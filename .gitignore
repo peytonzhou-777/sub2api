@@ -140,6 +140,9 @@ docs/*
 !docs/legal/*.md
 .serena/
 .codex/
+.agents/
+.codegraph/
+skills-lock.json
 frontend/coverage/
 aicodex
 output/
