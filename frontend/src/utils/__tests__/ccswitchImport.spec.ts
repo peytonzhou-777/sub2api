@@ -11,9 +11,14 @@ function paramsFromDeeplink(deeplink: string): URLSearchParams {
   return new URLSearchParams(query)
 }
 
+function decodeBase64Utf8(value: string): string {
+  const bytes = Uint8Array.from(atob(value), (char) => char.charCodeAt(0))
+  return new TextDecoder().decode(bytes)
+}
+
 describe('ccswitchImport utils', () => {
-  it('defaults OpenAI CC Switch imports to the current Codex model', () => {
-    expect(OPENAI_CC_SWITCH_CODEX_MODEL).toBe('gpt-5.5')
+  it('defaults OpenAI CC Switch imports to GPT-5.6 Sol', () => {
+    expect(OPENAI_CC_SWITCH_CODEX_MODEL).toBe('gpt-5.6-sol')
   })
 
   it('defaults Grok Build imports to the current Grok model', () => {
@@ -27,10 +32,11 @@ describe('ccswitchImport utils', () => {
     usageScript: 'return true'
   }
 
-  it('adds the Codex model parameter for OpenAI imports', () => {
+  it('imports the complete Codex provider in compatible mode', () => {
     const params = paramsFromDeeplink(
       buildCcSwitchImportDeeplink({
         ...baseInput,
+        providerName: '皮蛋粥',
         platform: 'openai',
         clientType: 'claude'
       })
@@ -39,7 +45,25 @@ describe('ccswitchImport utils', () => {
     expect(params.get('resource')).toBe('provider')
     expect(params.get('app')).toBe('codex')
     expect(params.get('endpoint')).toBe(baseInput.baseUrl)
+    expect(params.get('apiKey')).toBe(baseInput.apiKey)
     expect(params.get('model')).toBe(OPENAI_CC_SWITCH_CODEX_MODEL)
+    expect(params.get('configFormat')).toBe('toml')
+    expect(decodeBase64Utf8(params.get('config') || '')).toBe(`model_provider = "custom"
+model = "gpt-5.6-sol"
+review_model = "gpt-5.6-luna"
+model_reasoning_effort = "high"
+disable_response_storage = true
+windows_wsl_setup_acknowledged = true
+sandbox_mode = "workspace-write"
+
+[model_providers.custom]
+name = "皮蛋粥"
+base_url = "https://api.example.com"
+wire_api = "responses"
+requires_openai_auth = true
+
+[sandbox_workspace_write]
+network_access = true`)
     expect(atob(params.get('usageScript') || '')).toBe(baseInput.usageScript)
   })
 
@@ -78,6 +102,8 @@ describe('ccswitchImport utils', () => {
     expect(params.get('app')).toBe(app)
     expect(params.get('endpoint')).toBe(baseInput.baseUrl)
     expect(params.has('model')).toBe(false)
+    expect(params.get('configFormat')).toBe('json')
+    expect(params.has('config')).toBe(false)
   })
 
   it('keeps Antigravity imports on the selected client endpoint without a model parameter', () => {
