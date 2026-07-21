@@ -233,7 +233,8 @@ func TestSettingHandler_UpdateSettings_ClearsDefaultLimitedCreditsWithEmptyArray
 	require.Equal(t, "[]", repo.values[service.SettingKeyDefaultLimitedCredits])
 	var resp response.Response
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	data := resp.Data.(map[string]any)
+	data, ok := resp.Data.(map[string]any)
+	require.True(t, ok)
 	require.Empty(t, data["default_limited_credits"])
 }
 

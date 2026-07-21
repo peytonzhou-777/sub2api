@@ -53,9 +53,12 @@ func Do(client *http.Client, req *http.Request) (*http.Response, error) {
 		client = http.DefaultClient
 	}
 	if req == nil || !Active(req.Context()) {
+		// 此处只透传调用方已构造的请求，不负责选择或拼接目标 URL。
+		//nolint:gosec // G704：计时包装器必须保持原 http.Client.Do 行为。
 		return client.Do(req)
 	}
 	startedAt := time.Now()
+	//nolint:gosec // G704：请求 URL 由调用方的既有校验策略负责，本函数仅记录耗时。
 	response, err := client.Do(req)
 	RecordDependency(req.Context(), dependencyModule(req), startedAt, time.Now())
 	return response, err

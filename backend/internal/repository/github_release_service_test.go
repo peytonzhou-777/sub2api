@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,16 +29,13 @@ type testTransport struct {
 }
 
 func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Rewrite the URL to point to our test server
-	testURL := t.testServerURL + req.URL.Path
-	if req.URL.RawQuery != "" {
-		testURL += "?" + req.URL.RawQuery
-	}
-	newReq, err := http.NewRequestWithContext(req.Context(), req.Method, testURL, req.Body)
+	targetURL, err := url.Parse(t.testServerURL)
 	if err != nil {
 		return nil, err
 	}
-	newReq.Header = req.Header
+	newReq := req.Clone(req.Context())
+	newReq.URL.Scheme = targetURL.Scheme
+	newReq.URL.Host = targetURL.Host
 	return http.DefaultTransport.RoundTrip(newReq)
 }
 
