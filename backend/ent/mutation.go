@@ -50,6 +50,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
+	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditledger"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -101,6 +103,8 @@ const (
 	TypeUserAllowedGroup              = "UserAllowedGroup"
 	TypeUserAttributeDefinition       = "UserAttributeDefinition"
 	TypeUserAttributeValue            = "UserAttributeValue"
+	TypeUserLimitedCreditGrant        = "UserLimitedCreditGrant"
+	TypeUserLimitedCreditLedger       = "UserLimitedCreditLedger"
 	TypeUserPlatformQuota             = "UserPlatformQuota"
 	TypeUserSubscription              = "UserSubscription"
 )
@@ -47091,82 +47095,88 @@ func (m *UsageLogMutation) ResetEdge(name string) error {
 // UserMutation represents an operation that mutates the User nodes in the graph.
 type UserMutation struct {
 	config
-	op                            Op
-	typ                           string
-	id                            *int64
-	created_at                    *time.Time
-	updated_at                    *time.Time
-	deleted_at                    *time.Time
-	email                         *string
-	password_hash                 *string
-	role                          *string
-	balance                       *float64
-	addbalance                    *float64
-	frozen_balance                *float64
-	addfrozen_balance             *float64
-	concurrency                   *int
-	addconcurrency                *int
-	status                        *string
-	username                      *string
-	notes                         *string
-	totp_secret_encrypted         *string
-	totp_enabled                  *bool
-	totp_enabled_at               *time.Time
-	signup_source                 *string
-	last_login_at                 *time.Time
-	last_active_at                *time.Time
-	balance_notify_enabled        *bool
-	balance_notify_threshold_type *string
-	balance_notify_threshold      *float64
-	addbalance_notify_threshold   *float64
-	balance_notify_extra_emails   *string
-	total_recharged               *float64
-	addtotal_recharged            *float64
-	rpm_limit                     *int
-	addrpm_limit                  *int
-	clearedFields                 map[string]struct{}
-	api_keys                      map[int64]struct{}
-	removedapi_keys               map[int64]struct{}
-	clearedapi_keys               bool
-	redeem_codes                  map[int64]struct{}
-	removedredeem_codes           map[int64]struct{}
-	clearedredeem_codes           bool
-	subscriptions                 map[int64]struct{}
-	removedsubscriptions          map[int64]struct{}
-	clearedsubscriptions          bool
-	assigned_subscriptions        map[int64]struct{}
-	removedassigned_subscriptions map[int64]struct{}
-	clearedassigned_subscriptions bool
-	announcement_reads            map[int64]struct{}
-	removedannouncement_reads     map[int64]struct{}
-	clearedannouncement_reads     bool
-	allowed_groups                map[int64]struct{}
-	removedallowed_groups         map[int64]struct{}
-	clearedallowed_groups         bool
-	usage_logs                    map[int64]struct{}
-	removedusage_logs             map[int64]struct{}
-	clearedusage_logs             bool
-	attribute_values              map[int64]struct{}
-	removedattribute_values       map[int64]struct{}
-	clearedattribute_values       bool
-	promo_code_usages             map[int64]struct{}
-	removedpromo_code_usages      map[int64]struct{}
-	clearedpromo_code_usages      bool
-	payment_orders                map[int64]struct{}
-	removedpayment_orders         map[int64]struct{}
-	clearedpayment_orders         bool
-	auth_identities               map[int64]struct{}
-	removedauth_identities        map[int64]struct{}
-	clearedauth_identities        bool
-	pending_auth_sessions         map[int64]struct{}
-	removedpending_auth_sessions  map[int64]struct{}
-	clearedpending_auth_sessions  bool
-	platform_quotas               map[int64]struct{}
-	removedplatform_quotas        map[int64]struct{}
-	clearedplatform_quotas        bool
-	done                          bool
-	oldValue                      func(context.Context) (*User, error)
-	predicates                    []predicate.User
+	op                                   Op
+	typ                                  string
+	id                                   *int64
+	created_at                           *time.Time
+	updated_at                           *time.Time
+	deleted_at                           *time.Time
+	email                                *string
+	password_hash                        *string
+	role                                 *string
+	balance                              *float64
+	addbalance                           *float64
+	frozen_balance                       *float64
+	addfrozen_balance                    *float64
+	concurrency                          *int
+	addconcurrency                       *int
+	status                               *string
+	username                             *string
+	notes                                *string
+	totp_secret_encrypted                *string
+	totp_enabled                         *bool
+	totp_enabled_at                      *time.Time
+	signup_source                        *string
+	last_login_at                        *time.Time
+	last_active_at                       *time.Time
+	balance_notify_enabled               *bool
+	balance_notify_threshold_type        *string
+	balance_notify_threshold             *float64
+	addbalance_notify_threshold          *float64
+	balance_notify_extra_emails          *string
+	total_recharged                      *float64
+	addtotal_recharged                   *float64
+	rpm_limit                            *int
+	addrpm_limit                         *int
+	clearedFields                        map[string]struct{}
+	api_keys                             map[int64]struct{}
+	removedapi_keys                      map[int64]struct{}
+	clearedapi_keys                      bool
+	redeem_codes                         map[int64]struct{}
+	removedredeem_codes                  map[int64]struct{}
+	clearedredeem_codes                  bool
+	subscriptions                        map[int64]struct{}
+	removedsubscriptions                 map[int64]struct{}
+	clearedsubscriptions                 bool
+	assigned_subscriptions               map[int64]struct{}
+	removedassigned_subscriptions        map[int64]struct{}
+	clearedassigned_subscriptions        bool
+	announcement_reads                   map[int64]struct{}
+	removedannouncement_reads            map[int64]struct{}
+	clearedannouncement_reads            bool
+	allowed_groups                       map[int64]struct{}
+	removedallowed_groups                map[int64]struct{}
+	clearedallowed_groups                bool
+	usage_logs                           map[int64]struct{}
+	removedusage_logs                    map[int64]struct{}
+	clearedusage_logs                    bool
+	attribute_values                     map[int64]struct{}
+	removedattribute_values              map[int64]struct{}
+	clearedattribute_values              bool
+	promo_code_usages                    map[int64]struct{}
+	removedpromo_code_usages             map[int64]struct{}
+	clearedpromo_code_usages             bool
+	payment_orders                       map[int64]struct{}
+	removedpayment_orders                map[int64]struct{}
+	clearedpayment_orders                bool
+	auth_identities                      map[int64]struct{}
+	removedauth_identities               map[int64]struct{}
+	clearedauth_identities               bool
+	pending_auth_sessions                map[int64]struct{}
+	removedpending_auth_sessions         map[int64]struct{}
+	clearedpending_auth_sessions         bool
+	platform_quotas                      map[int64]struct{}
+	removedplatform_quotas               map[int64]struct{}
+	clearedplatform_quotas               bool
+	limited_credit_grants                map[int64]struct{}
+	removedlimited_credit_grants         map[int64]struct{}
+	clearedlimited_credit_grants         bool
+	limited_credit_ledger_entries        map[int64]struct{}
+	removedlimited_credit_ledger_entries map[int64]struct{}
+	clearedlimited_credit_ledger_entries bool
+	done                                 bool
+	oldValue                             func(context.Context) (*User, error)
+	predicates                           []predicate.User
 }
 
 var _ ent.Mutation = (*UserMutation)(nil)
@@ -49032,6 +49042,114 @@ func (m *UserMutation) ResetPlatformQuotas() {
 	m.removedplatform_quotas = nil
 }
 
+// AddLimitedCreditGrantIDs adds the "limited_credit_grants" edge to the UserLimitedCreditGrant entity by ids.
+func (m *UserMutation) AddLimitedCreditGrantIDs(ids ...int64) {
+	if m.limited_credit_grants == nil {
+		m.limited_credit_grants = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.limited_credit_grants[ids[i]] = struct{}{}
+	}
+}
+
+// ClearLimitedCreditGrants clears the "limited_credit_grants" edge to the UserLimitedCreditGrant entity.
+func (m *UserMutation) ClearLimitedCreditGrants() {
+	m.clearedlimited_credit_grants = true
+}
+
+// LimitedCreditGrantsCleared reports if the "limited_credit_grants" edge to the UserLimitedCreditGrant entity was cleared.
+func (m *UserMutation) LimitedCreditGrantsCleared() bool {
+	return m.clearedlimited_credit_grants
+}
+
+// RemoveLimitedCreditGrantIDs removes the "limited_credit_grants" edge to the UserLimitedCreditGrant entity by IDs.
+func (m *UserMutation) RemoveLimitedCreditGrantIDs(ids ...int64) {
+	if m.removedlimited_credit_grants == nil {
+		m.removedlimited_credit_grants = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.limited_credit_grants, ids[i])
+		m.removedlimited_credit_grants[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedLimitedCreditGrants returns the removed IDs of the "limited_credit_grants" edge to the UserLimitedCreditGrant entity.
+func (m *UserMutation) RemovedLimitedCreditGrantsIDs() (ids []int64) {
+	for id := range m.removedlimited_credit_grants {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// LimitedCreditGrantsIDs returns the "limited_credit_grants" edge IDs in the mutation.
+func (m *UserMutation) LimitedCreditGrantsIDs() (ids []int64) {
+	for id := range m.limited_credit_grants {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetLimitedCreditGrants resets all changes to the "limited_credit_grants" edge.
+func (m *UserMutation) ResetLimitedCreditGrants() {
+	m.limited_credit_grants = nil
+	m.clearedlimited_credit_grants = false
+	m.removedlimited_credit_grants = nil
+}
+
+// AddLimitedCreditLedgerEntryIDs adds the "limited_credit_ledger_entries" edge to the UserLimitedCreditLedger entity by ids.
+func (m *UserMutation) AddLimitedCreditLedgerEntryIDs(ids ...int64) {
+	if m.limited_credit_ledger_entries == nil {
+		m.limited_credit_ledger_entries = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.limited_credit_ledger_entries[ids[i]] = struct{}{}
+	}
+}
+
+// ClearLimitedCreditLedgerEntries clears the "limited_credit_ledger_entries" edge to the UserLimitedCreditLedger entity.
+func (m *UserMutation) ClearLimitedCreditLedgerEntries() {
+	m.clearedlimited_credit_ledger_entries = true
+}
+
+// LimitedCreditLedgerEntriesCleared reports if the "limited_credit_ledger_entries" edge to the UserLimitedCreditLedger entity was cleared.
+func (m *UserMutation) LimitedCreditLedgerEntriesCleared() bool {
+	return m.clearedlimited_credit_ledger_entries
+}
+
+// RemoveLimitedCreditLedgerEntryIDs removes the "limited_credit_ledger_entries" edge to the UserLimitedCreditLedger entity by IDs.
+func (m *UserMutation) RemoveLimitedCreditLedgerEntryIDs(ids ...int64) {
+	if m.removedlimited_credit_ledger_entries == nil {
+		m.removedlimited_credit_ledger_entries = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.limited_credit_ledger_entries, ids[i])
+		m.removedlimited_credit_ledger_entries[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedLimitedCreditLedgerEntries returns the removed IDs of the "limited_credit_ledger_entries" edge to the UserLimitedCreditLedger entity.
+func (m *UserMutation) RemovedLimitedCreditLedgerEntriesIDs() (ids []int64) {
+	for id := range m.removedlimited_credit_ledger_entries {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// LimitedCreditLedgerEntriesIDs returns the "limited_credit_ledger_entries" edge IDs in the mutation.
+func (m *UserMutation) LimitedCreditLedgerEntriesIDs() (ids []int64) {
+	for id := range m.limited_credit_ledger_entries {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetLimitedCreditLedgerEntries resets all changes to the "limited_credit_ledger_entries" edge.
+func (m *UserMutation) ResetLimitedCreditLedgerEntries() {
+	m.limited_credit_ledger_entries = nil
+	m.clearedlimited_credit_ledger_entries = false
+	m.removedlimited_credit_ledger_entries = nil
+}
+
 // Where appends a list predicates to the UserMutation builder.
 func (m *UserMutation) Where(ps ...predicate.User) {
 	m.predicates = append(m.predicates, ps...)
@@ -49670,7 +49788,7 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 15)
 	if m.api_keys != nil {
 		edges = append(edges, user.EdgeAPIKeys)
 	}
@@ -49709,6 +49827,12 @@ func (m *UserMutation) AddedEdges() []string {
 	}
 	if m.platform_quotas != nil {
 		edges = append(edges, user.EdgePlatformQuotas)
+	}
+	if m.limited_credit_grants != nil {
+		edges = append(edges, user.EdgeLimitedCreditGrants)
+	}
+	if m.limited_credit_ledger_entries != nil {
+		edges = append(edges, user.EdgeLimitedCreditLedgerEntries)
 	}
 	return edges
 }
@@ -49795,13 +49919,25 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeLimitedCreditGrants:
+		ids := make([]ent.Value, 0, len(m.limited_credit_grants))
+		for id := range m.limited_credit_grants {
+			ids = append(ids, id)
+		}
+		return ids
+	case user.EdgeLimitedCreditLedgerEntries:
+		ids := make([]ent.Value, 0, len(m.limited_credit_ledger_entries))
+		for id := range m.limited_credit_ledger_entries {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 15)
 	if m.removedapi_keys != nil {
 		edges = append(edges, user.EdgeAPIKeys)
 	}
@@ -49840,6 +49976,12 @@ func (m *UserMutation) RemovedEdges() []string {
 	}
 	if m.removedplatform_quotas != nil {
 		edges = append(edges, user.EdgePlatformQuotas)
+	}
+	if m.removedlimited_credit_grants != nil {
+		edges = append(edges, user.EdgeLimitedCreditGrants)
+	}
+	if m.removedlimited_credit_ledger_entries != nil {
+		edges = append(edges, user.EdgeLimitedCreditLedgerEntries)
 	}
 	return edges
 }
@@ -49926,13 +50068,25 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeLimitedCreditGrants:
+		ids := make([]ent.Value, 0, len(m.removedlimited_credit_grants))
+		for id := range m.removedlimited_credit_grants {
+			ids = append(ids, id)
+		}
+		return ids
+	case user.EdgeLimitedCreditLedgerEntries:
+		ids := make([]ent.Value, 0, len(m.removedlimited_credit_ledger_entries))
+		for id := range m.removedlimited_credit_ledger_entries {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 15)
 	if m.clearedapi_keys {
 		edges = append(edges, user.EdgeAPIKeys)
 	}
@@ -49972,6 +50126,12 @@ func (m *UserMutation) ClearedEdges() []string {
 	if m.clearedplatform_quotas {
 		edges = append(edges, user.EdgePlatformQuotas)
 	}
+	if m.clearedlimited_credit_grants {
+		edges = append(edges, user.EdgeLimitedCreditGrants)
+	}
+	if m.clearedlimited_credit_ledger_entries {
+		edges = append(edges, user.EdgeLimitedCreditLedgerEntries)
+	}
 	return edges
 }
 
@@ -50005,6 +50165,10 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedpending_auth_sessions
 	case user.EdgePlatformQuotas:
 		return m.clearedplatform_quotas
+	case user.EdgeLimitedCreditGrants:
+		return m.clearedlimited_credit_grants
+	case user.EdgeLimitedCreditLedgerEntries:
+		return m.clearedlimited_credit_ledger_entries
 	}
 	return false
 }
@@ -50059,6 +50223,12 @@ func (m *UserMutation) ResetEdge(name string) error {
 		return nil
 	case user.EdgePlatformQuotas:
 		m.ResetPlatformQuotas()
+		return nil
+	case user.EdgeLimitedCreditGrants:
+		m.ResetLimitedCreditGrants()
+		return nil
+	case user.EdgeLimitedCreditLedgerEntries:
+		m.ResetLimitedCreditLedgerEntries()
 		return nil
 	}
 	return fmt.Errorf("unknown User edge %s", name)
@@ -52278,6 +52448,2302 @@ func (m *UserAttributeValueMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown UserAttributeValue edge %s", name)
+}
+
+// UserLimitedCreditGrantMutation represents an operation that mutates the UserLimitedCreditGrant nodes in the graph.
+type UserLimitedCreditGrantMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *int64
+	source_type           *string
+	source_id             *int64
+	addsource_id          *int64
+	initial_amount        *float64
+	addinitial_amount     *float64
+	used_amount           *float64
+	addused_amount        *float64
+	frozen_amount         *float64
+	addfrozen_amount      *float64
+	expires_at            *time.Time
+	status                *string
+	notes                 *string
+	created_at            *time.Time
+	updated_at            *time.Time
+	clearedFields         map[string]struct{}
+	user                  *int64
+	cleareduser           bool
+	ledger_entries        map[int64]struct{}
+	removedledger_entries map[int64]struct{}
+	clearedledger_entries bool
+	done                  bool
+	oldValue              func(context.Context) (*UserLimitedCreditGrant, error)
+	predicates            []predicate.UserLimitedCreditGrant
+}
+
+var _ ent.Mutation = (*UserLimitedCreditGrantMutation)(nil)
+
+// userlimitedcreditgrantOption allows management of the mutation configuration using functional options.
+type userlimitedcreditgrantOption func(*UserLimitedCreditGrantMutation)
+
+// newUserLimitedCreditGrantMutation creates new mutation for the UserLimitedCreditGrant entity.
+func newUserLimitedCreditGrantMutation(c config, op Op, opts ...userlimitedcreditgrantOption) *UserLimitedCreditGrantMutation {
+	m := &UserLimitedCreditGrantMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeUserLimitedCreditGrant,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withUserLimitedCreditGrantID sets the ID field of the mutation.
+func withUserLimitedCreditGrantID(id int64) userlimitedcreditgrantOption {
+	return func(m *UserLimitedCreditGrantMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *UserLimitedCreditGrant
+		)
+		m.oldValue = func(ctx context.Context) (*UserLimitedCreditGrant, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().UserLimitedCreditGrant.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withUserLimitedCreditGrant sets the old UserLimitedCreditGrant of the mutation.
+func withUserLimitedCreditGrant(node *UserLimitedCreditGrant) userlimitedcreditgrantOption {
+	return func(m *UserLimitedCreditGrantMutation) {
+		m.oldValue = func(context.Context) (*UserLimitedCreditGrant, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m UserLimitedCreditGrantMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m UserLimitedCreditGrantMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *UserLimitedCreditGrantMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *UserLimitedCreditGrantMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().UserLimitedCreditGrant.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUserID sets the "user_id" field.
+func (m *UserLimitedCreditGrantMutation) SetUserID(i int64) {
+	m.user = &i
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *UserLimitedCreditGrantMutation) UserID() (r int64, exists bool) {
+	v := m.user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the UserLimitedCreditGrant entity.
+// If the UserLimitedCreditGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditGrantMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *UserLimitedCreditGrantMutation) ResetUserID() {
+	m.user = nil
+}
+
+// SetSourceType sets the "source_type" field.
+func (m *UserLimitedCreditGrantMutation) SetSourceType(s string) {
+	m.source_type = &s
+}
+
+// SourceType returns the value of the "source_type" field in the mutation.
+func (m *UserLimitedCreditGrantMutation) SourceType() (r string, exists bool) {
+	v := m.source_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceType returns the old "source_type" field's value of the UserLimitedCreditGrant entity.
+// If the UserLimitedCreditGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditGrantMutation) OldSourceType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceType: %w", err)
+	}
+	return oldValue.SourceType, nil
+}
+
+// ResetSourceType resets all changes to the "source_type" field.
+func (m *UserLimitedCreditGrantMutation) ResetSourceType() {
+	m.source_type = nil
+}
+
+// SetSourceID sets the "source_id" field.
+func (m *UserLimitedCreditGrantMutation) SetSourceID(i int64) {
+	m.source_id = &i
+	m.addsource_id = nil
+}
+
+// SourceID returns the value of the "source_id" field in the mutation.
+func (m *UserLimitedCreditGrantMutation) SourceID() (r int64, exists bool) {
+	v := m.source_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceID returns the old "source_id" field's value of the UserLimitedCreditGrant entity.
+// If the UserLimitedCreditGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditGrantMutation) OldSourceID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceID: %w", err)
+	}
+	return oldValue.SourceID, nil
+}
+
+// AddSourceID adds i to the "source_id" field.
+func (m *UserLimitedCreditGrantMutation) AddSourceID(i int64) {
+	if m.addsource_id != nil {
+		*m.addsource_id += i
+	} else {
+		m.addsource_id = &i
+	}
+}
+
+// AddedSourceID returns the value that was added to the "source_id" field in this mutation.
+func (m *UserLimitedCreditGrantMutation) AddedSourceID() (r int64, exists bool) {
+	v := m.addsource_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearSourceID clears the value of the "source_id" field.
+func (m *UserLimitedCreditGrantMutation) ClearSourceID() {
+	m.source_id = nil
+	m.addsource_id = nil
+	m.clearedFields[userlimitedcreditgrant.FieldSourceID] = struct{}{}
+}
+
+// SourceIDCleared returns if the "source_id" field was cleared in this mutation.
+func (m *UserLimitedCreditGrantMutation) SourceIDCleared() bool {
+	_, ok := m.clearedFields[userlimitedcreditgrant.FieldSourceID]
+	return ok
+}
+
+// ResetSourceID resets all changes to the "source_id" field.
+func (m *UserLimitedCreditGrantMutation) ResetSourceID() {
+	m.source_id = nil
+	m.addsource_id = nil
+	delete(m.clearedFields, userlimitedcreditgrant.FieldSourceID)
+}
+
+// SetInitialAmount sets the "initial_amount" field.
+func (m *UserLimitedCreditGrantMutation) SetInitialAmount(f float64) {
+	m.initial_amount = &f
+	m.addinitial_amount = nil
+}
+
+// InitialAmount returns the value of the "initial_amount" field in the mutation.
+func (m *UserLimitedCreditGrantMutation) InitialAmount() (r float64, exists bool) {
+	v := m.initial_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInitialAmount returns the old "initial_amount" field's value of the UserLimitedCreditGrant entity.
+// If the UserLimitedCreditGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditGrantMutation) OldInitialAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInitialAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInitialAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInitialAmount: %w", err)
+	}
+	return oldValue.InitialAmount, nil
+}
+
+// AddInitialAmount adds f to the "initial_amount" field.
+func (m *UserLimitedCreditGrantMutation) AddInitialAmount(f float64) {
+	if m.addinitial_amount != nil {
+		*m.addinitial_amount += f
+	} else {
+		m.addinitial_amount = &f
+	}
+}
+
+// AddedInitialAmount returns the value that was added to the "initial_amount" field in this mutation.
+func (m *UserLimitedCreditGrantMutation) AddedInitialAmount() (r float64, exists bool) {
+	v := m.addinitial_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetInitialAmount resets all changes to the "initial_amount" field.
+func (m *UserLimitedCreditGrantMutation) ResetInitialAmount() {
+	m.initial_amount = nil
+	m.addinitial_amount = nil
+}
+
+// SetUsedAmount sets the "used_amount" field.
+func (m *UserLimitedCreditGrantMutation) SetUsedAmount(f float64) {
+	m.used_amount = &f
+	m.addused_amount = nil
+}
+
+// UsedAmount returns the value of the "used_amount" field in the mutation.
+func (m *UserLimitedCreditGrantMutation) UsedAmount() (r float64, exists bool) {
+	v := m.used_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsedAmount returns the old "used_amount" field's value of the UserLimitedCreditGrant entity.
+// If the UserLimitedCreditGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditGrantMutation) OldUsedAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsedAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsedAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsedAmount: %w", err)
+	}
+	return oldValue.UsedAmount, nil
+}
+
+// AddUsedAmount adds f to the "used_amount" field.
+func (m *UserLimitedCreditGrantMutation) AddUsedAmount(f float64) {
+	if m.addused_amount != nil {
+		*m.addused_amount += f
+	} else {
+		m.addused_amount = &f
+	}
+}
+
+// AddedUsedAmount returns the value that was added to the "used_amount" field in this mutation.
+func (m *UserLimitedCreditGrantMutation) AddedUsedAmount() (r float64, exists bool) {
+	v := m.addused_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUsedAmount resets all changes to the "used_amount" field.
+func (m *UserLimitedCreditGrantMutation) ResetUsedAmount() {
+	m.used_amount = nil
+	m.addused_amount = nil
+}
+
+// SetFrozenAmount sets the "frozen_amount" field.
+func (m *UserLimitedCreditGrantMutation) SetFrozenAmount(f float64) {
+	m.frozen_amount = &f
+	m.addfrozen_amount = nil
+}
+
+// FrozenAmount returns the value of the "frozen_amount" field in the mutation.
+func (m *UserLimitedCreditGrantMutation) FrozenAmount() (r float64, exists bool) {
+	v := m.frozen_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFrozenAmount returns the old "frozen_amount" field's value of the UserLimitedCreditGrant entity.
+// If the UserLimitedCreditGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditGrantMutation) OldFrozenAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFrozenAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFrozenAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFrozenAmount: %w", err)
+	}
+	return oldValue.FrozenAmount, nil
+}
+
+// AddFrozenAmount adds f to the "frozen_amount" field.
+func (m *UserLimitedCreditGrantMutation) AddFrozenAmount(f float64) {
+	if m.addfrozen_amount != nil {
+		*m.addfrozen_amount += f
+	} else {
+		m.addfrozen_amount = &f
+	}
+}
+
+// AddedFrozenAmount returns the value that was added to the "frozen_amount" field in this mutation.
+func (m *UserLimitedCreditGrantMutation) AddedFrozenAmount() (r float64, exists bool) {
+	v := m.addfrozen_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFrozenAmount resets all changes to the "frozen_amount" field.
+func (m *UserLimitedCreditGrantMutation) ResetFrozenAmount() {
+	m.frozen_amount = nil
+	m.addfrozen_amount = nil
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *UserLimitedCreditGrantMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *UserLimitedCreditGrantMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the UserLimitedCreditGrant entity.
+// If the UserLimitedCreditGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditGrantMutation) OldExpiresAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *UserLimitedCreditGrantMutation) ResetExpiresAt() {
+	m.expires_at = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *UserLimitedCreditGrantMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *UserLimitedCreditGrantMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the UserLimitedCreditGrant entity.
+// If the UserLimitedCreditGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditGrantMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *UserLimitedCreditGrantMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetNotes sets the "notes" field.
+func (m *UserLimitedCreditGrantMutation) SetNotes(s string) {
+	m.notes = &s
+}
+
+// Notes returns the value of the "notes" field in the mutation.
+func (m *UserLimitedCreditGrantMutation) Notes() (r string, exists bool) {
+	v := m.notes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNotes returns the old "notes" field's value of the UserLimitedCreditGrant entity.
+// If the UserLimitedCreditGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditGrantMutation) OldNotes(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNotes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNotes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNotes: %w", err)
+	}
+	return oldValue.Notes, nil
+}
+
+// ClearNotes clears the value of the "notes" field.
+func (m *UserLimitedCreditGrantMutation) ClearNotes() {
+	m.notes = nil
+	m.clearedFields[userlimitedcreditgrant.FieldNotes] = struct{}{}
+}
+
+// NotesCleared returns if the "notes" field was cleared in this mutation.
+func (m *UserLimitedCreditGrantMutation) NotesCleared() bool {
+	_, ok := m.clearedFields[userlimitedcreditgrant.FieldNotes]
+	return ok
+}
+
+// ResetNotes resets all changes to the "notes" field.
+func (m *UserLimitedCreditGrantMutation) ResetNotes() {
+	m.notes = nil
+	delete(m.clearedFields, userlimitedcreditgrant.FieldNotes)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *UserLimitedCreditGrantMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *UserLimitedCreditGrantMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the UserLimitedCreditGrant entity.
+// If the UserLimitedCreditGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditGrantMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *UserLimitedCreditGrantMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *UserLimitedCreditGrantMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *UserLimitedCreditGrantMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the UserLimitedCreditGrant entity.
+// If the UserLimitedCreditGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditGrantMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *UserLimitedCreditGrantMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// ClearUser clears the "user" edge to the User entity.
+func (m *UserLimitedCreditGrantMutation) ClearUser() {
+	m.cleareduser = true
+	m.clearedFields[userlimitedcreditgrant.FieldUserID] = struct{}{}
+}
+
+// UserCleared reports if the "user" edge to the User entity was cleared.
+func (m *UserLimitedCreditGrantMutation) UserCleared() bool {
+	return m.cleareduser
+}
+
+// UserIDs returns the "user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UserID instead. It exists only for internal usage by the builders.
+func (m *UserLimitedCreditGrantMutation) UserIDs() (ids []int64) {
+	if id := m.user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUser resets all changes to the "user" edge.
+func (m *UserLimitedCreditGrantMutation) ResetUser() {
+	m.user = nil
+	m.cleareduser = false
+}
+
+// AddLedgerEntryIDs adds the "ledger_entries" edge to the UserLimitedCreditLedger entity by ids.
+func (m *UserLimitedCreditGrantMutation) AddLedgerEntryIDs(ids ...int64) {
+	if m.ledger_entries == nil {
+		m.ledger_entries = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.ledger_entries[ids[i]] = struct{}{}
+	}
+}
+
+// ClearLedgerEntries clears the "ledger_entries" edge to the UserLimitedCreditLedger entity.
+func (m *UserLimitedCreditGrantMutation) ClearLedgerEntries() {
+	m.clearedledger_entries = true
+}
+
+// LedgerEntriesCleared reports if the "ledger_entries" edge to the UserLimitedCreditLedger entity was cleared.
+func (m *UserLimitedCreditGrantMutation) LedgerEntriesCleared() bool {
+	return m.clearedledger_entries
+}
+
+// RemoveLedgerEntryIDs removes the "ledger_entries" edge to the UserLimitedCreditLedger entity by IDs.
+func (m *UserLimitedCreditGrantMutation) RemoveLedgerEntryIDs(ids ...int64) {
+	if m.removedledger_entries == nil {
+		m.removedledger_entries = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.ledger_entries, ids[i])
+		m.removedledger_entries[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedLedgerEntries returns the removed IDs of the "ledger_entries" edge to the UserLimitedCreditLedger entity.
+func (m *UserLimitedCreditGrantMutation) RemovedLedgerEntriesIDs() (ids []int64) {
+	for id := range m.removedledger_entries {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// LedgerEntriesIDs returns the "ledger_entries" edge IDs in the mutation.
+func (m *UserLimitedCreditGrantMutation) LedgerEntriesIDs() (ids []int64) {
+	for id := range m.ledger_entries {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetLedgerEntries resets all changes to the "ledger_entries" edge.
+func (m *UserLimitedCreditGrantMutation) ResetLedgerEntries() {
+	m.ledger_entries = nil
+	m.clearedledger_entries = false
+	m.removedledger_entries = nil
+}
+
+// Where appends a list predicates to the UserLimitedCreditGrantMutation builder.
+func (m *UserLimitedCreditGrantMutation) Where(ps ...predicate.UserLimitedCreditGrant) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the UserLimitedCreditGrantMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *UserLimitedCreditGrantMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.UserLimitedCreditGrant, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *UserLimitedCreditGrantMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *UserLimitedCreditGrantMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (UserLimitedCreditGrant).
+func (m *UserLimitedCreditGrantMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *UserLimitedCreditGrantMutation) Fields() []string {
+	fields := make([]string, 0, 11)
+	if m.user != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldUserID)
+	}
+	if m.source_type != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldSourceType)
+	}
+	if m.source_id != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldSourceID)
+	}
+	if m.initial_amount != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldInitialAmount)
+	}
+	if m.used_amount != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldUsedAmount)
+	}
+	if m.frozen_amount != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldFrozenAmount)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldExpiresAt)
+	}
+	if m.status != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldStatus)
+	}
+	if m.notes != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldNotes)
+	}
+	if m.created_at != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *UserLimitedCreditGrantMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case userlimitedcreditgrant.FieldUserID:
+		return m.UserID()
+	case userlimitedcreditgrant.FieldSourceType:
+		return m.SourceType()
+	case userlimitedcreditgrant.FieldSourceID:
+		return m.SourceID()
+	case userlimitedcreditgrant.FieldInitialAmount:
+		return m.InitialAmount()
+	case userlimitedcreditgrant.FieldUsedAmount:
+		return m.UsedAmount()
+	case userlimitedcreditgrant.FieldFrozenAmount:
+		return m.FrozenAmount()
+	case userlimitedcreditgrant.FieldExpiresAt:
+		return m.ExpiresAt()
+	case userlimitedcreditgrant.FieldStatus:
+		return m.Status()
+	case userlimitedcreditgrant.FieldNotes:
+		return m.Notes()
+	case userlimitedcreditgrant.FieldCreatedAt:
+		return m.CreatedAt()
+	case userlimitedcreditgrant.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *UserLimitedCreditGrantMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case userlimitedcreditgrant.FieldUserID:
+		return m.OldUserID(ctx)
+	case userlimitedcreditgrant.FieldSourceType:
+		return m.OldSourceType(ctx)
+	case userlimitedcreditgrant.FieldSourceID:
+		return m.OldSourceID(ctx)
+	case userlimitedcreditgrant.FieldInitialAmount:
+		return m.OldInitialAmount(ctx)
+	case userlimitedcreditgrant.FieldUsedAmount:
+		return m.OldUsedAmount(ctx)
+	case userlimitedcreditgrant.FieldFrozenAmount:
+		return m.OldFrozenAmount(ctx)
+	case userlimitedcreditgrant.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
+	case userlimitedcreditgrant.FieldStatus:
+		return m.OldStatus(ctx)
+	case userlimitedcreditgrant.FieldNotes:
+		return m.OldNotes(ctx)
+	case userlimitedcreditgrant.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case userlimitedcreditgrant.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown UserLimitedCreditGrant field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *UserLimitedCreditGrantMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case userlimitedcreditgrant.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case userlimitedcreditgrant.FieldSourceType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceType(v)
+		return nil
+	case userlimitedcreditgrant.FieldSourceID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceID(v)
+		return nil
+	case userlimitedcreditgrant.FieldInitialAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInitialAmount(v)
+		return nil
+	case userlimitedcreditgrant.FieldUsedAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsedAmount(v)
+		return nil
+	case userlimitedcreditgrant.FieldFrozenAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFrozenAmount(v)
+		return nil
+	case userlimitedcreditgrant.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
+		return nil
+	case userlimitedcreditgrant.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case userlimitedcreditgrant.FieldNotes:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNotes(v)
+		return nil
+	case userlimitedcreditgrant.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case userlimitedcreditgrant.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown UserLimitedCreditGrant field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *UserLimitedCreditGrantMutation) AddedFields() []string {
+	var fields []string
+	if m.addsource_id != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldSourceID)
+	}
+	if m.addinitial_amount != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldInitialAmount)
+	}
+	if m.addused_amount != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldUsedAmount)
+	}
+	if m.addfrozen_amount != nil {
+		fields = append(fields, userlimitedcreditgrant.FieldFrozenAmount)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *UserLimitedCreditGrantMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case userlimitedcreditgrant.FieldSourceID:
+		return m.AddedSourceID()
+	case userlimitedcreditgrant.FieldInitialAmount:
+		return m.AddedInitialAmount()
+	case userlimitedcreditgrant.FieldUsedAmount:
+		return m.AddedUsedAmount()
+	case userlimitedcreditgrant.FieldFrozenAmount:
+		return m.AddedFrozenAmount()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *UserLimitedCreditGrantMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case userlimitedcreditgrant.FieldSourceID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSourceID(v)
+		return nil
+	case userlimitedcreditgrant.FieldInitialAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddInitialAmount(v)
+		return nil
+	case userlimitedcreditgrant.FieldUsedAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUsedAmount(v)
+		return nil
+	case userlimitedcreditgrant.FieldFrozenAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFrozenAmount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown UserLimitedCreditGrant numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *UserLimitedCreditGrantMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(userlimitedcreditgrant.FieldSourceID) {
+		fields = append(fields, userlimitedcreditgrant.FieldSourceID)
+	}
+	if m.FieldCleared(userlimitedcreditgrant.FieldNotes) {
+		fields = append(fields, userlimitedcreditgrant.FieldNotes)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *UserLimitedCreditGrantMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *UserLimitedCreditGrantMutation) ClearField(name string) error {
+	switch name {
+	case userlimitedcreditgrant.FieldSourceID:
+		m.ClearSourceID()
+		return nil
+	case userlimitedcreditgrant.FieldNotes:
+		m.ClearNotes()
+		return nil
+	}
+	return fmt.Errorf("unknown UserLimitedCreditGrant nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *UserLimitedCreditGrantMutation) ResetField(name string) error {
+	switch name {
+	case userlimitedcreditgrant.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case userlimitedcreditgrant.FieldSourceType:
+		m.ResetSourceType()
+		return nil
+	case userlimitedcreditgrant.FieldSourceID:
+		m.ResetSourceID()
+		return nil
+	case userlimitedcreditgrant.FieldInitialAmount:
+		m.ResetInitialAmount()
+		return nil
+	case userlimitedcreditgrant.FieldUsedAmount:
+		m.ResetUsedAmount()
+		return nil
+	case userlimitedcreditgrant.FieldFrozenAmount:
+		m.ResetFrozenAmount()
+		return nil
+	case userlimitedcreditgrant.FieldExpiresAt:
+		m.ResetExpiresAt()
+		return nil
+	case userlimitedcreditgrant.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case userlimitedcreditgrant.FieldNotes:
+		m.ResetNotes()
+		return nil
+	case userlimitedcreditgrant.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case userlimitedcreditgrant.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown UserLimitedCreditGrant field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *UserLimitedCreditGrantMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.user != nil {
+		edges = append(edges, userlimitedcreditgrant.EdgeUser)
+	}
+	if m.ledger_entries != nil {
+		edges = append(edges, userlimitedcreditgrant.EdgeLedgerEntries)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *UserLimitedCreditGrantMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case userlimitedcreditgrant.EdgeUser:
+		if id := m.user; id != nil {
+			return []ent.Value{*id}
+		}
+	case userlimitedcreditgrant.EdgeLedgerEntries:
+		ids := make([]ent.Value, 0, len(m.ledger_entries))
+		for id := range m.ledger_entries {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *UserLimitedCreditGrantMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.removedledger_entries != nil {
+		edges = append(edges, userlimitedcreditgrant.EdgeLedgerEntries)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *UserLimitedCreditGrantMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case userlimitedcreditgrant.EdgeLedgerEntries:
+		ids := make([]ent.Value, 0, len(m.removedledger_entries))
+		for id := range m.removedledger_entries {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *UserLimitedCreditGrantMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.cleareduser {
+		edges = append(edges, userlimitedcreditgrant.EdgeUser)
+	}
+	if m.clearedledger_entries {
+		edges = append(edges, userlimitedcreditgrant.EdgeLedgerEntries)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *UserLimitedCreditGrantMutation) EdgeCleared(name string) bool {
+	switch name {
+	case userlimitedcreditgrant.EdgeUser:
+		return m.cleareduser
+	case userlimitedcreditgrant.EdgeLedgerEntries:
+		return m.clearedledger_entries
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *UserLimitedCreditGrantMutation) ClearEdge(name string) error {
+	switch name {
+	case userlimitedcreditgrant.EdgeUser:
+		m.ClearUser()
+		return nil
+	}
+	return fmt.Errorf("unknown UserLimitedCreditGrant unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *UserLimitedCreditGrantMutation) ResetEdge(name string) error {
+	switch name {
+	case userlimitedcreditgrant.EdgeUser:
+		m.ResetUser()
+		return nil
+	case userlimitedcreditgrant.EdgeLedgerEntries:
+		m.ResetLedgerEntries()
+		return nil
+	}
+	return fmt.Errorf("unknown UserLimitedCreditGrant edge %s", name)
+}
+
+// UserLimitedCreditLedgerMutation represents an operation that mutates the UserLimitedCreditLedger nodes in the graph.
+type UserLimitedCreditLedgerMutation struct {
+	config
+	op              Op
+	typ             string
+	id              *int64
+	event_type      *string
+	amount          *float64
+	addamount       *float64
+	request_id      *string
+	api_key_id      *int64
+	addapi_key_id   *int64
+	batch_id        *string
+	usage_log_id    *int64
+	addusage_log_id *int64
+	notes           *string
+	created_at      *time.Time
+	clearedFields   map[string]struct{}
+	user            *int64
+	cleareduser     bool
+	grant           *int64
+	clearedgrant    bool
+	done            bool
+	oldValue        func(context.Context) (*UserLimitedCreditLedger, error)
+	predicates      []predicate.UserLimitedCreditLedger
+}
+
+var _ ent.Mutation = (*UserLimitedCreditLedgerMutation)(nil)
+
+// userlimitedcreditledgerOption allows management of the mutation configuration using functional options.
+type userlimitedcreditledgerOption func(*UserLimitedCreditLedgerMutation)
+
+// newUserLimitedCreditLedgerMutation creates new mutation for the UserLimitedCreditLedger entity.
+func newUserLimitedCreditLedgerMutation(c config, op Op, opts ...userlimitedcreditledgerOption) *UserLimitedCreditLedgerMutation {
+	m := &UserLimitedCreditLedgerMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeUserLimitedCreditLedger,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withUserLimitedCreditLedgerID sets the ID field of the mutation.
+func withUserLimitedCreditLedgerID(id int64) userlimitedcreditledgerOption {
+	return func(m *UserLimitedCreditLedgerMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *UserLimitedCreditLedger
+		)
+		m.oldValue = func(ctx context.Context) (*UserLimitedCreditLedger, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().UserLimitedCreditLedger.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withUserLimitedCreditLedger sets the old UserLimitedCreditLedger of the mutation.
+func withUserLimitedCreditLedger(node *UserLimitedCreditLedger) userlimitedcreditledgerOption {
+	return func(m *UserLimitedCreditLedgerMutation) {
+		m.oldValue = func(context.Context) (*UserLimitedCreditLedger, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m UserLimitedCreditLedgerMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m UserLimitedCreditLedgerMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *UserLimitedCreditLedgerMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *UserLimitedCreditLedgerMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().UserLimitedCreditLedger.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUserID sets the "user_id" field.
+func (m *UserLimitedCreditLedgerMutation) SetUserID(i int64) {
+	m.user = &i
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *UserLimitedCreditLedgerMutation) UserID() (r int64, exists bool) {
+	v := m.user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the UserLimitedCreditLedger entity.
+// If the UserLimitedCreditLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditLedgerMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *UserLimitedCreditLedgerMutation) ResetUserID() {
+	m.user = nil
+}
+
+// SetGrantID sets the "grant_id" field.
+func (m *UserLimitedCreditLedgerMutation) SetGrantID(i int64) {
+	m.grant = &i
+}
+
+// GrantID returns the value of the "grant_id" field in the mutation.
+func (m *UserLimitedCreditLedgerMutation) GrantID() (r int64, exists bool) {
+	v := m.grant
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGrantID returns the old "grant_id" field's value of the UserLimitedCreditLedger entity.
+// If the UserLimitedCreditLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditLedgerMutation) OldGrantID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGrantID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGrantID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGrantID: %w", err)
+	}
+	return oldValue.GrantID, nil
+}
+
+// ResetGrantID resets all changes to the "grant_id" field.
+func (m *UserLimitedCreditLedgerMutation) ResetGrantID() {
+	m.grant = nil
+}
+
+// SetEventType sets the "event_type" field.
+func (m *UserLimitedCreditLedgerMutation) SetEventType(s string) {
+	m.event_type = &s
+}
+
+// EventType returns the value of the "event_type" field in the mutation.
+func (m *UserLimitedCreditLedgerMutation) EventType() (r string, exists bool) {
+	v := m.event_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEventType returns the old "event_type" field's value of the UserLimitedCreditLedger entity.
+// If the UserLimitedCreditLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditLedgerMutation) OldEventType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEventType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEventType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEventType: %w", err)
+	}
+	return oldValue.EventType, nil
+}
+
+// ResetEventType resets all changes to the "event_type" field.
+func (m *UserLimitedCreditLedgerMutation) ResetEventType() {
+	m.event_type = nil
+}
+
+// SetAmount sets the "amount" field.
+func (m *UserLimitedCreditLedgerMutation) SetAmount(f float64) {
+	m.amount = &f
+	m.addamount = nil
+}
+
+// Amount returns the value of the "amount" field in the mutation.
+func (m *UserLimitedCreditLedgerMutation) Amount() (r float64, exists bool) {
+	v := m.amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAmount returns the old "amount" field's value of the UserLimitedCreditLedger entity.
+// If the UserLimitedCreditLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditLedgerMutation) OldAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAmount: %w", err)
+	}
+	return oldValue.Amount, nil
+}
+
+// AddAmount adds f to the "amount" field.
+func (m *UserLimitedCreditLedgerMutation) AddAmount(f float64) {
+	if m.addamount != nil {
+		*m.addamount += f
+	} else {
+		m.addamount = &f
+	}
+}
+
+// AddedAmount returns the value that was added to the "amount" field in this mutation.
+func (m *UserLimitedCreditLedgerMutation) AddedAmount() (r float64, exists bool) {
+	v := m.addamount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAmount resets all changes to the "amount" field.
+func (m *UserLimitedCreditLedgerMutation) ResetAmount() {
+	m.amount = nil
+	m.addamount = nil
+}
+
+// SetRequestID sets the "request_id" field.
+func (m *UserLimitedCreditLedgerMutation) SetRequestID(s string) {
+	m.request_id = &s
+}
+
+// RequestID returns the value of the "request_id" field in the mutation.
+func (m *UserLimitedCreditLedgerMutation) RequestID() (r string, exists bool) {
+	v := m.request_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestID returns the old "request_id" field's value of the UserLimitedCreditLedger entity.
+// If the UserLimitedCreditLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditLedgerMutation) OldRequestID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestID: %w", err)
+	}
+	return oldValue.RequestID, nil
+}
+
+// ClearRequestID clears the value of the "request_id" field.
+func (m *UserLimitedCreditLedgerMutation) ClearRequestID() {
+	m.request_id = nil
+	m.clearedFields[userlimitedcreditledger.FieldRequestID] = struct{}{}
+}
+
+// RequestIDCleared returns if the "request_id" field was cleared in this mutation.
+func (m *UserLimitedCreditLedgerMutation) RequestIDCleared() bool {
+	_, ok := m.clearedFields[userlimitedcreditledger.FieldRequestID]
+	return ok
+}
+
+// ResetRequestID resets all changes to the "request_id" field.
+func (m *UserLimitedCreditLedgerMutation) ResetRequestID() {
+	m.request_id = nil
+	delete(m.clearedFields, userlimitedcreditledger.FieldRequestID)
+}
+
+// SetAPIKeyID sets the "api_key_id" field.
+func (m *UserLimitedCreditLedgerMutation) SetAPIKeyID(i int64) {
+	m.api_key_id = &i
+	m.addapi_key_id = nil
+}
+
+// APIKeyID returns the value of the "api_key_id" field in the mutation.
+func (m *UserLimitedCreditLedgerMutation) APIKeyID() (r int64, exists bool) {
+	v := m.api_key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyID returns the old "api_key_id" field's value of the UserLimitedCreditLedger entity.
+// If the UserLimitedCreditLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditLedgerMutation) OldAPIKeyID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyID: %w", err)
+	}
+	return oldValue.APIKeyID, nil
+}
+
+// AddAPIKeyID adds i to the "api_key_id" field.
+func (m *UserLimitedCreditLedgerMutation) AddAPIKeyID(i int64) {
+	if m.addapi_key_id != nil {
+		*m.addapi_key_id += i
+	} else {
+		m.addapi_key_id = &i
+	}
+}
+
+// AddedAPIKeyID returns the value that was added to the "api_key_id" field in this mutation.
+func (m *UserLimitedCreditLedgerMutation) AddedAPIKeyID() (r int64, exists bool) {
+	v := m.addapi_key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAPIKeyID clears the value of the "api_key_id" field.
+func (m *UserLimitedCreditLedgerMutation) ClearAPIKeyID() {
+	m.api_key_id = nil
+	m.addapi_key_id = nil
+	m.clearedFields[userlimitedcreditledger.FieldAPIKeyID] = struct{}{}
+}
+
+// APIKeyIDCleared returns if the "api_key_id" field was cleared in this mutation.
+func (m *UserLimitedCreditLedgerMutation) APIKeyIDCleared() bool {
+	_, ok := m.clearedFields[userlimitedcreditledger.FieldAPIKeyID]
+	return ok
+}
+
+// ResetAPIKeyID resets all changes to the "api_key_id" field.
+func (m *UserLimitedCreditLedgerMutation) ResetAPIKeyID() {
+	m.api_key_id = nil
+	m.addapi_key_id = nil
+	delete(m.clearedFields, userlimitedcreditledger.FieldAPIKeyID)
+}
+
+// SetBatchID sets the "batch_id" field.
+func (m *UserLimitedCreditLedgerMutation) SetBatchID(s string) {
+	m.batch_id = &s
+}
+
+// BatchID returns the value of the "batch_id" field in the mutation.
+func (m *UserLimitedCreditLedgerMutation) BatchID() (r string, exists bool) {
+	v := m.batch_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBatchID returns the old "batch_id" field's value of the UserLimitedCreditLedger entity.
+// If the UserLimitedCreditLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditLedgerMutation) OldBatchID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBatchID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBatchID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBatchID: %w", err)
+	}
+	return oldValue.BatchID, nil
+}
+
+// ClearBatchID clears the value of the "batch_id" field.
+func (m *UserLimitedCreditLedgerMutation) ClearBatchID() {
+	m.batch_id = nil
+	m.clearedFields[userlimitedcreditledger.FieldBatchID] = struct{}{}
+}
+
+// BatchIDCleared returns if the "batch_id" field was cleared in this mutation.
+func (m *UserLimitedCreditLedgerMutation) BatchIDCleared() bool {
+	_, ok := m.clearedFields[userlimitedcreditledger.FieldBatchID]
+	return ok
+}
+
+// ResetBatchID resets all changes to the "batch_id" field.
+func (m *UserLimitedCreditLedgerMutation) ResetBatchID() {
+	m.batch_id = nil
+	delete(m.clearedFields, userlimitedcreditledger.FieldBatchID)
+}
+
+// SetUsageLogID sets the "usage_log_id" field.
+func (m *UserLimitedCreditLedgerMutation) SetUsageLogID(i int64) {
+	m.usage_log_id = &i
+	m.addusage_log_id = nil
+}
+
+// UsageLogID returns the value of the "usage_log_id" field in the mutation.
+func (m *UserLimitedCreditLedgerMutation) UsageLogID() (r int64, exists bool) {
+	v := m.usage_log_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsageLogID returns the old "usage_log_id" field's value of the UserLimitedCreditLedger entity.
+// If the UserLimitedCreditLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditLedgerMutation) OldUsageLogID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsageLogID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsageLogID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsageLogID: %w", err)
+	}
+	return oldValue.UsageLogID, nil
+}
+
+// AddUsageLogID adds i to the "usage_log_id" field.
+func (m *UserLimitedCreditLedgerMutation) AddUsageLogID(i int64) {
+	if m.addusage_log_id != nil {
+		*m.addusage_log_id += i
+	} else {
+		m.addusage_log_id = &i
+	}
+}
+
+// AddedUsageLogID returns the value that was added to the "usage_log_id" field in this mutation.
+func (m *UserLimitedCreditLedgerMutation) AddedUsageLogID() (r int64, exists bool) {
+	v := m.addusage_log_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearUsageLogID clears the value of the "usage_log_id" field.
+func (m *UserLimitedCreditLedgerMutation) ClearUsageLogID() {
+	m.usage_log_id = nil
+	m.addusage_log_id = nil
+	m.clearedFields[userlimitedcreditledger.FieldUsageLogID] = struct{}{}
+}
+
+// UsageLogIDCleared returns if the "usage_log_id" field was cleared in this mutation.
+func (m *UserLimitedCreditLedgerMutation) UsageLogIDCleared() bool {
+	_, ok := m.clearedFields[userlimitedcreditledger.FieldUsageLogID]
+	return ok
+}
+
+// ResetUsageLogID resets all changes to the "usage_log_id" field.
+func (m *UserLimitedCreditLedgerMutation) ResetUsageLogID() {
+	m.usage_log_id = nil
+	m.addusage_log_id = nil
+	delete(m.clearedFields, userlimitedcreditledger.FieldUsageLogID)
+}
+
+// SetNotes sets the "notes" field.
+func (m *UserLimitedCreditLedgerMutation) SetNotes(s string) {
+	m.notes = &s
+}
+
+// Notes returns the value of the "notes" field in the mutation.
+func (m *UserLimitedCreditLedgerMutation) Notes() (r string, exists bool) {
+	v := m.notes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNotes returns the old "notes" field's value of the UserLimitedCreditLedger entity.
+// If the UserLimitedCreditLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditLedgerMutation) OldNotes(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNotes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNotes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNotes: %w", err)
+	}
+	return oldValue.Notes, nil
+}
+
+// ClearNotes clears the value of the "notes" field.
+func (m *UserLimitedCreditLedgerMutation) ClearNotes() {
+	m.notes = nil
+	m.clearedFields[userlimitedcreditledger.FieldNotes] = struct{}{}
+}
+
+// NotesCleared returns if the "notes" field was cleared in this mutation.
+func (m *UserLimitedCreditLedgerMutation) NotesCleared() bool {
+	_, ok := m.clearedFields[userlimitedcreditledger.FieldNotes]
+	return ok
+}
+
+// ResetNotes resets all changes to the "notes" field.
+func (m *UserLimitedCreditLedgerMutation) ResetNotes() {
+	m.notes = nil
+	delete(m.clearedFields, userlimitedcreditledger.FieldNotes)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *UserLimitedCreditLedgerMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *UserLimitedCreditLedgerMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the UserLimitedCreditLedger entity.
+// If the UserLimitedCreditLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserLimitedCreditLedgerMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *UserLimitedCreditLedgerMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// ClearUser clears the "user" edge to the User entity.
+func (m *UserLimitedCreditLedgerMutation) ClearUser() {
+	m.cleareduser = true
+	m.clearedFields[userlimitedcreditledger.FieldUserID] = struct{}{}
+}
+
+// UserCleared reports if the "user" edge to the User entity was cleared.
+func (m *UserLimitedCreditLedgerMutation) UserCleared() bool {
+	return m.cleareduser
+}
+
+// UserIDs returns the "user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UserID instead. It exists only for internal usage by the builders.
+func (m *UserLimitedCreditLedgerMutation) UserIDs() (ids []int64) {
+	if id := m.user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUser resets all changes to the "user" edge.
+func (m *UserLimitedCreditLedgerMutation) ResetUser() {
+	m.user = nil
+	m.cleareduser = false
+}
+
+// ClearGrant clears the "grant" edge to the UserLimitedCreditGrant entity.
+func (m *UserLimitedCreditLedgerMutation) ClearGrant() {
+	m.clearedgrant = true
+	m.clearedFields[userlimitedcreditledger.FieldGrantID] = struct{}{}
+}
+
+// GrantCleared reports if the "grant" edge to the UserLimitedCreditGrant entity was cleared.
+func (m *UserLimitedCreditLedgerMutation) GrantCleared() bool {
+	return m.clearedgrant
+}
+
+// GrantIDs returns the "grant" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// GrantID instead. It exists only for internal usage by the builders.
+func (m *UserLimitedCreditLedgerMutation) GrantIDs() (ids []int64) {
+	if id := m.grant; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetGrant resets all changes to the "grant" edge.
+func (m *UserLimitedCreditLedgerMutation) ResetGrant() {
+	m.grant = nil
+	m.clearedgrant = false
+}
+
+// Where appends a list predicates to the UserLimitedCreditLedgerMutation builder.
+func (m *UserLimitedCreditLedgerMutation) Where(ps ...predicate.UserLimitedCreditLedger) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the UserLimitedCreditLedgerMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *UserLimitedCreditLedgerMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.UserLimitedCreditLedger, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *UserLimitedCreditLedgerMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *UserLimitedCreditLedgerMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (UserLimitedCreditLedger).
+func (m *UserLimitedCreditLedgerMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *UserLimitedCreditLedgerMutation) Fields() []string {
+	fields := make([]string, 0, 10)
+	if m.user != nil {
+		fields = append(fields, userlimitedcreditledger.FieldUserID)
+	}
+	if m.grant != nil {
+		fields = append(fields, userlimitedcreditledger.FieldGrantID)
+	}
+	if m.event_type != nil {
+		fields = append(fields, userlimitedcreditledger.FieldEventType)
+	}
+	if m.amount != nil {
+		fields = append(fields, userlimitedcreditledger.FieldAmount)
+	}
+	if m.request_id != nil {
+		fields = append(fields, userlimitedcreditledger.FieldRequestID)
+	}
+	if m.api_key_id != nil {
+		fields = append(fields, userlimitedcreditledger.FieldAPIKeyID)
+	}
+	if m.batch_id != nil {
+		fields = append(fields, userlimitedcreditledger.FieldBatchID)
+	}
+	if m.usage_log_id != nil {
+		fields = append(fields, userlimitedcreditledger.FieldUsageLogID)
+	}
+	if m.notes != nil {
+		fields = append(fields, userlimitedcreditledger.FieldNotes)
+	}
+	if m.created_at != nil {
+		fields = append(fields, userlimitedcreditledger.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *UserLimitedCreditLedgerMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case userlimitedcreditledger.FieldUserID:
+		return m.UserID()
+	case userlimitedcreditledger.FieldGrantID:
+		return m.GrantID()
+	case userlimitedcreditledger.FieldEventType:
+		return m.EventType()
+	case userlimitedcreditledger.FieldAmount:
+		return m.Amount()
+	case userlimitedcreditledger.FieldRequestID:
+		return m.RequestID()
+	case userlimitedcreditledger.FieldAPIKeyID:
+		return m.APIKeyID()
+	case userlimitedcreditledger.FieldBatchID:
+		return m.BatchID()
+	case userlimitedcreditledger.FieldUsageLogID:
+		return m.UsageLogID()
+	case userlimitedcreditledger.FieldNotes:
+		return m.Notes()
+	case userlimitedcreditledger.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *UserLimitedCreditLedgerMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case userlimitedcreditledger.FieldUserID:
+		return m.OldUserID(ctx)
+	case userlimitedcreditledger.FieldGrantID:
+		return m.OldGrantID(ctx)
+	case userlimitedcreditledger.FieldEventType:
+		return m.OldEventType(ctx)
+	case userlimitedcreditledger.FieldAmount:
+		return m.OldAmount(ctx)
+	case userlimitedcreditledger.FieldRequestID:
+		return m.OldRequestID(ctx)
+	case userlimitedcreditledger.FieldAPIKeyID:
+		return m.OldAPIKeyID(ctx)
+	case userlimitedcreditledger.FieldBatchID:
+		return m.OldBatchID(ctx)
+	case userlimitedcreditledger.FieldUsageLogID:
+		return m.OldUsageLogID(ctx)
+	case userlimitedcreditledger.FieldNotes:
+		return m.OldNotes(ctx)
+	case userlimitedcreditledger.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown UserLimitedCreditLedger field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *UserLimitedCreditLedgerMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case userlimitedcreditledger.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case userlimitedcreditledger.FieldGrantID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGrantID(v)
+		return nil
+	case userlimitedcreditledger.FieldEventType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEventType(v)
+		return nil
+	case userlimitedcreditledger.FieldAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAmount(v)
+		return nil
+	case userlimitedcreditledger.FieldRequestID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestID(v)
+		return nil
+	case userlimitedcreditledger.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyID(v)
+		return nil
+	case userlimitedcreditledger.FieldBatchID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBatchID(v)
+		return nil
+	case userlimitedcreditledger.FieldUsageLogID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsageLogID(v)
+		return nil
+	case userlimitedcreditledger.FieldNotes:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNotes(v)
+		return nil
+	case userlimitedcreditledger.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown UserLimitedCreditLedger field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *UserLimitedCreditLedgerMutation) AddedFields() []string {
+	var fields []string
+	if m.addamount != nil {
+		fields = append(fields, userlimitedcreditledger.FieldAmount)
+	}
+	if m.addapi_key_id != nil {
+		fields = append(fields, userlimitedcreditledger.FieldAPIKeyID)
+	}
+	if m.addusage_log_id != nil {
+		fields = append(fields, userlimitedcreditledger.FieldUsageLogID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *UserLimitedCreditLedgerMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case userlimitedcreditledger.FieldAmount:
+		return m.AddedAmount()
+	case userlimitedcreditledger.FieldAPIKeyID:
+		return m.AddedAPIKeyID()
+	case userlimitedcreditledger.FieldUsageLogID:
+		return m.AddedUsageLogID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *UserLimitedCreditLedgerMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case userlimitedcreditledger.FieldAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAmount(v)
+		return nil
+	case userlimitedcreditledger.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAPIKeyID(v)
+		return nil
+	case userlimitedcreditledger.FieldUsageLogID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUsageLogID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown UserLimitedCreditLedger numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *UserLimitedCreditLedgerMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(userlimitedcreditledger.FieldRequestID) {
+		fields = append(fields, userlimitedcreditledger.FieldRequestID)
+	}
+	if m.FieldCleared(userlimitedcreditledger.FieldAPIKeyID) {
+		fields = append(fields, userlimitedcreditledger.FieldAPIKeyID)
+	}
+	if m.FieldCleared(userlimitedcreditledger.FieldBatchID) {
+		fields = append(fields, userlimitedcreditledger.FieldBatchID)
+	}
+	if m.FieldCleared(userlimitedcreditledger.FieldUsageLogID) {
+		fields = append(fields, userlimitedcreditledger.FieldUsageLogID)
+	}
+	if m.FieldCleared(userlimitedcreditledger.FieldNotes) {
+		fields = append(fields, userlimitedcreditledger.FieldNotes)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *UserLimitedCreditLedgerMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *UserLimitedCreditLedgerMutation) ClearField(name string) error {
+	switch name {
+	case userlimitedcreditledger.FieldRequestID:
+		m.ClearRequestID()
+		return nil
+	case userlimitedcreditledger.FieldAPIKeyID:
+		m.ClearAPIKeyID()
+		return nil
+	case userlimitedcreditledger.FieldBatchID:
+		m.ClearBatchID()
+		return nil
+	case userlimitedcreditledger.FieldUsageLogID:
+		m.ClearUsageLogID()
+		return nil
+	case userlimitedcreditledger.FieldNotes:
+		m.ClearNotes()
+		return nil
+	}
+	return fmt.Errorf("unknown UserLimitedCreditLedger nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *UserLimitedCreditLedgerMutation) ResetField(name string) error {
+	switch name {
+	case userlimitedcreditledger.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case userlimitedcreditledger.FieldGrantID:
+		m.ResetGrantID()
+		return nil
+	case userlimitedcreditledger.FieldEventType:
+		m.ResetEventType()
+		return nil
+	case userlimitedcreditledger.FieldAmount:
+		m.ResetAmount()
+		return nil
+	case userlimitedcreditledger.FieldRequestID:
+		m.ResetRequestID()
+		return nil
+	case userlimitedcreditledger.FieldAPIKeyID:
+		m.ResetAPIKeyID()
+		return nil
+	case userlimitedcreditledger.FieldBatchID:
+		m.ResetBatchID()
+		return nil
+	case userlimitedcreditledger.FieldUsageLogID:
+		m.ResetUsageLogID()
+		return nil
+	case userlimitedcreditledger.FieldNotes:
+		m.ResetNotes()
+		return nil
+	case userlimitedcreditledger.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown UserLimitedCreditLedger field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *UserLimitedCreditLedgerMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.user != nil {
+		edges = append(edges, userlimitedcreditledger.EdgeUser)
+	}
+	if m.grant != nil {
+		edges = append(edges, userlimitedcreditledger.EdgeGrant)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *UserLimitedCreditLedgerMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case userlimitedcreditledger.EdgeUser:
+		if id := m.user; id != nil {
+			return []ent.Value{*id}
+		}
+	case userlimitedcreditledger.EdgeGrant:
+		if id := m.grant; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *UserLimitedCreditLedgerMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *UserLimitedCreditLedgerMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *UserLimitedCreditLedgerMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.cleareduser {
+		edges = append(edges, userlimitedcreditledger.EdgeUser)
+	}
+	if m.clearedgrant {
+		edges = append(edges, userlimitedcreditledger.EdgeGrant)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *UserLimitedCreditLedgerMutation) EdgeCleared(name string) bool {
+	switch name {
+	case userlimitedcreditledger.EdgeUser:
+		return m.cleareduser
+	case userlimitedcreditledger.EdgeGrant:
+		return m.clearedgrant
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *UserLimitedCreditLedgerMutation) ClearEdge(name string) error {
+	switch name {
+	case userlimitedcreditledger.EdgeUser:
+		m.ClearUser()
+		return nil
+	case userlimitedcreditledger.EdgeGrant:
+		m.ClearGrant()
+		return nil
+	}
+	return fmt.Errorf("unknown UserLimitedCreditLedger unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *UserLimitedCreditLedgerMutation) ResetEdge(name string) error {
+	switch name {
+	case userlimitedcreditledger.EdgeUser:
+		m.ResetUser()
+		return nil
+	case userlimitedcreditledger.EdgeGrant:
+		m.ResetGrant()
+		return nil
+	}
+	return fmt.Errorf("unknown UserLimitedCreditLedger edge %s", name)
 }
 
 // UserPlatformQuotaMutation represents an operation that mutates the UserPlatformQuota nodes in the graph.

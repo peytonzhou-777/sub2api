@@ -66,29 +66,40 @@ type JWTClaims struct {
 
 // AuthService 认证服务
 type AuthService struct {
-	entClient             *dbent.Client
-	userRepo              UserRepository
-	redeemRepo            RedeemCodeRepository
-	refreshTokenCache     RefreshTokenCache
-	cfg                   *config.Config
-	settingService        *SettingService
-	emailService          *EmailService
-	turnstileService      *TurnstileService
-	emailQueueService     *EmailQueueService
-	promoService          *PromoService
-	affiliateService      *AffiliateService
-	defaultSubAssigner    DefaultSubscriptionAssigner
-	userPlatformQuotaRepo UserPlatformQuotaRepository
+	entClient                   *dbent.Client
+	userRepo                    UserRepository
+	redeemRepo                  RedeemCodeRepository
+	refreshTokenCache           RefreshTokenCache
+	cfg                         *config.Config
+	settingService              *SettingService
+	emailService                *EmailService
+	turnstileService            *TurnstileService
+	emailQueueService           *EmailQueueService
+	promoService                *PromoService
+	affiliateService            *AffiliateService
+	defaultSubAssigner          DefaultSubscriptionAssigner
+	defaultLimitedCreditGranter DefaultLimitedCreditGranter
+	userPlatformQuotaRepo       UserPlatformQuotaRepository
 }
 
 type DefaultSubscriptionAssigner interface {
 	AssignOrExtendSubscription(ctx context.Context, input *AssignSubscriptionInput) (*UserSubscription, bool, error)
 }
 
+type AuthServiceOption func(*AuthService)
+
+// WithDefaultLimitedCreditGranter 配置新用户默认限时额度发放器。
+func WithDefaultLimitedCreditGranter(granter DefaultLimitedCreditGranter) AuthServiceOption {
+	return func(service *AuthService) {
+		service.defaultLimitedCreditGranter = granter
+	}
+}
+
 type signupGrantPlan struct {
 	Balance        float64
 	Concurrency    int
 	Subscriptions  []DefaultSubscriptionSetting
+	LimitedCredits []DefaultLimitedCreditSetting
 	PlatformQuotas map[string]*DefaultPlatformQuotaSetting
 }
 
@@ -107,8 +118,9 @@ func NewAuthService(
 	defaultSubAssigner DefaultSubscriptionAssigner,
 	affiliateService *AffiliateService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	options ...AuthServiceOption,
 ) *AuthService {
-	return &AuthService{
+	authService := &AuthService{
 		entClient:             entClient,
 		userRepo:              userRepo,
 		redeemRepo:            redeemRepo,
@@ -123,6 +135,12 @@ func NewAuthService(
 		defaultSubAssigner:    defaultSubAssigner,
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
 	}
+	for _, option := range options {
+		if option != nil {
+			option(authService)
+		}
+	}
+	return authService
 }
 
 func (s *AuthService) EntClient() *dbent.Client {
@@ -233,7 +251,7 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 		return "", nil, ErrServiceUnavailable
 	}
 	s.postAuthUserBootstrap(ctx, user, "email", true)
-	s.assignSubscriptions(ctx, user.ID, grantPlan.Subscriptions, "auto assigned by signup defaults")
+	s.assignSignupEntitlements(ctx, user.ID, grantPlan)
 	// snapshot user × platform quota（fail-open）
 	_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
 	if s.affiliateService != nil {
@@ -544,7 +562,7 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 			} else {
 				user = newUser
 				s.postAuthUserBootstrap(ctx, user, signupSource, false)
-				s.assignSubscriptions(ctx, user.ID, grantPlan.Subscriptions, "auto assigned by signup defaults")
+				s.assignSignupEntitlements(ctx, user.ID, grantPlan)
 				// snapshot user × platform quota（fail-open）
 				_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
 			}
@@ -709,7 +727,7 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 					user = newUser
 					created = true
 					s.postAuthUserBootstrap(ctx, user, signupSource, false)
-					s.assignSubscriptions(ctx, user.ID, grantPlan.Subscriptions, "auto assigned by signup defaults")
+					s.assignSignupEntitlements(ctx, user.ID, grantPlan)
 					// snapshot user × platform quota（fail-open）
 					_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
 					s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
@@ -730,7 +748,7 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 					user = newUser
 					created = true
 					s.postAuthUserBootstrap(ctx, user, signupSource, false)
-					s.assignSubscriptions(ctx, user.ID, grantPlan.Subscriptions, "auto assigned by signup defaults")
+					s.assignSignupEntitlements(ctx, user.ID, grantPlan)
 					// snapshot user × platform quota（fail-open）
 					_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
 					s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
@@ -805,6 +823,17 @@ func (s *AuthService) assignSubscriptions(ctx context.Context, userID int64, ite
 	}
 }
 
+// assignSignupEntitlements 为刚创建的用户发放全局默认订阅和限时额度。
+func (s *AuthService) assignSignupEntitlements(ctx context.Context, userID int64, plan signupGrantPlan) {
+	s.assignSubscriptions(ctx, userID, plan.Subscriptions, "auto assigned by signup defaults")
+	if s.defaultLimitedCreditGranter == nil || len(plan.LimitedCredits) == 0 || userID <= 0 {
+		return
+	}
+	if _, err := s.defaultLimitedCreditGranter.GrantFromDefaultSettings(ctx, userID, plan.LimitedCredits); err != nil {
+		logger.LegacyPrintf("service.auth", "[Auth] Failed to grant default limited credits: user_id=%d err=%v", userID, err)
+	}
+}
+
 func (s *AuthService) resolveSignupGrantPlan(ctx context.Context, signupSource string) signupGrantPlan {
 	plan := signupGrantPlan{}
 	if s != nil && s.cfg != nil {
@@ -818,6 +847,7 @@ func (s *AuthService) resolveSignupGrantPlan(ctx context.Context, signupSource s
 	plan.Balance = s.settingService.GetDefaultBalance(ctx)
 	plan.Concurrency = s.settingService.GetDefaultConcurrency(ctx)
 	plan.Subscriptions = s.settingService.GetDefaultSubscriptions(ctx)
+	plan.LimitedCredits = s.settingService.GetDefaultLimitedCredits(ctx)
 
 	// ============ 全局 quota 装载（必须在 ResolveAuthSourceGrantSettings 之前） ============
 	// 无论 auth source 是否 enabled，全局层都要先装载，确保 !enabled 早退路径也携带全局 quota。

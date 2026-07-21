@@ -605,12 +605,15 @@ export default {
     concurrencyReducedAdmin: '并发减少（管理员）',
     adminAdjustment: '管理员调整',
     subscriptionAssigned: '订阅已分配',
+    limitedCreditAssigned: '限时额度已发放',
     subscriptionAssignedDesc: '您已获得 {groupName} 的访问权限',
     subscriptionDays: '{days} 天',
+    validityDays: '有效 {days} 天',
     days: '天',
     codeRedeemSuccess: '兑换成功！',
     failedToRedeem: '兑换失败，请检查兑换码后重试。',
     subscriptionRefreshFailed: '兑换成功，但订阅状态刷新失败。',
+    limitedCreditRefreshFailed: '兑换成功，但限时额度状态刷新失败。',
     pleaseEnterCode: '请输入兑换码'
   },
 

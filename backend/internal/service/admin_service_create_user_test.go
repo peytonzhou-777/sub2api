@@ -146,3 +146,54 @@ func TestAdminService_CreateUser_AssignsDefaultSubscriptions(t *testing.T) {
 	require.Equal(t, int64(5), assigner.calls[0].GroupID)
 	require.Equal(t, 30, assigner.calls[0].ValidityDays)
 }
+
+func TestAdminService_CreateUser_GrantsDefaultLimitedCredits(t *testing.T) {
+	repo := &userRepoStub{nextID: 22}
+	granter := &defaultLimitedCreditGranterStub{}
+	settingService := NewSettingService(&settingRepoStub{values: map[string]string{
+		SettingKeyDefaultLimitedCredits: `[{"amount":3.5,"validity_days":14},{"amount":8,"validity_days":30}]`,
+	}}, &config.Config{})
+	svc := &adminServiceImpl{
+		userRepo:                    repo,
+		settingService:              settingService,
+		defaultLimitedCreditGranter: granter,
+	}
+
+	user, err := svc.CreateUser(context.Background(), &CreateUserInput{
+		Email:    "limited-credit@test.com",
+		Password: "password",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Equal(t, []defaultLimitedCreditGrantCall{{
+		userID: 22,
+		items: []DefaultLimitedCreditSetting{
+			{Amount: 3.5, ValidityDays: 14},
+			{Amount: 8, ValidityDays: 30},
+		},
+	}}, granter.calls)
+}
+
+func TestAdminService_CreateUser_DefaultLimitedCreditFailureKeepsUser(t *testing.T) {
+	repo := &userRepoStub{nextID: 23}
+	granter := &defaultLimitedCreditGranterStub{err: errors.New("grant failed")}
+	settingService := NewSettingService(&settingRepoStub{values: map[string]string{
+		SettingKeyDefaultLimitedCredits: `[{"amount":5,"validity_days":30}]`,
+	}}, &config.Config{})
+	svc := &adminServiceImpl{
+		userRepo:                    repo,
+		settingService:              settingService,
+		defaultLimitedCreditGranter: granter,
+	}
+
+	user, err := svc.CreateUser(context.Background(), &CreateUserInput{
+		Email:    "limited-credit-failure@test.com",
+		Password: "password",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Len(t, repo.created, 1)
+	require.Len(t, granter.calls, 1)
+}

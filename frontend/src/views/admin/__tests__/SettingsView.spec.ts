@@ -352,6 +352,7 @@ const baseSettingsResponse = {
   default_balance: 0,
   default_concurrency: 1,
   default_subscriptions: [],
+  default_limited_credits: [],
   site_name: "Sub2API",
   site_logo: "",
   site_subtitle: "",
@@ -1463,6 +1464,58 @@ describe("admin SettingsView platform quota matrix", () => {
     expect(html).toContain("openai");
     expect(html).toContain("gemini");
     expect(html).toContain("antigravity");
+  });
+
+  it("默认限时额度为空时展示空状态", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openUsersTab(wrapper);
+
+    expect(wrapper.findAll(".default-limited-credit-row")).toHaveLength(0);
+    expect(wrapper.find(".default-limited-credit-empty").exists()).toBe(true);
+  });
+
+  it("加载、添加、删除并保存默认限时额度", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      default_limited_credits: [{ amount: 2.5, validity_days: 14 }],
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openUsersTab(wrapper);
+
+    let rows = wrapper.findAll(".default-limited-credit-row");
+    expect(rows).toHaveLength(1);
+    expect(
+      (rows[0]?.find(".default-limited-credit-amount").element as HTMLInputElement)
+        .value,
+    ).toBe("2.5");
+    expect(
+      (
+        rows[0]?.find(".default-limited-credit-validity")
+          .element as HTMLInputElement
+      ).value,
+    ).toBe("14");
+
+    await wrapper.find(".default-limited-credit-add-btn").trigger("click");
+    rows = wrapper.findAll(".default-limited-credit-row");
+    expect(rows).toHaveLength(2);
+    expect(
+      (rows[1]?.find(".default-limited-credit-amount").element as HTMLInputElement)
+        .value,
+    ).toBe("1");
+
+    await rows[0]?.find(".default-limited-credit-delete-btn").trigger("click");
+    expect(wrapper.findAll(".default-limited-credit-row")).toHaveLength(1);
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        default_limited_credits: [{ amount: 1, validity_days: 30 }],
+      }),
+    );
   });
 
   it("保存时 updateSettings payload 应包含嵌套 default_platform_quotas 对象（含全 5 平台）", async () => {

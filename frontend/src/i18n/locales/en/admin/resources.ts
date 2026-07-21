@@ -249,6 +249,7 @@ export default {
       balance: 'Balance',
       concurrency: 'Concurrency',
       subscription: 'Subscription',
+      limitedCredit: 'Limited Credit',
       invitation: 'Invitation',
       invitationHint: 'Invitation codes are used to restrict user registration. They are automatically marked as used after use.',
       unused: 'Unused',
@@ -315,6 +316,7 @@ export default {
         balance: 'Balance',
         concurrency: 'Concurrency',
         subscription: 'Subscription',
+        limited_credit: 'Limited Credit',
         invitation: 'Invitation',
         // Admin adjustment types (created when admin modifies user balance/concurrency)
         admin_balance: 'Balance (Admin)',
@@ -330,6 +332,7 @@ export default {
       customExpiryDays: 'Custom days',
       expiryDaysRequired: 'Please enter a valid expiry day count',
       groupRequired: 'Please select a subscription group',
+      amountRequired: 'Please enter a valid amount',
       days: ' days',
       status: {
         unused: 'Unused',

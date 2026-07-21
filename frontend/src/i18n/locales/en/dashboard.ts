@@ -600,12 +600,15 @@ export default {
     concurrencyReducedAdmin: 'Concurrency Reduced (Admin)',
     adminAdjustment: 'Admin Adjustment',
     subscriptionAssigned: 'Subscription Assigned',
+    limitedCreditAssigned: 'Limited Credit Granted',
     subscriptionAssignedDesc: 'You have been granted access to {groupName}',
     subscriptionDays: '{days} days',
+    validityDays: 'valid for {days} days',
     days: ' days',
     codeRedeemSuccess: 'Code redeemed successfully!',
     failedToRedeem: 'Failed to redeem code. Please check the code and try again.',
     subscriptionRefreshFailed: 'Redeemed successfully, but failed to refresh subscription status.',
+    limitedCreditRefreshFailed: 'Redeemed successfully, but failed to refresh limited credit status.',
     pleaseEnterCode: 'Please enter a redeem code'
   },
 

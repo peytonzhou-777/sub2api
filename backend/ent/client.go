@@ -52,6 +52,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
+	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditledger"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 
@@ -137,6 +139,10 @@ type Client struct {
 	UserAttributeDefinition *UserAttributeDefinitionClient
 	// UserAttributeValue is the client for interacting with the UserAttributeValue builders.
 	UserAttributeValue *UserAttributeValueClient
+	// UserLimitedCreditGrant is the client for interacting with the UserLimitedCreditGrant builders.
+	UserLimitedCreditGrant *UserLimitedCreditGrantClient
+	// UserLimitedCreditLedger is the client for interacting with the UserLimitedCreditLedger builders.
+	UserLimitedCreditLedger *UserLimitedCreditLedgerClient
 	// UserPlatformQuota is the client for interacting with the UserPlatformQuota builders.
 	UserPlatformQuota *UserPlatformQuotaClient
 	// UserSubscription is the client for interacting with the UserSubscription builders.
@@ -189,6 +195,8 @@ func (c *Client) init() {
 	c.UserAllowedGroup = NewUserAllowedGroupClient(c.config)
 	c.UserAttributeDefinition = NewUserAttributeDefinitionClient(c.config)
 	c.UserAttributeValue = NewUserAttributeValueClient(c.config)
+	c.UserLimitedCreditGrant = NewUserLimitedCreditGrantClient(c.config)
+	c.UserLimitedCreditLedger = NewUserLimitedCreditLedgerClient(c.config)
 	c.UserPlatformQuota = NewUserPlatformQuotaClient(c.config)
 	c.UserSubscription = NewUserSubscriptionClient(c.config)
 }
@@ -320,6 +328,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		UserAllowedGroup:              NewUserAllowedGroupClient(cfg),
 		UserAttributeDefinition:       NewUserAttributeDefinitionClient(cfg),
 		UserAttributeValue:            NewUserAttributeValueClient(cfg),
+		UserLimitedCreditGrant:        NewUserLimitedCreditGrantClient(cfg),
+		UserLimitedCreditLedger:       NewUserLimitedCreditLedgerClient(cfg),
 		UserPlatformQuota:             NewUserPlatformQuotaClient(cfg),
 		UserSubscription:              NewUserSubscriptionClient(cfg),
 	}, nil
@@ -378,6 +388,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		UserAllowedGroup:              NewUserAllowedGroupClient(cfg),
 		UserAttributeDefinition:       NewUserAttributeDefinitionClient(cfg),
 		UserAttributeValue:            NewUserAttributeValueClient(cfg),
+		UserLimitedCreditGrant:        NewUserLimitedCreditGrantClient(cfg),
+		UserLimitedCreditLedger:       NewUserLimitedCreditLedgerClient(cfg),
 		UserPlatformQuota:             NewUserPlatformQuotaClient(cfg),
 		UserSubscription:              NewUserSubscriptionClient(cfg),
 	}, nil
@@ -419,7 +431,8 @@ func (c *Client) Use(hooks ...Hook) {
 		c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
 		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
 		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
-		c.UserPlatformQuota, c.UserSubscription,
+		c.UserLimitedCreditGrant, c.UserLimitedCreditLedger, c.UserPlatformQuota,
+		c.UserSubscription,
 	} {
 		n.Use(hooks...)
 	}
@@ -439,7 +452,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
 		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
 		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
-		c.UserPlatformQuota, c.UserSubscription,
+		c.UserLimitedCreditGrant, c.UserLimitedCreditLedger, c.UserPlatformQuota,
+		c.UserSubscription,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -522,6 +536,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.UserAttributeDefinition.mutate(ctx, m)
 	case *UserAttributeValueMutation:
 		return c.UserAttributeValue.mutate(ctx, m)
+	case *UserLimitedCreditGrantMutation:
+		return c.UserLimitedCreditGrant.mutate(ctx, m)
+	case *UserLimitedCreditLedgerMutation:
+		return c.UserLimitedCreditLedger.mutate(ctx, m)
 	case *UserPlatformQuotaMutation:
 		return c.UserPlatformQuota.mutate(ctx, m)
 	case *UserSubscriptionMutation:
@@ -5997,6 +6015,38 @@ func (c *UserClient) QueryPlatformQuotas(_m *User) *UserPlatformQuotaQuery {
 	return query
 }
 
+// QueryLimitedCreditGrants queries the limited_credit_grants edge of a User.
+func (c *UserClient) QueryLimitedCreditGrants(_m *User) *UserLimitedCreditGrantQuery {
+	query := (&UserLimitedCreditGrantClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(userlimitedcreditgrant.Table, userlimitedcreditgrant.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.LimitedCreditGrantsTable, user.LimitedCreditGrantsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryLimitedCreditLedgerEntries queries the limited_credit_ledger_entries edge of a User.
+func (c *UserClient) QueryLimitedCreditLedgerEntries(_m *User) *UserLimitedCreditLedgerQuery {
+	query := (&UserLimitedCreditLedgerClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(userlimitedcreditledger.Table, userlimitedcreditledger.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.LimitedCreditLedgerEntriesTable, user.LimitedCreditLedgerEntriesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryUserAllowedGroups queries the user_allowed_groups edge of a User.
 func (c *UserClient) QueryUserAllowedGroups(_m *User) *UserAllowedGroupQuery {
 	query := (&UserAllowedGroupClient{config: c.config}).Query()
@@ -6472,6 +6522,336 @@ func (c *UserAttributeValueClient) mutate(ctx context.Context, m *UserAttributeV
 	}
 }
 
+// UserLimitedCreditGrantClient is a client for the UserLimitedCreditGrant schema.
+type UserLimitedCreditGrantClient struct {
+	config
+}
+
+// NewUserLimitedCreditGrantClient returns a client for the UserLimitedCreditGrant from the given config.
+func NewUserLimitedCreditGrantClient(c config) *UserLimitedCreditGrantClient {
+	return &UserLimitedCreditGrantClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `userlimitedcreditgrant.Hooks(f(g(h())))`.
+func (c *UserLimitedCreditGrantClient) Use(hooks ...Hook) {
+	c.hooks.UserLimitedCreditGrant = append(c.hooks.UserLimitedCreditGrant, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `userlimitedcreditgrant.Intercept(f(g(h())))`.
+func (c *UserLimitedCreditGrantClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UserLimitedCreditGrant = append(c.inters.UserLimitedCreditGrant, interceptors...)
+}
+
+// Create returns a builder for creating a UserLimitedCreditGrant entity.
+func (c *UserLimitedCreditGrantClient) Create() *UserLimitedCreditGrantCreate {
+	mutation := newUserLimitedCreditGrantMutation(c.config, OpCreate)
+	return &UserLimitedCreditGrantCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UserLimitedCreditGrant entities.
+func (c *UserLimitedCreditGrantClient) CreateBulk(builders ...*UserLimitedCreditGrantCreate) *UserLimitedCreditGrantCreateBulk {
+	return &UserLimitedCreditGrantCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UserLimitedCreditGrantClient) MapCreateBulk(slice any, setFunc func(*UserLimitedCreditGrantCreate, int)) *UserLimitedCreditGrantCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UserLimitedCreditGrantCreateBulk{err: fmt.Errorf("calling to UserLimitedCreditGrantClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UserLimitedCreditGrantCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UserLimitedCreditGrantCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UserLimitedCreditGrant.
+func (c *UserLimitedCreditGrantClient) Update() *UserLimitedCreditGrantUpdate {
+	mutation := newUserLimitedCreditGrantMutation(c.config, OpUpdate)
+	return &UserLimitedCreditGrantUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UserLimitedCreditGrantClient) UpdateOne(_m *UserLimitedCreditGrant) *UserLimitedCreditGrantUpdateOne {
+	mutation := newUserLimitedCreditGrantMutation(c.config, OpUpdateOne, withUserLimitedCreditGrant(_m))
+	return &UserLimitedCreditGrantUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UserLimitedCreditGrantClient) UpdateOneID(id int64) *UserLimitedCreditGrantUpdateOne {
+	mutation := newUserLimitedCreditGrantMutation(c.config, OpUpdateOne, withUserLimitedCreditGrantID(id))
+	return &UserLimitedCreditGrantUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UserLimitedCreditGrant.
+func (c *UserLimitedCreditGrantClient) Delete() *UserLimitedCreditGrantDelete {
+	mutation := newUserLimitedCreditGrantMutation(c.config, OpDelete)
+	return &UserLimitedCreditGrantDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UserLimitedCreditGrantClient) DeleteOne(_m *UserLimitedCreditGrant) *UserLimitedCreditGrantDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UserLimitedCreditGrantClient) DeleteOneID(id int64) *UserLimitedCreditGrantDeleteOne {
+	builder := c.Delete().Where(userlimitedcreditgrant.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UserLimitedCreditGrantDeleteOne{builder}
+}
+
+// Query returns a query builder for UserLimitedCreditGrant.
+func (c *UserLimitedCreditGrantClient) Query() *UserLimitedCreditGrantQuery {
+	return &UserLimitedCreditGrantQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUserLimitedCreditGrant},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UserLimitedCreditGrant entity by its id.
+func (c *UserLimitedCreditGrantClient) Get(ctx context.Context, id int64) (*UserLimitedCreditGrant, error) {
+	return c.Query().Where(userlimitedcreditgrant.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UserLimitedCreditGrantClient) GetX(ctx context.Context, id int64) *UserLimitedCreditGrant {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUser queries the user edge of a UserLimitedCreditGrant.
+func (c *UserLimitedCreditGrantClient) QueryUser(_m *UserLimitedCreditGrant) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(userlimitedcreditgrant.Table, userlimitedcreditgrant.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, userlimitedcreditgrant.UserTable, userlimitedcreditgrant.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryLedgerEntries queries the ledger_entries edge of a UserLimitedCreditGrant.
+func (c *UserLimitedCreditGrantClient) QueryLedgerEntries(_m *UserLimitedCreditGrant) *UserLimitedCreditLedgerQuery {
+	query := (&UserLimitedCreditLedgerClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(userlimitedcreditgrant.Table, userlimitedcreditgrant.FieldID, id),
+			sqlgraph.To(userlimitedcreditledger.Table, userlimitedcreditledger.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, userlimitedcreditgrant.LedgerEntriesTable, userlimitedcreditgrant.LedgerEntriesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *UserLimitedCreditGrantClient) Hooks() []Hook {
+	return c.hooks.UserLimitedCreditGrant
+}
+
+// Interceptors returns the client interceptors.
+func (c *UserLimitedCreditGrantClient) Interceptors() []Interceptor {
+	return c.inters.UserLimitedCreditGrant
+}
+
+func (c *UserLimitedCreditGrantClient) mutate(ctx context.Context, m *UserLimitedCreditGrantMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UserLimitedCreditGrantCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UserLimitedCreditGrantUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UserLimitedCreditGrantUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UserLimitedCreditGrantDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UserLimitedCreditGrant mutation op: %q", m.Op())
+	}
+}
+
+// UserLimitedCreditLedgerClient is a client for the UserLimitedCreditLedger schema.
+type UserLimitedCreditLedgerClient struct {
+	config
+}
+
+// NewUserLimitedCreditLedgerClient returns a client for the UserLimitedCreditLedger from the given config.
+func NewUserLimitedCreditLedgerClient(c config) *UserLimitedCreditLedgerClient {
+	return &UserLimitedCreditLedgerClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `userlimitedcreditledger.Hooks(f(g(h())))`.
+func (c *UserLimitedCreditLedgerClient) Use(hooks ...Hook) {
+	c.hooks.UserLimitedCreditLedger = append(c.hooks.UserLimitedCreditLedger, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `userlimitedcreditledger.Intercept(f(g(h())))`.
+func (c *UserLimitedCreditLedgerClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UserLimitedCreditLedger = append(c.inters.UserLimitedCreditLedger, interceptors...)
+}
+
+// Create returns a builder for creating a UserLimitedCreditLedger entity.
+func (c *UserLimitedCreditLedgerClient) Create() *UserLimitedCreditLedgerCreate {
+	mutation := newUserLimitedCreditLedgerMutation(c.config, OpCreate)
+	return &UserLimitedCreditLedgerCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UserLimitedCreditLedger entities.
+func (c *UserLimitedCreditLedgerClient) CreateBulk(builders ...*UserLimitedCreditLedgerCreate) *UserLimitedCreditLedgerCreateBulk {
+	return &UserLimitedCreditLedgerCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UserLimitedCreditLedgerClient) MapCreateBulk(slice any, setFunc func(*UserLimitedCreditLedgerCreate, int)) *UserLimitedCreditLedgerCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UserLimitedCreditLedgerCreateBulk{err: fmt.Errorf("calling to UserLimitedCreditLedgerClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UserLimitedCreditLedgerCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UserLimitedCreditLedgerCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UserLimitedCreditLedger.
+func (c *UserLimitedCreditLedgerClient) Update() *UserLimitedCreditLedgerUpdate {
+	mutation := newUserLimitedCreditLedgerMutation(c.config, OpUpdate)
+	return &UserLimitedCreditLedgerUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UserLimitedCreditLedgerClient) UpdateOne(_m *UserLimitedCreditLedger) *UserLimitedCreditLedgerUpdateOne {
+	mutation := newUserLimitedCreditLedgerMutation(c.config, OpUpdateOne, withUserLimitedCreditLedger(_m))
+	return &UserLimitedCreditLedgerUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UserLimitedCreditLedgerClient) UpdateOneID(id int64) *UserLimitedCreditLedgerUpdateOne {
+	mutation := newUserLimitedCreditLedgerMutation(c.config, OpUpdateOne, withUserLimitedCreditLedgerID(id))
+	return &UserLimitedCreditLedgerUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UserLimitedCreditLedger.
+func (c *UserLimitedCreditLedgerClient) Delete() *UserLimitedCreditLedgerDelete {
+	mutation := newUserLimitedCreditLedgerMutation(c.config, OpDelete)
+	return &UserLimitedCreditLedgerDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UserLimitedCreditLedgerClient) DeleteOne(_m *UserLimitedCreditLedger) *UserLimitedCreditLedgerDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UserLimitedCreditLedgerClient) DeleteOneID(id int64) *UserLimitedCreditLedgerDeleteOne {
+	builder := c.Delete().Where(userlimitedcreditledger.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UserLimitedCreditLedgerDeleteOne{builder}
+}
+
+// Query returns a query builder for UserLimitedCreditLedger.
+func (c *UserLimitedCreditLedgerClient) Query() *UserLimitedCreditLedgerQuery {
+	return &UserLimitedCreditLedgerQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUserLimitedCreditLedger},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UserLimitedCreditLedger entity by its id.
+func (c *UserLimitedCreditLedgerClient) Get(ctx context.Context, id int64) (*UserLimitedCreditLedger, error) {
+	return c.Query().Where(userlimitedcreditledger.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UserLimitedCreditLedgerClient) GetX(ctx context.Context, id int64) *UserLimitedCreditLedger {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUser queries the user edge of a UserLimitedCreditLedger.
+func (c *UserLimitedCreditLedgerClient) QueryUser(_m *UserLimitedCreditLedger) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(userlimitedcreditledger.Table, userlimitedcreditledger.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, userlimitedcreditledger.UserTable, userlimitedcreditledger.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryGrant queries the grant edge of a UserLimitedCreditLedger.
+func (c *UserLimitedCreditLedgerClient) QueryGrant(_m *UserLimitedCreditLedger) *UserLimitedCreditGrantQuery {
+	query := (&UserLimitedCreditGrantClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(userlimitedcreditledger.Table, userlimitedcreditledger.FieldID, id),
+			sqlgraph.To(userlimitedcreditgrant.Table, userlimitedcreditgrant.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, userlimitedcreditledger.GrantTable, userlimitedcreditledger.GrantColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *UserLimitedCreditLedgerClient) Hooks() []Hook {
+	return c.hooks.UserLimitedCreditLedger
+}
+
+// Interceptors returns the client interceptors.
+func (c *UserLimitedCreditLedgerClient) Interceptors() []Interceptor {
+	return c.inters.UserLimitedCreditLedger
+}
+
+func (c *UserLimitedCreditLedgerClient) mutate(ctx context.Context, m *UserLimitedCreditLedgerMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UserLimitedCreditLedgerCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UserLimitedCreditLedgerUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UserLimitedCreditLedgerUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UserLimitedCreditLedgerDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UserLimitedCreditLedger mutation op: %q", m.Op())
+	}
+}
+
 // UserPlatformQuotaClient is a client for the UserPlatformQuota schema.
 type UserPlatformQuotaClient struct {
 	config
@@ -6828,25 +7208,25 @@ type (
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
 		AuthIdentityChannel, BatchImageEvent, BatchImageItem, BatchImageJob,
 		ChannelMonitor, ChannelMonitorDailyRollup, ChannelMonitorHistory,
-		ChannelMonitorRequestTemplate, CompositeModelRoute,
-		ErrorPassthroughRule, Group, IdempotencyRecord, IdentityAdoptionDecision,
-		PaymentAuditLog, PaymentOrder, PaymentProviderInstance, PendingAuthSession,
-		PromoCode, PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting,
-		SubscriptionPlan, TLSFingerprintProfile, UsageCleanupTask, UsageLog, User,
-		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserPlatformQuota, UserSubscription []ent.Hook
+		ChannelMonitorRequestTemplate, CompositeModelRoute, ErrorPassthroughRule,
+		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
+		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
+		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
+		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
+		UserAttributeDefinition, UserAttributeValue, UserLimitedCreditGrant,
+		UserLimitedCreditLedger, UserPlatformQuota, UserSubscription []ent.Hook
 	}
 	inters struct {
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
 		AuthIdentityChannel, BatchImageEvent, BatchImageItem, BatchImageJob,
 		ChannelMonitor, ChannelMonitorDailyRollup, ChannelMonitorHistory,
-		ChannelMonitorRequestTemplate, CompositeModelRoute,
-		ErrorPassthroughRule, Group, IdempotencyRecord, IdentityAdoptionDecision,
-		PaymentAuditLog, PaymentOrder, PaymentProviderInstance, PendingAuthSession,
-		PromoCode, PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting,
-		SubscriptionPlan, TLSFingerprintProfile, UsageCleanupTask, UsageLog, User,
-		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserPlatformQuota, UserSubscription []ent.Interceptor
+		ChannelMonitorRequestTemplate, CompositeModelRoute, ErrorPassthroughRule,
+		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
+		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
+		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
+		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
+		UserAttributeDefinition, UserAttributeValue, UserLimitedCreditGrant,
+		UserLimitedCreditLedger, UserPlatformQuota, UserSubscription []ent.Interceptor
 	}
 )
 

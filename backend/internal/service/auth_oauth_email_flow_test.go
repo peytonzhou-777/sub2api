@@ -237,6 +237,62 @@ func TestRegisterOAuthEmailAccountSetsNormalizedSignupSourceOnCreatedUser(t *tes
 	require.Equal(t, "oidc", userRepo.created[0].SignupSource)
 }
 
+func TestFinalizeOAuthEmailAccountWithInvitationGrantsDefaultLimitedCredits(t *testing.T) {
+	userRepo := &userRepoStub{nextID: 45}
+	redeemRepo := &redeemCodeRepoStub{
+		codesByCode: map[string]*RedeemCode{
+			"INVITE123": {
+				ID:     7,
+				Code:   "INVITE123",
+				Type:   RedeemTypeInvitation,
+				Status: StatusUnused,
+			},
+		},
+	}
+	emailCache := &emailCacheStub{
+		data: &VerificationCodeData{
+			Code:      "246810",
+			CreatedAt: time.Now().UTC(),
+			ExpiresAt: time.Now().UTC().Add(15 * time.Minute),
+		},
+	}
+	granter := &defaultLimitedCreditGranterStub{}
+	authService := newOAuthEmailFlowAuthService(
+		userRepo,
+		redeemRepo,
+		&refreshTokenCacheStub{},
+		map[string]string{
+			SettingKeyRegistrationEnabled:   "true",
+			SettingKeyInvitationCodeEnabled: "true",
+			SettingKeyEmailVerifyEnabled:    "true",
+			SettingKeyDefaultLimitedCredits: `[{"amount":8.5,"validity_days":20}]`,
+		},
+		emailCache,
+		nil,
+	)
+	authService.defaultLimitedCreditGranter = granter
+
+	tokenPair, user, err := authService.RegisterOAuthEmailAccount(
+		context.Background(),
+		"invited@example.com",
+		"secret-123",
+		"246810",
+		"INVITE123",
+		"oidc",
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, tokenPair)
+	require.NotNil(t, user)
+	err = authService.FinalizeOAuthEmailAccount(context.Background(), user, "INVITE123", "oidc", "")
+	require.NoError(t, err)
+
+	require.Len(t, granter.calls, 1)
+	require.Equal(t, int64(45), granter.calls[0].userID)
+	require.Equal(t, []DefaultLimitedCreditSetting{{Amount: 8.5, ValidityDays: 20}}, granter.calls[0].items)
+	require.Len(t, redeemRepo.useCalls, 1)
+}
+
 func TestRegisterOAuthEmailAccountKeepsGitHubAndGoogleSignupSource(t *testing.T) {
 	tests := []struct {
 		name         string

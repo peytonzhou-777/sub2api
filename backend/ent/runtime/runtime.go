@@ -43,6 +43,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
+	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditledger"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -2333,6 +2335,56 @@ func init() {
 	userattributevalueDescValue := userattributevalueFields[2].Descriptor()
 	// userattributevalue.DefaultValue holds the default value on creation for the value field.
 	userattributevalue.DefaultValue = userattributevalueDescValue.Default.(string)
+	userlimitedcreditgrantFields := schema.UserLimitedCreditGrant{}.Fields()
+	_ = userlimitedcreditgrantFields
+	// userlimitedcreditgrantDescSourceType is the schema descriptor for source_type field.
+	userlimitedcreditgrantDescSourceType := userlimitedcreditgrantFields[1].Descriptor()
+	// userlimitedcreditgrant.DefaultSourceType holds the default value on creation for the source_type field.
+	userlimitedcreditgrant.DefaultSourceType = userlimitedcreditgrantDescSourceType.Default.(string)
+	// userlimitedcreditgrant.SourceTypeValidator is a validator for the "source_type" field. It is called by the builders before save.
+	userlimitedcreditgrant.SourceTypeValidator = userlimitedcreditgrantDescSourceType.Validators[0].(func(string) error)
+	// userlimitedcreditgrantDescUsedAmount is the schema descriptor for used_amount field.
+	userlimitedcreditgrantDescUsedAmount := userlimitedcreditgrantFields[4].Descriptor()
+	// userlimitedcreditgrant.DefaultUsedAmount holds the default value on creation for the used_amount field.
+	userlimitedcreditgrant.DefaultUsedAmount = userlimitedcreditgrantDescUsedAmount.Default.(float64)
+	// userlimitedcreditgrantDescFrozenAmount is the schema descriptor for frozen_amount field.
+	userlimitedcreditgrantDescFrozenAmount := userlimitedcreditgrantFields[5].Descriptor()
+	// userlimitedcreditgrant.DefaultFrozenAmount holds the default value on creation for the frozen_amount field.
+	userlimitedcreditgrant.DefaultFrozenAmount = userlimitedcreditgrantDescFrozenAmount.Default.(float64)
+	// userlimitedcreditgrantDescStatus is the schema descriptor for status field.
+	userlimitedcreditgrantDescStatus := userlimitedcreditgrantFields[7].Descriptor()
+	// userlimitedcreditgrant.DefaultStatus holds the default value on creation for the status field.
+	userlimitedcreditgrant.DefaultStatus = userlimitedcreditgrantDescStatus.Default.(string)
+	// userlimitedcreditgrant.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	userlimitedcreditgrant.StatusValidator = userlimitedcreditgrantDescStatus.Validators[0].(func(string) error)
+	// userlimitedcreditgrantDescCreatedAt is the schema descriptor for created_at field.
+	userlimitedcreditgrantDescCreatedAt := userlimitedcreditgrantFields[9].Descriptor()
+	// userlimitedcreditgrant.DefaultCreatedAt holds the default value on creation for the created_at field.
+	userlimitedcreditgrant.DefaultCreatedAt = userlimitedcreditgrantDescCreatedAt.Default.(func() time.Time)
+	// userlimitedcreditgrantDescUpdatedAt is the schema descriptor for updated_at field.
+	userlimitedcreditgrantDescUpdatedAt := userlimitedcreditgrantFields[10].Descriptor()
+	// userlimitedcreditgrant.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	userlimitedcreditgrant.DefaultUpdatedAt = userlimitedcreditgrantDescUpdatedAt.Default.(func() time.Time)
+	// userlimitedcreditgrant.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	userlimitedcreditgrant.UpdateDefaultUpdatedAt = userlimitedcreditgrantDescUpdatedAt.UpdateDefault.(func() time.Time)
+	userlimitedcreditledgerFields := schema.UserLimitedCreditLedger{}.Fields()
+	_ = userlimitedcreditledgerFields
+	// userlimitedcreditledgerDescEventType is the schema descriptor for event_type field.
+	userlimitedcreditledgerDescEventType := userlimitedcreditledgerFields[2].Descriptor()
+	// userlimitedcreditledger.EventTypeValidator is a validator for the "event_type" field. It is called by the builders before save.
+	userlimitedcreditledger.EventTypeValidator = userlimitedcreditledgerDescEventType.Validators[0].(func(string) error)
+	// userlimitedcreditledgerDescRequestID is the schema descriptor for request_id field.
+	userlimitedcreditledgerDescRequestID := userlimitedcreditledgerFields[4].Descriptor()
+	// userlimitedcreditledger.RequestIDValidator is a validator for the "request_id" field. It is called by the builders before save.
+	userlimitedcreditledger.RequestIDValidator = userlimitedcreditledgerDescRequestID.Validators[0].(func(string) error)
+	// userlimitedcreditledgerDescBatchID is the schema descriptor for batch_id field.
+	userlimitedcreditledgerDescBatchID := userlimitedcreditledgerFields[6].Descriptor()
+	// userlimitedcreditledger.BatchIDValidator is a validator for the "batch_id" field. It is called by the builders before save.
+	userlimitedcreditledger.BatchIDValidator = userlimitedcreditledgerDescBatchID.Validators[0].(func(string) error)
+	// userlimitedcreditledgerDescCreatedAt is the schema descriptor for created_at field.
+	userlimitedcreditledgerDescCreatedAt := userlimitedcreditledgerFields[9].Descriptor()
+	// userlimitedcreditledger.DefaultCreatedAt holds the default value on creation for the created_at field.
+	userlimitedcreditledger.DefaultCreatedAt = userlimitedcreditledgerDescCreatedAt.Default.(func() time.Time)
 	userplatformquotaMixin := schema.UserPlatformQuota{}.Mixin()
 	userplatformquotaMixinHooks1 := userplatformquotaMixin[1].Hooks()
 	userplatformquota.Hooks[0] = userplatformquotaMixinHooks1[0]

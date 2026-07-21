@@ -283,6 +283,15 @@ func (s *SettingService) GetDefaultSubscriptions(ctx context.Context) []DefaultS
 	return parseDefaultSubscriptions(value)
 }
 
+// GetDefaultLimitedCredits 获取新用户默认限时额度配置列表。
+func (s *SettingService) GetDefaultLimitedCredits(ctx context.Context) []DefaultLimitedCreditSetting {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyDefaultLimitedCredits)
+	if err != nil {
+		return nil
+	}
+	return parseDefaultLimitedCredits(value)
+}
+
 func (s *SettingService) GetAuthSourceDefaultSettings(ctx context.Context) (*AuthSourceDefaultSettings, error) {
 	keys := []string{
 		SettingKeyAuthSourceDefaultEmailBalance,

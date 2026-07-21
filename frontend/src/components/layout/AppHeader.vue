@@ -75,8 +75,12 @@
             class="pointer-events-none absolute right-0 top-full mt-2 hidden w-56 rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-lg group-hover:block dark:border-dark-700 dark:bg-dark-800"
           >
             <div class="flex items-center justify-between">
-              <span class="text-gray-500 dark:text-dark-400">{{ balanceAvailableText }}</span>
-              <span class="font-medium text-gray-900 dark:text-white">{{ formatHeaderMoney(availableBalance) }}</span>
+              <span class="text-gray-500 dark:text-dark-400">{{ ordinaryBalanceText }}</span>
+              <span class="font-medium text-gray-900 dark:text-white">{{ formatHeaderMoney(ordinaryAvailableBalance) }}</span>
+            </div>
+            <div v-if="limitedCreditRemainingBalance > 0" class="mt-2 flex items-center justify-between">
+              <span class="text-gray-500 dark:text-dark-400">{{ limitedCreditText }}</span>
+              <span class="font-medium text-emerald-700 dark:text-emerald-300">{{ formatHeaderMoney(limitedCreditRemainingBalance) }}</span>
             </div>
             <div class="mt-2 flex items-center justify-between">
               <span class="text-gray-500 dark:text-dark-400">{{ balanceFrozenText }}</span>
@@ -136,6 +140,9 @@
                 </div>
                 <div class="text-sm font-semibold text-primary-600 dark:text-primary-400">
                   {{ formatHeaderMoney(availableBalance) }}
+                </div>
+                <div v-if="limitedCreditRemainingBalance > 0" class="mt-1 text-xs text-emerald-600 dark:text-emerald-300">
+                  {{ limitedCreditText }} {{ formatHeaderMoney(limitedCreditRemainingBalance) }}
                 </div>
                 <div v-if="frozenBalance > 0" class="mt-1 text-xs text-amber-600 dark:text-amber-300">
                   {{ balanceFrozenText }} {{ formatHeaderMoney(frozenBalance) }}
@@ -243,7 +250,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
+import { useAppStore, useAuthStore, useLimitedCreditStore, useOnboardingStore } from '@/stores'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import SubscriptionProgressMini from '@/components/common/SubscriptionProgressMini.vue'
@@ -258,6 +265,7 @@ const appStore = useAppStore()
 const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
 const onboardingStore = useOnboardingStore()
+const limitedCreditStore = useLimitedCreditStore()
 
 const user = computed(() => authStore.user)
 const dropdownOpen = ref(false)
@@ -265,12 +273,17 @@ const dropdownRef = ref<HTMLElement | null>(null)
 const contactInfo = computed(() => appStore.contactInfo)
 const docUrl = computed(() => sanitizeUrl(appStore.docUrl))
 const avatarUrl = computed(() => user.value?.avatar_url?.trim() || '')
-const availableBalance = computed(() => Number(user.value?.balance || 0))
-const frozenBalance = computed(() => Number(user.value?.frozen_balance || 0))
-const totalBalance = computed(() => availableBalance.value + frozenBalance.value)
-const balanceAvailableText = computed(() => t('common.availableBalance') === 'common.availableBalance' ? '可用余额' : t('common.availableBalance'))
+const ordinaryAvailableBalance = computed(() => Number(user.value?.balance || 0))
+const ordinaryFrozenBalance = computed(() => Number(user.value?.frozen_balance || 0))
+const limitedCreditRemainingBalance = computed(() => limitedCreditStore.remainingAmount)
+const limitedCreditFrozenBalance = computed(() => limitedCreditStore.frozenAmount)
+const availableBalance = computed(() => ordinaryAvailableBalance.value + limitedCreditRemainingBalance.value)
+const frozenBalance = computed(() => ordinaryFrozenBalance.value + limitedCreditFrozenBalance.value)
+const totalBalance = computed(() => ordinaryAvailableBalance.value + ordinaryFrozenBalance.value + limitedCreditRemainingBalance.value)
+const ordinaryBalanceText = computed(() => t('common.ordinaryBalance') === 'common.ordinaryBalance' ? '普通余额' : t('common.ordinaryBalance'))
 const balanceFrozenText = computed(() => t('common.frozenBalance') === 'common.frozenBalance' ? '冻结金额' : t('common.frozenBalance'))
 const balanceTotalText = computed(() => t('common.totalBalance') === 'common.totalBalance' ? '总余额' : t('common.totalBalance'))
+const limitedCreditText = computed(() => t('common.limitedCredit') === 'common.limitedCredit' ? '限时额度' : t('common.limitedCredit'))
 const balanceFrozenLabel = computed(() => `${balanceFrozenText.value} ${formatHeaderMoney(frozenBalance.value)}`)
 
 // 只在标准模式的管理员下显示新手引导按钮

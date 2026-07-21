@@ -22,6 +22,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
+	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditledger"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 )
@@ -549,6 +551,36 @@ func (_c *UserCreate) AddPlatformQuotas(v ...*UserPlatformQuota) *UserCreate {
 	return _c.AddPlatformQuotaIDs(ids...)
 }
 
+// AddLimitedCreditGrantIDs adds the "limited_credit_grants" edge to the UserLimitedCreditGrant entity by IDs.
+func (_c *UserCreate) AddLimitedCreditGrantIDs(ids ...int64) *UserCreate {
+	_c.mutation.AddLimitedCreditGrantIDs(ids...)
+	return _c
+}
+
+// AddLimitedCreditGrants adds the "limited_credit_grants" edges to the UserLimitedCreditGrant entity.
+func (_c *UserCreate) AddLimitedCreditGrants(v ...*UserLimitedCreditGrant) *UserCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddLimitedCreditGrantIDs(ids...)
+}
+
+// AddLimitedCreditLedgerEntryIDs adds the "limited_credit_ledger_entries" edge to the UserLimitedCreditLedger entity by IDs.
+func (_c *UserCreate) AddLimitedCreditLedgerEntryIDs(ids ...int64) *UserCreate {
+	_c.mutation.AddLimitedCreditLedgerEntryIDs(ids...)
+	return _c
+}
+
+// AddLimitedCreditLedgerEntries adds the "limited_credit_ledger_entries" edges to the UserLimitedCreditLedger entity.
+func (_c *UserCreate) AddLimitedCreditLedgerEntries(v ...*UserLimitedCreditLedger) *UserCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddLimitedCreditLedgerEntryIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_c *UserCreate) Mutation() *UserMutation {
 	return _c.mutation
@@ -1073,6 +1105,38 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(userplatformquota.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.LimitedCreditGrantsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditGrantsTable,
+			Columns: []string{user.LimitedCreditGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditgrant.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.LimitedCreditLedgerEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditLedgerEntriesTable,
+			Columns: []string{user.LimitedCreditLedgerEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditledger.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {

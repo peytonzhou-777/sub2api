@@ -3394,6 +3394,86 @@
                 </div>
               </div>
 
+              <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+                <div class="mb-3 flex items-center justify-between gap-4">
+                  <div>
+                    <label class="font-medium text-gray-900 dark:text-white">
+                      {{ t("admin.settings.defaults.defaultLimitedCredits") }}
+                    </label>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                      {{
+                        t(
+                          "admin.settings.defaults.defaultLimitedCreditsHint",
+                        )
+                      }}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm default-limited-credit-add-btn shrink-0"
+                    @click="addDefaultLimitedCredit"
+                  >
+                    {{ t("admin.settings.defaults.addDefaultLimitedCredit") }}
+                  </button>
+                </div>
+
+                <div
+                  v-if="form.default_limited_credits.length === 0"
+                  class="default-limited-credit-empty rounded border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-500 dark:border-dark-600 dark:text-gray-400"
+                >
+                  {{
+                    t("admin.settings.defaults.defaultLimitedCreditsEmpty")
+                  }}
+                </div>
+
+                <div v-else class="space-y-3">
+                  <div
+                    v-for="(item, index) in form.default_limited_credits"
+                    :key="`default-limited-credit-${index}`"
+                    class="default-limited-credit-row grid grid-cols-1 gap-3 rounded border border-gray-200 p-3 md:grid-cols-[1fr_160px_auto] dark:border-dark-600"
+                  >
+                    <div>
+                      <label
+                        class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
+                      >
+                        {{ t("admin.settings.defaults.limitedCreditAmount") }}
+                      </label>
+                      <input
+                        v-model.number="item.amount"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        class="input h-[42px] default-limited-credit-amount"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
+                      >
+                        {{ t("admin.settings.defaults.limitedCreditValidityDays") }}
+                      </label>
+                      <input
+                        v-model.number="item.validity_days"
+                        type="number"
+                        min="1"
+                        max="36500"
+                        step="1"
+                        class="input h-[42px] default-limited-credit-validity"
+                      />
+                    </div>
+                    <div class="flex items-end">
+                      <button
+                        type="button"
+                        class="btn btn-secondary default-limited-credit-delete-btn w-full text-red-600 hover:text-red-700 dark:text-red-400"
+                        @click="removeDefaultLimitedCredit(index)"
+                      >
+                        {{ t("common.delete") }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <!-- ★ 新增：系统全局默认平台限额矩阵 -->
               <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
                 <div class="mb-3">
@@ -7740,7 +7820,9 @@ import {
   sanitizePlatformQuotasMap,
   defaultWeChatConnectScopesForMode,
   deriveWeChatConnectStoredMode,
+  isValidDefaultLimitedCreditSetting,
   normalizeDefaultSubscriptionSettings,
+  normalizeDefaultLimitedCreditSettings,
   resolveWeChatConnectModeCapabilities,
 } from "@/api/admin/settings";
 import type {
@@ -7749,6 +7831,7 @@ import type {
   SystemSettings,
   UpdateSettingsRequest,
   DefaultSubscriptionSetting,
+  DefaultLimitedCreditSetting,
   DefaultPlatformQuotasMap,
   OpenAIFastPolicyRule,
   WeChatConnectMode,
@@ -8492,6 +8575,7 @@ const form = reactive<SettingsForm>({
   affiliate_admin_recharge_enabled: false,
   default_concurrency: 1,
   default_subscriptions: [],
+  default_limited_credits: [],
   force_email_on_third_party_signup: false,
   default_user_rpm_limit: 0,
   site_name: "Sub2API",
@@ -9653,6 +9737,9 @@ async function loadSettings() {
     form.default_subscriptions = normalizeDefaultSubscriptionSettings(
       settings.default_subscriptions,
     );
+    form.default_limited_credits = normalizeDefaultLimitedCreditSettings(
+      settings.default_limited_credits,
+    );
     registrationEmailSuffixWhitelistTags.value =
       normalizeRegistrationEmailSuffixDomains(
         settings.registration_email_suffix_whitelist,
@@ -9796,6 +9883,17 @@ function removeDefaultSubscription(index: number) {
   form.default_subscriptions.splice(index, 1);
 }
 
+function addDefaultLimitedCredit() {
+  form.default_limited_credits.push({
+    amount: 1,
+    validity_days: 30,
+  });
+}
+
+function removeDefaultLimitedCredit(index: number) {
+  form.default_limited_credits.splice(index, 1);
+}
+
 function addAuthSourceDefaultSubscription(source: AuthSourceType) {
   if (subscriptionGroups.value.length === 0) return;
   const candidate = findNextAvailableSubscriptionGroup(
@@ -9921,6 +10019,19 @@ async function saveSettings() {
       return;
     }
 
+    const invalidDefaultLimitedCredit = form.default_limited_credits.some(
+      (item: DefaultLimitedCreditSetting) =>
+        !isValidDefaultLimitedCreditSetting(item),
+    );
+    if (invalidDefaultLimitedCredit) {
+      appStore.showError(
+        t("admin.settings.defaults.defaultLimitedCreditsInvalid"),
+      );
+      return;
+    }
+    const normalizedDefaultLimitedCredits =
+      normalizeDefaultLimitedCreditSettings(form.default_limited_credits);
+
     for (const authSource of authSourceDefaultsMeta.value) {
       authSourceDefaults[authSource.source].subscriptions =
         normalizeDefaultSubscriptionSettings(
@@ -10011,6 +10122,7 @@ async function saveSettings() {
       affiliate_admin_recharge_enabled: form.affiliate_admin_recharge_enabled,
       default_concurrency: form.default_concurrency,
       default_subscriptions: normalizedDefaultSubscriptions,
+      default_limited_credits: normalizedDefaultLimitedCredits,
       force_email_on_third_party_signup: form.force_email_on_third_party_signup,
       default_user_rpm_limit: form.default_user_rpm_limit,
       site_name: form.site_name,

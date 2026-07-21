@@ -1924,6 +1924,103 @@ var (
 			},
 		},
 	}
+	// UserLimitedCreditGrantsColumns holds the columns for the "user_limited_credit_grants" table.
+	UserLimitedCreditGrantsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "source_type", Type: field.TypeString, Size: 32, Default: "redeem_code"},
+		{Name: "source_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "initial_amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "used_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "frozen_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "expires_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "status", Type: field.TypeString, Size: 20, Default: "active"},
+		{Name: "notes", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "user_id", Type: field.TypeInt64},
+	}
+	// UserLimitedCreditGrantsTable holds the schema information for the "user_limited_credit_grants" table.
+	UserLimitedCreditGrantsTable = &schema.Table{
+		Name:       "user_limited_credit_grants",
+		Columns:    UserLimitedCreditGrantsColumns,
+		PrimaryKey: []*schema.Column{UserLimitedCreditGrantsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "user_limited_credit_grants_users_limited_credit_grants",
+				Columns:    []*schema.Column{UserLimitedCreditGrantsColumns[11]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "userlimitedcreditgrant_user_id_status_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{UserLimitedCreditGrantsColumns[11], UserLimitedCreditGrantsColumns[7], UserLimitedCreditGrantsColumns[6]},
+			},
+			{
+				Name:    "userlimitedcreditgrant_source_type_source_id",
+				Unique:  false,
+				Columns: []*schema.Column{UserLimitedCreditGrantsColumns[1], UserLimitedCreditGrantsColumns[2]},
+			},
+		},
+	}
+	// UserLimitedCreditLedgerColumns holds the columns for the "user_limited_credit_ledger" table.
+	UserLimitedCreditLedgerColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "event_type", Type: field.TypeString, Size: 32},
+		{Name: "amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "request_id", Type: field.TypeString, Nullable: true, Size: 128},
+		{Name: "api_key_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "batch_id", Type: field.TypeString, Nullable: true, Size: 128},
+		{Name: "usage_log_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "notes", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "grant_id", Type: field.TypeInt64},
+	}
+	// UserLimitedCreditLedgerTable holds the schema information for the "user_limited_credit_ledger" table.
+	UserLimitedCreditLedgerTable = &schema.Table{
+		Name:       "user_limited_credit_ledger",
+		Columns:    UserLimitedCreditLedgerColumns,
+		PrimaryKey: []*schema.Column{UserLimitedCreditLedgerColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "user_limited_credit_ledger_users_limited_credit_ledger_entries",
+				Columns:    []*schema.Column{UserLimitedCreditLedgerColumns[9]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "user_limited_credit_ledger_user_limited_credit_grants_ledger_entries",
+				Columns:    []*schema.Column{UserLimitedCreditLedgerColumns[10]},
+				RefColumns: []*schema.Column{UserLimitedCreditGrantsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "userlimitedcreditledger_user_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UserLimitedCreditLedgerColumns[9], UserLimitedCreditLedgerColumns[8]},
+			},
+			{
+				Name:    "userlimitedcreditledger_grant_id_event_type",
+				Unique:  false,
+				Columns: []*schema.Column{UserLimitedCreditLedgerColumns[10], UserLimitedCreditLedgerColumns[1]},
+			},
+			{
+				Name:    "userlimitedcreditledger_batch_id",
+				Unique:  false,
+				Columns: []*schema.Column{UserLimitedCreditLedgerColumns[5]},
+			},
+			{
+				Name:    "userlimitedcreditledger_request_id_api_key_id",
+				Unique:  false,
+				Columns: []*schema.Column{UserLimitedCreditLedgerColumns[3], UserLimitedCreditLedgerColumns[4]},
+			},
+		},
+	}
 	// UserPlatformQuotasColumns holds the columns for the "user_platform_quotas" table.
 	UserPlatformQuotasColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -2099,6 +2196,8 @@ var (
 		UserAllowedGroupsTable,
 		UserAttributeDefinitionsTable,
 		UserAttributeValuesTable,
+		UserLimitedCreditGrantsTable,
+		UserLimitedCreditLedgerTable,
 		UserPlatformQuotasTable,
 		UserSubscriptionsTable,
 	}
@@ -2247,6 +2346,15 @@ func init() {
 	UserAttributeValuesTable.ForeignKeys[1].RefTable = UserAttributeDefinitionsTable
 	UserAttributeValuesTable.Annotation = &entsql.Annotation{
 		Table: "user_attribute_values",
+	}
+	UserLimitedCreditGrantsTable.ForeignKeys[0].RefTable = UsersTable
+	UserLimitedCreditGrantsTable.Annotation = &entsql.Annotation{
+		Table: "user_limited_credit_grants",
+	}
+	UserLimitedCreditLedgerTable.ForeignKeys[0].RefTable = UsersTable
+	UserLimitedCreditLedgerTable.ForeignKeys[1].RefTable = UserLimitedCreditGrantsTable
+	UserLimitedCreditLedgerTable.Annotation = &entsql.Annotation{
+		Table: "user_limited_credit_ledger",
 	}
 	UserPlatformQuotasTable.ForeignKeys[0].RefTable = UsersTable
 	UserPlatformQuotasTable.Annotation = &entsql.Annotation{

@@ -366,6 +366,65 @@ func TestParseDefaultSubscriptions_NormalizesValues(t *testing.T) {
 	}, got)
 }
 
+func TestSettingService_UpdateSettings_DefaultLimitedCredits_PersistsMultipleGrants(t *testing.T) {
+	repo := &settingUpdateRepoStub{}
+	svc := NewSettingService(repo, &config.Config{})
+
+	err := svc.UpdateSettings(context.Background(), &SystemSettings{
+		DefaultLimitedCredits: []DefaultLimitedCreditSetting{
+			{Amount: 1.25, ValidityDays: 30},
+			{Amount: 1.25, ValidityDays: 30},
+			{Amount: 8, ValidityDays: MaxValidityDays},
+		},
+	})
+	require.NoError(t, err)
+
+	var got []DefaultLimitedCreditSetting
+	require.NoError(t, json.Unmarshal([]byte(repo.updates[SettingKeyDefaultLimitedCredits]), &got))
+	require.Equal(t, []DefaultLimitedCreditSetting{
+		{Amount: 1.25, ValidityDays: 30},
+		{Amount: 1.25, ValidityDays: 30},
+		{Amount: 8, ValidityDays: MaxValidityDays},
+	}, got)
+}
+
+func TestSettingService_UpdateSettings_DefaultLimitedCredits_RejectsInvalidValues(t *testing.T) {
+	tests := []struct {
+		name string
+		item DefaultLimitedCreditSetting
+	}{
+		{name: "zero amount", item: DefaultLimitedCreditSetting{Amount: 0, ValidityDays: 30}},
+		{name: "negative amount", item: DefaultLimitedCreditSetting{Amount: -1, ValidityDays: 30}},
+		{name: "nan amount", item: DefaultLimitedCreditSetting{Amount: math.NaN(), ValidityDays: 30}},
+		{name: "infinite amount", item: DefaultLimitedCreditSetting{Amount: math.Inf(1), ValidityDays: 30}},
+		{name: "zero validity", item: DefaultLimitedCreditSetting{Amount: 1, ValidityDays: 0}},
+		{name: "excessive validity", item: DefaultLimitedCreditSetting{Amount: 1, ValidityDays: MaxValidityDays + 1}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &settingUpdateRepoStub{}
+			svc := NewSettingService(repo, &config.Config{})
+
+			err := svc.UpdateSettings(context.Background(), &SystemSettings{
+				DefaultLimitedCredits: []DefaultLimitedCreditSetting{tt.item},
+			})
+
+			require.Error(t, err)
+			require.Equal(t, "INVALID_DEFAULT_LIMITED_CREDIT", infraerrors.Reason(err))
+			require.Nil(t, repo.updates)
+		})
+	}
+}
+
+func TestParseDefaultLimitedCredits_DropsInvalidEntries(t *testing.T) {
+	got := parseDefaultLimitedCredits(`[{"amount":1.5,"validity_days":30},{"amount":0,"validity_days":30},{"amount":2,"validity_days":0},{"amount":3,"validity_days":36501},{"amount":1.5,"validity_days":30}]`)
+	require.Equal(t, []DefaultLimitedCreditSetting{
+		{Amount: 1.5, ValidityDays: 30},
+		{Amount: 1.5, ValidityDays: 30},
+	}, got)
+}
+
 func TestSettingService_UpdateSettings_TablePreferences(t *testing.T) {
 	repo := &settingUpdateRepoStub{}
 	svc := NewSettingService(repo, &config.Config{})

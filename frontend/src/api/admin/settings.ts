@@ -16,6 +16,11 @@ export interface DefaultSubscriptionSetting {
   validity_days: number;
 }
 
+export interface DefaultLimitedCreditSetting {
+  amount: number;
+  validity_days: number;
+}
+
 // ── 平台限额类型 ──────────────────────────────────────────────────
 export type PlatformType = "anthropic" | "openai" | "gemini" | "antigravity" | "grok"
 export type QuotaWindowType = "daily" | "weekly" | "monthly"
@@ -208,6 +213,31 @@ export function normalizeDefaultSubscriptionSettings(
     }));
 }
 
+export function isValidDefaultLimitedCreditSetting(
+  item: DefaultLimitedCreditSetting,
+): boolean {
+  return (
+    Number.isFinite(item.amount) &&
+    item.amount > 0 &&
+    Number.isFinite(item.validity_days) &&
+    item.validity_days > 0 &&
+    item.validity_days <= 36500
+  );
+}
+
+export function normalizeDefaultLimitedCreditSettings(
+  items: DefaultLimitedCreditSetting[] | null | undefined,
+): DefaultLimitedCreditSetting[] {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .filter(isValidDefaultLimitedCreditSetting)
+    .map((item) => ({
+      amount: Number(item.amount),
+      validity_days: Math.floor(item.validity_days),
+    }));
+}
+
 export function buildAuthSourceDefaultsState(
   settings: Partial<SystemSettings>,
 ): AuthSourceDefaultsState {
@@ -383,6 +413,7 @@ export interface SystemSettings {
   default_concurrency: number;
   default_user_rpm_limit: number;
   default_subscriptions: DefaultSubscriptionSetting[];
+  default_limited_credits: DefaultLimitedCreditSetting[];
   auth_source_default_email_balance?: number;
   auth_source_default_email_concurrency?: number;
   auth_source_default_email_subscriptions?: DefaultSubscriptionSetting[];
@@ -690,6 +721,7 @@ export interface UpdateSettingsRequest {
   default_concurrency?: number;
   default_user_rpm_limit?: number;
   default_subscriptions?: DefaultSubscriptionSetting[];
+  default_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_email_balance?: number;
   auth_source_default_email_concurrency?: number;
   auth_source_default_email_subscriptions?: DefaultSubscriptionSetting[];

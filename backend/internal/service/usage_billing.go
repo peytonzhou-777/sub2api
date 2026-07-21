@@ -114,7 +114,9 @@ type AccountQuotaState struct {
 type UsageBillingApplyResult struct {
 	Applied              bool
 	APIKeyQuotaExhausted bool
-	NewBalance           *float64           // post-deduction balance (nil = no balance deduction)
+	NewBalance           *float64           // post-deduction balance (nil = no ordinary balance deduction)
+	LimitedCreditCost    float64            // 从限时额度扣除的金额
+	OrdinaryBalanceCost  float64            // 从普通余额扣除的金额
 	BalanceOverdrafted   bool               // true when the sufficient-balance guard missed and debt was still recorded
 	QuotaState           *AccountQuotaState // post-increment quota state (nil = no quota increment)
 }
@@ -162,9 +164,11 @@ func buildBatchImageBalanceHoldFingerprint(c *BatchImageBalanceHoldCommand) stri
 }
 
 type BatchImageBalanceHoldResult struct {
-	Applied       bool
-	NewBalance    *float64
-	FrozenBalance *float64
+	Applied             bool
+	NewBalance          *float64
+	FrozenBalance       *float64
+	LimitedCreditCost   float64
+	OrdinaryBalanceCost float64
 }
 
 type UsageBillingRepository interface {

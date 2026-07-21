@@ -159,6 +159,7 @@ type SystemSettings struct {
 	AdminRechargeRebateEnabled   bool
 	DefaultUserRPMLimit          int
 	DefaultSubscriptions         []DefaultSubscriptionSetting
+	DefaultLimitedCredits        []DefaultLimitedCreditSetting
 
 	// Model fallback configuration
 	EnableModelFallback      bool   `json:"enable_model_fallback"`
@@ -273,6 +274,12 @@ type SystemSettings struct {
 type DefaultSubscriptionSetting struct {
 	GroupID      int64 `json:"group_id"`
 	ValidityDays int   `json:"validity_days"`
+}
+
+// DefaultLimitedCreditSetting 定义新用户自动获得的一份限时额度。
+type DefaultLimitedCreditSetting struct {
+	Amount       float64 `json:"amount"`
+	ValidityDays int     `json:"validity_days"`
 }
 
 type PublicSettings struct {

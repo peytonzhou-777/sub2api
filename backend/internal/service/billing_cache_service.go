@@ -113,6 +113,7 @@ type BillingCacheService struct {
 	cfg                   *config.Config
 	circuitBreaker        *billingCircuitBreaker
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	limitedCreditRepo     LimitedCreditRepository
 
 	cacheWriteChan     chan cacheWriteTask
 	cacheWriteWg       sync.WaitGroup
@@ -138,7 +139,13 @@ func NewBillingCacheService(
 	userGroupRateRepo UserGroupRateRepository,
 	cfg *config.Config,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	limitedCreditRepos ...LimitedCreditRepository,
 ) *BillingCacheService {
+	var limitedCreditRepo LimitedCreditRepository
+	if len(limitedCreditRepos) > 0 {
+		limitedCreditRepo = limitedCreditRepos[0]
+	}
+
 	svc := &BillingCacheService{
 		cache:                 cache,
 		userRepo:              userRepo,
@@ -148,6 +155,7 @@ func NewBillingCacheService(
 		userGroupRateRepo:     userGroupRateRepo,
 		cfg:                   cfg,
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
+		limitedCreditRepo:     limitedCreditRepo,
 	}
 	svc.circuitBreaker = newBillingCircuitBreaker(cfg.Billing.CircuitBreaker)
 	svc.startCacheWriteWorkers()
@@ -346,6 +354,22 @@ func (s *BillingCacheService) GetUserBalance(ctx context.Context, userID int64) 
 		return 0, fmt.Errorf("unexpected balance type: %T", value)
 	}
 	return balance, nil
+}
+
+// GetUserTotalAvailableBalance 获取用户普通余额和限时额度的可消费总额。
+func (s *BillingCacheService) GetUserTotalAvailableBalance(ctx context.Context, userID int64) (float64, error) {
+	balance, err := s.GetUserBalance(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	if s.limitedCreditRepo == nil {
+		return balance, nil
+	}
+	limitedCredit, err := s.limitedCreditRepo.GetAvailableAmount(ctx, userID)
+	if err != nil {
+		return 0, fmt.Errorf("get limited credit available amount: %w", err)
+	}
+	return balance + limitedCredit, nil
 }
 
 // getUserBalanceFromDB 从数据库获取用户余额
@@ -875,7 +899,7 @@ func (s *BillingCacheService) balanceBelowEligibilityThreshold(balance float64) 
 	return minimumReserve > 0 && balance < minimumReserve
 }
 
-// checkBalanceEligibility 检查余额模式资格
+// checkBalanceEligibility 检查余额模式资格，限时额度与普通余额合并判断可消费能力。
 func (s *BillingCacheService) checkBalanceEligibility(ctx context.Context, userID int64) error {
 	balance, err := s.GetUserBalance(ctx, userID)
 	if err != nil {
@@ -885,11 +909,25 @@ func (s *BillingCacheService) checkBalanceEligibility(ctx context.Context, userI
 		logger.LegacyPrintf("service.billing_cache", "ALERT: billing balance check failed for user %d: %v", userID, err)
 		return ErrBillingServiceUnavailable.WithCause(err)
 	}
+
+	totalBalance := balance
+	if s.balanceBelowEligibilityThreshold(balance) && s.limitedCreditRepo != nil {
+		limitedCredit, err := s.limitedCreditRepo.GetAvailableAmount(ctx, userID)
+		if err != nil {
+			if s.circuitBreaker != nil {
+				s.circuitBreaker.OnFailure(err)
+			}
+			logger.LegacyPrintf("service.billing_cache", "ALERT: limited credit check failed for user %d: %v", userID, err)
+			return ErrBillingServiceUnavailable.WithCause(err)
+		}
+		totalBalance += limitedCredit
+	}
+
 	if s.circuitBreaker != nil {
 		s.circuitBreaker.OnSuccess()
 	}
 
-	if s.balanceBelowEligibilityThreshold(balance) {
+	if s.balanceBelowEligibilityThreshold(totalBalance) {
 		return ErrInsufficientBalance
 	}
 

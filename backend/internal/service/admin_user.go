@@ -154,6 +154,7 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 			input.ActorAdminID, user.ID)
 	}
 	s.assignDefaultSubscriptions(ctx, user.ID)
+	s.assignDefaultLimitedCredits(ctx, user.ID)
 	return user, nil
 }
 
@@ -189,6 +190,20 @@ func (s *adminServiceImpl) assignDefaultSubscriptions(ctx context.Context, userI
 		}); err != nil {
 			logger.LegacyPrintf("service.admin", "failed to assign default subscription: user_id=%d group_id=%d err=%v", userID, item.GroupID, err)
 		}
+	}
+}
+
+// assignDefaultLimitedCredits 为管理员刚创建的用户发放全局默认限时额度。
+func (s *adminServiceImpl) assignDefaultLimitedCredits(ctx context.Context, userID int64) {
+	if s.settingService == nil || s.defaultLimitedCreditGranter == nil || userID <= 0 {
+		return
+	}
+	items := s.settingService.GetDefaultLimitedCredits(ctx)
+	if len(items) == 0 {
+		return
+	}
+	if _, err := s.defaultLimitedCreditGranter.GrantFromDefaultSettings(ctx, userID, items); err != nil {
+		logger.LegacyPrintf("service.admin", "failed to grant default limited credits: user_id=%d err=%v", userID, err)
 	}
 }
 
@@ -1232,6 +1247,10 @@ func (s *adminServiceImpl) GenerateRedeemCodes(ctx context.Context, input *Gener
 		return nil, ErrRedeemCodeExpired
 	}
 
+	if input.Type == RedeemTypeLimitedCredit && input.Value <= 0 {
+		return nil, errors.New("value must be greater than zero for limited_credit type")
+	}
+
 	// 如果是订阅类型，验证必须有 GroupID
 	if input.Type == RedeemTypeSubscription {
 		if input.GroupID == nil {
@@ -1260,9 +1279,11 @@ func (s *adminServiceImpl) GenerateRedeemCodes(ctx context.Context, input *Gener
 			Status:    StatusUnused,
 			ExpiresAt: input.ExpiresAt,
 		}
-		// 订阅类型专用字段
+		// 订阅绑定分组；订阅和限时额度都使用权益有效天数。
 		if input.Type == RedeemTypeSubscription {
 			code.GroupID = input.GroupID
+		}
+		if input.Type == RedeemTypeSubscription || input.Type == RedeemTypeLimitedCredit {
 			code.ValidityDays = input.ValidityDays
 			if code.ValidityDays <= 0 {
 				code.ValidityDays = 30 // 默认30天

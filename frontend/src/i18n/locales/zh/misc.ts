@@ -2,12 +2,18 @@ export default {
 
   // Subscription Progress (Header component)
   subscriptionProgress: {
-    title: '我的订阅',
-    viewDetails: '查看订阅详情',
-    activeCount: '{count} 个有效订阅',
+    title: '我的权益',
+    viewDetails: '查看权益详情',
+    activeCount: '{count} 个有效权益',
+    subscriptions: '订阅',
+    limitedCredits: '限时额度',
+    limitedCreditTitle: '限时额度 #{id}',
     daily: '每日',
     weekly: '每周',
     monthly: '每月',
+    used: '已用',
+    remaining: '剩余',
+    frozen: '冻结',
     daysRemaining: '剩余 {days} 天',
     expired: '已过期',
     expiresToday: '今天到期',

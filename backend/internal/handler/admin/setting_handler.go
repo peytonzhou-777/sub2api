@@ -91,6 +91,18 @@ func (h *SettingHandler) SetStepUpDeps(totpService *service.TotpService, userSer
 	h.userService = userService
 }
 
+// defaultLimitedCreditsToDTO 将服务层默认限时额度配置转换为管理员 API DTO。
+func defaultLimitedCreditsToDTO(items []service.DefaultLimitedCreditSetting) []dto.DefaultLimitedCreditSetting {
+	result := make([]dto.DefaultLimitedCreditSetting, 0, len(items))
+	for _, item := range items {
+		result = append(result, dto.DefaultLimitedCreditSetting{
+			Amount:       item.Amount,
+			ValidityDays: item.ValidityDays,
+		})
+	}
+	return result
+}
+
 // GetSettings 获取所有系统设置
 // GET /api/v1/admin/settings
 func (h *SettingHandler) GetSettings(c *gin.Context) {
@@ -114,6 +126,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 			ValidityDays: sub.ValidityDays,
 		})
 	}
+	defaultLimitedCredits := defaultLimitedCreditsToDTO(settings.DefaultLimitedCredits)
 
 	// Load payment config
 	var paymentCfg *service.PaymentConfig
@@ -247,6 +260,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		AdminRechargeRebateEnabled:                             settings.AdminRechargeRebateEnabled,
 		DefaultUserRPMLimit:                                    settings.DefaultUserRPMLimit,
 		DefaultSubscriptions:                                   defaultSubscriptions,
+		DefaultLimitedCredits:                                  defaultLimitedCredits,
 		EnableModelFallback:                                    settings.EnableModelFallback,
 		FallbackModelAnthropic:                                 settings.FallbackModelAnthropic,
 		FallbackModelOpenAI:                                    settings.FallbackModelOpenAI,

@@ -453,6 +453,30 @@ func (f UserAttributeValueFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserAttributeValueMutation", m)
 }
 
+// The UserLimitedCreditGrantFunc type is an adapter to allow the use of ordinary
+// function as UserLimitedCreditGrant mutator.
+type UserLimitedCreditGrantFunc func(context.Context, *ent.UserLimitedCreditGrantMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UserLimitedCreditGrantFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UserLimitedCreditGrantMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserLimitedCreditGrantMutation", m)
+}
+
+// The UserLimitedCreditLedgerFunc type is an adapter to allow the use of ordinary
+// function as UserLimitedCreditLedger mutator.
+type UserLimitedCreditLedgerFunc func(context.Context, *ent.UserLimitedCreditLedgerMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UserLimitedCreditLedgerFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UserLimitedCreditLedgerMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserLimitedCreditLedgerMutation", m)
+}
+
 // The UserPlatformQuotaFunc type is an adapter to allow the use of ordinary
 // function as UserPlatformQuota mutator.
 type UserPlatformQuotaFunc func(context.Context, *ent.UserPlatformQuotaMutation) (ent.Value, error)

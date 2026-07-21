@@ -89,6 +89,10 @@ const (
 	EdgePendingAuthSessions = "pending_auth_sessions"
 	// EdgePlatformQuotas holds the string denoting the platform_quotas edge name in mutations.
 	EdgePlatformQuotas = "platform_quotas"
+	// EdgeLimitedCreditGrants holds the string denoting the limited_credit_grants edge name in mutations.
+	EdgeLimitedCreditGrants = "limited_credit_grants"
+	// EdgeLimitedCreditLedgerEntries holds the string denoting the limited_credit_ledger_entries edge name in mutations.
+	EdgeLimitedCreditLedgerEntries = "limited_credit_ledger_entries"
 	// EdgeUserAllowedGroups holds the string denoting the user_allowed_groups edge name in mutations.
 	EdgeUserAllowedGroups = "user_allowed_groups"
 	// Table holds the table name of the user in the database.
@@ -182,6 +186,20 @@ const (
 	PlatformQuotasInverseTable = "user_platform_quotas"
 	// PlatformQuotasColumn is the table column denoting the platform_quotas relation/edge.
 	PlatformQuotasColumn = "user_id"
+	// LimitedCreditGrantsTable is the table that holds the limited_credit_grants relation/edge.
+	LimitedCreditGrantsTable = "user_limited_credit_grants"
+	// LimitedCreditGrantsInverseTable is the table name for the UserLimitedCreditGrant entity.
+	// It exists in this package in order to avoid circular dependency with the "userlimitedcreditgrant" package.
+	LimitedCreditGrantsInverseTable = "user_limited_credit_grants"
+	// LimitedCreditGrantsColumn is the table column denoting the limited_credit_grants relation/edge.
+	LimitedCreditGrantsColumn = "user_id"
+	// LimitedCreditLedgerEntriesTable is the table that holds the limited_credit_ledger_entries relation/edge.
+	LimitedCreditLedgerEntriesTable = "user_limited_credit_ledger"
+	// LimitedCreditLedgerEntriesInverseTable is the table name for the UserLimitedCreditLedger entity.
+	// It exists in this package in order to avoid circular dependency with the "userlimitedcreditledger" package.
+	LimitedCreditLedgerEntriesInverseTable = "user_limited_credit_ledger"
+	// LimitedCreditLedgerEntriesColumn is the table column denoting the limited_credit_ledger_entries relation/edge.
+	LimitedCreditLedgerEntriesColumn = "user_id"
 	// UserAllowedGroupsTable is the table that holds the user_allowed_groups relation/edge.
 	UserAllowedGroupsTable = "user_allowed_groups"
 	// UserAllowedGroupsInverseTable is the table name for the UserAllowedGroup entity.
@@ -602,6 +620,34 @@ func ByPlatformQuotas(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByLimitedCreditGrantsCount orders the results by limited_credit_grants count.
+func ByLimitedCreditGrantsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newLimitedCreditGrantsStep(), opts...)
+	}
+}
+
+// ByLimitedCreditGrants orders the results by limited_credit_grants terms.
+func ByLimitedCreditGrants(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newLimitedCreditGrantsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByLimitedCreditLedgerEntriesCount orders the results by limited_credit_ledger_entries count.
+func ByLimitedCreditLedgerEntriesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newLimitedCreditLedgerEntriesStep(), opts...)
+	}
+}
+
+// ByLimitedCreditLedgerEntries orders the results by limited_credit_ledger_entries terms.
+func ByLimitedCreditLedgerEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newLimitedCreditLedgerEntriesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByUserAllowedGroupsCount orders the results by user_allowed_groups count.
 func ByUserAllowedGroupsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -704,6 +750,20 @@ func newPlatformQuotasStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(PlatformQuotasInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, PlatformQuotasTable, PlatformQuotasColumn),
+	)
+}
+func newLimitedCreditGrantsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(LimitedCreditGrantsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, LimitedCreditGrantsTable, LimitedCreditGrantsColumn),
+	)
+}
+func newLimitedCreditLedgerEntriesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(LimitedCreditLedgerEntriesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, LimitedCreditLedgerEntriesTable, LimitedCreditLedgerEntriesColumn),
 	)
 }
 func newUserAllowedGroupsStep() *sqlgraph.Step {

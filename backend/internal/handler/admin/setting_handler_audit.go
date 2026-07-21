@@ -323,6 +323,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if !equalDefaultSubscriptions(before.DefaultSubscriptions, after.DefaultSubscriptions) {
 		changed = append(changed, "default_subscriptions")
 	}
+	if !equalDefaultLimitedCredits(before.DefaultLimitedCredits, after.DefaultLimitedCredits) {
+		changed = append(changed, "default_limited_credits")
+	}
 	if before.EnableModelFallback != after.EnableModelFallback {
 		changed = append(changed, "enable_model_fallback")
 	}
@@ -655,6 +658,21 @@ func defaultSubscriptionsValueOrDefault(input *[]dto.DefaultSubscriptionSetting,
 	return result
 }
 
+// defaultLimitedCreditsValueOrDefault 区分设置更新中的“字段省略”和“显式清空”。
+func defaultLimitedCreditsValueOrDefault(input *[]dto.DefaultLimitedCreditSetting, fallback []service.DefaultLimitedCreditSetting) []service.DefaultLimitedCreditSetting {
+	if input == nil {
+		return append([]service.DefaultLimitedCreditSetting(nil), fallback...)
+	}
+	result := make([]service.DefaultLimitedCreditSetting, 0, len(*input))
+	for _, item := range *input {
+		result = append(result, service.DefaultLimitedCreditSetting{
+			Amount:       item.Amount,
+			ValidityDays: item.ValidityDays,
+		})
+	}
+	return result
+}
+
 // platformQuotasValueOrDefault 处理 auth-source platform quota 的 nil 语义：
 // nil = 请求未包含该字段（保留 fallback），non-nil（含 empty map）= 整体覆盖。
 // 注意：JSON null 与字段省略等价——两者均反序列化为 nil map，因此都保留旧值；
@@ -684,6 +702,18 @@ func equalDefaultSubscriptions(a, b []service.DefaultSubscriptionSetting) bool {
 	}
 	for i := range a {
 		if a[i].GroupID != b[i].GroupID || a[i].ValidityDays != b[i].ValidityDays {
+			return false
+		}
+	}
+	return true
+}
+
+func equalDefaultLimitedCredits(a, b []service.DefaultLimitedCreditSetting) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Amount != b[i].Amount || a[i].ValidityDays != b[i].ValidityDays {
 			return false
 		}
 	}

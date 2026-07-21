@@ -256,6 +256,7 @@ export default {
         balance: '余额',
         concurrency: '并发数',
         subscription: '订阅',
+        limited_credit: '限时额度',
         invitation: '邀请码',
         // 管理员在用户管理页面调整余额/并发时产生的记录
         admin_balance: '余额（管理员）',
@@ -265,6 +266,7 @@ export default {
       balance: '余额',
       concurrency: '并发数',
       subscription: '订阅',
+      limitedCredit: '限时额度',
       invitation: '邀请码',
       invitationHint: '邀请码用于限制用户注册，使用后自动标记为已使用。',
       allTypes: '全部类型',
@@ -321,6 +323,7 @@ export default {
       customExpiryDays: '自定义天数',
       expiryDaysRequired: '请输入有效的过期天数',
       groupRequired: '请选择订阅分组',
+      amountRequired: '请输入有效金额',
       days: '天',
       status: {
         unused: '未使用',

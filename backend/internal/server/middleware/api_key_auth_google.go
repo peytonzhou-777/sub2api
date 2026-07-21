@@ -23,6 +23,11 @@ func APIKeyAuthGoogle(apiKeyService *service.APIKeyService, cfg *config.Config) 
 //
 // It is intended for Gemini native endpoints (/v1beta) to match Gemini SDK expectations.
 func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
+	return APIKeyAuthWithSubscriptionGoogleAndBillingCache(apiKeyService, subscriptionService, nil, cfg)
+}
+
+// APIKeyAuthWithSubscriptionGoogleAndBillingCache 创建支持限时额度回查的 Google 风格 API Key 鉴权中间件。
+func APIKeyAuthWithSubscriptionGoogleAndBillingCache(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, billingCacheService *service.BillingCacheService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if rejectInvalidAuthAbuse(c, apiKeyService) {
 			abortWithGoogleError(c, 429, "Too many invalid authentication attempts; retry later")
@@ -200,7 +205,7 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 
 			c.Set(string(ContextKeySubscription), subscription)
 		} else {
-			if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
+			if !apiKeyHasSpendableBalance(c.Request.Context(), apiKey.User.ID, apiKey.User.Balance, billingCacheService, cfg) {
 				abortWithGoogleError(c, 403, "Insufficient account balance")
 				return
 			}

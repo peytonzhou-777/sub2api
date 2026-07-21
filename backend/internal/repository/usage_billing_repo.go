@@ -179,12 +179,25 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 	}
 
 	if cmd.BalanceCost > 0 {
-		newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, cmd.UserID, cmd.BalanceCost)
-		if err != nil {
-			return err
+		limitedCost := 0.0
+		if cmd.RequestID != "" {
+			var err error
+			limitedCost, err = deductUsageBillingLimitedCredits(ctx, tx, cmd.UserID, cmd.APIKeyID, cmd.RequestID, cmd.BalanceCost)
+			if err != nil {
+				return err
+			}
 		}
-		result.NewBalance = &newBalance
-		result.BalanceOverdrafted = !sufficient
+		ordinaryCost := clampBillingAmount(cmd.BalanceCost - limitedCost)
+		result.LimitedCreditCost = limitedCost
+		result.OrdinaryBalanceCost = ordinaryCost
+		if ordinaryCost > 0 {
+			newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, cmd.UserID, ordinaryCost)
+			if err != nil {
+				return err
+			}
+			result.NewBalance = &newBalance
+			result.BalanceOverdrafted = !sufficient
+		}
 	}
 
 	if cmd.APIKeyQuotaCost > 0 {
@@ -240,6 +253,105 @@ func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscrip
 	return service.ErrSubscriptionNotFound
 }
 
+const billingAmountEpsilon = 0.00000001
+
+func clampBillingAmount(amount float64) float64 {
+	if amount <= billingAmountEpsilon {
+		return 0
+	}
+	return amount
+}
+
+func deductUsageBillingLimitedCredits(ctx context.Context, tx *sql.Tx, userID, apiKeyID int64, requestID string, amount float64) (float64, error) {
+	remaining := clampBillingAmount(amount)
+	if remaining <= 0 {
+		return 0, nil
+	}
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, initial_amount - used_amount - frozen_amount AS available
+		FROM user_limited_credit_grants
+		WHERE user_id = $1
+			AND status = $2
+			AND expires_at > NOW()
+			AND initial_amount - used_amount - frozen_amount > $3
+		ORDER BY expires_at ASC, id ASC
+		FOR UPDATE
+	`, userID, service.LimitedCreditStatusActive, billingAmountEpsilon)
+	if err != nil {
+		return 0, err
+	}
+	type grantAvailability struct {
+		id        int64
+		available float64
+	}
+	locked := make([]grantAvailability, 0)
+	for rows.Next() {
+		var grantID int64
+		var available float64
+		if err := rows.Scan(&grantID, &available); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		locked = append(locked, grantAvailability{id: grantID, available: available})
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+
+	deducted := 0.0
+	for _, grant := range locked {
+		if remaining <= 0 {
+			break
+		}
+		available := clampBillingAmount(grant.available)
+		if available <= 0 {
+			continue
+		}
+		part := available
+		if part > remaining {
+			part = remaining
+		}
+		if err := consumeLimitedCreditGrant(ctx, tx, userID, grant.id, apiKeyID, requestID, part); err != nil {
+			return 0, err
+		}
+		deducted += part
+		remaining = clampBillingAmount(remaining - part)
+	}
+	return deducted, nil
+}
+
+func consumeLimitedCreditGrant(ctx context.Context, tx *sql.Tx, userID, grantID, apiKeyID int64, requestID string, amount float64) error {
+	res, err := tx.ExecContext(ctx, `
+		UPDATE user_limited_credit_grants
+		SET used_amount = used_amount + $1,
+			status = CASE
+				WHEN initial_amount - (used_amount + $1) - frozen_amount <= $2 THEN $3
+				ELSE status
+			END,
+			updated_at = NOW()
+		WHERE id = $4 AND user_id = $5
+	`, amount, billingAmountEpsilon, service.LimitedCreditStatusDepleted, grantID, userID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return service.ErrUserNotFound
+	}
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO user_limited_credit_ledger (user_id, grant_id, event_type, amount, request_id, api_key_id)
+		VALUES ($1, $2, 'consume', $3, $4, $5)
+	`, userID, grantID, amount, requestID, apiKeyID)
+	return err
+}
 func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, amount float64) (float64, bool, error) {
 	var newBalance float64
 	err := tx.QueryRowContext(ctx, `
@@ -276,6 +388,23 @@ func reserveUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *
 	if cmd.HoldAmount <= 0 {
 		return &service.BatchImageBalanceHoldResult{}, nil
 	}
+	limitedReserved := 0.0
+	if cmd.RequestID != "" && cmd.BatchID != "" {
+		var err error
+		limitedReserved, err = reserveUsageBillingLimitedCredits(ctx, tx, cmd)
+		if err != nil {
+			return nil, err
+		}
+	}
+	ordinaryHold := clampBillingAmount(cmd.HoldAmount - limitedReserved)
+	result := &service.BatchImageBalanceHoldResult{
+		LimitedCreditCost:   limitedReserved,
+		OrdinaryBalanceCost: ordinaryHold,
+	}
+	if ordinaryHold <= 0 {
+		return result, nil
+	}
+
 	var balance, frozen float64
 	err := tx.QueryRowContext(ctx, `
 		UPDATE users
@@ -284,9 +413,11 @@ func reserveUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *
 			updated_at = NOW()
 		WHERE id = $2 AND deleted_at IS NULL AND balance >= $1
 		RETURNING balance, frozen_balance
-	`, cmd.HoldAmount, cmd.UserID).Scan(&balance, &frozen)
+	`, ordinaryHold, cmd.UserID).Scan(&balance, &frozen)
 	if err == nil {
-		return &service.BatchImageBalanceHoldResult{NewBalance: &balance, FrozenBalance: &frozen}, nil
+		result.NewBalance = &balance
+		result.FrozenBalance = &frozen
+		return result, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
@@ -303,9 +434,33 @@ func captureUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *
 	if cmd.HoldAmount <= 0 && cmd.ActualAmount <= 0 {
 		return &service.BatchImageBalanceHoldResult{}, nil
 	}
-	if cmd.ActualAmount-cmd.HoldAmount > 0.00000001 {
+	if cmd.ActualAmount-cmd.HoldAmount > billingAmountEpsilon {
 		return nil, service.ErrBatchImageSettlementCostExceedsHold
 	}
+
+	limitedReserved := 0.0
+	limitedCaptured := 0.0
+	if cmd.RequestID != "" && cmd.BatchID != "" {
+		limitedResult, err := captureUsageBillingLimitedCredits(ctx, tx, cmd)
+		if err != nil {
+			return nil, err
+		}
+		limitedReserved = limitedResult.totalReserved
+		limitedCaptured = limitedResult.captured
+	}
+	ordinaryHold := clampBillingAmount(cmd.HoldAmount - limitedReserved)
+	ordinaryActual := clampBillingAmount(cmd.ActualAmount - limitedReserved)
+	if ordinaryActual > ordinaryHold {
+		ordinaryActual = ordinaryHold
+	}
+	result := &service.BatchImageBalanceHoldResult{
+		LimitedCreditCost:   limitedCaptured,
+		OrdinaryBalanceCost: ordinaryActual,
+	}
+	if ordinaryHold <= 0 {
+		return result, nil
+	}
+
 	var balance, frozen float64
 	err := tx.QueryRowContext(ctx, `
 		UPDATE users
@@ -316,9 +471,11 @@ func captureUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *
 			updated_at = NOW()
 		WHERE id = $3 AND deleted_at IS NULL AND COALESCE(frozen_balance, 0) >= $1
 		RETURNING balance, frozen_balance
-	`, cmd.HoldAmount, cmd.ActualAmount, cmd.UserID).Scan(&balance, &frozen)
+	`, ordinaryHold, ordinaryActual, cmd.UserID).Scan(&balance, &frozen)
 	if err == nil {
-		return &service.BatchImageBalanceHoldResult{NewBalance: &balance, FrozenBalance: &frozen}, nil
+		result.NewBalance = &balance
+		result.FrozenBalance = &frozen
+		return result, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
@@ -345,6 +502,26 @@ func releaseUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *
 		logger.LegacyPrintf("repository.usage_billing", "[BatchImage] release skipped, hold was never reserved: batch=%s", cmd.BatchID)
 		return &service.BatchImageBalanceHoldResult{}, nil
 	}
+
+	limitedReserved := 0.0
+	limitedReleased := 0.0
+	if cmd.RequestID != "" && cmd.BatchID != "" {
+		limitedResult, err := releaseUsageBillingLimitedCredits(ctx, tx, cmd)
+		if err != nil {
+			return nil, err
+		}
+		limitedReserved = limitedResult.totalReserved
+		limitedReleased = limitedResult.released
+	}
+	ordinaryHold := clampBillingAmount(cmd.HoldAmount - limitedReserved)
+	result := &service.BatchImageBalanceHoldResult{
+		LimitedCreditCost:   limitedReleased,
+		OrdinaryBalanceCost: ordinaryHold,
+	}
+	if ordinaryHold <= 0 {
+		return result, nil
+	}
+
 	var balance, frozen float64
 	err := tx.QueryRowContext(ctx, `
 		UPDATE users
@@ -353,9 +530,11 @@ func releaseUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *
 			updated_at = NOW()
 		WHERE id = $2 AND deleted_at IS NULL AND COALESCE(frozen_balance, 0) >= $1
 		RETURNING balance, frozen_balance
-	`, cmd.HoldAmount, cmd.UserID).Scan(&balance, &frozen)
+	`, ordinaryHold, cmd.UserID).Scan(&balance, &frozen)
 	if err == nil {
-		return &service.BatchImageBalanceHoldResult{NewBalance: &balance, FrozenBalance: &frozen}, nil
+		result.NewBalance = &balance
+		result.FrozenBalance = &frozen
+		return result, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
@@ -366,6 +545,262 @@ func releaseUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *
 		return nil, service.ErrUserNotFound
 	}
 	return nil, errors.New("batch image frozen balance is insufficient")
+}
+
+type limitedCreditBatchAllocation struct {
+	grantID       int64
+	totalReserved float64
+	openAmount    float64
+}
+
+type limitedCreditBatchResult struct {
+	totalReserved float64
+	captured      float64
+	released      float64
+}
+
+func reserveUsageBillingLimitedCredits(ctx context.Context, tx *sql.Tx, cmd *service.BatchImageBalanceHoldCommand) (float64, error) {
+	remaining := clampBillingAmount(cmd.HoldAmount)
+	if remaining <= 0 {
+		return 0, nil
+	}
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, initial_amount - used_amount - frozen_amount AS available
+		FROM user_limited_credit_grants
+		WHERE user_id = $1
+			AND status = $2
+			AND expires_at > NOW()
+			AND initial_amount - used_amount - frozen_amount > $3
+		ORDER BY expires_at ASC, id ASC
+		FOR UPDATE
+	`, cmd.UserID, service.LimitedCreditStatusActive, billingAmountEpsilon)
+	if err != nil {
+		return 0, err
+	}
+	type grantAvailability struct {
+		id        int64
+		available float64
+	}
+	locked := make([]grantAvailability, 0)
+	for rows.Next() {
+		var grantID int64
+		var available float64
+		if err := rows.Scan(&grantID, &available); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		locked = append(locked, grantAvailability{id: grantID, available: available})
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+
+	reserved := 0.0
+	for _, grant := range locked {
+		if remaining <= 0 {
+			break
+		}
+		available := clampBillingAmount(grant.available)
+		if available <= 0 {
+			continue
+		}
+		part := available
+		if part > remaining {
+			part = remaining
+		}
+		if err := reserveLimitedCreditGrant(ctx, tx, cmd, grant.id, part); err != nil {
+			return 0, err
+		}
+		reserved += part
+		remaining = clampBillingAmount(remaining - part)
+	}
+	return reserved, nil
+}
+
+func reserveLimitedCreditGrant(ctx context.Context, tx *sql.Tx, cmd *service.BatchImageBalanceHoldCommand, grantID int64, amount float64) error {
+	res, err := tx.ExecContext(ctx, `
+		UPDATE user_limited_credit_grants
+		SET frozen_amount = frozen_amount + $1,
+			updated_at = NOW()
+		WHERE id = $2
+			AND user_id = $3
+			AND initial_amount - used_amount - frozen_amount + $4 >= $1
+	`, amount, grantID, cmd.UserID, billingAmountEpsilon)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errors.New("limited credit available amount is insufficient")
+	}
+	return insertLimitedCreditLedger(ctx, tx, cmd.UserID, grantID, "reserve", amount, cmd.RequestID, cmd.APIKeyID, cmd.BatchID)
+}
+
+func captureUsageBillingLimitedCredits(ctx context.Context, tx *sql.Tx, cmd *service.BatchImageBalanceHoldCommand) (*limitedCreditBatchResult, error) {
+	allocations, totalReserved, err := getLimitedCreditBatchAllocations(ctx, tx, cmd.UserID, cmd.BatchID)
+	if err != nil {
+		return nil, err
+	}
+	result := &limitedCreditBatchResult{totalReserved: totalReserved}
+	captureRemaining := cmd.ActualAmount
+	if captureRemaining > totalReserved {
+		captureRemaining = totalReserved
+	}
+	captureRemaining = clampBillingAmount(captureRemaining)
+	for _, allocation := range allocations {
+		openAmount := clampBillingAmount(allocation.openAmount)
+		if openAmount <= 0 {
+			continue
+		}
+		capturePart := 0.0
+		if captureRemaining > 0 {
+			capturePart = openAmount
+			if capturePart > captureRemaining {
+				capturePart = captureRemaining
+			}
+			if err := captureLimitedCreditGrant(ctx, tx, cmd, allocation.grantID, capturePart); err != nil {
+				return nil, err
+			}
+			result.captured += capturePart
+			captureRemaining = clampBillingAmount(captureRemaining - capturePart)
+		}
+		releasePart := clampBillingAmount(openAmount - capturePart)
+		if releasePart > 0 {
+			if err := releaseLimitedCreditGrant(ctx, tx, cmd, allocation.grantID, releasePart); err != nil {
+				return nil, err
+			}
+			result.released += releasePart
+		}
+	}
+	return result, nil
+}
+
+func releaseUsageBillingLimitedCredits(ctx context.Context, tx *sql.Tx, cmd *service.BatchImageBalanceHoldCommand) (*limitedCreditBatchResult, error) {
+	allocations, totalReserved, err := getLimitedCreditBatchAllocations(ctx, tx, cmd.UserID, cmd.BatchID)
+	if err != nil {
+		return nil, err
+	}
+	result := &limitedCreditBatchResult{totalReserved: totalReserved}
+	for _, allocation := range allocations {
+		openAmount := clampBillingAmount(allocation.openAmount)
+		if openAmount <= 0 {
+			continue
+		}
+		if err := releaseLimitedCreditGrant(ctx, tx, cmd, allocation.grantID, openAmount); err != nil {
+			return nil, err
+		}
+		result.released += openAmount
+	}
+	return result, nil
+}
+
+func getLimitedCreditBatchAllocations(ctx context.Context, tx *sql.Tx, userID int64, batchID string) ([]limitedCreditBatchAllocation, float64, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT
+			g.id,
+			COALESCE(SUM(CASE WHEN l.event_type = 'reserve' THEN l.amount ELSE 0 END), 0) AS total_reserved,
+			COALESCE(SUM(CASE
+				WHEN l.event_type = 'reserve' THEN l.amount
+				WHEN l.event_type IN ('capture', 'release') THEN -l.amount
+				ELSE 0
+			END), 0) AS open_amount
+		FROM user_limited_credit_ledger l
+		JOIN user_limited_credit_grants g ON g.id = l.grant_id
+		WHERE l.user_id = $1
+			AND l.batch_id = $2
+		GROUP BY g.id, g.expires_at
+		HAVING COALESCE(SUM(CASE WHEN l.event_type = 'reserve' THEN l.amount ELSE 0 END), 0) > $3
+		ORDER BY g.expires_at ASC, g.id ASC
+	`, userID, batchID, billingAmountEpsilon)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	allocations := make([]limitedCreditBatchAllocation, 0)
+	totalReserved := 0.0
+	for rows.Next() {
+		var allocation limitedCreditBatchAllocation
+		if err := rows.Scan(&allocation.grantID, &allocation.totalReserved, &allocation.openAmount); err != nil {
+			return nil, 0, err
+		}
+		allocation.totalReserved = clampBillingAmount(allocation.totalReserved)
+		allocation.openAmount = clampBillingAmount(allocation.openAmount)
+		totalReserved += allocation.totalReserved
+		allocations = append(allocations, allocation)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return allocations, totalReserved, nil
+}
+
+func captureLimitedCreditGrant(ctx context.Context, tx *sql.Tx, cmd *service.BatchImageBalanceHoldCommand, grantID int64, amount float64) error {
+	if amount <= 0 {
+		return nil
+	}
+	res, err := tx.ExecContext(ctx, `
+		UPDATE user_limited_credit_grants
+		SET used_amount = used_amount + $1,
+			frozen_amount = frozen_amount - $1,
+			status = CASE
+				WHEN initial_amount - (used_amount + $1) - (frozen_amount - $1) <= $2
+					AND frozen_amount - $1 <= $2 THEN $3
+				ELSE status
+			END,
+			updated_at = NOW()
+		WHERE id = $4 AND user_id = $5 AND frozen_amount + $2 >= $1
+	`, amount, billingAmountEpsilon, service.LimitedCreditStatusDepleted, grantID, cmd.UserID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errors.New("limited credit frozen amount is insufficient")
+	}
+	return insertLimitedCreditLedger(ctx, tx, cmd.UserID, grantID, "capture", amount, cmd.RequestID, cmd.APIKeyID, cmd.BatchID)
+}
+
+func releaseLimitedCreditGrant(ctx context.Context, tx *sql.Tx, cmd *service.BatchImageBalanceHoldCommand, grantID int64, amount float64) error {
+	if amount <= 0 {
+		return nil
+	}
+	res, err := tx.ExecContext(ctx, `
+		UPDATE user_limited_credit_grants
+		SET frozen_amount = frozen_amount - $1,
+			updated_at = NOW()
+		WHERE id = $2 AND user_id = $3 AND frozen_amount + $4 >= $1
+	`, amount, grantID, cmd.UserID, billingAmountEpsilon)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errors.New("limited credit frozen amount is insufficient")
+	}
+	return insertLimitedCreditLedger(ctx, tx, cmd.UserID, grantID, "release", amount, cmd.RequestID, cmd.APIKeyID, cmd.BatchID)
+}
+
+func insertLimitedCreditLedger(ctx context.Context, tx *sql.Tx, userID, grantID int64, eventType string, amount float64, requestID string, apiKeyID int64, batchID string) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO user_limited_credit_ledger (user_id, grant_id, event_type, amount, request_id, api_key_id, batch_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, userID, grantID, eventType, amount, requestID, apiKeyID, batchID)
+	return err
 }
 
 // batchImageHoldClaimExists 检查 hold request id 是否已在 dedup（或归档）表中被 claim，

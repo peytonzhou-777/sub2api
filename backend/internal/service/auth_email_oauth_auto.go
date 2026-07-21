@@ -201,7 +201,7 @@ func (s *AuthService) createEmailOAuthUser(ctx context.Context, email, username,
 		return nil, ErrServiceUnavailable
 	}
 	s.postAuthUserBootstrap(ctx, user, providerType, false)
-	s.assignSubscriptions(ctx, user.ID, grantPlan.Subscriptions, "auto assigned by signup defaults")
+	s.assignSignupEntitlements(ctx, user.ID, grantPlan)
 	// snapshot user × platform quota（fail-open）
 	_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
 	s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)

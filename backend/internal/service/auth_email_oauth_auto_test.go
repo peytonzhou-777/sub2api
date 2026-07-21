@@ -86,3 +86,33 @@ func TestEmailOAuthAuto_SnapshotsPlatformQuotaDefaults(t *testing.T) {
 	require.NotNil(t, geminiRecord.MonthlyLimitUSD)
 	require.InDelta(t, 100.0, *geminiRecord.MonthlyLimitUSD, 0.0001)
 }
+
+func TestEmailOAuthAuto_GrantsDefaultLimitedCredits(t *testing.T) {
+	userRepo := &userRepoStub{nextID: 89}
+	svc := newEmailOAuthAutoAuthService(
+		userRepo,
+		map[string]string{
+			SettingKeyRegistrationEnabled:   "true",
+			SettingKeyDefaultLimitedCredits: `[{"amount":7.5,"validity_days":18}]`,
+		},
+		nil,
+	)
+	granter := &defaultLimitedCreditGranterStub{}
+	svc.defaultLimitedCreditGranter = granter
+
+	user, err := svc.createEmailOAuthUser(
+		context.Background(),
+		"github-oauth@example.com",
+		"github-oauth",
+		"github",
+		"",
+		"",
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Equal(t, []defaultLimitedCreditGrantCall{{
+		userID: 89,
+		items:  []DefaultLimitedCreditSetting{{Amount: 7.5, ValidityDays: 18}},
+	}}, granter.calls)
+}

@@ -119,7 +119,10 @@ func TestSyncBalanceCacheAfterDeduction_QueuesDeductWhenBalanceStillEligible(t *
 	syncBalanceCacheAfterDeduction(context.Background(), &postUsageBillingParams{
 		Cost: &CostBreakdown{ActualCost: 0.25},
 		User: &User{ID: 1},
-	}, &billingDeps{billingCacheService: svc}, &UsageBillingApplyResult{NewBalance: &newBalance})
+	}, &billingDeps{billingCacheService: svc}, &UsageBillingApplyResult{
+		NewBalance:          &newBalance,
+		OrdinaryBalanceCost: 0.25,
+	})
 
 	require.Equal(t, int64(0), cache.invalidateCalls.Load())
 	require.Eventually(t, func() bool {

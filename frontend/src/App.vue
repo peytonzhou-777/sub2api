@@ -6,7 +6,7 @@ import NavigationProgress from '@/components/common/NavigationProgress.vue'
 import AdminComplianceDialog from '@/components/admin/AdminComplianceDialog.vue'
 import { resolveRouteDocumentTitle } from '@/router/title'
 import AnnouncementPopup from '@/components/common/AnnouncementPopup.vue'
-import { useAppStore, useAuthStore, useSubscriptionStore, useAnnouncementStore, useAdminComplianceStore, useAdminSettingsStore } from '@/stores'
+import { useAppStore, useAuthStore, useSubscriptionStore, useLimitedCreditStore, useAnnouncementStore, useAdminComplianceStore, useAdminSettingsStore } from '@/stores'
 import { getSetupStatus } from '@/api/setup'
 import { updateFavicon } from '@/utils/branding'
 
@@ -15,6 +15,7 @@ const route = useRoute()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const subscriptionStore = useSubscriptionStore()
+const limitedCreditStore = useLimitedCreditStore()
 const announcementStore = useAnnouncementStore()
 const adminComplianceStore = useAdminComplianceStore()
 const adminSettingsStore = useAdminSettingsStore()
@@ -74,11 +75,15 @@ watch(
         })
       }
 
-      // User logged in: preload subscriptions and start polling
+      // User logged in: preload subscriptions/limited credits and start polling
       subscriptionStore.fetchActiveSubscriptions().catch((error) => {
         console.error('Failed to preload subscriptions:', error)
       })
       subscriptionStore.startPolling()
+      limitedCreditStore.fetchActiveLimitedCredits().catch((error) => {
+        console.error('Failed to preload limited credits:', error)
+      })
+      limitedCreditStore.startPolling()
 
       // Announcements: new login vs page refresh restore
       if (oldValue === false) {
@@ -94,6 +99,7 @@ watch(
     } else {
       // User logged out: clear data and stop polling
       subscriptionStore.clear()
+      limitedCreditStore.clear()
       announcementStore.reset()
       adminComplianceStore.reset()
       document.removeEventListener('visibilitychange', onVisibilityChange)

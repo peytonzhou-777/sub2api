@@ -42,6 +42,19 @@ type flakyEmailBindDefaultSubAssignerStub struct {
 	calls []*service.AssignSubscriptionInput
 }
 
+type emailBindDefaultLimitedCreditGranterStub struct {
+	calls int
+}
+
+func (s *emailBindDefaultLimitedCreditGranterStub) GrantFromDefaultSettings(
+	context.Context,
+	int64,
+	[]service.DefaultLimitedCreditSetting,
+) ([]service.LimitedCreditGrant, error) {
+	s.calls++
+	return nil, nil
+}
+
 func (s *flakyEmailBindDefaultSubAssignerStub) AssignOrExtendSubscription(
 	_ context.Context,
 	input *service.AssignSubscriptionInput,
@@ -56,8 +69,16 @@ func newAuthServiceForEmailBind(
 	settings map[string]string,
 	emailCache service.EmailCache,
 	defaultSubAssigner service.DefaultSubscriptionAssigner,
+	defaultLimitedCreditGranters ...service.DefaultLimitedCreditGranter,
 ) (*service.AuthService, service.UserRepository, *dbent.Client) {
-	return newAuthServiceForEmailBindWithRefreshCache(t, settings, emailCache, defaultSubAssigner, nil)
+	return newAuthServiceForEmailBindWithRefreshCache(
+		t,
+		settings,
+		emailCache,
+		defaultSubAssigner,
+		nil,
+		defaultLimitedCreditGranters...,
+	)
 }
 
 func newAuthServiceForEmailBindWithRefreshCache(
@@ -66,6 +87,7 @@ func newAuthServiceForEmailBindWithRefreshCache(
 	emailCache service.EmailCache,
 	defaultSubAssigner service.DefaultSubscriptionAssigner,
 	refreshTokenCache service.RefreshTokenCache,
+	defaultLimitedCreditGranters ...service.DefaultLimitedCreditGranter,
 ) (*service.AuthService, service.UserRepository, *dbent.Client) {
 	t.Helper()
 
@@ -110,12 +132,33 @@ CREATE TABLE IF NOT EXISTS user_provider_default_grants (
 		emailSvc = service.NewEmailService(settingRepo, emailCache)
 	}
 
-	svc := service.NewAuthService(client, repo, nil, refreshTokenCache, cfg, settingSvc, emailSvc, nil, nil, nil, defaultSubAssigner, nil, nil)
+	options := make([]service.AuthServiceOption, 0, len(defaultLimitedCreditGranters))
+	for _, granter := range defaultLimitedCreditGranters {
+		options = append(options, service.WithDefaultLimitedCreditGranter(granter))
+	}
+
+	svc := service.NewAuthService(
+		client,
+		repo,
+		nil,
+		refreshTokenCache,
+		cfg,
+		settingSvc,
+		emailSvc,
+		nil,
+		nil,
+		nil,
+		defaultSubAssigner,
+		nil,
+		nil,
+		options...,
+	)
 	return svc, repo, client
 }
 
 func TestAuthServiceBindEmailIdentity_UpdatesEmailAndAppliesFirstBindDefaults(t *testing.T) {
 	assigner := &emailBindDefaultSubAssignerStub{}
+	limitedCreditGranter := &emailBindDefaultLimitedCreditGranterStub{}
 	cache := &emailBindCacheStub{
 		data: &service.VerificationCodeData{
 			Code:      "123456",
@@ -128,7 +171,8 @@ func TestAuthServiceBindEmailIdentity_UpdatesEmailAndAppliesFirstBindDefaults(t 
 		service.SettingKeyAuthSourceDefaultEmailConcurrency:      "4",
 		service.SettingKeyAuthSourceDefaultEmailSubscriptions:    `[{"group_id":11,"validity_days":30}]`,
 		service.SettingKeyAuthSourceDefaultEmailGrantOnFirstBind: "true",
-	}, cache, assigner)
+		service.SettingKeyDefaultLimitedCredits:                  `[{"amount":9.5,"validity_days":15}]`,
+	}, cache, assigner, limitedCreditGranter)
 
 	ctx := context.Background()
 	user, err := client.User.Create().
@@ -169,6 +213,7 @@ func TestAuthServiceBindEmailIdentity_UpdatesEmailAndAppliesFirstBindDefaults(t 
 	require.Equal(t, user.ID, assigner.calls[0].UserID)
 	require.Equal(t, int64(11), assigner.calls[0].GroupID)
 	require.Equal(t, 30, assigner.calls[0].ValidityDays)
+	require.Zero(t, limitedCreditGranter.calls)
 	require.Equal(t, 1, countProviderGrantRecords(t, client, user.ID, "email", "first_bind"))
 }
 

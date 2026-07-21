@@ -23,6 +23,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
+	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditledger"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 )
@@ -627,6 +629,36 @@ func (_u *UserUpdate) AddPlatformQuotas(v ...*UserPlatformQuota) *UserUpdate {
 	return _u.AddPlatformQuotaIDs(ids...)
 }
 
+// AddLimitedCreditGrantIDs adds the "limited_credit_grants" edge to the UserLimitedCreditGrant entity by IDs.
+func (_u *UserUpdate) AddLimitedCreditGrantIDs(ids ...int64) *UserUpdate {
+	_u.mutation.AddLimitedCreditGrantIDs(ids...)
+	return _u
+}
+
+// AddLimitedCreditGrants adds the "limited_credit_grants" edges to the UserLimitedCreditGrant entity.
+func (_u *UserUpdate) AddLimitedCreditGrants(v ...*UserLimitedCreditGrant) *UserUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddLimitedCreditGrantIDs(ids...)
+}
+
+// AddLimitedCreditLedgerEntryIDs adds the "limited_credit_ledger_entries" edge to the UserLimitedCreditLedger entity by IDs.
+func (_u *UserUpdate) AddLimitedCreditLedgerEntryIDs(ids ...int64) *UserUpdate {
+	_u.mutation.AddLimitedCreditLedgerEntryIDs(ids...)
+	return _u
+}
+
+// AddLimitedCreditLedgerEntries adds the "limited_credit_ledger_entries" edges to the UserLimitedCreditLedger entity.
+func (_u *UserUpdate) AddLimitedCreditLedgerEntries(v ...*UserLimitedCreditLedger) *UserUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddLimitedCreditLedgerEntryIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
@@ -903,6 +935,48 @@ func (_u *UserUpdate) RemovePlatformQuotas(v ...*UserPlatformQuota) *UserUpdate 
 		ids[i] = v[i].ID
 	}
 	return _u.RemovePlatformQuotaIDs(ids...)
+}
+
+// ClearLimitedCreditGrants clears all "limited_credit_grants" edges to the UserLimitedCreditGrant entity.
+func (_u *UserUpdate) ClearLimitedCreditGrants() *UserUpdate {
+	_u.mutation.ClearLimitedCreditGrants()
+	return _u
+}
+
+// RemoveLimitedCreditGrantIDs removes the "limited_credit_grants" edge to UserLimitedCreditGrant entities by IDs.
+func (_u *UserUpdate) RemoveLimitedCreditGrantIDs(ids ...int64) *UserUpdate {
+	_u.mutation.RemoveLimitedCreditGrantIDs(ids...)
+	return _u
+}
+
+// RemoveLimitedCreditGrants removes "limited_credit_grants" edges to UserLimitedCreditGrant entities.
+func (_u *UserUpdate) RemoveLimitedCreditGrants(v ...*UserLimitedCreditGrant) *UserUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveLimitedCreditGrantIDs(ids...)
+}
+
+// ClearLimitedCreditLedgerEntries clears all "limited_credit_ledger_entries" edges to the UserLimitedCreditLedger entity.
+func (_u *UserUpdate) ClearLimitedCreditLedgerEntries() *UserUpdate {
+	_u.mutation.ClearLimitedCreditLedgerEntries()
+	return _u
+}
+
+// RemoveLimitedCreditLedgerEntryIDs removes the "limited_credit_ledger_entries" edge to UserLimitedCreditLedger entities by IDs.
+func (_u *UserUpdate) RemoveLimitedCreditLedgerEntryIDs(ids ...int64) *UserUpdate {
+	_u.mutation.RemoveLimitedCreditLedgerEntryIDs(ids...)
+	return _u
+}
+
+// RemoveLimitedCreditLedgerEntries removes "limited_credit_ledger_entries" edges to UserLimitedCreditLedger entities.
+func (_u *UserUpdate) RemoveLimitedCreditLedgerEntries(v ...*UserLimitedCreditLedger) *UserUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveLimitedCreditLedgerEntryIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -1696,6 +1770,96 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.LimitedCreditGrantsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditGrantsTable,
+			Columns: []string{user.LimitedCreditGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditgrant.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedLimitedCreditGrantsIDs(); len(nodes) > 0 && !_u.mutation.LimitedCreditGrantsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditGrantsTable,
+			Columns: []string{user.LimitedCreditGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditgrant.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.LimitedCreditGrantsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditGrantsTable,
+			Columns: []string{user.LimitedCreditGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditgrant.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.LimitedCreditLedgerEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditLedgerEntriesTable,
+			Columns: []string{user.LimitedCreditLedgerEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditledger.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedLimitedCreditLedgerEntriesIDs(); len(nodes) > 0 && !_u.mutation.LimitedCreditLedgerEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditLedgerEntriesTable,
+			Columns: []string{user.LimitedCreditLedgerEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditledger.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.LimitedCreditLedgerEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditLedgerEntriesTable,
+			Columns: []string{user.LimitedCreditLedgerEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditledger.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
@@ -2303,6 +2467,36 @@ func (_u *UserUpdateOne) AddPlatformQuotas(v ...*UserPlatformQuota) *UserUpdateO
 	return _u.AddPlatformQuotaIDs(ids...)
 }
 
+// AddLimitedCreditGrantIDs adds the "limited_credit_grants" edge to the UserLimitedCreditGrant entity by IDs.
+func (_u *UserUpdateOne) AddLimitedCreditGrantIDs(ids ...int64) *UserUpdateOne {
+	_u.mutation.AddLimitedCreditGrantIDs(ids...)
+	return _u
+}
+
+// AddLimitedCreditGrants adds the "limited_credit_grants" edges to the UserLimitedCreditGrant entity.
+func (_u *UserUpdateOne) AddLimitedCreditGrants(v ...*UserLimitedCreditGrant) *UserUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddLimitedCreditGrantIDs(ids...)
+}
+
+// AddLimitedCreditLedgerEntryIDs adds the "limited_credit_ledger_entries" edge to the UserLimitedCreditLedger entity by IDs.
+func (_u *UserUpdateOne) AddLimitedCreditLedgerEntryIDs(ids ...int64) *UserUpdateOne {
+	_u.mutation.AddLimitedCreditLedgerEntryIDs(ids...)
+	return _u
+}
+
+// AddLimitedCreditLedgerEntries adds the "limited_credit_ledger_entries" edges to the UserLimitedCreditLedger entity.
+func (_u *UserUpdateOne) AddLimitedCreditLedgerEntries(v ...*UserLimitedCreditLedger) *UserUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddLimitedCreditLedgerEntryIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
@@ -2579,6 +2773,48 @@ func (_u *UserUpdateOne) RemovePlatformQuotas(v ...*UserPlatformQuota) *UserUpda
 		ids[i] = v[i].ID
 	}
 	return _u.RemovePlatformQuotaIDs(ids...)
+}
+
+// ClearLimitedCreditGrants clears all "limited_credit_grants" edges to the UserLimitedCreditGrant entity.
+func (_u *UserUpdateOne) ClearLimitedCreditGrants() *UserUpdateOne {
+	_u.mutation.ClearLimitedCreditGrants()
+	return _u
+}
+
+// RemoveLimitedCreditGrantIDs removes the "limited_credit_grants" edge to UserLimitedCreditGrant entities by IDs.
+func (_u *UserUpdateOne) RemoveLimitedCreditGrantIDs(ids ...int64) *UserUpdateOne {
+	_u.mutation.RemoveLimitedCreditGrantIDs(ids...)
+	return _u
+}
+
+// RemoveLimitedCreditGrants removes "limited_credit_grants" edges to UserLimitedCreditGrant entities.
+func (_u *UserUpdateOne) RemoveLimitedCreditGrants(v ...*UserLimitedCreditGrant) *UserUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveLimitedCreditGrantIDs(ids...)
+}
+
+// ClearLimitedCreditLedgerEntries clears all "limited_credit_ledger_entries" edges to the UserLimitedCreditLedger entity.
+func (_u *UserUpdateOne) ClearLimitedCreditLedgerEntries() *UserUpdateOne {
+	_u.mutation.ClearLimitedCreditLedgerEntries()
+	return _u
+}
+
+// RemoveLimitedCreditLedgerEntryIDs removes the "limited_credit_ledger_entries" edge to UserLimitedCreditLedger entities by IDs.
+func (_u *UserUpdateOne) RemoveLimitedCreditLedgerEntryIDs(ids ...int64) *UserUpdateOne {
+	_u.mutation.RemoveLimitedCreditLedgerEntryIDs(ids...)
+	return _u
+}
+
+// RemoveLimitedCreditLedgerEntries removes "limited_credit_ledger_entries" edges to UserLimitedCreditLedger entities.
+func (_u *UserUpdateOne) RemoveLimitedCreditLedgerEntries(v ...*UserLimitedCreditLedger) *UserUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveLimitedCreditLedgerEntryIDs(ids...)
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -3395,6 +3631,96 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(userplatformquota.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.LimitedCreditGrantsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditGrantsTable,
+			Columns: []string{user.LimitedCreditGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditgrant.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedLimitedCreditGrantsIDs(); len(nodes) > 0 && !_u.mutation.LimitedCreditGrantsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditGrantsTable,
+			Columns: []string{user.LimitedCreditGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditgrant.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.LimitedCreditGrantsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditGrantsTable,
+			Columns: []string{user.LimitedCreditGrantsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditgrant.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.LimitedCreditLedgerEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditLedgerEntriesTable,
+			Columns: []string{user.LimitedCreditLedgerEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditledger.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedLimitedCreditLedgerEntriesIDs(); len(nodes) > 0 && !_u.mutation.LimitedCreditLedgerEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditLedgerEntriesTable,
+			Columns: []string{user.LimitedCreditLedgerEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditledger.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.LimitedCreditLedgerEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LimitedCreditLedgerEntriesTable,
+			Columns: []string{user.LimitedCreditLedgerEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userlimitedcreditledger.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {

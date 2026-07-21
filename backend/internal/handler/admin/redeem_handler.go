@@ -35,10 +35,10 @@ func NewRedeemHandler(adminService service.AdminService, redeemService *service.
 // GenerateRedeemCodesRequest represents generate redeem codes request
 type GenerateRedeemCodesRequest struct {
 	Count         int        `json:"count" binding:"required,min=1,max=100"`
-	Type          string     `json:"type" binding:"required,oneof=balance concurrency subscription invitation"`
+	Type          string     `json:"type" binding:"required,oneof=balance concurrency subscription invitation limited_credit"`
 	Value         float64    `json:"value"`
 	GroupID       *int64     `json:"group_id"`      // 订阅类型必填
-	ValidityDays  int        `json:"validity_days"` // 订阅类型使用，正数增加/负数退款扣减
+	ValidityDays  int        `json:"validity_days"` // 订阅/限时额度使用，正数表示权益有效天数
 	ExpiresAt     *time.Time `json:"expires_at"`
 	ExpiresInDays *int       `json:"expires_in_days" binding:"omitempty,min=1,max=3650"`
 }
@@ -47,11 +47,11 @@ type GenerateRedeemCodesRequest struct {
 // Type 为 omitempty 而非 required 是为了向后兼容旧版调用方（不传 type 时默认 balance）。
 type CreateAndRedeemCodeRequest struct {
 	Code          string     `json:"code" binding:"required,min=3,max=128"`
-	Type          string     `json:"type" binding:"omitempty,oneof=balance concurrency subscription invitation"` // 不传时默认 balance（向后兼容）
+	Type          string     `json:"type" binding:"omitempty,oneof=balance concurrency subscription invitation limited_credit"` // 不传时默认 balance（向后兼容）
 	Value         float64    `json:"value" binding:"required"`
 	UserID        int64      `json:"user_id" binding:"required,gt=0"`
 	GroupID       *int64     `json:"group_id"`      // subscription 类型必填
-	ValidityDays  int        `json:"validity_days"` // subscription 类型：正数增加，负数退款扣减
+	ValidityDays  int        `json:"validity_days"` // subscription/limited_credit 类型权益有效天数
 	Notes         string     `json:"notes"`
 	ExpiresAt     *time.Time `json:"expires_at"`
 	ExpiresInDays *int       `json:"expires_in_days" binding:"omitempty,min=1,max=3650"`
@@ -191,6 +191,15 @@ func (h *RedeemHandler) CreateAndRedeem(c *gin.Context) {
 		if req.ValidityDays == 0 {
 			response.BadRequest(c, "validity_days must not be zero for subscription type")
 			return
+		}
+	}
+	if req.Type == "limited_credit" {
+		if req.Value <= 0 {
+			response.BadRequest(c, "value must be greater than zero for limited_credit type")
+			return
+		}
+		if req.ValidityDays == 0 {
+			req.ValidityDays = 30
 		}
 	}
 

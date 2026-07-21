@@ -129,6 +129,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyAffiliateRebatePerInviteeCap:              strconv.FormatFloat(AffiliateRebatePerInviteeCapDefault, 'f', 2, 64),
 		SettingKeyDefaultUserRPMLimit:                       "0",
 		SettingKeyDefaultSubscriptions:                      "[]",
+		SettingKeyDefaultLimitedCredits:                     "[]",
 		SettingKeyAuthSourceDefaultEmailBalance:             "0",
 		SettingKeyAuthSourceDefaultEmailConcurrency:         "5",
 		SettingKeyAuthSourceDefaultEmailSubscriptions:       "[]",
@@ -381,6 +382,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	}
 	result.AdminRechargeRebateEnabled = settings[SettingKeyAffiliateAdminRechargeEnabled] == "true"
 	result.DefaultSubscriptions = parseDefaultSubscriptions(settings[SettingKeyDefaultSubscriptions])
+	result.DefaultLimitedCredits = parseDefaultLimitedCredits(settings[SettingKeyDefaultLimitedCredits])
 
 	// 敏感信息直接返回，方便测试连接时使用
 	result.SMTPPassword = settings[SettingKeySMTPPassword]
@@ -1089,6 +1091,28 @@ func parseDefaultSubscriptions(raw string) []DefaultSubscriptionSetting {
 		normalized = append(normalized, item)
 	}
 
+	return normalized
+}
+
+func parseDefaultLimitedCredits(raw string) []DefaultLimitedCreditSetting {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	var items []DefaultLimitedCreditSetting
+	if err := json.Unmarshal([]byte(raw), &items); err != nil {
+		return nil
+	}
+
+	normalized := make([]DefaultLimitedCreditSetting, 0, len(items))
+	for _, item := range items {
+		if item.Amount <= 0 || math.IsNaN(item.Amount) || math.IsInf(item.Amount, 0) ||
+			item.ValidityDays <= 0 || item.ValidityDays > MaxValidityDays {
+			continue
+		}
+		normalized = append(normalized, item)
+	}
 	return normalized
 }
 
