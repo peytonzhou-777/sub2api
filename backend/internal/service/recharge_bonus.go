@@ -43,12 +43,6 @@ type RechargeBonusQuote struct {
 	Amount  float64 `json:"amount"`
 }
 
-// calculateRechargeBonus 供纯计算测试使用，生产流程使用带错误返回的版本。
-func calculateRechargeBonus(creditedAmount float64, tiers []RechargeBonusTier) RechargeBonusQuote {
-	quote, _ := calculateRechargeBonusChecked(creditedAmount, tiers)
-	return quote
-}
-
 func calculateRechargeBonusChecked(creditedAmount float64, tiers []RechargeBonusTier) (RechargeBonusQuote, error) {
 	if !isFiniteRechargeBonusNumber(creditedAmount) || creditedAmount < 0 || len(tiers) == 0 {
 		return RechargeBonusQuote{}, nil

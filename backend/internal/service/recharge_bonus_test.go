@@ -17,7 +17,8 @@ func TestCalculateRechargeBonus_UsesLaterTierAtSharedBoundary(t *testing.T) {
 		{MinAmount: 100, MaxAmount: 500, MinRate: 7, MaxRate: 11},
 	}
 
-	quote := calculateRechargeBonus(100, tiers)
+	quote, err := calculateRechargeBonusChecked(100, tiers)
+	require.NoError(t, err)
 
 	require.True(t, quote.Matched)
 	require.InDelta(t, 7, quote.Rate, 0.000000001)
@@ -43,7 +44,8 @@ func TestCalculateRechargeBonus_InterpolatesWholeCreditedAmount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			quote := calculateRechargeBonus(tt.amount, tiers)
+			quote, err := calculateRechargeBonusChecked(tt.amount, tiers)
+			require.NoError(t, err)
 			require.True(t, quote.Matched)
 			require.InDelta(t, tt.wantRate, quote.Rate, 0.000000001)
 			require.InDelta(t, tt.wantAmount, quote.Amount, 0.000000001)
@@ -52,21 +54,23 @@ func TestCalculateRechargeBonus_InterpolatesWholeCreditedAmount(t *testing.T) {
 }
 
 func TestCalculateRechargeBonus_ReturnsNoBonusForGap(t *testing.T) {
-	quote := calculateRechargeBonus(150, []RechargeBonusTier{
+	quote, err := calculateRechargeBonusChecked(150, []RechargeBonusTier{
 		{MinAmount: 10, MaxAmount: 100, MinRate: 5, MaxRate: 5},
 		{MinAmount: 200, MaxAmount: 300, MinRate: 10, MaxRate: 10},
 	})
 
+	require.NoError(t, err)
 	require.False(t, quote.Matched)
 	require.Zero(t, quote.Amount)
 }
 
 func TestCalculateRechargeBonus_RoundsToEightDecimalPlaces(t *testing.T) {
-	quote := calculateRechargeBonus(1, []RechargeBonusTier{
+	quote, err := calculateRechargeBonusChecked(1, []RechargeBonusTier{
 
 		{MinAmount: 0, MaxAmount: 2, MinRate: 33.333333333, MaxRate: 33.333333333},
 	})
 
+	require.NoError(t, err)
 	require.True(t, quote.Matched)
 	require.Equal(t, 0.33333333, quote.Amount)
 }
