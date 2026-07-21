@@ -345,6 +345,54 @@ func (f RechargeBonusParticipationFunc) Mutate(ctx context.Context, m ent.Mutati
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RechargeBonusParticipationMutation", m)
 }
 
+// The RecurringCreditBatchFunc type is an adapter to allow the use of ordinary
+// function as RecurringCreditBatch mutator.
+type RecurringCreditBatchFunc func(context.Context, *ent.RecurringCreditBatchMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RecurringCreditBatchFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RecurringCreditBatchMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RecurringCreditBatchMutation", m)
+}
+
+// The RecurringCreditTaskFunc type is an adapter to allow the use of ordinary
+// function as RecurringCreditTask mutator.
+type RecurringCreditTaskFunc func(context.Context, *ent.RecurringCreditTaskMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RecurringCreditTaskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RecurringCreditTaskMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RecurringCreditTaskMutation", m)
+}
+
+// The RecurringCreditTaskAuditFunc type is an adapter to allow the use of ordinary
+// function as RecurringCreditTaskAudit mutator.
+type RecurringCreditTaskAuditFunc func(context.Context, *ent.RecurringCreditTaskAuditMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RecurringCreditTaskAuditFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RecurringCreditTaskAuditMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RecurringCreditTaskAuditMutation", m)
+}
+
+// The RecurringCreditUserItemFunc type is an adapter to allow the use of ordinary
+// function as RecurringCreditUserItem mutator.
+type RecurringCreditUserItemFunc func(context.Context, *ent.RecurringCreditUserItemMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RecurringCreditUserItemFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RecurringCreditUserItemMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RecurringCreditUserItemMutation", m)
+}
+
 // The RedeemCodeFunc type is an adapter to allow the use of ordinary
 // function as RedeemCode mutator.
 type RedeemCodeFunc func(context.Context, *ent.RedeemCodeMutation) (ent.Value, error)

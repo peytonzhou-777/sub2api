@@ -81,5 +81,9 @@ func (UserLimitedCreditGrant) Indexes() []ent.Index {
 			Unique().
 			StorageKey("idx_user_limited_credit_grants_recharge_bonus_order").
 			Annotations(entsql.IndexWhere("source_type = 'recharge_bonus' AND source_id IS NOT NULL")),
+		index.Fields("source_type", "source_id", "user_id").
+			Unique().
+			StorageKey("idx_user_limited_credit_grants_recurring_user").
+			Annotations(entsql.IndexWhere("source_type = 'recurring_grant' AND source_id IS NOT NULL")),
 	}
 }

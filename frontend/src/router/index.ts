@@ -462,6 +462,24 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/credits/recharge-activities',
+    name: 'AdminCreditRechargeActivities',
+    component: () => import('@/views/admin/orders/AdminRechargeActivitiesView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Recharge Activities', titleKey: 'nav.rechargeActivities', requiresPayment: true }
+  },
+  {
+    path: '/admin/credits/reset-rebates',
+    name: 'AdminResetRebates',
+    component: () => import('@/views/admin/ResetRebatesView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Reset Rebates', titleKey: 'admin.credits.resetRebates.title' }
+  },
+  {
+    path: '/admin/credits/recurring-grants',
+    name: 'AdminRecurringCreditGrants',
+    component: () => import('@/views/admin/RecurringCreditGrantsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Grant Tasks', titleKey: 'admin.credits.recurringGrants.title' }
+  },
+  {
     path: '/admin/groups',
     name: 'AdminGroups',
     component: () => import('@/views/admin/GroupsView.vue'),
@@ -703,15 +721,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/admin/orders/recharge-activities',
-    name: 'AdminRechargeActivities',
-    component: () => import('@/views/admin/orders/AdminRechargeActivitiesView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Recharge Activities',
-      titleKey: 'nav.rechargeActivities',
-      requiresPayment: true
-    }
+    redirect: '/admin/credits/recharge-activities'
   },
   {
     path: '/admin/orders/plans',

@@ -35,6 +35,8 @@ import affiliatesAPI from './affiliates'
 import riskControlAPI from './riskControl'
 import adminComplianceAPI from './compliance'
 import auditAPI from './audit'
+import resetRebatesAPI from './resetRebates'
+import recurringCreditsAPI from './recurringCredits'
 
 /**
  * Unified admin API object for convenient access
@@ -71,7 +73,9 @@ export const adminAPI = {
   affiliates: affiliatesAPI,
   riskControl: riskControlAPI,
   compliance: adminComplianceAPI,
-  audit: auditAPI
+  audit: auditAPI,
+  resetRebates: resetRebatesAPI,
+  recurringCredits: recurringCreditsAPI
 }
 
 export {
@@ -106,7 +110,9 @@ export {
   affiliatesAPI,
   riskControlAPI,
   adminComplianceAPI,
-  auditAPI
+  auditAPI,
+  resetRebatesAPI,
+  recurringCreditsAPI
 }
 
 export default adminAPI

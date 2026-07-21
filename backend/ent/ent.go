@@ -40,6 +40,10 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonuscampaign"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonusparticipation"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcreditbatch"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredittask"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredittaskaudit"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredituseritem"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
@@ -143,6 +147,10 @@ func checkColumn(t, c string) error {
 			proxy.Table:                         proxy.ValidColumn,
 			rechargebonuscampaign.Table:         rechargebonuscampaign.ValidColumn,
 			rechargebonusparticipation.Table:    rechargebonusparticipation.ValidColumn,
+			recurringcreditbatch.Table:          recurringcreditbatch.ValidColumn,
+			recurringcredittask.Table:           recurringcredittask.ValidColumn,
+			recurringcredittaskaudit.Table:      recurringcredittaskaudit.ValidColumn,
+			recurringcredituseritem.Table:       recurringcredituseritem.ValidColumn,
 			redeemcode.Table:                    redeemcode.ValidColumn,
 			securitysecret.Table:                securitysecret.ValidColumn,
 			setting.Table:                       setting.ValidColumn,

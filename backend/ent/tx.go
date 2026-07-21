@@ -70,6 +70,14 @@ type Tx struct {
 	RechargeBonusCampaign *RechargeBonusCampaignClient
 	// RechargeBonusParticipation is the client for interacting with the RechargeBonusParticipation builders.
 	RechargeBonusParticipation *RechargeBonusParticipationClient
+	// RecurringCreditBatch is the client for interacting with the RecurringCreditBatch builders.
+	RecurringCreditBatch *RecurringCreditBatchClient
+	// RecurringCreditTask is the client for interacting with the RecurringCreditTask builders.
+	RecurringCreditTask *RecurringCreditTaskClient
+	// RecurringCreditTaskAudit is the client for interacting with the RecurringCreditTaskAudit builders.
+	RecurringCreditTaskAudit *RecurringCreditTaskAuditClient
+	// RecurringCreditUserItem is the client for interacting with the RecurringCreditUserItem builders.
+	RecurringCreditUserItem *RecurringCreditUserItemClient
 	// RedeemCode is the client for interacting with the RedeemCode builders.
 	RedeemCode *RedeemCodeClient
 	// SecuritySecret is the client for interacting with the SecuritySecret builders.
@@ -259,6 +267,10 @@ func (tx *Tx) init() {
 	tx.Proxy = NewProxyClient(tx.config)
 	tx.RechargeBonusCampaign = NewRechargeBonusCampaignClient(tx.config)
 	tx.RechargeBonusParticipation = NewRechargeBonusParticipationClient(tx.config)
+	tx.RecurringCreditBatch = NewRecurringCreditBatchClient(tx.config)
+	tx.RecurringCreditTask = NewRecurringCreditTaskClient(tx.config)
+	tx.RecurringCreditTaskAudit = NewRecurringCreditTaskAuditClient(tx.config)
+	tx.RecurringCreditUserItem = NewRecurringCreditUserItemClient(tx.config)
 	tx.RedeemCode = NewRedeemCodeClient(tx.config)
 	tx.SecuritySecret = NewSecuritySecretClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)
