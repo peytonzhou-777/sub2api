@@ -67,6 +67,18 @@ vi.mock('vue-i18n', async () => {
         if (key === 'payment.rechargeBonus.limitHint') {
           return '赠送额度以充值到账时可参与活动次数为准'
         }
+        if (key === 'payment.account.limitedCreditTitleWithReason') {
+          return `限时额度 #${params?.id} （${params?.reason}）`
+        }
+        if (key === 'payment.account.limitedCreditTitle') {
+          return `限时额度 #${params?.id}`
+        }
+        if (key === 'payment.account.redeemCodeCreditReason') {
+          return '兑换码兑换额度'
+        }
+        if (key === 'payment.account.defaultUserCreditReason') {
+          return '新用户体验额度'
+        }
         return key
       },
     }),
@@ -441,6 +453,99 @@ describe('PaymentView account tab', () => {
     expect(wrapper.get('[data-test="payment-tab-recharge"]').classes()).toContain('page-header-tab')
     expect(wrapper.get('[data-test="limited-credit-progress-track"]').classes()).toContain('bg-[#444444]')
     expect(wrapper.get('[data-test="limited-credit-progress-fill"]').classes()).toContain('bg-[#f4f4f4]')
+  })
+
+  it('shows reset rebate batch and reason in limited credit details', async () => {
+    limitedCreditState.activeCredits = [
+      {
+        id: 9, source_type: 'reset_rebate', source_id: 12, source_reason: '本周活动返利',
+        initial_amount: 3, used_amount: 0, frozen_amount: 0,
+        remaining_amount: 3, available_amount: 3,
+        expires_at: '2099-01-01T00:00:00Z', status: 'active',
+        created_at: '2026-01-01T00:00:00Z',
+      },
+    ]
+
+    const wrapper = await mountAccount()
+
+    expect(wrapper.get('[data-test="limited-credit-item"] h3').text()).toBe('限时额度 #9 （本周活动返利）')
+    expect(wrapper.get('[data-test="limited-credit-item"]').text()).not.toContain('返利原因：')
+  })
+
+  it('shows recharge campaign name in the limited credit title', async () => {
+    limitedCreditState.activeCredits = [
+      {
+        id: 3, source_type: 'recharge_bonus', source_id: 21, source_reason: '暑期充值活动',
+        initial_amount: 3, used_amount: 0, frozen_amount: 0,
+        remaining_amount: 3, available_amount: 3,
+        expires_at: '2099-01-01T00:00:00Z', status: 'active',
+        created_at: '2026-01-01T00:00:00Z',
+      },
+    ]
+
+    const wrapper = await mountAccount()
+
+    expect(wrapper.get('[data-test="limited-credit-item"] h3').text()).toBe('限时额度 #3 （暑期充值活动）')
+  })
+
+  it('shows fixed title reasons for redeem code and default user credits', async () => {
+    limitedCreditState.activeCredits = [
+      {
+        id: 5, source_type: 'redeem_code', source_id: 22,
+        initial_amount: 3, used_amount: 0, frozen_amount: 0,
+        remaining_amount: 3, available_amount: 3,
+        expires_at: '2099-01-01T00:00:00Z', status: 'active',
+        created_at: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 6, source_type: 'default_user_setting',
+        initial_amount: 5, used_amount: 0, frozen_amount: 0,
+        remaining_amount: 5, available_amount: 5,
+        expires_at: '2099-02-01T00:00:00Z', status: 'active',
+        created_at: '2026-01-01T00:00:00Z',
+      },
+    ]
+
+    const wrapper = await mountAccount()
+    const titles = wrapper.findAll('[data-test="limited-credit-item"] h3').map(item => item.text())
+
+    expect(titles).toEqual([
+      '限时额度 #5 （兑换码兑换额度）',
+      '限时额度 #6 （新用户体验额度）',
+    ])
+  })
+
+  it('does not expose admin operation notes in the limited credit title', async () => {
+    limitedCreditState.activeCredits = [
+      {
+        id: 7, source_type: 'admin_manual', notes: '内部补偿审批单 #1024',
+        initial_amount: 3, used_amount: 0, frozen_amount: 0,
+        remaining_amount: 3, available_amount: 3,
+        expires_at: '2099-01-01T00:00:00Z', status: 'active',
+        created_at: '2026-01-01T00:00:00Z',
+      },
+    ]
+
+    const wrapper = await mountAccount()
+
+    expect(wrapper.get('[data-test="limited-credit-item"] h3').text()).toBe('限时额度 #7')
+    expect(wrapper.get('[data-test="limited-credit-item"]').text()).not.toContain('内部补偿审批单')
+  })
+
+  it('keeps the base title when the source reason is empty', async () => {
+    limitedCreditState.activeCredits = [
+      {
+        id: 4, source_type: 'reset_rebate', source_id: 13, source_reason: '',
+        initial_amount: 3, used_amount: 0, frozen_amount: 0,
+        remaining_amount: 3, available_amount: 3,
+        expires_at: '2099-01-01T00:00:00Z', status: 'active',
+        created_at: '2026-01-01T00:00:00Z',
+      },
+    ]
+
+    const wrapper = await mountAccount()
+
+    expect(wrapper.get('[data-test="limited-credit-item"] h3').text()).toBe('限时额度 #4')
   })
 
   it('shows the account empty state when no active limited credit exists', async () => {

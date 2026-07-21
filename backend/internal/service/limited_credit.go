@@ -23,6 +23,7 @@ type LimitedCreditGrant struct {
 	UserID        int64     `json:"user_id"`
 	SourceType    string    `json:"source_type"`
 	SourceID      *int64    `json:"source_id,omitempty"`
+	SourceReason  string    `json:"source_reason,omitempty"`
 	InitialAmount float64   `json:"initial_amount"`
 	UsedAmount    float64   `json:"used_amount"`
 	FrozenAmount  float64   `json:"frozen_amount"`

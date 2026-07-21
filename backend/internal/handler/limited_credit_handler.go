@@ -22,6 +22,8 @@ func NewLimitedCreditHandler(limitedCreditService *service.LimitedCreditService)
 
 type limitedCreditGrantResponse struct {
 	ID              int64     `json:"id"`
+	SourceID        *int64    `json:"source_id,omitempty"`
+	SourceReason    string    `json:"source_reason,omitempty"`
 	InitialAmount   float64   `json:"initial_amount"`
 	UsedAmount      float64   `json:"used_amount"`
 	FrozenAmount    float64   `json:"frozen_amount"`
@@ -51,6 +53,8 @@ func (h *LimitedCreditHandler) GetActive(c *gin.Context) {
 	for _, grant := range grants {
 		out = append(out, limitedCreditGrantResponse{
 			ID:              grant.ID,
+			SourceID:        grant.SourceID,
+			SourceReason:    grant.SourceReason,
 			InitialAmount:   grant.InitialAmount,
 			UsedAmount:      grant.UsedAmount,
 			FrozenAmount:    grant.FrozenAmount,

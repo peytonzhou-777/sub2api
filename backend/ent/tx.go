@@ -72,6 +72,12 @@ type Tx struct {
 	RechargeBonusParticipation *RechargeBonusParticipationClient
 	// RedeemCode is the client for interacting with the RedeemCode builders.
 	RedeemCode *RedeemCodeClient
+	// ResetRebateAccountItem is the client for interacting with the ResetRebateAccountItem builders.
+	ResetRebateAccountItem *ResetRebateAccountItemClient
+	// ResetRebateBatch is the client for interacting with the ResetRebateBatch builders.
+	ResetRebateBatch *ResetRebateBatchClient
+	// ResetRebateUserItem is the client for interacting with the ResetRebateUserItem builders.
+	ResetRebateUserItem *ResetRebateUserItemClient
 	// SecuritySecret is the client for interacting with the SecuritySecret builders.
 	SecuritySecret *SecuritySecretClient
 	// Setting is the client for interacting with the Setting builders.
@@ -260,6 +266,9 @@ func (tx *Tx) init() {
 	tx.RechargeBonusCampaign = NewRechargeBonusCampaignClient(tx.config)
 	tx.RechargeBonusParticipation = NewRechargeBonusParticipationClient(tx.config)
 	tx.RedeemCode = NewRedeemCodeClient(tx.config)
+	tx.ResetRebateAccountItem = NewResetRebateAccountItemClient(tx.config)
+	tx.ResetRebateBatch = NewResetRebateBatchClient(tx.config)
+	tx.ResetRebateUserItem = NewResetRebateUserItemClient(tx.config)
 	tx.SecuritySecret = NewSecuritySecretClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)
 	tx.SubscriptionPlan = NewSubscriptionPlanClient(tx.config)

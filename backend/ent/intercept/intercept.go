@@ -38,6 +38,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonuscampaign"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonusparticipation"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateaccountitem"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebatebatch"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseritem"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -893,6 +896,87 @@ func (f TraverseRedeemCode) Traverse(ctx context.Context, q ent.Query) error {
 	return fmt.Errorf("unexpected query type %T. expect *ent.RedeemCodeQuery", q)
 }
 
+// The ResetRebateAccountItemFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ResetRebateAccountItemFunc func(context.Context, *ent.ResetRebateAccountItemQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ResetRebateAccountItemFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ResetRebateAccountItemQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateAccountItemQuery", q)
+}
+
+// The TraverseResetRebateAccountItem type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseResetRebateAccountItem func(context.Context, *ent.ResetRebateAccountItemQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseResetRebateAccountItem) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseResetRebateAccountItem) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ResetRebateAccountItemQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateAccountItemQuery", q)
+}
+
+// The ResetRebateBatchFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ResetRebateBatchFunc func(context.Context, *ent.ResetRebateBatchQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ResetRebateBatchFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ResetRebateBatchQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateBatchQuery", q)
+}
+
+// The TraverseResetRebateBatch type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseResetRebateBatch func(context.Context, *ent.ResetRebateBatchQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseResetRebateBatch) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseResetRebateBatch) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ResetRebateBatchQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateBatchQuery", q)
+}
+
+// The ResetRebateUserItemFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ResetRebateUserItemFunc func(context.Context, *ent.ResetRebateUserItemQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ResetRebateUserItemFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ResetRebateUserItemQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateUserItemQuery", q)
+}
+
+// The TraverseResetRebateUserItem type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseResetRebateUserItem func(context.Context, *ent.ResetRebateUserItemQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseResetRebateUserItem) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseResetRebateUserItem) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ResetRebateUserItemQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateUserItemQuery", q)
+}
+
 // The SecuritySecretFunc type is an adapter to allow the use of ordinary function as a Querier.
 type SecuritySecretFunc func(context.Context, *ent.SecuritySecretQuery) (ent.Value, error)
 
@@ -1332,6 +1416,12 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.RechargeBonusParticipationQuery, predicate.RechargeBonusParticipation, rechargebonusparticipation.OrderOption]{typ: ent.TypeRechargeBonusParticipation, tq: q}, nil
 	case *ent.RedeemCodeQuery:
 		return &query[*ent.RedeemCodeQuery, predicate.RedeemCode, redeemcode.OrderOption]{typ: ent.TypeRedeemCode, tq: q}, nil
+	case *ent.ResetRebateAccountItemQuery:
+		return &query[*ent.ResetRebateAccountItemQuery, predicate.ResetRebateAccountItem, resetrebateaccountitem.OrderOption]{typ: ent.TypeResetRebateAccountItem, tq: q}, nil
+	case *ent.ResetRebateBatchQuery:
+		return &query[*ent.ResetRebateBatchQuery, predicate.ResetRebateBatch, resetrebatebatch.OrderOption]{typ: ent.TypeResetRebateBatch, tq: q}, nil
+	case *ent.ResetRebateUserItemQuery:
+		return &query[*ent.ResetRebateUserItemQuery, predicate.ResetRebateUserItem, resetrebateuseritem.OrderOption]{typ: ent.TypeResetRebateUserItem, tq: q}, nil
 	case *ent.SecuritySecretQuery:
 		return &query[*ent.SecuritySecretQuery, predicate.SecuritySecret, securitysecret.OrderOption]{typ: ent.TypeSecuritySecret, tq: q}, nil
 	case *ent.SettingQuery:

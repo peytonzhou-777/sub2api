@@ -696,7 +696,18 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
     { path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
     { path: '/admin/users', label: t('nav.users'), icon: UsersIcon, hideInSimpleMode: true },
-    { path: '/admin/credits', label: t('nav.credits'), icon: CreditCardIcon, hideInSimpleMode: true },
+    {
+      path: '/admin/credits',
+      label: t('nav.credits'),
+      icon: CreditCardIcon,
+      hideInSimpleMode: true,
+      expandOnly: true,
+      children: [
+        { path: '/admin/credits', label: t('admin.credits.tabs.users'), icon: UsersIcon },
+        { path: '/admin/credits/recharge-activities', label: t('admin.credits.tabs.rechargeActivities'), icon: GiftIcon },
+        { path: '/admin/credits/reset-rebates', label: t('admin.credits.tabs.resetRebates'), icon: CreditCardIcon },
+      ],
+    },
     { path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon, hideInSimpleMode: true },
     {
       path: '/admin/channels',
@@ -750,7 +761,6 @@ const adminNavItems = computed((): NavItem[] => {
       children: [
         { path: '/admin/orders/dashboard', label: t('nav.paymentDashboard'), icon: ChartIcon },
         { path: '/admin/orders', label: t('nav.orderManagement'), icon: OrderIcon },
-        { path: '/admin/orders/recharge-activities', label: t('nav.rechargeActivities'), icon: GiftIcon },
         { path: '/admin/orders/plans', label: t('nav.paymentPlans'), icon: CreditCardIcon },
       ],
     },

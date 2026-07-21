@@ -42,6 +42,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonuscampaign"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonusparticipation"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateaccountitem"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebatebatch"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseritem"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -97,6 +100,9 @@ const (
 	TypeRechargeBonusCampaign         = "RechargeBonusCampaign"
 	TypeRechargeBonusParticipation    = "RechargeBonusParticipation"
 	TypeRedeemCode                    = "RedeemCode"
+	TypeResetRebateAccountItem        = "ResetRebateAccountItem"
+	TypeResetRebateBatch              = "ResetRebateBatch"
+	TypeResetRebateUserItem           = "ResetRebateUserItem"
 	TypeSecuritySecret                = "SecuritySecret"
 	TypeSetting                       = "Setting"
 	TypeSubscriptionPlan              = "SubscriptionPlan"
@@ -40353,6 +40359,5412 @@ func (m *RedeemCodeMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown RedeemCode edge %s", name)
+}
+
+// ResetRebateAccountItemMutation represents an operation that mutates the ResetRebateAccountItem nodes in the graph.
+type ResetRebateAccountItemMutation struct {
+	config
+	op                       Op
+	typ                      string
+	id                       *int64
+	batch_id                 *int64
+	addbatch_id              *int64
+	account_id               *int64
+	addaccount_id            *int64
+	account_name             *string
+	platform                 *string
+	account_type             *string
+	is_shadow                *bool
+	in_group                 *bool
+	schedulable              *bool
+	consumed_amount          *float64
+	addconsumed_amount       *float64
+	available_count          *int
+	addavailable_count       *int
+	weekly_used_percent      *float64
+	addweekly_used_percent   *float64
+	weekly_window_seconds    *int64
+	addweekly_window_seconds *int64
+	included                 *bool
+	exclusion_reason         *string
+	error_code               *string
+	error_message            *string
+	fetched_at               *time.Time
+	clearedFields            map[string]struct{}
+	done                     bool
+	oldValue                 func(context.Context) (*ResetRebateAccountItem, error)
+	predicates               []predicate.ResetRebateAccountItem
+}
+
+var _ ent.Mutation = (*ResetRebateAccountItemMutation)(nil)
+
+// resetrebateaccountitemOption allows management of the mutation configuration using functional options.
+type resetrebateaccountitemOption func(*ResetRebateAccountItemMutation)
+
+// newResetRebateAccountItemMutation creates new mutation for the ResetRebateAccountItem entity.
+func newResetRebateAccountItemMutation(c config, op Op, opts ...resetrebateaccountitemOption) *ResetRebateAccountItemMutation {
+	m := &ResetRebateAccountItemMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeResetRebateAccountItem,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withResetRebateAccountItemID sets the ID field of the mutation.
+func withResetRebateAccountItemID(id int64) resetrebateaccountitemOption {
+	return func(m *ResetRebateAccountItemMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ResetRebateAccountItem
+		)
+		m.oldValue = func(ctx context.Context) (*ResetRebateAccountItem, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ResetRebateAccountItem.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withResetRebateAccountItem sets the old ResetRebateAccountItem of the mutation.
+func withResetRebateAccountItem(node *ResetRebateAccountItem) resetrebateaccountitemOption {
+	return func(m *ResetRebateAccountItemMutation) {
+		m.oldValue = func(context.Context) (*ResetRebateAccountItem, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ResetRebateAccountItemMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ResetRebateAccountItemMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ResetRebateAccountItemMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ResetRebateAccountItemMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ResetRebateAccountItem.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetBatchID sets the "batch_id" field.
+func (m *ResetRebateAccountItemMutation) SetBatchID(i int64) {
+	m.batch_id = &i
+	m.addbatch_id = nil
+}
+
+// BatchID returns the value of the "batch_id" field in the mutation.
+func (m *ResetRebateAccountItemMutation) BatchID() (r int64, exists bool) {
+	v := m.batch_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBatchID returns the old "batch_id" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldBatchID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBatchID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBatchID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBatchID: %w", err)
+	}
+	return oldValue.BatchID, nil
+}
+
+// AddBatchID adds i to the "batch_id" field.
+func (m *ResetRebateAccountItemMutation) AddBatchID(i int64) {
+	if m.addbatch_id != nil {
+		*m.addbatch_id += i
+	} else {
+		m.addbatch_id = &i
+	}
+}
+
+// AddedBatchID returns the value that was added to the "batch_id" field in this mutation.
+func (m *ResetRebateAccountItemMutation) AddedBatchID() (r int64, exists bool) {
+	v := m.addbatch_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBatchID resets all changes to the "batch_id" field.
+func (m *ResetRebateAccountItemMutation) ResetBatchID() {
+	m.batch_id = nil
+	m.addbatch_id = nil
+}
+
+// SetAccountID sets the "account_id" field.
+func (m *ResetRebateAccountItemMutation) SetAccountID(i int64) {
+	m.account_id = &i
+	m.addaccount_id = nil
+}
+
+// AccountID returns the value of the "account_id" field in the mutation.
+func (m *ResetRebateAccountItemMutation) AccountID() (r int64, exists bool) {
+	v := m.account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountID returns the old "account_id" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldAccountID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountID: %w", err)
+	}
+	return oldValue.AccountID, nil
+}
+
+// AddAccountID adds i to the "account_id" field.
+func (m *ResetRebateAccountItemMutation) AddAccountID(i int64) {
+	if m.addaccount_id != nil {
+		*m.addaccount_id += i
+	} else {
+		m.addaccount_id = &i
+	}
+}
+
+// AddedAccountID returns the value that was added to the "account_id" field in this mutation.
+func (m *ResetRebateAccountItemMutation) AddedAccountID() (r int64, exists bool) {
+	v := m.addaccount_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAccountID resets all changes to the "account_id" field.
+func (m *ResetRebateAccountItemMutation) ResetAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+}
+
+// SetAccountName sets the "account_name" field.
+func (m *ResetRebateAccountItemMutation) SetAccountName(s string) {
+	m.account_name = &s
+}
+
+// AccountName returns the value of the "account_name" field in the mutation.
+func (m *ResetRebateAccountItemMutation) AccountName() (r string, exists bool) {
+	v := m.account_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountName returns the old "account_name" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldAccountName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountName: %w", err)
+	}
+	return oldValue.AccountName, nil
+}
+
+// ResetAccountName resets all changes to the "account_name" field.
+func (m *ResetRebateAccountItemMutation) ResetAccountName() {
+	m.account_name = nil
+}
+
+// SetPlatform sets the "platform" field.
+func (m *ResetRebateAccountItemMutation) SetPlatform(s string) {
+	m.platform = &s
+}
+
+// Platform returns the value of the "platform" field in the mutation.
+func (m *ResetRebateAccountItemMutation) Platform() (r string, exists bool) {
+	v := m.platform
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlatform returns the old "platform" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldPlatform(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlatform is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlatform requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlatform: %w", err)
+	}
+	return oldValue.Platform, nil
+}
+
+// ResetPlatform resets all changes to the "platform" field.
+func (m *ResetRebateAccountItemMutation) ResetPlatform() {
+	m.platform = nil
+}
+
+// SetAccountType sets the "account_type" field.
+func (m *ResetRebateAccountItemMutation) SetAccountType(s string) {
+	m.account_type = &s
+}
+
+// AccountType returns the value of the "account_type" field in the mutation.
+func (m *ResetRebateAccountItemMutation) AccountType() (r string, exists bool) {
+	v := m.account_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountType returns the old "account_type" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldAccountType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountType: %w", err)
+	}
+	return oldValue.AccountType, nil
+}
+
+// ResetAccountType resets all changes to the "account_type" field.
+func (m *ResetRebateAccountItemMutation) ResetAccountType() {
+	m.account_type = nil
+}
+
+// SetIsShadow sets the "is_shadow" field.
+func (m *ResetRebateAccountItemMutation) SetIsShadow(b bool) {
+	m.is_shadow = &b
+}
+
+// IsShadow returns the value of the "is_shadow" field in the mutation.
+func (m *ResetRebateAccountItemMutation) IsShadow() (r bool, exists bool) {
+	v := m.is_shadow
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsShadow returns the old "is_shadow" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldIsShadow(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsShadow is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsShadow requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsShadow: %w", err)
+	}
+	return oldValue.IsShadow, nil
+}
+
+// ResetIsShadow resets all changes to the "is_shadow" field.
+func (m *ResetRebateAccountItemMutation) ResetIsShadow() {
+	m.is_shadow = nil
+}
+
+// SetInGroup sets the "in_group" field.
+func (m *ResetRebateAccountItemMutation) SetInGroup(b bool) {
+	m.in_group = &b
+}
+
+// InGroup returns the value of the "in_group" field in the mutation.
+func (m *ResetRebateAccountItemMutation) InGroup() (r bool, exists bool) {
+	v := m.in_group
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInGroup returns the old "in_group" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldInGroup(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInGroup is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInGroup requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInGroup: %w", err)
+	}
+	return oldValue.InGroup, nil
+}
+
+// ResetInGroup resets all changes to the "in_group" field.
+func (m *ResetRebateAccountItemMutation) ResetInGroup() {
+	m.in_group = nil
+}
+
+// SetSchedulable sets the "schedulable" field.
+func (m *ResetRebateAccountItemMutation) SetSchedulable(b bool) {
+	m.schedulable = &b
+}
+
+// Schedulable returns the value of the "schedulable" field in the mutation.
+func (m *ResetRebateAccountItemMutation) Schedulable() (r bool, exists bool) {
+	v := m.schedulable
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSchedulable returns the old "schedulable" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldSchedulable(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSchedulable is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSchedulable requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSchedulable: %w", err)
+	}
+	return oldValue.Schedulable, nil
+}
+
+// ResetSchedulable resets all changes to the "schedulable" field.
+func (m *ResetRebateAccountItemMutation) ResetSchedulable() {
+	m.schedulable = nil
+}
+
+// SetConsumedAmount sets the "consumed_amount" field.
+func (m *ResetRebateAccountItemMutation) SetConsumedAmount(f float64) {
+	m.consumed_amount = &f
+	m.addconsumed_amount = nil
+}
+
+// ConsumedAmount returns the value of the "consumed_amount" field in the mutation.
+func (m *ResetRebateAccountItemMutation) ConsumedAmount() (r float64, exists bool) {
+	v := m.consumed_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldConsumedAmount returns the old "consumed_amount" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldConsumedAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldConsumedAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldConsumedAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldConsumedAmount: %w", err)
+	}
+	return oldValue.ConsumedAmount, nil
+}
+
+// AddConsumedAmount adds f to the "consumed_amount" field.
+func (m *ResetRebateAccountItemMutation) AddConsumedAmount(f float64) {
+	if m.addconsumed_amount != nil {
+		*m.addconsumed_amount += f
+	} else {
+		m.addconsumed_amount = &f
+	}
+}
+
+// AddedConsumedAmount returns the value that was added to the "consumed_amount" field in this mutation.
+func (m *ResetRebateAccountItemMutation) AddedConsumedAmount() (r float64, exists bool) {
+	v := m.addconsumed_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetConsumedAmount resets all changes to the "consumed_amount" field.
+func (m *ResetRebateAccountItemMutation) ResetConsumedAmount() {
+	m.consumed_amount = nil
+	m.addconsumed_amount = nil
+}
+
+// SetAvailableCount sets the "available_count" field.
+func (m *ResetRebateAccountItemMutation) SetAvailableCount(i int) {
+	m.available_count = &i
+	m.addavailable_count = nil
+}
+
+// AvailableCount returns the value of the "available_count" field in the mutation.
+func (m *ResetRebateAccountItemMutation) AvailableCount() (r int, exists bool) {
+	v := m.available_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAvailableCount returns the old "available_count" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldAvailableCount(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAvailableCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAvailableCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAvailableCount: %w", err)
+	}
+	return oldValue.AvailableCount, nil
+}
+
+// AddAvailableCount adds i to the "available_count" field.
+func (m *ResetRebateAccountItemMutation) AddAvailableCount(i int) {
+	if m.addavailable_count != nil {
+		*m.addavailable_count += i
+	} else {
+		m.addavailable_count = &i
+	}
+}
+
+// AddedAvailableCount returns the value that was added to the "available_count" field in this mutation.
+func (m *ResetRebateAccountItemMutation) AddedAvailableCount() (r int, exists bool) {
+	v := m.addavailable_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAvailableCount clears the value of the "available_count" field.
+func (m *ResetRebateAccountItemMutation) ClearAvailableCount() {
+	m.available_count = nil
+	m.addavailable_count = nil
+	m.clearedFields[resetrebateaccountitem.FieldAvailableCount] = struct{}{}
+}
+
+// AvailableCountCleared returns if the "available_count" field was cleared in this mutation.
+func (m *ResetRebateAccountItemMutation) AvailableCountCleared() bool {
+	_, ok := m.clearedFields[resetrebateaccountitem.FieldAvailableCount]
+	return ok
+}
+
+// ResetAvailableCount resets all changes to the "available_count" field.
+func (m *ResetRebateAccountItemMutation) ResetAvailableCount() {
+	m.available_count = nil
+	m.addavailable_count = nil
+	delete(m.clearedFields, resetrebateaccountitem.FieldAvailableCount)
+}
+
+// SetWeeklyUsedPercent sets the "weekly_used_percent" field.
+func (m *ResetRebateAccountItemMutation) SetWeeklyUsedPercent(f float64) {
+	m.weekly_used_percent = &f
+	m.addweekly_used_percent = nil
+}
+
+// WeeklyUsedPercent returns the value of the "weekly_used_percent" field in the mutation.
+func (m *ResetRebateAccountItemMutation) WeeklyUsedPercent() (r float64, exists bool) {
+	v := m.weekly_used_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeeklyUsedPercent returns the old "weekly_used_percent" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldWeeklyUsedPercent(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeeklyUsedPercent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeeklyUsedPercent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeeklyUsedPercent: %w", err)
+	}
+	return oldValue.WeeklyUsedPercent, nil
+}
+
+// AddWeeklyUsedPercent adds f to the "weekly_used_percent" field.
+func (m *ResetRebateAccountItemMutation) AddWeeklyUsedPercent(f float64) {
+	if m.addweekly_used_percent != nil {
+		*m.addweekly_used_percent += f
+	} else {
+		m.addweekly_used_percent = &f
+	}
+}
+
+// AddedWeeklyUsedPercent returns the value that was added to the "weekly_used_percent" field in this mutation.
+func (m *ResetRebateAccountItemMutation) AddedWeeklyUsedPercent() (r float64, exists bool) {
+	v := m.addweekly_used_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearWeeklyUsedPercent clears the value of the "weekly_used_percent" field.
+func (m *ResetRebateAccountItemMutation) ClearWeeklyUsedPercent() {
+	m.weekly_used_percent = nil
+	m.addweekly_used_percent = nil
+	m.clearedFields[resetrebateaccountitem.FieldWeeklyUsedPercent] = struct{}{}
+}
+
+// WeeklyUsedPercentCleared returns if the "weekly_used_percent" field was cleared in this mutation.
+func (m *ResetRebateAccountItemMutation) WeeklyUsedPercentCleared() bool {
+	_, ok := m.clearedFields[resetrebateaccountitem.FieldWeeklyUsedPercent]
+	return ok
+}
+
+// ResetWeeklyUsedPercent resets all changes to the "weekly_used_percent" field.
+func (m *ResetRebateAccountItemMutation) ResetWeeklyUsedPercent() {
+	m.weekly_used_percent = nil
+	m.addweekly_used_percent = nil
+	delete(m.clearedFields, resetrebateaccountitem.FieldWeeklyUsedPercent)
+}
+
+// SetWeeklyWindowSeconds sets the "weekly_window_seconds" field.
+func (m *ResetRebateAccountItemMutation) SetWeeklyWindowSeconds(i int64) {
+	m.weekly_window_seconds = &i
+	m.addweekly_window_seconds = nil
+}
+
+// WeeklyWindowSeconds returns the value of the "weekly_window_seconds" field in the mutation.
+func (m *ResetRebateAccountItemMutation) WeeklyWindowSeconds() (r int64, exists bool) {
+	v := m.weekly_window_seconds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeeklyWindowSeconds returns the old "weekly_window_seconds" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldWeeklyWindowSeconds(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeeklyWindowSeconds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeeklyWindowSeconds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeeklyWindowSeconds: %w", err)
+	}
+	return oldValue.WeeklyWindowSeconds, nil
+}
+
+// AddWeeklyWindowSeconds adds i to the "weekly_window_seconds" field.
+func (m *ResetRebateAccountItemMutation) AddWeeklyWindowSeconds(i int64) {
+	if m.addweekly_window_seconds != nil {
+		*m.addweekly_window_seconds += i
+	} else {
+		m.addweekly_window_seconds = &i
+	}
+}
+
+// AddedWeeklyWindowSeconds returns the value that was added to the "weekly_window_seconds" field in this mutation.
+func (m *ResetRebateAccountItemMutation) AddedWeeklyWindowSeconds() (r int64, exists bool) {
+	v := m.addweekly_window_seconds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearWeeklyWindowSeconds clears the value of the "weekly_window_seconds" field.
+func (m *ResetRebateAccountItemMutation) ClearWeeklyWindowSeconds() {
+	m.weekly_window_seconds = nil
+	m.addweekly_window_seconds = nil
+	m.clearedFields[resetrebateaccountitem.FieldWeeklyWindowSeconds] = struct{}{}
+}
+
+// WeeklyWindowSecondsCleared returns if the "weekly_window_seconds" field was cleared in this mutation.
+func (m *ResetRebateAccountItemMutation) WeeklyWindowSecondsCleared() bool {
+	_, ok := m.clearedFields[resetrebateaccountitem.FieldWeeklyWindowSeconds]
+	return ok
+}
+
+// ResetWeeklyWindowSeconds resets all changes to the "weekly_window_seconds" field.
+func (m *ResetRebateAccountItemMutation) ResetWeeklyWindowSeconds() {
+	m.weekly_window_seconds = nil
+	m.addweekly_window_seconds = nil
+	delete(m.clearedFields, resetrebateaccountitem.FieldWeeklyWindowSeconds)
+}
+
+// SetIncluded sets the "included" field.
+func (m *ResetRebateAccountItemMutation) SetIncluded(b bool) {
+	m.included = &b
+}
+
+// Included returns the value of the "included" field in the mutation.
+func (m *ResetRebateAccountItemMutation) Included() (r bool, exists bool) {
+	v := m.included
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIncluded returns the old "included" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldIncluded(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIncluded is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIncluded requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIncluded: %w", err)
+	}
+	return oldValue.Included, nil
+}
+
+// ResetIncluded resets all changes to the "included" field.
+func (m *ResetRebateAccountItemMutation) ResetIncluded() {
+	m.included = nil
+}
+
+// SetExclusionReason sets the "exclusion_reason" field.
+func (m *ResetRebateAccountItemMutation) SetExclusionReason(s string) {
+	m.exclusion_reason = &s
+}
+
+// ExclusionReason returns the value of the "exclusion_reason" field in the mutation.
+func (m *ResetRebateAccountItemMutation) ExclusionReason() (r string, exists bool) {
+	v := m.exclusion_reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExclusionReason returns the old "exclusion_reason" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldExclusionReason(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExclusionReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExclusionReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExclusionReason: %w", err)
+	}
+	return oldValue.ExclusionReason, nil
+}
+
+// ResetExclusionReason resets all changes to the "exclusion_reason" field.
+func (m *ResetRebateAccountItemMutation) ResetExclusionReason() {
+	m.exclusion_reason = nil
+}
+
+// SetErrorCode sets the "error_code" field.
+func (m *ResetRebateAccountItemMutation) SetErrorCode(s string) {
+	m.error_code = &s
+}
+
+// ErrorCode returns the value of the "error_code" field in the mutation.
+func (m *ResetRebateAccountItemMutation) ErrorCode() (r string, exists bool) {
+	v := m.error_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorCode returns the old "error_code" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldErrorCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorCode: %w", err)
+	}
+	return oldValue.ErrorCode, nil
+}
+
+// ResetErrorCode resets all changes to the "error_code" field.
+func (m *ResetRebateAccountItemMutation) ResetErrorCode() {
+	m.error_code = nil
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (m *ResetRebateAccountItemMutation) SetErrorMessage(s string) {
+	m.error_message = &s
+}
+
+// ErrorMessage returns the value of the "error_message" field in the mutation.
+func (m *ResetRebateAccountItemMutation) ErrorMessage() (r string, exists bool) {
+	v := m.error_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorMessage returns the old "error_message" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldErrorMessage(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
+	}
+	return oldValue.ErrorMessage, nil
+}
+
+// ResetErrorMessage resets all changes to the "error_message" field.
+func (m *ResetRebateAccountItemMutation) ResetErrorMessage() {
+	m.error_message = nil
+}
+
+// SetFetchedAt sets the "fetched_at" field.
+func (m *ResetRebateAccountItemMutation) SetFetchedAt(t time.Time) {
+	m.fetched_at = &t
+}
+
+// FetchedAt returns the value of the "fetched_at" field in the mutation.
+func (m *ResetRebateAccountItemMutation) FetchedAt() (r time.Time, exists bool) {
+	v := m.fetched_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFetchedAt returns the old "fetched_at" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldFetchedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFetchedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFetchedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFetchedAt: %w", err)
+	}
+	return oldValue.FetchedAt, nil
+}
+
+// ClearFetchedAt clears the value of the "fetched_at" field.
+func (m *ResetRebateAccountItemMutation) ClearFetchedAt() {
+	m.fetched_at = nil
+	m.clearedFields[resetrebateaccountitem.FieldFetchedAt] = struct{}{}
+}
+
+// FetchedAtCleared returns if the "fetched_at" field was cleared in this mutation.
+func (m *ResetRebateAccountItemMutation) FetchedAtCleared() bool {
+	_, ok := m.clearedFields[resetrebateaccountitem.FieldFetchedAt]
+	return ok
+}
+
+// ResetFetchedAt resets all changes to the "fetched_at" field.
+func (m *ResetRebateAccountItemMutation) ResetFetchedAt() {
+	m.fetched_at = nil
+	delete(m.clearedFields, resetrebateaccountitem.FieldFetchedAt)
+}
+
+// Where appends a list predicates to the ResetRebateAccountItemMutation builder.
+func (m *ResetRebateAccountItemMutation) Where(ps ...predicate.ResetRebateAccountItem) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ResetRebateAccountItemMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ResetRebateAccountItemMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ResetRebateAccountItem, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ResetRebateAccountItemMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ResetRebateAccountItemMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ResetRebateAccountItem).
+func (m *ResetRebateAccountItemMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ResetRebateAccountItemMutation) Fields() []string {
+	fields := make([]string, 0, 17)
+	if m.batch_id != nil {
+		fields = append(fields, resetrebateaccountitem.FieldBatchID)
+	}
+	if m.account_id != nil {
+		fields = append(fields, resetrebateaccountitem.FieldAccountID)
+	}
+	if m.account_name != nil {
+		fields = append(fields, resetrebateaccountitem.FieldAccountName)
+	}
+	if m.platform != nil {
+		fields = append(fields, resetrebateaccountitem.FieldPlatform)
+	}
+	if m.account_type != nil {
+		fields = append(fields, resetrebateaccountitem.FieldAccountType)
+	}
+	if m.is_shadow != nil {
+		fields = append(fields, resetrebateaccountitem.FieldIsShadow)
+	}
+	if m.in_group != nil {
+		fields = append(fields, resetrebateaccountitem.FieldInGroup)
+	}
+	if m.schedulable != nil {
+		fields = append(fields, resetrebateaccountitem.FieldSchedulable)
+	}
+	if m.consumed_amount != nil {
+		fields = append(fields, resetrebateaccountitem.FieldConsumedAmount)
+	}
+	if m.available_count != nil {
+		fields = append(fields, resetrebateaccountitem.FieldAvailableCount)
+	}
+	if m.weekly_used_percent != nil {
+		fields = append(fields, resetrebateaccountitem.FieldWeeklyUsedPercent)
+	}
+	if m.weekly_window_seconds != nil {
+		fields = append(fields, resetrebateaccountitem.FieldWeeklyWindowSeconds)
+	}
+	if m.included != nil {
+		fields = append(fields, resetrebateaccountitem.FieldIncluded)
+	}
+	if m.exclusion_reason != nil {
+		fields = append(fields, resetrebateaccountitem.FieldExclusionReason)
+	}
+	if m.error_code != nil {
+		fields = append(fields, resetrebateaccountitem.FieldErrorCode)
+	}
+	if m.error_message != nil {
+		fields = append(fields, resetrebateaccountitem.FieldErrorMessage)
+	}
+	if m.fetched_at != nil {
+		fields = append(fields, resetrebateaccountitem.FieldFetchedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ResetRebateAccountItemMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case resetrebateaccountitem.FieldBatchID:
+		return m.BatchID()
+	case resetrebateaccountitem.FieldAccountID:
+		return m.AccountID()
+	case resetrebateaccountitem.FieldAccountName:
+		return m.AccountName()
+	case resetrebateaccountitem.FieldPlatform:
+		return m.Platform()
+	case resetrebateaccountitem.FieldAccountType:
+		return m.AccountType()
+	case resetrebateaccountitem.FieldIsShadow:
+		return m.IsShadow()
+	case resetrebateaccountitem.FieldInGroup:
+		return m.InGroup()
+	case resetrebateaccountitem.FieldSchedulable:
+		return m.Schedulable()
+	case resetrebateaccountitem.FieldConsumedAmount:
+		return m.ConsumedAmount()
+	case resetrebateaccountitem.FieldAvailableCount:
+		return m.AvailableCount()
+	case resetrebateaccountitem.FieldWeeklyUsedPercent:
+		return m.WeeklyUsedPercent()
+	case resetrebateaccountitem.FieldWeeklyWindowSeconds:
+		return m.WeeklyWindowSeconds()
+	case resetrebateaccountitem.FieldIncluded:
+		return m.Included()
+	case resetrebateaccountitem.FieldExclusionReason:
+		return m.ExclusionReason()
+	case resetrebateaccountitem.FieldErrorCode:
+		return m.ErrorCode()
+	case resetrebateaccountitem.FieldErrorMessage:
+		return m.ErrorMessage()
+	case resetrebateaccountitem.FieldFetchedAt:
+		return m.FetchedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ResetRebateAccountItemMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case resetrebateaccountitem.FieldBatchID:
+		return m.OldBatchID(ctx)
+	case resetrebateaccountitem.FieldAccountID:
+		return m.OldAccountID(ctx)
+	case resetrebateaccountitem.FieldAccountName:
+		return m.OldAccountName(ctx)
+	case resetrebateaccountitem.FieldPlatform:
+		return m.OldPlatform(ctx)
+	case resetrebateaccountitem.FieldAccountType:
+		return m.OldAccountType(ctx)
+	case resetrebateaccountitem.FieldIsShadow:
+		return m.OldIsShadow(ctx)
+	case resetrebateaccountitem.FieldInGroup:
+		return m.OldInGroup(ctx)
+	case resetrebateaccountitem.FieldSchedulable:
+		return m.OldSchedulable(ctx)
+	case resetrebateaccountitem.FieldConsumedAmount:
+		return m.OldConsumedAmount(ctx)
+	case resetrebateaccountitem.FieldAvailableCount:
+		return m.OldAvailableCount(ctx)
+	case resetrebateaccountitem.FieldWeeklyUsedPercent:
+		return m.OldWeeklyUsedPercent(ctx)
+	case resetrebateaccountitem.FieldWeeklyWindowSeconds:
+		return m.OldWeeklyWindowSeconds(ctx)
+	case resetrebateaccountitem.FieldIncluded:
+		return m.OldIncluded(ctx)
+	case resetrebateaccountitem.FieldExclusionReason:
+		return m.OldExclusionReason(ctx)
+	case resetrebateaccountitem.FieldErrorCode:
+		return m.OldErrorCode(ctx)
+	case resetrebateaccountitem.FieldErrorMessage:
+		return m.OldErrorMessage(ctx)
+	case resetrebateaccountitem.FieldFetchedAt:
+		return m.OldFetchedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ResetRebateAccountItem field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ResetRebateAccountItemMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case resetrebateaccountitem.FieldBatchID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBatchID(v)
+		return nil
+	case resetrebateaccountitem.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountID(v)
+		return nil
+	case resetrebateaccountitem.FieldAccountName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountName(v)
+		return nil
+	case resetrebateaccountitem.FieldPlatform:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlatform(v)
+		return nil
+	case resetrebateaccountitem.FieldAccountType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountType(v)
+		return nil
+	case resetrebateaccountitem.FieldIsShadow:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsShadow(v)
+		return nil
+	case resetrebateaccountitem.FieldInGroup:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInGroup(v)
+		return nil
+	case resetrebateaccountitem.FieldSchedulable:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSchedulable(v)
+		return nil
+	case resetrebateaccountitem.FieldConsumedAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetConsumedAmount(v)
+		return nil
+	case resetrebateaccountitem.FieldAvailableCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAvailableCount(v)
+		return nil
+	case resetrebateaccountitem.FieldWeeklyUsedPercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeeklyUsedPercent(v)
+		return nil
+	case resetrebateaccountitem.FieldWeeklyWindowSeconds:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeeklyWindowSeconds(v)
+		return nil
+	case resetrebateaccountitem.FieldIncluded:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIncluded(v)
+		return nil
+	case resetrebateaccountitem.FieldExclusionReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExclusionReason(v)
+		return nil
+	case resetrebateaccountitem.FieldErrorCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorCode(v)
+		return nil
+	case resetrebateaccountitem.FieldErrorMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorMessage(v)
+		return nil
+	case resetrebateaccountitem.FieldFetchedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFetchedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ResetRebateAccountItem field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ResetRebateAccountItemMutation) AddedFields() []string {
+	var fields []string
+	if m.addbatch_id != nil {
+		fields = append(fields, resetrebateaccountitem.FieldBatchID)
+	}
+	if m.addaccount_id != nil {
+		fields = append(fields, resetrebateaccountitem.FieldAccountID)
+	}
+	if m.addconsumed_amount != nil {
+		fields = append(fields, resetrebateaccountitem.FieldConsumedAmount)
+	}
+	if m.addavailable_count != nil {
+		fields = append(fields, resetrebateaccountitem.FieldAvailableCount)
+	}
+	if m.addweekly_used_percent != nil {
+		fields = append(fields, resetrebateaccountitem.FieldWeeklyUsedPercent)
+	}
+	if m.addweekly_window_seconds != nil {
+		fields = append(fields, resetrebateaccountitem.FieldWeeklyWindowSeconds)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ResetRebateAccountItemMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case resetrebateaccountitem.FieldBatchID:
+		return m.AddedBatchID()
+	case resetrebateaccountitem.FieldAccountID:
+		return m.AddedAccountID()
+	case resetrebateaccountitem.FieldConsumedAmount:
+		return m.AddedConsumedAmount()
+	case resetrebateaccountitem.FieldAvailableCount:
+		return m.AddedAvailableCount()
+	case resetrebateaccountitem.FieldWeeklyUsedPercent:
+		return m.AddedWeeklyUsedPercent()
+	case resetrebateaccountitem.FieldWeeklyWindowSeconds:
+		return m.AddedWeeklyWindowSeconds()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ResetRebateAccountItemMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case resetrebateaccountitem.FieldBatchID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBatchID(v)
+		return nil
+	case resetrebateaccountitem.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountID(v)
+		return nil
+	case resetrebateaccountitem.FieldConsumedAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddConsumedAmount(v)
+		return nil
+	case resetrebateaccountitem.FieldAvailableCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAvailableCount(v)
+		return nil
+	case resetrebateaccountitem.FieldWeeklyUsedPercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeeklyUsedPercent(v)
+		return nil
+	case resetrebateaccountitem.FieldWeeklyWindowSeconds:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeeklyWindowSeconds(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ResetRebateAccountItem numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ResetRebateAccountItemMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(resetrebateaccountitem.FieldAvailableCount) {
+		fields = append(fields, resetrebateaccountitem.FieldAvailableCount)
+	}
+	if m.FieldCleared(resetrebateaccountitem.FieldWeeklyUsedPercent) {
+		fields = append(fields, resetrebateaccountitem.FieldWeeklyUsedPercent)
+	}
+	if m.FieldCleared(resetrebateaccountitem.FieldWeeklyWindowSeconds) {
+		fields = append(fields, resetrebateaccountitem.FieldWeeklyWindowSeconds)
+	}
+	if m.FieldCleared(resetrebateaccountitem.FieldFetchedAt) {
+		fields = append(fields, resetrebateaccountitem.FieldFetchedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ResetRebateAccountItemMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ResetRebateAccountItemMutation) ClearField(name string) error {
+	switch name {
+	case resetrebateaccountitem.FieldAvailableCount:
+		m.ClearAvailableCount()
+		return nil
+	case resetrebateaccountitem.FieldWeeklyUsedPercent:
+		m.ClearWeeklyUsedPercent()
+		return nil
+	case resetrebateaccountitem.FieldWeeklyWindowSeconds:
+		m.ClearWeeklyWindowSeconds()
+		return nil
+	case resetrebateaccountitem.FieldFetchedAt:
+		m.ClearFetchedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ResetRebateAccountItem nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ResetRebateAccountItemMutation) ResetField(name string) error {
+	switch name {
+	case resetrebateaccountitem.FieldBatchID:
+		m.ResetBatchID()
+		return nil
+	case resetrebateaccountitem.FieldAccountID:
+		m.ResetAccountID()
+		return nil
+	case resetrebateaccountitem.FieldAccountName:
+		m.ResetAccountName()
+		return nil
+	case resetrebateaccountitem.FieldPlatform:
+		m.ResetPlatform()
+		return nil
+	case resetrebateaccountitem.FieldAccountType:
+		m.ResetAccountType()
+		return nil
+	case resetrebateaccountitem.FieldIsShadow:
+		m.ResetIsShadow()
+		return nil
+	case resetrebateaccountitem.FieldInGroup:
+		m.ResetInGroup()
+		return nil
+	case resetrebateaccountitem.FieldSchedulable:
+		m.ResetSchedulable()
+		return nil
+	case resetrebateaccountitem.FieldConsumedAmount:
+		m.ResetConsumedAmount()
+		return nil
+	case resetrebateaccountitem.FieldAvailableCount:
+		m.ResetAvailableCount()
+		return nil
+	case resetrebateaccountitem.FieldWeeklyUsedPercent:
+		m.ResetWeeklyUsedPercent()
+		return nil
+	case resetrebateaccountitem.FieldWeeklyWindowSeconds:
+		m.ResetWeeklyWindowSeconds()
+		return nil
+	case resetrebateaccountitem.FieldIncluded:
+		m.ResetIncluded()
+		return nil
+	case resetrebateaccountitem.FieldExclusionReason:
+		m.ResetExclusionReason()
+		return nil
+	case resetrebateaccountitem.FieldErrorCode:
+		m.ResetErrorCode()
+		return nil
+	case resetrebateaccountitem.FieldErrorMessage:
+		m.ResetErrorMessage()
+		return nil
+	case resetrebateaccountitem.FieldFetchedAt:
+		m.ResetFetchedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ResetRebateAccountItem field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ResetRebateAccountItemMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ResetRebateAccountItemMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ResetRebateAccountItemMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ResetRebateAccountItemMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ResetRebateAccountItemMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ResetRebateAccountItemMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ResetRebateAccountItemMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown ResetRebateAccountItem unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ResetRebateAccountItemMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown ResetRebateAccountItem edge %s", name)
+}
+
+// ResetRebateBatchMutation represents an operation that mutates the ResetRebateBatch nodes in the graph.
+type ResetRebateBatchMutation struct {
+	config
+	op                       Op
+	typ                      string
+	id                       *int64
+	group_id                 *int64
+	addgroup_id              *int64
+	group_name               *string
+	admin_id                 *int64
+	addadmin_id              *int64
+	admin_email              *string
+	period_start             *time.Time
+	period_end               *time.Time
+	status                   *string
+	progress_total           *int
+	addprogress_total        *int
+	progress_completed       *int
+	addprogress_completed    *int
+	progress_succeeded       *int
+	addprogress_succeeded    *int
+	progress_failed          *int
+	addprogress_failed       *int
+	participant_count        *int
+	addparticipant_count     *int
+	actual_amount            *float64
+	addactual_amount         *float64
+	refundable_amount        *float64
+	addrefundable_amount     *float64
+	failed_account_amount    *float64
+	addfailed_account_amount *float64
+	weekly_usage_percent     *float64
+	addweekly_usage_percent  *float64
+	refundable_percent       *float64
+	addrefundable_percent    *float64
+	suggested_ratio          *int
+	addsuggested_ratio       *int
+	configured_ratio         *int
+	addconfigured_ratio      *int
+	issued_user_count        *int
+	addissued_user_count     *int
+	excluded_user_count      *int
+	addexcluded_user_count   *int
+	issued_amount            *float64
+	addissued_amount         *float64
+	failure_code             *string
+	failure_message          *string
+	rebate_reason            *string
+	execution_attempts       *int
+	addexecution_attempts    *int
+	completed_at             *time.Time
+	snapshot_expires_at      *time.Time
+	issued_at                *time.Time
+	executed_at              *time.Time
+	created_at               *time.Time
+	updated_at               *time.Time
+	clearedFields            map[string]struct{}
+	done                     bool
+	oldValue                 func(context.Context) (*ResetRebateBatch, error)
+	predicates               []predicate.ResetRebateBatch
+}
+
+var _ ent.Mutation = (*ResetRebateBatchMutation)(nil)
+
+// resetrebatebatchOption allows management of the mutation configuration using functional options.
+type resetrebatebatchOption func(*ResetRebateBatchMutation)
+
+// newResetRebateBatchMutation creates new mutation for the ResetRebateBatch entity.
+func newResetRebateBatchMutation(c config, op Op, opts ...resetrebatebatchOption) *ResetRebateBatchMutation {
+	m := &ResetRebateBatchMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeResetRebateBatch,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withResetRebateBatchID sets the ID field of the mutation.
+func withResetRebateBatchID(id int64) resetrebatebatchOption {
+	return func(m *ResetRebateBatchMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ResetRebateBatch
+		)
+		m.oldValue = func(ctx context.Context) (*ResetRebateBatch, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ResetRebateBatch.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withResetRebateBatch sets the old ResetRebateBatch of the mutation.
+func withResetRebateBatch(node *ResetRebateBatch) resetrebatebatchOption {
+	return func(m *ResetRebateBatchMutation) {
+		m.oldValue = func(context.Context) (*ResetRebateBatch, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ResetRebateBatchMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ResetRebateBatchMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ResetRebateBatchMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ResetRebateBatchMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ResetRebateBatch.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *ResetRebateBatchMutation) SetGroupID(i int64) {
+	m.group_id = &i
+	m.addgroup_id = nil
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *ResetRebateBatchMutation) GroupID() (r int64, exists bool) {
+	v := m.group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldGroupID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// AddGroupID adds i to the "group_id" field.
+func (m *ResetRebateBatchMutation) AddGroupID(i int64) {
+	if m.addgroup_id != nil {
+		*m.addgroup_id += i
+	} else {
+		m.addgroup_id = &i
+	}
+}
+
+// AddedGroupID returns the value that was added to the "group_id" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedGroupID() (r int64, exists bool) {
+	v := m.addgroup_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *ResetRebateBatchMutation) ResetGroupID() {
+	m.group_id = nil
+	m.addgroup_id = nil
+}
+
+// SetGroupName sets the "group_name" field.
+func (m *ResetRebateBatchMutation) SetGroupName(s string) {
+	m.group_name = &s
+}
+
+// GroupName returns the value of the "group_name" field in the mutation.
+func (m *ResetRebateBatchMutation) GroupName() (r string, exists bool) {
+	v := m.group_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupName returns the old "group_name" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldGroupName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupName: %w", err)
+	}
+	return oldValue.GroupName, nil
+}
+
+// ResetGroupName resets all changes to the "group_name" field.
+func (m *ResetRebateBatchMutation) ResetGroupName() {
+	m.group_name = nil
+}
+
+// SetAdminID sets the "admin_id" field.
+func (m *ResetRebateBatchMutation) SetAdminID(i int64) {
+	m.admin_id = &i
+	m.addadmin_id = nil
+}
+
+// AdminID returns the value of the "admin_id" field in the mutation.
+func (m *ResetRebateBatchMutation) AdminID() (r int64, exists bool) {
+	v := m.admin_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAdminID returns the old "admin_id" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldAdminID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAdminID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAdminID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAdminID: %w", err)
+	}
+	return oldValue.AdminID, nil
+}
+
+// AddAdminID adds i to the "admin_id" field.
+func (m *ResetRebateBatchMutation) AddAdminID(i int64) {
+	if m.addadmin_id != nil {
+		*m.addadmin_id += i
+	} else {
+		m.addadmin_id = &i
+	}
+}
+
+// AddedAdminID returns the value that was added to the "admin_id" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedAdminID() (r int64, exists bool) {
+	v := m.addadmin_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAdminID resets all changes to the "admin_id" field.
+func (m *ResetRebateBatchMutation) ResetAdminID() {
+	m.admin_id = nil
+	m.addadmin_id = nil
+}
+
+// SetAdminEmail sets the "admin_email" field.
+func (m *ResetRebateBatchMutation) SetAdminEmail(s string) {
+	m.admin_email = &s
+}
+
+// AdminEmail returns the value of the "admin_email" field in the mutation.
+func (m *ResetRebateBatchMutation) AdminEmail() (r string, exists bool) {
+	v := m.admin_email
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAdminEmail returns the old "admin_email" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldAdminEmail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAdminEmail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAdminEmail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAdminEmail: %w", err)
+	}
+	return oldValue.AdminEmail, nil
+}
+
+// ResetAdminEmail resets all changes to the "admin_email" field.
+func (m *ResetRebateBatchMutation) ResetAdminEmail() {
+	m.admin_email = nil
+}
+
+// SetPeriodStart sets the "period_start" field.
+func (m *ResetRebateBatchMutation) SetPeriodStart(t time.Time) {
+	m.period_start = &t
+}
+
+// PeriodStart returns the value of the "period_start" field in the mutation.
+func (m *ResetRebateBatchMutation) PeriodStart() (r time.Time, exists bool) {
+	v := m.period_start
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPeriodStart returns the old "period_start" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldPeriodStart(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPeriodStart is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPeriodStart requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPeriodStart: %w", err)
+	}
+	return oldValue.PeriodStart, nil
+}
+
+// ResetPeriodStart resets all changes to the "period_start" field.
+func (m *ResetRebateBatchMutation) ResetPeriodStart() {
+	m.period_start = nil
+}
+
+// SetPeriodEnd sets the "period_end" field.
+func (m *ResetRebateBatchMutation) SetPeriodEnd(t time.Time) {
+	m.period_end = &t
+}
+
+// PeriodEnd returns the value of the "period_end" field in the mutation.
+func (m *ResetRebateBatchMutation) PeriodEnd() (r time.Time, exists bool) {
+	v := m.period_end
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPeriodEnd returns the old "period_end" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldPeriodEnd(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPeriodEnd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPeriodEnd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPeriodEnd: %w", err)
+	}
+	return oldValue.PeriodEnd, nil
+}
+
+// ResetPeriodEnd resets all changes to the "period_end" field.
+func (m *ResetRebateBatchMutation) ResetPeriodEnd() {
+	m.period_end = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *ResetRebateBatchMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *ResetRebateBatchMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *ResetRebateBatchMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetProgressTotal sets the "progress_total" field.
+func (m *ResetRebateBatchMutation) SetProgressTotal(i int) {
+	m.progress_total = &i
+	m.addprogress_total = nil
+}
+
+// ProgressTotal returns the value of the "progress_total" field in the mutation.
+func (m *ResetRebateBatchMutation) ProgressTotal() (r int, exists bool) {
+	v := m.progress_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProgressTotal returns the old "progress_total" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldProgressTotal(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProgressTotal is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProgressTotal requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProgressTotal: %w", err)
+	}
+	return oldValue.ProgressTotal, nil
+}
+
+// AddProgressTotal adds i to the "progress_total" field.
+func (m *ResetRebateBatchMutation) AddProgressTotal(i int) {
+	if m.addprogress_total != nil {
+		*m.addprogress_total += i
+	} else {
+		m.addprogress_total = &i
+	}
+}
+
+// AddedProgressTotal returns the value that was added to the "progress_total" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedProgressTotal() (r int, exists bool) {
+	v := m.addprogress_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProgressTotal resets all changes to the "progress_total" field.
+func (m *ResetRebateBatchMutation) ResetProgressTotal() {
+	m.progress_total = nil
+	m.addprogress_total = nil
+}
+
+// SetProgressCompleted sets the "progress_completed" field.
+func (m *ResetRebateBatchMutation) SetProgressCompleted(i int) {
+	m.progress_completed = &i
+	m.addprogress_completed = nil
+}
+
+// ProgressCompleted returns the value of the "progress_completed" field in the mutation.
+func (m *ResetRebateBatchMutation) ProgressCompleted() (r int, exists bool) {
+	v := m.progress_completed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProgressCompleted returns the old "progress_completed" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldProgressCompleted(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProgressCompleted is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProgressCompleted requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProgressCompleted: %w", err)
+	}
+	return oldValue.ProgressCompleted, nil
+}
+
+// AddProgressCompleted adds i to the "progress_completed" field.
+func (m *ResetRebateBatchMutation) AddProgressCompleted(i int) {
+	if m.addprogress_completed != nil {
+		*m.addprogress_completed += i
+	} else {
+		m.addprogress_completed = &i
+	}
+}
+
+// AddedProgressCompleted returns the value that was added to the "progress_completed" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedProgressCompleted() (r int, exists bool) {
+	v := m.addprogress_completed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProgressCompleted resets all changes to the "progress_completed" field.
+func (m *ResetRebateBatchMutation) ResetProgressCompleted() {
+	m.progress_completed = nil
+	m.addprogress_completed = nil
+}
+
+// SetProgressSucceeded sets the "progress_succeeded" field.
+func (m *ResetRebateBatchMutation) SetProgressSucceeded(i int) {
+	m.progress_succeeded = &i
+	m.addprogress_succeeded = nil
+}
+
+// ProgressSucceeded returns the value of the "progress_succeeded" field in the mutation.
+func (m *ResetRebateBatchMutation) ProgressSucceeded() (r int, exists bool) {
+	v := m.progress_succeeded
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProgressSucceeded returns the old "progress_succeeded" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldProgressSucceeded(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProgressSucceeded is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProgressSucceeded requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProgressSucceeded: %w", err)
+	}
+	return oldValue.ProgressSucceeded, nil
+}
+
+// AddProgressSucceeded adds i to the "progress_succeeded" field.
+func (m *ResetRebateBatchMutation) AddProgressSucceeded(i int) {
+	if m.addprogress_succeeded != nil {
+		*m.addprogress_succeeded += i
+	} else {
+		m.addprogress_succeeded = &i
+	}
+}
+
+// AddedProgressSucceeded returns the value that was added to the "progress_succeeded" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedProgressSucceeded() (r int, exists bool) {
+	v := m.addprogress_succeeded
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProgressSucceeded resets all changes to the "progress_succeeded" field.
+func (m *ResetRebateBatchMutation) ResetProgressSucceeded() {
+	m.progress_succeeded = nil
+	m.addprogress_succeeded = nil
+}
+
+// SetProgressFailed sets the "progress_failed" field.
+func (m *ResetRebateBatchMutation) SetProgressFailed(i int) {
+	m.progress_failed = &i
+	m.addprogress_failed = nil
+}
+
+// ProgressFailed returns the value of the "progress_failed" field in the mutation.
+func (m *ResetRebateBatchMutation) ProgressFailed() (r int, exists bool) {
+	v := m.progress_failed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProgressFailed returns the old "progress_failed" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldProgressFailed(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProgressFailed is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProgressFailed requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProgressFailed: %w", err)
+	}
+	return oldValue.ProgressFailed, nil
+}
+
+// AddProgressFailed adds i to the "progress_failed" field.
+func (m *ResetRebateBatchMutation) AddProgressFailed(i int) {
+	if m.addprogress_failed != nil {
+		*m.addprogress_failed += i
+	} else {
+		m.addprogress_failed = &i
+	}
+}
+
+// AddedProgressFailed returns the value that was added to the "progress_failed" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedProgressFailed() (r int, exists bool) {
+	v := m.addprogress_failed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProgressFailed resets all changes to the "progress_failed" field.
+func (m *ResetRebateBatchMutation) ResetProgressFailed() {
+	m.progress_failed = nil
+	m.addprogress_failed = nil
+}
+
+// SetParticipantCount sets the "participant_count" field.
+func (m *ResetRebateBatchMutation) SetParticipantCount(i int) {
+	m.participant_count = &i
+	m.addparticipant_count = nil
+}
+
+// ParticipantCount returns the value of the "participant_count" field in the mutation.
+func (m *ResetRebateBatchMutation) ParticipantCount() (r int, exists bool) {
+	v := m.participant_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldParticipantCount returns the old "participant_count" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldParticipantCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldParticipantCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldParticipantCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldParticipantCount: %w", err)
+	}
+	return oldValue.ParticipantCount, nil
+}
+
+// AddParticipantCount adds i to the "participant_count" field.
+func (m *ResetRebateBatchMutation) AddParticipantCount(i int) {
+	if m.addparticipant_count != nil {
+		*m.addparticipant_count += i
+	} else {
+		m.addparticipant_count = &i
+	}
+}
+
+// AddedParticipantCount returns the value that was added to the "participant_count" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedParticipantCount() (r int, exists bool) {
+	v := m.addparticipant_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetParticipantCount resets all changes to the "participant_count" field.
+func (m *ResetRebateBatchMutation) ResetParticipantCount() {
+	m.participant_count = nil
+	m.addparticipant_count = nil
+}
+
+// SetActualAmount sets the "actual_amount" field.
+func (m *ResetRebateBatchMutation) SetActualAmount(f float64) {
+	m.actual_amount = &f
+	m.addactual_amount = nil
+}
+
+// ActualAmount returns the value of the "actual_amount" field in the mutation.
+func (m *ResetRebateBatchMutation) ActualAmount() (r float64, exists bool) {
+	v := m.actual_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActualAmount returns the old "actual_amount" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldActualAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActualAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActualAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActualAmount: %w", err)
+	}
+	return oldValue.ActualAmount, nil
+}
+
+// AddActualAmount adds f to the "actual_amount" field.
+func (m *ResetRebateBatchMutation) AddActualAmount(f float64) {
+	if m.addactual_amount != nil {
+		*m.addactual_amount += f
+	} else {
+		m.addactual_amount = &f
+	}
+}
+
+// AddedActualAmount returns the value that was added to the "actual_amount" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedActualAmount() (r float64, exists bool) {
+	v := m.addactual_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetActualAmount resets all changes to the "actual_amount" field.
+func (m *ResetRebateBatchMutation) ResetActualAmount() {
+	m.actual_amount = nil
+	m.addactual_amount = nil
+}
+
+// SetRefundableAmount sets the "refundable_amount" field.
+func (m *ResetRebateBatchMutation) SetRefundableAmount(f float64) {
+	m.refundable_amount = &f
+	m.addrefundable_amount = nil
+}
+
+// RefundableAmount returns the value of the "refundable_amount" field in the mutation.
+func (m *ResetRebateBatchMutation) RefundableAmount() (r float64, exists bool) {
+	v := m.refundable_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRefundableAmount returns the old "refundable_amount" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldRefundableAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRefundableAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRefundableAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRefundableAmount: %w", err)
+	}
+	return oldValue.RefundableAmount, nil
+}
+
+// AddRefundableAmount adds f to the "refundable_amount" field.
+func (m *ResetRebateBatchMutation) AddRefundableAmount(f float64) {
+	if m.addrefundable_amount != nil {
+		*m.addrefundable_amount += f
+	} else {
+		m.addrefundable_amount = &f
+	}
+}
+
+// AddedRefundableAmount returns the value that was added to the "refundable_amount" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedRefundableAmount() (r float64, exists bool) {
+	v := m.addrefundable_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRefundableAmount resets all changes to the "refundable_amount" field.
+func (m *ResetRebateBatchMutation) ResetRefundableAmount() {
+	m.refundable_amount = nil
+	m.addrefundable_amount = nil
+}
+
+// SetFailedAccountAmount sets the "failed_account_amount" field.
+func (m *ResetRebateBatchMutation) SetFailedAccountAmount(f float64) {
+	m.failed_account_amount = &f
+	m.addfailed_account_amount = nil
+}
+
+// FailedAccountAmount returns the value of the "failed_account_amount" field in the mutation.
+func (m *ResetRebateBatchMutation) FailedAccountAmount() (r float64, exists bool) {
+	v := m.failed_account_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailedAccountAmount returns the old "failed_account_amount" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldFailedAccountAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailedAccountAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailedAccountAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailedAccountAmount: %w", err)
+	}
+	return oldValue.FailedAccountAmount, nil
+}
+
+// AddFailedAccountAmount adds f to the "failed_account_amount" field.
+func (m *ResetRebateBatchMutation) AddFailedAccountAmount(f float64) {
+	if m.addfailed_account_amount != nil {
+		*m.addfailed_account_amount += f
+	} else {
+		m.addfailed_account_amount = &f
+	}
+}
+
+// AddedFailedAccountAmount returns the value that was added to the "failed_account_amount" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedFailedAccountAmount() (r float64, exists bool) {
+	v := m.addfailed_account_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFailedAccountAmount resets all changes to the "failed_account_amount" field.
+func (m *ResetRebateBatchMutation) ResetFailedAccountAmount() {
+	m.failed_account_amount = nil
+	m.addfailed_account_amount = nil
+}
+
+// SetWeeklyUsagePercent sets the "weekly_usage_percent" field.
+func (m *ResetRebateBatchMutation) SetWeeklyUsagePercent(f float64) {
+	m.weekly_usage_percent = &f
+	m.addweekly_usage_percent = nil
+}
+
+// WeeklyUsagePercent returns the value of the "weekly_usage_percent" field in the mutation.
+func (m *ResetRebateBatchMutation) WeeklyUsagePercent() (r float64, exists bool) {
+	v := m.weekly_usage_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeeklyUsagePercent returns the old "weekly_usage_percent" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldWeeklyUsagePercent(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeeklyUsagePercent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeeklyUsagePercent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeeklyUsagePercent: %w", err)
+	}
+	return oldValue.WeeklyUsagePercent, nil
+}
+
+// AddWeeklyUsagePercent adds f to the "weekly_usage_percent" field.
+func (m *ResetRebateBatchMutation) AddWeeklyUsagePercent(f float64) {
+	if m.addweekly_usage_percent != nil {
+		*m.addweekly_usage_percent += f
+	} else {
+		m.addweekly_usage_percent = &f
+	}
+}
+
+// AddedWeeklyUsagePercent returns the value that was added to the "weekly_usage_percent" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedWeeklyUsagePercent() (r float64, exists bool) {
+	v := m.addweekly_usage_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetWeeklyUsagePercent resets all changes to the "weekly_usage_percent" field.
+func (m *ResetRebateBatchMutation) ResetWeeklyUsagePercent() {
+	m.weekly_usage_percent = nil
+	m.addweekly_usage_percent = nil
+}
+
+// SetRefundablePercent sets the "refundable_percent" field.
+func (m *ResetRebateBatchMutation) SetRefundablePercent(f float64) {
+	m.refundable_percent = &f
+	m.addrefundable_percent = nil
+}
+
+// RefundablePercent returns the value of the "refundable_percent" field in the mutation.
+func (m *ResetRebateBatchMutation) RefundablePercent() (r float64, exists bool) {
+	v := m.refundable_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRefundablePercent returns the old "refundable_percent" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldRefundablePercent(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRefundablePercent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRefundablePercent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRefundablePercent: %w", err)
+	}
+	return oldValue.RefundablePercent, nil
+}
+
+// AddRefundablePercent adds f to the "refundable_percent" field.
+func (m *ResetRebateBatchMutation) AddRefundablePercent(f float64) {
+	if m.addrefundable_percent != nil {
+		*m.addrefundable_percent += f
+	} else {
+		m.addrefundable_percent = &f
+	}
+}
+
+// AddedRefundablePercent returns the value that was added to the "refundable_percent" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedRefundablePercent() (r float64, exists bool) {
+	v := m.addrefundable_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRefundablePercent resets all changes to the "refundable_percent" field.
+func (m *ResetRebateBatchMutation) ResetRefundablePercent() {
+	m.refundable_percent = nil
+	m.addrefundable_percent = nil
+}
+
+// SetSuggestedRatio sets the "suggested_ratio" field.
+func (m *ResetRebateBatchMutation) SetSuggestedRatio(i int) {
+	m.suggested_ratio = &i
+	m.addsuggested_ratio = nil
+}
+
+// SuggestedRatio returns the value of the "suggested_ratio" field in the mutation.
+func (m *ResetRebateBatchMutation) SuggestedRatio() (r int, exists bool) {
+	v := m.suggested_ratio
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSuggestedRatio returns the old "suggested_ratio" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldSuggestedRatio(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSuggestedRatio is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSuggestedRatio requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSuggestedRatio: %w", err)
+	}
+	return oldValue.SuggestedRatio, nil
+}
+
+// AddSuggestedRatio adds i to the "suggested_ratio" field.
+func (m *ResetRebateBatchMutation) AddSuggestedRatio(i int) {
+	if m.addsuggested_ratio != nil {
+		*m.addsuggested_ratio += i
+	} else {
+		m.addsuggested_ratio = &i
+	}
+}
+
+// AddedSuggestedRatio returns the value that was added to the "suggested_ratio" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedSuggestedRatio() (r int, exists bool) {
+	v := m.addsuggested_ratio
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSuggestedRatio resets all changes to the "suggested_ratio" field.
+func (m *ResetRebateBatchMutation) ResetSuggestedRatio() {
+	m.suggested_ratio = nil
+	m.addsuggested_ratio = nil
+}
+
+// SetConfiguredRatio sets the "configured_ratio" field.
+func (m *ResetRebateBatchMutation) SetConfiguredRatio(i int) {
+	m.configured_ratio = &i
+	m.addconfigured_ratio = nil
+}
+
+// ConfiguredRatio returns the value of the "configured_ratio" field in the mutation.
+func (m *ResetRebateBatchMutation) ConfiguredRatio() (r int, exists bool) {
+	v := m.configured_ratio
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldConfiguredRatio returns the old "configured_ratio" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldConfiguredRatio(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldConfiguredRatio is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldConfiguredRatio requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldConfiguredRatio: %w", err)
+	}
+	return oldValue.ConfiguredRatio, nil
+}
+
+// AddConfiguredRatio adds i to the "configured_ratio" field.
+func (m *ResetRebateBatchMutation) AddConfiguredRatio(i int) {
+	if m.addconfigured_ratio != nil {
+		*m.addconfigured_ratio += i
+	} else {
+		m.addconfigured_ratio = &i
+	}
+}
+
+// AddedConfiguredRatio returns the value that was added to the "configured_ratio" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedConfiguredRatio() (r int, exists bool) {
+	v := m.addconfigured_ratio
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearConfiguredRatio clears the value of the "configured_ratio" field.
+func (m *ResetRebateBatchMutation) ClearConfiguredRatio() {
+	m.configured_ratio = nil
+	m.addconfigured_ratio = nil
+	m.clearedFields[resetrebatebatch.FieldConfiguredRatio] = struct{}{}
+}
+
+// ConfiguredRatioCleared returns if the "configured_ratio" field was cleared in this mutation.
+func (m *ResetRebateBatchMutation) ConfiguredRatioCleared() bool {
+	_, ok := m.clearedFields[resetrebatebatch.FieldConfiguredRatio]
+	return ok
+}
+
+// ResetConfiguredRatio resets all changes to the "configured_ratio" field.
+func (m *ResetRebateBatchMutation) ResetConfiguredRatio() {
+	m.configured_ratio = nil
+	m.addconfigured_ratio = nil
+	delete(m.clearedFields, resetrebatebatch.FieldConfiguredRatio)
+}
+
+// SetIssuedUserCount sets the "issued_user_count" field.
+func (m *ResetRebateBatchMutation) SetIssuedUserCount(i int) {
+	m.issued_user_count = &i
+	m.addissued_user_count = nil
+}
+
+// IssuedUserCount returns the value of the "issued_user_count" field in the mutation.
+func (m *ResetRebateBatchMutation) IssuedUserCount() (r int, exists bool) {
+	v := m.issued_user_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIssuedUserCount returns the old "issued_user_count" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldIssuedUserCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIssuedUserCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIssuedUserCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIssuedUserCount: %w", err)
+	}
+	return oldValue.IssuedUserCount, nil
+}
+
+// AddIssuedUserCount adds i to the "issued_user_count" field.
+func (m *ResetRebateBatchMutation) AddIssuedUserCount(i int) {
+	if m.addissued_user_count != nil {
+		*m.addissued_user_count += i
+	} else {
+		m.addissued_user_count = &i
+	}
+}
+
+// AddedIssuedUserCount returns the value that was added to the "issued_user_count" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedIssuedUserCount() (r int, exists bool) {
+	v := m.addissued_user_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetIssuedUserCount resets all changes to the "issued_user_count" field.
+func (m *ResetRebateBatchMutation) ResetIssuedUserCount() {
+	m.issued_user_count = nil
+	m.addissued_user_count = nil
+}
+
+// SetExcludedUserCount sets the "excluded_user_count" field.
+func (m *ResetRebateBatchMutation) SetExcludedUserCount(i int) {
+	m.excluded_user_count = &i
+	m.addexcluded_user_count = nil
+}
+
+// ExcludedUserCount returns the value of the "excluded_user_count" field in the mutation.
+func (m *ResetRebateBatchMutation) ExcludedUserCount() (r int, exists bool) {
+	v := m.excluded_user_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExcludedUserCount returns the old "excluded_user_count" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldExcludedUserCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExcludedUserCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExcludedUserCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExcludedUserCount: %w", err)
+	}
+	return oldValue.ExcludedUserCount, nil
+}
+
+// AddExcludedUserCount adds i to the "excluded_user_count" field.
+func (m *ResetRebateBatchMutation) AddExcludedUserCount(i int) {
+	if m.addexcluded_user_count != nil {
+		*m.addexcluded_user_count += i
+	} else {
+		m.addexcluded_user_count = &i
+	}
+}
+
+// AddedExcludedUserCount returns the value that was added to the "excluded_user_count" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedExcludedUserCount() (r int, exists bool) {
+	v := m.addexcluded_user_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetExcludedUserCount resets all changes to the "excluded_user_count" field.
+func (m *ResetRebateBatchMutation) ResetExcludedUserCount() {
+	m.excluded_user_count = nil
+	m.addexcluded_user_count = nil
+}
+
+// SetIssuedAmount sets the "issued_amount" field.
+func (m *ResetRebateBatchMutation) SetIssuedAmount(f float64) {
+	m.issued_amount = &f
+	m.addissued_amount = nil
+}
+
+// IssuedAmount returns the value of the "issued_amount" field in the mutation.
+func (m *ResetRebateBatchMutation) IssuedAmount() (r float64, exists bool) {
+	v := m.issued_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIssuedAmount returns the old "issued_amount" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldIssuedAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIssuedAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIssuedAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIssuedAmount: %w", err)
+	}
+	return oldValue.IssuedAmount, nil
+}
+
+// AddIssuedAmount adds f to the "issued_amount" field.
+func (m *ResetRebateBatchMutation) AddIssuedAmount(f float64) {
+	if m.addissued_amount != nil {
+		*m.addissued_amount += f
+	} else {
+		m.addissued_amount = &f
+	}
+}
+
+// AddedIssuedAmount returns the value that was added to the "issued_amount" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedIssuedAmount() (r float64, exists bool) {
+	v := m.addissued_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetIssuedAmount resets all changes to the "issued_amount" field.
+func (m *ResetRebateBatchMutation) ResetIssuedAmount() {
+	m.issued_amount = nil
+	m.addissued_amount = nil
+}
+
+// SetFailureCode sets the "failure_code" field.
+func (m *ResetRebateBatchMutation) SetFailureCode(s string) {
+	m.failure_code = &s
+}
+
+// FailureCode returns the value of the "failure_code" field in the mutation.
+func (m *ResetRebateBatchMutation) FailureCode() (r string, exists bool) {
+	v := m.failure_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailureCode returns the old "failure_code" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldFailureCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailureCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailureCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailureCode: %w", err)
+	}
+	return oldValue.FailureCode, nil
+}
+
+// ResetFailureCode resets all changes to the "failure_code" field.
+func (m *ResetRebateBatchMutation) ResetFailureCode() {
+	m.failure_code = nil
+}
+
+// SetFailureMessage sets the "failure_message" field.
+func (m *ResetRebateBatchMutation) SetFailureMessage(s string) {
+	m.failure_message = &s
+}
+
+// FailureMessage returns the value of the "failure_message" field in the mutation.
+func (m *ResetRebateBatchMutation) FailureMessage() (r string, exists bool) {
+	v := m.failure_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailureMessage returns the old "failure_message" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldFailureMessage(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailureMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailureMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailureMessage: %w", err)
+	}
+	return oldValue.FailureMessage, nil
+}
+
+// ResetFailureMessage resets all changes to the "failure_message" field.
+func (m *ResetRebateBatchMutation) ResetFailureMessage() {
+	m.failure_message = nil
+}
+
+// SetRebateReason sets the "rebate_reason" field.
+func (m *ResetRebateBatchMutation) SetRebateReason(s string) {
+	m.rebate_reason = &s
+}
+
+// RebateReason returns the value of the "rebate_reason" field in the mutation.
+func (m *ResetRebateBatchMutation) RebateReason() (r string, exists bool) {
+	v := m.rebate_reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRebateReason returns the old "rebate_reason" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldRebateReason(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRebateReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRebateReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRebateReason: %w", err)
+	}
+	return oldValue.RebateReason, nil
+}
+
+// ResetRebateReason resets all changes to the "rebate_reason" field.
+func (m *ResetRebateBatchMutation) ResetRebateReason() {
+	m.rebate_reason = nil
+}
+
+// SetExecutionAttempts sets the "execution_attempts" field.
+func (m *ResetRebateBatchMutation) SetExecutionAttempts(i int) {
+	m.execution_attempts = &i
+	m.addexecution_attempts = nil
+}
+
+// ExecutionAttempts returns the value of the "execution_attempts" field in the mutation.
+func (m *ResetRebateBatchMutation) ExecutionAttempts() (r int, exists bool) {
+	v := m.execution_attempts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExecutionAttempts returns the old "execution_attempts" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldExecutionAttempts(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExecutionAttempts is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExecutionAttempts requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExecutionAttempts: %w", err)
+	}
+	return oldValue.ExecutionAttempts, nil
+}
+
+// AddExecutionAttempts adds i to the "execution_attempts" field.
+func (m *ResetRebateBatchMutation) AddExecutionAttempts(i int) {
+	if m.addexecution_attempts != nil {
+		*m.addexecution_attempts += i
+	} else {
+		m.addexecution_attempts = &i
+	}
+}
+
+// AddedExecutionAttempts returns the value that was added to the "execution_attempts" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedExecutionAttempts() (r int, exists bool) {
+	v := m.addexecution_attempts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetExecutionAttempts resets all changes to the "execution_attempts" field.
+func (m *ResetRebateBatchMutation) ResetExecutionAttempts() {
+	m.execution_attempts = nil
+	m.addexecution_attempts = nil
+}
+
+// SetCompletedAt sets the "completed_at" field.
+func (m *ResetRebateBatchMutation) SetCompletedAt(t time.Time) {
+	m.completed_at = &t
+}
+
+// CompletedAt returns the value of the "completed_at" field in the mutation.
+func (m *ResetRebateBatchMutation) CompletedAt() (r time.Time, exists bool) {
+	v := m.completed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCompletedAt returns the old "completed_at" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldCompletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCompletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCompletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCompletedAt: %w", err)
+	}
+	return oldValue.CompletedAt, nil
+}
+
+// ClearCompletedAt clears the value of the "completed_at" field.
+func (m *ResetRebateBatchMutation) ClearCompletedAt() {
+	m.completed_at = nil
+	m.clearedFields[resetrebatebatch.FieldCompletedAt] = struct{}{}
+}
+
+// CompletedAtCleared returns if the "completed_at" field was cleared in this mutation.
+func (m *ResetRebateBatchMutation) CompletedAtCleared() bool {
+	_, ok := m.clearedFields[resetrebatebatch.FieldCompletedAt]
+	return ok
+}
+
+// ResetCompletedAt resets all changes to the "completed_at" field.
+func (m *ResetRebateBatchMutation) ResetCompletedAt() {
+	m.completed_at = nil
+	delete(m.clearedFields, resetrebatebatch.FieldCompletedAt)
+}
+
+// SetSnapshotExpiresAt sets the "snapshot_expires_at" field.
+func (m *ResetRebateBatchMutation) SetSnapshotExpiresAt(t time.Time) {
+	m.snapshot_expires_at = &t
+}
+
+// SnapshotExpiresAt returns the value of the "snapshot_expires_at" field in the mutation.
+func (m *ResetRebateBatchMutation) SnapshotExpiresAt() (r time.Time, exists bool) {
+	v := m.snapshot_expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSnapshotExpiresAt returns the old "snapshot_expires_at" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldSnapshotExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSnapshotExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSnapshotExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSnapshotExpiresAt: %w", err)
+	}
+	return oldValue.SnapshotExpiresAt, nil
+}
+
+// ClearSnapshotExpiresAt clears the value of the "snapshot_expires_at" field.
+func (m *ResetRebateBatchMutation) ClearSnapshotExpiresAt() {
+	m.snapshot_expires_at = nil
+	m.clearedFields[resetrebatebatch.FieldSnapshotExpiresAt] = struct{}{}
+}
+
+// SnapshotExpiresAtCleared returns if the "snapshot_expires_at" field was cleared in this mutation.
+func (m *ResetRebateBatchMutation) SnapshotExpiresAtCleared() bool {
+	_, ok := m.clearedFields[resetrebatebatch.FieldSnapshotExpiresAt]
+	return ok
+}
+
+// ResetSnapshotExpiresAt resets all changes to the "snapshot_expires_at" field.
+func (m *ResetRebateBatchMutation) ResetSnapshotExpiresAt() {
+	m.snapshot_expires_at = nil
+	delete(m.clearedFields, resetrebatebatch.FieldSnapshotExpiresAt)
+}
+
+// SetIssuedAt sets the "issued_at" field.
+func (m *ResetRebateBatchMutation) SetIssuedAt(t time.Time) {
+	m.issued_at = &t
+}
+
+// IssuedAt returns the value of the "issued_at" field in the mutation.
+func (m *ResetRebateBatchMutation) IssuedAt() (r time.Time, exists bool) {
+	v := m.issued_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIssuedAt returns the old "issued_at" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldIssuedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIssuedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIssuedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIssuedAt: %w", err)
+	}
+	return oldValue.IssuedAt, nil
+}
+
+// ClearIssuedAt clears the value of the "issued_at" field.
+func (m *ResetRebateBatchMutation) ClearIssuedAt() {
+	m.issued_at = nil
+	m.clearedFields[resetrebatebatch.FieldIssuedAt] = struct{}{}
+}
+
+// IssuedAtCleared returns if the "issued_at" field was cleared in this mutation.
+func (m *ResetRebateBatchMutation) IssuedAtCleared() bool {
+	_, ok := m.clearedFields[resetrebatebatch.FieldIssuedAt]
+	return ok
+}
+
+// ResetIssuedAt resets all changes to the "issued_at" field.
+func (m *ResetRebateBatchMutation) ResetIssuedAt() {
+	m.issued_at = nil
+	delete(m.clearedFields, resetrebatebatch.FieldIssuedAt)
+}
+
+// SetExecutedAt sets the "executed_at" field.
+func (m *ResetRebateBatchMutation) SetExecutedAt(t time.Time) {
+	m.executed_at = &t
+}
+
+// ExecutedAt returns the value of the "executed_at" field in the mutation.
+func (m *ResetRebateBatchMutation) ExecutedAt() (r time.Time, exists bool) {
+	v := m.executed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExecutedAt returns the old "executed_at" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldExecutedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExecutedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExecutedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExecutedAt: %w", err)
+	}
+	return oldValue.ExecutedAt, nil
+}
+
+// ClearExecutedAt clears the value of the "executed_at" field.
+func (m *ResetRebateBatchMutation) ClearExecutedAt() {
+	m.executed_at = nil
+	m.clearedFields[resetrebatebatch.FieldExecutedAt] = struct{}{}
+}
+
+// ExecutedAtCleared returns if the "executed_at" field was cleared in this mutation.
+func (m *ResetRebateBatchMutation) ExecutedAtCleared() bool {
+	_, ok := m.clearedFields[resetrebatebatch.FieldExecutedAt]
+	return ok
+}
+
+// ResetExecutedAt resets all changes to the "executed_at" field.
+func (m *ResetRebateBatchMutation) ResetExecutedAt() {
+	m.executed_at = nil
+	delete(m.clearedFields, resetrebatebatch.FieldExecutedAt)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *ResetRebateBatchMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *ResetRebateBatchMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *ResetRebateBatchMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *ResetRebateBatchMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *ResetRebateBatchMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *ResetRebateBatchMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the ResetRebateBatchMutation builder.
+func (m *ResetRebateBatchMutation) Where(ps ...predicate.ResetRebateBatch) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ResetRebateBatchMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ResetRebateBatchMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ResetRebateBatch, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ResetRebateBatchMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ResetRebateBatchMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ResetRebateBatch).
+func (m *ResetRebateBatchMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ResetRebateBatchMutation) Fields() []string {
+	fields := make([]string, 0, 32)
+	if m.group_id != nil {
+		fields = append(fields, resetrebatebatch.FieldGroupID)
+	}
+	if m.group_name != nil {
+		fields = append(fields, resetrebatebatch.FieldGroupName)
+	}
+	if m.admin_id != nil {
+		fields = append(fields, resetrebatebatch.FieldAdminID)
+	}
+	if m.admin_email != nil {
+		fields = append(fields, resetrebatebatch.FieldAdminEmail)
+	}
+	if m.period_start != nil {
+		fields = append(fields, resetrebatebatch.FieldPeriodStart)
+	}
+	if m.period_end != nil {
+		fields = append(fields, resetrebatebatch.FieldPeriodEnd)
+	}
+	if m.status != nil {
+		fields = append(fields, resetrebatebatch.FieldStatus)
+	}
+	if m.progress_total != nil {
+		fields = append(fields, resetrebatebatch.FieldProgressTotal)
+	}
+	if m.progress_completed != nil {
+		fields = append(fields, resetrebatebatch.FieldProgressCompleted)
+	}
+	if m.progress_succeeded != nil {
+		fields = append(fields, resetrebatebatch.FieldProgressSucceeded)
+	}
+	if m.progress_failed != nil {
+		fields = append(fields, resetrebatebatch.FieldProgressFailed)
+	}
+	if m.participant_count != nil {
+		fields = append(fields, resetrebatebatch.FieldParticipantCount)
+	}
+	if m.actual_amount != nil {
+		fields = append(fields, resetrebatebatch.FieldActualAmount)
+	}
+	if m.refundable_amount != nil {
+		fields = append(fields, resetrebatebatch.FieldRefundableAmount)
+	}
+	if m.failed_account_amount != nil {
+		fields = append(fields, resetrebatebatch.FieldFailedAccountAmount)
+	}
+	if m.weekly_usage_percent != nil {
+		fields = append(fields, resetrebatebatch.FieldWeeklyUsagePercent)
+	}
+	if m.refundable_percent != nil {
+		fields = append(fields, resetrebatebatch.FieldRefundablePercent)
+	}
+	if m.suggested_ratio != nil {
+		fields = append(fields, resetrebatebatch.FieldSuggestedRatio)
+	}
+	if m.configured_ratio != nil {
+		fields = append(fields, resetrebatebatch.FieldConfiguredRatio)
+	}
+	if m.issued_user_count != nil {
+		fields = append(fields, resetrebatebatch.FieldIssuedUserCount)
+	}
+	if m.excluded_user_count != nil {
+		fields = append(fields, resetrebatebatch.FieldExcludedUserCount)
+	}
+	if m.issued_amount != nil {
+		fields = append(fields, resetrebatebatch.FieldIssuedAmount)
+	}
+	if m.failure_code != nil {
+		fields = append(fields, resetrebatebatch.FieldFailureCode)
+	}
+	if m.failure_message != nil {
+		fields = append(fields, resetrebatebatch.FieldFailureMessage)
+	}
+	if m.rebate_reason != nil {
+		fields = append(fields, resetrebatebatch.FieldRebateReason)
+	}
+	if m.execution_attempts != nil {
+		fields = append(fields, resetrebatebatch.FieldExecutionAttempts)
+	}
+	if m.completed_at != nil {
+		fields = append(fields, resetrebatebatch.FieldCompletedAt)
+	}
+	if m.snapshot_expires_at != nil {
+		fields = append(fields, resetrebatebatch.FieldSnapshotExpiresAt)
+	}
+	if m.issued_at != nil {
+		fields = append(fields, resetrebatebatch.FieldIssuedAt)
+	}
+	if m.executed_at != nil {
+		fields = append(fields, resetrebatebatch.FieldExecutedAt)
+	}
+	if m.created_at != nil {
+		fields = append(fields, resetrebatebatch.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, resetrebatebatch.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ResetRebateBatchMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case resetrebatebatch.FieldGroupID:
+		return m.GroupID()
+	case resetrebatebatch.FieldGroupName:
+		return m.GroupName()
+	case resetrebatebatch.FieldAdminID:
+		return m.AdminID()
+	case resetrebatebatch.FieldAdminEmail:
+		return m.AdminEmail()
+	case resetrebatebatch.FieldPeriodStart:
+		return m.PeriodStart()
+	case resetrebatebatch.FieldPeriodEnd:
+		return m.PeriodEnd()
+	case resetrebatebatch.FieldStatus:
+		return m.Status()
+	case resetrebatebatch.FieldProgressTotal:
+		return m.ProgressTotal()
+	case resetrebatebatch.FieldProgressCompleted:
+		return m.ProgressCompleted()
+	case resetrebatebatch.FieldProgressSucceeded:
+		return m.ProgressSucceeded()
+	case resetrebatebatch.FieldProgressFailed:
+		return m.ProgressFailed()
+	case resetrebatebatch.FieldParticipantCount:
+		return m.ParticipantCount()
+	case resetrebatebatch.FieldActualAmount:
+		return m.ActualAmount()
+	case resetrebatebatch.FieldRefundableAmount:
+		return m.RefundableAmount()
+	case resetrebatebatch.FieldFailedAccountAmount:
+		return m.FailedAccountAmount()
+	case resetrebatebatch.FieldWeeklyUsagePercent:
+		return m.WeeklyUsagePercent()
+	case resetrebatebatch.FieldRefundablePercent:
+		return m.RefundablePercent()
+	case resetrebatebatch.FieldSuggestedRatio:
+		return m.SuggestedRatio()
+	case resetrebatebatch.FieldConfiguredRatio:
+		return m.ConfiguredRatio()
+	case resetrebatebatch.FieldIssuedUserCount:
+		return m.IssuedUserCount()
+	case resetrebatebatch.FieldExcludedUserCount:
+		return m.ExcludedUserCount()
+	case resetrebatebatch.FieldIssuedAmount:
+		return m.IssuedAmount()
+	case resetrebatebatch.FieldFailureCode:
+		return m.FailureCode()
+	case resetrebatebatch.FieldFailureMessage:
+		return m.FailureMessage()
+	case resetrebatebatch.FieldRebateReason:
+		return m.RebateReason()
+	case resetrebatebatch.FieldExecutionAttempts:
+		return m.ExecutionAttempts()
+	case resetrebatebatch.FieldCompletedAt:
+		return m.CompletedAt()
+	case resetrebatebatch.FieldSnapshotExpiresAt:
+		return m.SnapshotExpiresAt()
+	case resetrebatebatch.FieldIssuedAt:
+		return m.IssuedAt()
+	case resetrebatebatch.FieldExecutedAt:
+		return m.ExecutedAt()
+	case resetrebatebatch.FieldCreatedAt:
+		return m.CreatedAt()
+	case resetrebatebatch.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ResetRebateBatchMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case resetrebatebatch.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case resetrebatebatch.FieldGroupName:
+		return m.OldGroupName(ctx)
+	case resetrebatebatch.FieldAdminID:
+		return m.OldAdminID(ctx)
+	case resetrebatebatch.FieldAdminEmail:
+		return m.OldAdminEmail(ctx)
+	case resetrebatebatch.FieldPeriodStart:
+		return m.OldPeriodStart(ctx)
+	case resetrebatebatch.FieldPeriodEnd:
+		return m.OldPeriodEnd(ctx)
+	case resetrebatebatch.FieldStatus:
+		return m.OldStatus(ctx)
+	case resetrebatebatch.FieldProgressTotal:
+		return m.OldProgressTotal(ctx)
+	case resetrebatebatch.FieldProgressCompleted:
+		return m.OldProgressCompleted(ctx)
+	case resetrebatebatch.FieldProgressSucceeded:
+		return m.OldProgressSucceeded(ctx)
+	case resetrebatebatch.FieldProgressFailed:
+		return m.OldProgressFailed(ctx)
+	case resetrebatebatch.FieldParticipantCount:
+		return m.OldParticipantCount(ctx)
+	case resetrebatebatch.FieldActualAmount:
+		return m.OldActualAmount(ctx)
+	case resetrebatebatch.FieldRefundableAmount:
+		return m.OldRefundableAmount(ctx)
+	case resetrebatebatch.FieldFailedAccountAmount:
+		return m.OldFailedAccountAmount(ctx)
+	case resetrebatebatch.FieldWeeklyUsagePercent:
+		return m.OldWeeklyUsagePercent(ctx)
+	case resetrebatebatch.FieldRefundablePercent:
+		return m.OldRefundablePercent(ctx)
+	case resetrebatebatch.FieldSuggestedRatio:
+		return m.OldSuggestedRatio(ctx)
+	case resetrebatebatch.FieldConfiguredRatio:
+		return m.OldConfiguredRatio(ctx)
+	case resetrebatebatch.FieldIssuedUserCount:
+		return m.OldIssuedUserCount(ctx)
+	case resetrebatebatch.FieldExcludedUserCount:
+		return m.OldExcludedUserCount(ctx)
+	case resetrebatebatch.FieldIssuedAmount:
+		return m.OldIssuedAmount(ctx)
+	case resetrebatebatch.FieldFailureCode:
+		return m.OldFailureCode(ctx)
+	case resetrebatebatch.FieldFailureMessage:
+		return m.OldFailureMessage(ctx)
+	case resetrebatebatch.FieldRebateReason:
+		return m.OldRebateReason(ctx)
+	case resetrebatebatch.FieldExecutionAttempts:
+		return m.OldExecutionAttempts(ctx)
+	case resetrebatebatch.FieldCompletedAt:
+		return m.OldCompletedAt(ctx)
+	case resetrebatebatch.FieldSnapshotExpiresAt:
+		return m.OldSnapshotExpiresAt(ctx)
+	case resetrebatebatch.FieldIssuedAt:
+		return m.OldIssuedAt(ctx)
+	case resetrebatebatch.FieldExecutedAt:
+		return m.OldExecutedAt(ctx)
+	case resetrebatebatch.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case resetrebatebatch.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ResetRebateBatch field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ResetRebateBatchMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case resetrebatebatch.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case resetrebatebatch.FieldGroupName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupName(v)
+		return nil
+	case resetrebatebatch.FieldAdminID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAdminID(v)
+		return nil
+	case resetrebatebatch.FieldAdminEmail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAdminEmail(v)
+		return nil
+	case resetrebatebatch.FieldPeriodStart:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPeriodStart(v)
+		return nil
+	case resetrebatebatch.FieldPeriodEnd:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPeriodEnd(v)
+		return nil
+	case resetrebatebatch.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case resetrebatebatch.FieldProgressTotal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProgressTotal(v)
+		return nil
+	case resetrebatebatch.FieldProgressCompleted:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProgressCompleted(v)
+		return nil
+	case resetrebatebatch.FieldProgressSucceeded:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProgressSucceeded(v)
+		return nil
+	case resetrebatebatch.FieldProgressFailed:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProgressFailed(v)
+		return nil
+	case resetrebatebatch.FieldParticipantCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetParticipantCount(v)
+		return nil
+	case resetrebatebatch.FieldActualAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActualAmount(v)
+		return nil
+	case resetrebatebatch.FieldRefundableAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRefundableAmount(v)
+		return nil
+	case resetrebatebatch.FieldFailedAccountAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailedAccountAmount(v)
+		return nil
+	case resetrebatebatch.FieldWeeklyUsagePercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeeklyUsagePercent(v)
+		return nil
+	case resetrebatebatch.FieldRefundablePercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRefundablePercent(v)
+		return nil
+	case resetrebatebatch.FieldSuggestedRatio:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSuggestedRatio(v)
+		return nil
+	case resetrebatebatch.FieldConfiguredRatio:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetConfiguredRatio(v)
+		return nil
+	case resetrebatebatch.FieldIssuedUserCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIssuedUserCount(v)
+		return nil
+	case resetrebatebatch.FieldExcludedUserCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExcludedUserCount(v)
+		return nil
+	case resetrebatebatch.FieldIssuedAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIssuedAmount(v)
+		return nil
+	case resetrebatebatch.FieldFailureCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailureCode(v)
+		return nil
+	case resetrebatebatch.FieldFailureMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailureMessage(v)
+		return nil
+	case resetrebatebatch.FieldRebateReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRebateReason(v)
+		return nil
+	case resetrebatebatch.FieldExecutionAttempts:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExecutionAttempts(v)
+		return nil
+	case resetrebatebatch.FieldCompletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCompletedAt(v)
+		return nil
+	case resetrebatebatch.FieldSnapshotExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSnapshotExpiresAt(v)
+		return nil
+	case resetrebatebatch.FieldIssuedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIssuedAt(v)
+		return nil
+	case resetrebatebatch.FieldExecutedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExecutedAt(v)
+		return nil
+	case resetrebatebatch.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case resetrebatebatch.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ResetRebateBatch field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ResetRebateBatchMutation) AddedFields() []string {
+	var fields []string
+	if m.addgroup_id != nil {
+		fields = append(fields, resetrebatebatch.FieldGroupID)
+	}
+	if m.addadmin_id != nil {
+		fields = append(fields, resetrebatebatch.FieldAdminID)
+	}
+	if m.addprogress_total != nil {
+		fields = append(fields, resetrebatebatch.FieldProgressTotal)
+	}
+	if m.addprogress_completed != nil {
+		fields = append(fields, resetrebatebatch.FieldProgressCompleted)
+	}
+	if m.addprogress_succeeded != nil {
+		fields = append(fields, resetrebatebatch.FieldProgressSucceeded)
+	}
+	if m.addprogress_failed != nil {
+		fields = append(fields, resetrebatebatch.FieldProgressFailed)
+	}
+	if m.addparticipant_count != nil {
+		fields = append(fields, resetrebatebatch.FieldParticipantCount)
+	}
+	if m.addactual_amount != nil {
+		fields = append(fields, resetrebatebatch.FieldActualAmount)
+	}
+	if m.addrefundable_amount != nil {
+		fields = append(fields, resetrebatebatch.FieldRefundableAmount)
+	}
+	if m.addfailed_account_amount != nil {
+		fields = append(fields, resetrebatebatch.FieldFailedAccountAmount)
+	}
+	if m.addweekly_usage_percent != nil {
+		fields = append(fields, resetrebatebatch.FieldWeeklyUsagePercent)
+	}
+	if m.addrefundable_percent != nil {
+		fields = append(fields, resetrebatebatch.FieldRefundablePercent)
+	}
+	if m.addsuggested_ratio != nil {
+		fields = append(fields, resetrebatebatch.FieldSuggestedRatio)
+	}
+	if m.addconfigured_ratio != nil {
+		fields = append(fields, resetrebatebatch.FieldConfiguredRatio)
+	}
+	if m.addissued_user_count != nil {
+		fields = append(fields, resetrebatebatch.FieldIssuedUserCount)
+	}
+	if m.addexcluded_user_count != nil {
+		fields = append(fields, resetrebatebatch.FieldExcludedUserCount)
+	}
+	if m.addissued_amount != nil {
+		fields = append(fields, resetrebatebatch.FieldIssuedAmount)
+	}
+	if m.addexecution_attempts != nil {
+		fields = append(fields, resetrebatebatch.FieldExecutionAttempts)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ResetRebateBatchMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case resetrebatebatch.FieldGroupID:
+		return m.AddedGroupID()
+	case resetrebatebatch.FieldAdminID:
+		return m.AddedAdminID()
+	case resetrebatebatch.FieldProgressTotal:
+		return m.AddedProgressTotal()
+	case resetrebatebatch.FieldProgressCompleted:
+		return m.AddedProgressCompleted()
+	case resetrebatebatch.FieldProgressSucceeded:
+		return m.AddedProgressSucceeded()
+	case resetrebatebatch.FieldProgressFailed:
+		return m.AddedProgressFailed()
+	case resetrebatebatch.FieldParticipantCount:
+		return m.AddedParticipantCount()
+	case resetrebatebatch.FieldActualAmount:
+		return m.AddedActualAmount()
+	case resetrebatebatch.FieldRefundableAmount:
+		return m.AddedRefundableAmount()
+	case resetrebatebatch.FieldFailedAccountAmount:
+		return m.AddedFailedAccountAmount()
+	case resetrebatebatch.FieldWeeklyUsagePercent:
+		return m.AddedWeeklyUsagePercent()
+	case resetrebatebatch.FieldRefundablePercent:
+		return m.AddedRefundablePercent()
+	case resetrebatebatch.FieldSuggestedRatio:
+		return m.AddedSuggestedRatio()
+	case resetrebatebatch.FieldConfiguredRatio:
+		return m.AddedConfiguredRatio()
+	case resetrebatebatch.FieldIssuedUserCount:
+		return m.AddedIssuedUserCount()
+	case resetrebatebatch.FieldExcludedUserCount:
+		return m.AddedExcludedUserCount()
+	case resetrebatebatch.FieldIssuedAmount:
+		return m.AddedIssuedAmount()
+	case resetrebatebatch.FieldExecutionAttempts:
+		return m.AddedExecutionAttempts()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ResetRebateBatchMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case resetrebatebatch.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupID(v)
+		return nil
+	case resetrebatebatch.FieldAdminID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAdminID(v)
+		return nil
+	case resetrebatebatch.FieldProgressTotal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProgressTotal(v)
+		return nil
+	case resetrebatebatch.FieldProgressCompleted:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProgressCompleted(v)
+		return nil
+	case resetrebatebatch.FieldProgressSucceeded:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProgressSucceeded(v)
+		return nil
+	case resetrebatebatch.FieldProgressFailed:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProgressFailed(v)
+		return nil
+	case resetrebatebatch.FieldParticipantCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddParticipantCount(v)
+		return nil
+	case resetrebatebatch.FieldActualAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddActualAmount(v)
+		return nil
+	case resetrebatebatch.FieldRefundableAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRefundableAmount(v)
+		return nil
+	case resetrebatebatch.FieldFailedAccountAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFailedAccountAmount(v)
+		return nil
+	case resetrebatebatch.FieldWeeklyUsagePercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeeklyUsagePercent(v)
+		return nil
+	case resetrebatebatch.FieldRefundablePercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRefundablePercent(v)
+		return nil
+	case resetrebatebatch.FieldSuggestedRatio:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSuggestedRatio(v)
+		return nil
+	case resetrebatebatch.FieldConfiguredRatio:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddConfiguredRatio(v)
+		return nil
+	case resetrebatebatch.FieldIssuedUserCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddIssuedUserCount(v)
+		return nil
+	case resetrebatebatch.FieldExcludedUserCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddExcludedUserCount(v)
+		return nil
+	case resetrebatebatch.FieldIssuedAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddIssuedAmount(v)
+		return nil
+	case resetrebatebatch.FieldExecutionAttempts:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddExecutionAttempts(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ResetRebateBatch numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ResetRebateBatchMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(resetrebatebatch.FieldConfiguredRatio) {
+		fields = append(fields, resetrebatebatch.FieldConfiguredRatio)
+	}
+	if m.FieldCleared(resetrebatebatch.FieldCompletedAt) {
+		fields = append(fields, resetrebatebatch.FieldCompletedAt)
+	}
+	if m.FieldCleared(resetrebatebatch.FieldSnapshotExpiresAt) {
+		fields = append(fields, resetrebatebatch.FieldSnapshotExpiresAt)
+	}
+	if m.FieldCleared(resetrebatebatch.FieldIssuedAt) {
+		fields = append(fields, resetrebatebatch.FieldIssuedAt)
+	}
+	if m.FieldCleared(resetrebatebatch.FieldExecutedAt) {
+		fields = append(fields, resetrebatebatch.FieldExecutedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ResetRebateBatchMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ResetRebateBatchMutation) ClearField(name string) error {
+	switch name {
+	case resetrebatebatch.FieldConfiguredRatio:
+		m.ClearConfiguredRatio()
+		return nil
+	case resetrebatebatch.FieldCompletedAt:
+		m.ClearCompletedAt()
+		return nil
+	case resetrebatebatch.FieldSnapshotExpiresAt:
+		m.ClearSnapshotExpiresAt()
+		return nil
+	case resetrebatebatch.FieldIssuedAt:
+		m.ClearIssuedAt()
+		return nil
+	case resetrebatebatch.FieldExecutedAt:
+		m.ClearExecutedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ResetRebateBatch nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ResetRebateBatchMutation) ResetField(name string) error {
+	switch name {
+	case resetrebatebatch.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case resetrebatebatch.FieldGroupName:
+		m.ResetGroupName()
+		return nil
+	case resetrebatebatch.FieldAdminID:
+		m.ResetAdminID()
+		return nil
+	case resetrebatebatch.FieldAdminEmail:
+		m.ResetAdminEmail()
+		return nil
+	case resetrebatebatch.FieldPeriodStart:
+		m.ResetPeriodStart()
+		return nil
+	case resetrebatebatch.FieldPeriodEnd:
+		m.ResetPeriodEnd()
+		return nil
+	case resetrebatebatch.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case resetrebatebatch.FieldProgressTotal:
+		m.ResetProgressTotal()
+		return nil
+	case resetrebatebatch.FieldProgressCompleted:
+		m.ResetProgressCompleted()
+		return nil
+	case resetrebatebatch.FieldProgressSucceeded:
+		m.ResetProgressSucceeded()
+		return nil
+	case resetrebatebatch.FieldProgressFailed:
+		m.ResetProgressFailed()
+		return nil
+	case resetrebatebatch.FieldParticipantCount:
+		m.ResetParticipantCount()
+		return nil
+	case resetrebatebatch.FieldActualAmount:
+		m.ResetActualAmount()
+		return nil
+	case resetrebatebatch.FieldRefundableAmount:
+		m.ResetRefundableAmount()
+		return nil
+	case resetrebatebatch.FieldFailedAccountAmount:
+		m.ResetFailedAccountAmount()
+		return nil
+	case resetrebatebatch.FieldWeeklyUsagePercent:
+		m.ResetWeeklyUsagePercent()
+		return nil
+	case resetrebatebatch.FieldRefundablePercent:
+		m.ResetRefundablePercent()
+		return nil
+	case resetrebatebatch.FieldSuggestedRatio:
+		m.ResetSuggestedRatio()
+		return nil
+	case resetrebatebatch.FieldConfiguredRatio:
+		m.ResetConfiguredRatio()
+		return nil
+	case resetrebatebatch.FieldIssuedUserCount:
+		m.ResetIssuedUserCount()
+		return nil
+	case resetrebatebatch.FieldExcludedUserCount:
+		m.ResetExcludedUserCount()
+		return nil
+	case resetrebatebatch.FieldIssuedAmount:
+		m.ResetIssuedAmount()
+		return nil
+	case resetrebatebatch.FieldFailureCode:
+		m.ResetFailureCode()
+		return nil
+	case resetrebatebatch.FieldFailureMessage:
+		m.ResetFailureMessage()
+		return nil
+	case resetrebatebatch.FieldRebateReason:
+		m.ResetRebateReason()
+		return nil
+	case resetrebatebatch.FieldExecutionAttempts:
+		m.ResetExecutionAttempts()
+		return nil
+	case resetrebatebatch.FieldCompletedAt:
+		m.ResetCompletedAt()
+		return nil
+	case resetrebatebatch.FieldSnapshotExpiresAt:
+		m.ResetSnapshotExpiresAt()
+		return nil
+	case resetrebatebatch.FieldIssuedAt:
+		m.ResetIssuedAt()
+		return nil
+	case resetrebatebatch.FieldExecutedAt:
+		m.ResetExecutedAt()
+		return nil
+	case resetrebatebatch.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case resetrebatebatch.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ResetRebateBatch field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ResetRebateBatchMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ResetRebateBatchMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ResetRebateBatchMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ResetRebateBatchMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ResetRebateBatchMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ResetRebateBatchMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ResetRebateBatchMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown ResetRebateBatch unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ResetRebateBatchMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown ResetRebateBatch edge %s", name)
+}
+
+// ResetRebateUserItemMutation represents an operation that mutates the ResetRebateUserItem nodes in the graph.
+type ResetRebateUserItemMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int64
+	batch_id         *int64
+	addbatch_id      *int64
+	user_id          *int64
+	adduser_id       *int64
+	email            *string
+	username         *string
+	user_status      *string
+	user_deleted     *bool
+	actual_amount    *float64
+	addactual_amount *float64
+	rebate_ratio     *int
+	addrebate_ratio  *int
+	rebate_amount    *float64
+	addrebate_amount *float64
+	issued           *bool
+	exclusion_reason *string
+	grant_id         *int64
+	addgrant_id      *int64
+	expires_at       *time.Time
+	clearedFields    map[string]struct{}
+	done             bool
+	oldValue         func(context.Context) (*ResetRebateUserItem, error)
+	predicates       []predicate.ResetRebateUserItem
+}
+
+var _ ent.Mutation = (*ResetRebateUserItemMutation)(nil)
+
+// resetrebateuseritemOption allows management of the mutation configuration using functional options.
+type resetrebateuseritemOption func(*ResetRebateUserItemMutation)
+
+// newResetRebateUserItemMutation creates new mutation for the ResetRebateUserItem entity.
+func newResetRebateUserItemMutation(c config, op Op, opts ...resetrebateuseritemOption) *ResetRebateUserItemMutation {
+	m := &ResetRebateUserItemMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeResetRebateUserItem,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withResetRebateUserItemID sets the ID field of the mutation.
+func withResetRebateUserItemID(id int64) resetrebateuseritemOption {
+	return func(m *ResetRebateUserItemMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ResetRebateUserItem
+		)
+		m.oldValue = func(ctx context.Context) (*ResetRebateUserItem, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ResetRebateUserItem.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withResetRebateUserItem sets the old ResetRebateUserItem of the mutation.
+func withResetRebateUserItem(node *ResetRebateUserItem) resetrebateuseritemOption {
+	return func(m *ResetRebateUserItemMutation) {
+		m.oldValue = func(context.Context) (*ResetRebateUserItem, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ResetRebateUserItemMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ResetRebateUserItemMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ResetRebateUserItemMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ResetRebateUserItemMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ResetRebateUserItem.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetBatchID sets the "batch_id" field.
+func (m *ResetRebateUserItemMutation) SetBatchID(i int64) {
+	m.batch_id = &i
+	m.addbatch_id = nil
+}
+
+// BatchID returns the value of the "batch_id" field in the mutation.
+func (m *ResetRebateUserItemMutation) BatchID() (r int64, exists bool) {
+	v := m.batch_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBatchID returns the old "batch_id" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldBatchID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBatchID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBatchID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBatchID: %w", err)
+	}
+	return oldValue.BatchID, nil
+}
+
+// AddBatchID adds i to the "batch_id" field.
+func (m *ResetRebateUserItemMutation) AddBatchID(i int64) {
+	if m.addbatch_id != nil {
+		*m.addbatch_id += i
+	} else {
+		m.addbatch_id = &i
+	}
+}
+
+// AddedBatchID returns the value that was added to the "batch_id" field in this mutation.
+func (m *ResetRebateUserItemMutation) AddedBatchID() (r int64, exists bool) {
+	v := m.addbatch_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBatchID resets all changes to the "batch_id" field.
+func (m *ResetRebateUserItemMutation) ResetBatchID() {
+	m.batch_id = nil
+	m.addbatch_id = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *ResetRebateUserItemMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *ResetRebateUserItemMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *ResetRebateUserItemMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *ResetRebateUserItemMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *ResetRebateUserItemMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetEmail sets the "email" field.
+func (m *ResetRebateUserItemMutation) SetEmail(s string) {
+	m.email = &s
+}
+
+// Email returns the value of the "email" field in the mutation.
+func (m *ResetRebateUserItemMutation) Email() (r string, exists bool) {
+	v := m.email
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmail returns the old "email" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldEmail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmail: %w", err)
+	}
+	return oldValue.Email, nil
+}
+
+// ResetEmail resets all changes to the "email" field.
+func (m *ResetRebateUserItemMutation) ResetEmail() {
+	m.email = nil
+}
+
+// SetUsername sets the "username" field.
+func (m *ResetRebateUserItemMutation) SetUsername(s string) {
+	m.username = &s
+}
+
+// Username returns the value of the "username" field in the mutation.
+func (m *ResetRebateUserItemMutation) Username() (r string, exists bool) {
+	v := m.username
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsername returns the old "username" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldUsername(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsername is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsername requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsername: %w", err)
+	}
+	return oldValue.Username, nil
+}
+
+// ResetUsername resets all changes to the "username" field.
+func (m *ResetRebateUserItemMutation) ResetUsername() {
+	m.username = nil
+}
+
+// SetUserStatus sets the "user_status" field.
+func (m *ResetRebateUserItemMutation) SetUserStatus(s string) {
+	m.user_status = &s
+}
+
+// UserStatus returns the value of the "user_status" field in the mutation.
+func (m *ResetRebateUserItemMutation) UserStatus() (r string, exists bool) {
+	v := m.user_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserStatus returns the old "user_status" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldUserStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserStatus: %w", err)
+	}
+	return oldValue.UserStatus, nil
+}
+
+// ResetUserStatus resets all changes to the "user_status" field.
+func (m *ResetRebateUserItemMutation) ResetUserStatus() {
+	m.user_status = nil
+}
+
+// SetUserDeleted sets the "user_deleted" field.
+func (m *ResetRebateUserItemMutation) SetUserDeleted(b bool) {
+	m.user_deleted = &b
+}
+
+// UserDeleted returns the value of the "user_deleted" field in the mutation.
+func (m *ResetRebateUserItemMutation) UserDeleted() (r bool, exists bool) {
+	v := m.user_deleted
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserDeleted returns the old "user_deleted" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldUserDeleted(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserDeleted is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserDeleted requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserDeleted: %w", err)
+	}
+	return oldValue.UserDeleted, nil
+}
+
+// ResetUserDeleted resets all changes to the "user_deleted" field.
+func (m *ResetRebateUserItemMutation) ResetUserDeleted() {
+	m.user_deleted = nil
+}
+
+// SetActualAmount sets the "actual_amount" field.
+func (m *ResetRebateUserItemMutation) SetActualAmount(f float64) {
+	m.actual_amount = &f
+	m.addactual_amount = nil
+}
+
+// ActualAmount returns the value of the "actual_amount" field in the mutation.
+func (m *ResetRebateUserItemMutation) ActualAmount() (r float64, exists bool) {
+	v := m.actual_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActualAmount returns the old "actual_amount" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldActualAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActualAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActualAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActualAmount: %w", err)
+	}
+	return oldValue.ActualAmount, nil
+}
+
+// AddActualAmount adds f to the "actual_amount" field.
+func (m *ResetRebateUserItemMutation) AddActualAmount(f float64) {
+	if m.addactual_amount != nil {
+		*m.addactual_amount += f
+	} else {
+		m.addactual_amount = &f
+	}
+}
+
+// AddedActualAmount returns the value that was added to the "actual_amount" field in this mutation.
+func (m *ResetRebateUserItemMutation) AddedActualAmount() (r float64, exists bool) {
+	v := m.addactual_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetActualAmount resets all changes to the "actual_amount" field.
+func (m *ResetRebateUserItemMutation) ResetActualAmount() {
+	m.actual_amount = nil
+	m.addactual_amount = nil
+}
+
+// SetRebateRatio sets the "rebate_ratio" field.
+func (m *ResetRebateUserItemMutation) SetRebateRatio(i int) {
+	m.rebate_ratio = &i
+	m.addrebate_ratio = nil
+}
+
+// RebateRatio returns the value of the "rebate_ratio" field in the mutation.
+func (m *ResetRebateUserItemMutation) RebateRatio() (r int, exists bool) {
+	v := m.rebate_ratio
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRebateRatio returns the old "rebate_ratio" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldRebateRatio(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRebateRatio is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRebateRatio requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRebateRatio: %w", err)
+	}
+	return oldValue.RebateRatio, nil
+}
+
+// AddRebateRatio adds i to the "rebate_ratio" field.
+func (m *ResetRebateUserItemMutation) AddRebateRatio(i int) {
+	if m.addrebate_ratio != nil {
+		*m.addrebate_ratio += i
+	} else {
+		m.addrebate_ratio = &i
+	}
+}
+
+// AddedRebateRatio returns the value that was added to the "rebate_ratio" field in this mutation.
+func (m *ResetRebateUserItemMutation) AddedRebateRatio() (r int, exists bool) {
+	v := m.addrebate_ratio
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearRebateRatio clears the value of the "rebate_ratio" field.
+func (m *ResetRebateUserItemMutation) ClearRebateRatio() {
+	m.rebate_ratio = nil
+	m.addrebate_ratio = nil
+	m.clearedFields[resetrebateuseritem.FieldRebateRatio] = struct{}{}
+}
+
+// RebateRatioCleared returns if the "rebate_ratio" field was cleared in this mutation.
+func (m *ResetRebateUserItemMutation) RebateRatioCleared() bool {
+	_, ok := m.clearedFields[resetrebateuseritem.FieldRebateRatio]
+	return ok
+}
+
+// ResetRebateRatio resets all changes to the "rebate_ratio" field.
+func (m *ResetRebateUserItemMutation) ResetRebateRatio() {
+	m.rebate_ratio = nil
+	m.addrebate_ratio = nil
+	delete(m.clearedFields, resetrebateuseritem.FieldRebateRatio)
+}
+
+// SetRebateAmount sets the "rebate_amount" field.
+func (m *ResetRebateUserItemMutation) SetRebateAmount(f float64) {
+	m.rebate_amount = &f
+	m.addrebate_amount = nil
+}
+
+// RebateAmount returns the value of the "rebate_amount" field in the mutation.
+func (m *ResetRebateUserItemMutation) RebateAmount() (r float64, exists bool) {
+	v := m.rebate_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRebateAmount returns the old "rebate_amount" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldRebateAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRebateAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRebateAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRebateAmount: %w", err)
+	}
+	return oldValue.RebateAmount, nil
+}
+
+// AddRebateAmount adds f to the "rebate_amount" field.
+func (m *ResetRebateUserItemMutation) AddRebateAmount(f float64) {
+	if m.addrebate_amount != nil {
+		*m.addrebate_amount += f
+	} else {
+		m.addrebate_amount = &f
+	}
+}
+
+// AddedRebateAmount returns the value that was added to the "rebate_amount" field in this mutation.
+func (m *ResetRebateUserItemMutation) AddedRebateAmount() (r float64, exists bool) {
+	v := m.addrebate_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRebateAmount resets all changes to the "rebate_amount" field.
+func (m *ResetRebateUserItemMutation) ResetRebateAmount() {
+	m.rebate_amount = nil
+	m.addrebate_amount = nil
+}
+
+// SetIssued sets the "issued" field.
+func (m *ResetRebateUserItemMutation) SetIssued(b bool) {
+	m.issued = &b
+}
+
+// Issued returns the value of the "issued" field in the mutation.
+func (m *ResetRebateUserItemMutation) Issued() (r bool, exists bool) {
+	v := m.issued
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIssued returns the old "issued" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldIssued(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIssued is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIssued requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIssued: %w", err)
+	}
+	return oldValue.Issued, nil
+}
+
+// ResetIssued resets all changes to the "issued" field.
+func (m *ResetRebateUserItemMutation) ResetIssued() {
+	m.issued = nil
+}
+
+// SetExclusionReason sets the "exclusion_reason" field.
+func (m *ResetRebateUserItemMutation) SetExclusionReason(s string) {
+	m.exclusion_reason = &s
+}
+
+// ExclusionReason returns the value of the "exclusion_reason" field in the mutation.
+func (m *ResetRebateUserItemMutation) ExclusionReason() (r string, exists bool) {
+	v := m.exclusion_reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExclusionReason returns the old "exclusion_reason" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldExclusionReason(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExclusionReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExclusionReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExclusionReason: %w", err)
+	}
+	return oldValue.ExclusionReason, nil
+}
+
+// ResetExclusionReason resets all changes to the "exclusion_reason" field.
+func (m *ResetRebateUserItemMutation) ResetExclusionReason() {
+	m.exclusion_reason = nil
+}
+
+// SetGrantID sets the "grant_id" field.
+func (m *ResetRebateUserItemMutation) SetGrantID(i int64) {
+	m.grant_id = &i
+	m.addgrant_id = nil
+}
+
+// GrantID returns the value of the "grant_id" field in the mutation.
+func (m *ResetRebateUserItemMutation) GrantID() (r int64, exists bool) {
+	v := m.grant_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGrantID returns the old "grant_id" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldGrantID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGrantID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGrantID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGrantID: %w", err)
+	}
+	return oldValue.GrantID, nil
+}
+
+// AddGrantID adds i to the "grant_id" field.
+func (m *ResetRebateUserItemMutation) AddGrantID(i int64) {
+	if m.addgrant_id != nil {
+		*m.addgrant_id += i
+	} else {
+		m.addgrant_id = &i
+	}
+}
+
+// AddedGrantID returns the value that was added to the "grant_id" field in this mutation.
+func (m *ResetRebateUserItemMutation) AddedGrantID() (r int64, exists bool) {
+	v := m.addgrant_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearGrantID clears the value of the "grant_id" field.
+func (m *ResetRebateUserItemMutation) ClearGrantID() {
+	m.grant_id = nil
+	m.addgrant_id = nil
+	m.clearedFields[resetrebateuseritem.FieldGrantID] = struct{}{}
+}
+
+// GrantIDCleared returns if the "grant_id" field was cleared in this mutation.
+func (m *ResetRebateUserItemMutation) GrantIDCleared() bool {
+	_, ok := m.clearedFields[resetrebateuseritem.FieldGrantID]
+	return ok
+}
+
+// ResetGrantID resets all changes to the "grant_id" field.
+func (m *ResetRebateUserItemMutation) ResetGrantID() {
+	m.grant_id = nil
+	m.addgrant_id = nil
+	delete(m.clearedFields, resetrebateuseritem.FieldGrantID)
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *ResetRebateUserItemMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *ResetRebateUserItemMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (m *ResetRebateUserItemMutation) ClearExpiresAt() {
+	m.expires_at = nil
+	m.clearedFields[resetrebateuseritem.FieldExpiresAt] = struct{}{}
+}
+
+// ExpiresAtCleared returns if the "expires_at" field was cleared in this mutation.
+func (m *ResetRebateUserItemMutation) ExpiresAtCleared() bool {
+	_, ok := m.clearedFields[resetrebateuseritem.FieldExpiresAt]
+	return ok
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *ResetRebateUserItemMutation) ResetExpiresAt() {
+	m.expires_at = nil
+	delete(m.clearedFields, resetrebateuseritem.FieldExpiresAt)
+}
+
+// Where appends a list predicates to the ResetRebateUserItemMutation builder.
+func (m *ResetRebateUserItemMutation) Where(ps ...predicate.ResetRebateUserItem) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ResetRebateUserItemMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ResetRebateUserItemMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ResetRebateUserItem, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ResetRebateUserItemMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ResetRebateUserItemMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ResetRebateUserItem).
+func (m *ResetRebateUserItemMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ResetRebateUserItemMutation) Fields() []string {
+	fields := make([]string, 0, 13)
+	if m.batch_id != nil {
+		fields = append(fields, resetrebateuseritem.FieldBatchID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, resetrebateuseritem.FieldUserID)
+	}
+	if m.email != nil {
+		fields = append(fields, resetrebateuseritem.FieldEmail)
+	}
+	if m.username != nil {
+		fields = append(fields, resetrebateuseritem.FieldUsername)
+	}
+	if m.user_status != nil {
+		fields = append(fields, resetrebateuseritem.FieldUserStatus)
+	}
+	if m.user_deleted != nil {
+		fields = append(fields, resetrebateuseritem.FieldUserDeleted)
+	}
+	if m.actual_amount != nil {
+		fields = append(fields, resetrebateuseritem.FieldActualAmount)
+	}
+	if m.rebate_ratio != nil {
+		fields = append(fields, resetrebateuseritem.FieldRebateRatio)
+	}
+	if m.rebate_amount != nil {
+		fields = append(fields, resetrebateuseritem.FieldRebateAmount)
+	}
+	if m.issued != nil {
+		fields = append(fields, resetrebateuseritem.FieldIssued)
+	}
+	if m.exclusion_reason != nil {
+		fields = append(fields, resetrebateuseritem.FieldExclusionReason)
+	}
+	if m.grant_id != nil {
+		fields = append(fields, resetrebateuseritem.FieldGrantID)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, resetrebateuseritem.FieldExpiresAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ResetRebateUserItemMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case resetrebateuseritem.FieldBatchID:
+		return m.BatchID()
+	case resetrebateuseritem.FieldUserID:
+		return m.UserID()
+	case resetrebateuseritem.FieldEmail:
+		return m.Email()
+	case resetrebateuseritem.FieldUsername:
+		return m.Username()
+	case resetrebateuseritem.FieldUserStatus:
+		return m.UserStatus()
+	case resetrebateuseritem.FieldUserDeleted:
+		return m.UserDeleted()
+	case resetrebateuseritem.FieldActualAmount:
+		return m.ActualAmount()
+	case resetrebateuseritem.FieldRebateRatio:
+		return m.RebateRatio()
+	case resetrebateuseritem.FieldRebateAmount:
+		return m.RebateAmount()
+	case resetrebateuseritem.FieldIssued:
+		return m.Issued()
+	case resetrebateuseritem.FieldExclusionReason:
+		return m.ExclusionReason()
+	case resetrebateuseritem.FieldGrantID:
+		return m.GrantID()
+	case resetrebateuseritem.FieldExpiresAt:
+		return m.ExpiresAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ResetRebateUserItemMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case resetrebateuseritem.FieldBatchID:
+		return m.OldBatchID(ctx)
+	case resetrebateuseritem.FieldUserID:
+		return m.OldUserID(ctx)
+	case resetrebateuseritem.FieldEmail:
+		return m.OldEmail(ctx)
+	case resetrebateuseritem.FieldUsername:
+		return m.OldUsername(ctx)
+	case resetrebateuseritem.FieldUserStatus:
+		return m.OldUserStatus(ctx)
+	case resetrebateuseritem.FieldUserDeleted:
+		return m.OldUserDeleted(ctx)
+	case resetrebateuseritem.FieldActualAmount:
+		return m.OldActualAmount(ctx)
+	case resetrebateuseritem.FieldRebateRatio:
+		return m.OldRebateRatio(ctx)
+	case resetrebateuseritem.FieldRebateAmount:
+		return m.OldRebateAmount(ctx)
+	case resetrebateuseritem.FieldIssued:
+		return m.OldIssued(ctx)
+	case resetrebateuseritem.FieldExclusionReason:
+		return m.OldExclusionReason(ctx)
+	case resetrebateuseritem.FieldGrantID:
+		return m.OldGrantID(ctx)
+	case resetrebateuseritem.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ResetRebateUserItem field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ResetRebateUserItemMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case resetrebateuseritem.FieldBatchID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBatchID(v)
+		return nil
+	case resetrebateuseritem.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case resetrebateuseritem.FieldEmail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmail(v)
+		return nil
+	case resetrebateuseritem.FieldUsername:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsername(v)
+		return nil
+	case resetrebateuseritem.FieldUserStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserStatus(v)
+		return nil
+	case resetrebateuseritem.FieldUserDeleted:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserDeleted(v)
+		return nil
+	case resetrebateuseritem.FieldActualAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActualAmount(v)
+		return nil
+	case resetrebateuseritem.FieldRebateRatio:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRebateRatio(v)
+		return nil
+	case resetrebateuseritem.FieldRebateAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRebateAmount(v)
+		return nil
+	case resetrebateuseritem.FieldIssued:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIssued(v)
+		return nil
+	case resetrebateuseritem.FieldExclusionReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExclusionReason(v)
+		return nil
+	case resetrebateuseritem.FieldGrantID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGrantID(v)
+		return nil
+	case resetrebateuseritem.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ResetRebateUserItem field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ResetRebateUserItemMutation) AddedFields() []string {
+	var fields []string
+	if m.addbatch_id != nil {
+		fields = append(fields, resetrebateuseritem.FieldBatchID)
+	}
+	if m.adduser_id != nil {
+		fields = append(fields, resetrebateuseritem.FieldUserID)
+	}
+	if m.addactual_amount != nil {
+		fields = append(fields, resetrebateuseritem.FieldActualAmount)
+	}
+	if m.addrebate_ratio != nil {
+		fields = append(fields, resetrebateuseritem.FieldRebateRatio)
+	}
+	if m.addrebate_amount != nil {
+		fields = append(fields, resetrebateuseritem.FieldRebateAmount)
+	}
+	if m.addgrant_id != nil {
+		fields = append(fields, resetrebateuseritem.FieldGrantID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ResetRebateUserItemMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case resetrebateuseritem.FieldBatchID:
+		return m.AddedBatchID()
+	case resetrebateuseritem.FieldUserID:
+		return m.AddedUserID()
+	case resetrebateuseritem.FieldActualAmount:
+		return m.AddedActualAmount()
+	case resetrebateuseritem.FieldRebateRatio:
+		return m.AddedRebateRatio()
+	case resetrebateuseritem.FieldRebateAmount:
+		return m.AddedRebateAmount()
+	case resetrebateuseritem.FieldGrantID:
+		return m.AddedGrantID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ResetRebateUserItemMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case resetrebateuseritem.FieldBatchID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBatchID(v)
+		return nil
+	case resetrebateuseritem.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case resetrebateuseritem.FieldActualAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddActualAmount(v)
+		return nil
+	case resetrebateuseritem.FieldRebateRatio:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRebateRatio(v)
+		return nil
+	case resetrebateuseritem.FieldRebateAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRebateAmount(v)
+		return nil
+	case resetrebateuseritem.FieldGrantID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGrantID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ResetRebateUserItem numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ResetRebateUserItemMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(resetrebateuseritem.FieldRebateRatio) {
+		fields = append(fields, resetrebateuseritem.FieldRebateRatio)
+	}
+	if m.FieldCleared(resetrebateuseritem.FieldGrantID) {
+		fields = append(fields, resetrebateuseritem.FieldGrantID)
+	}
+	if m.FieldCleared(resetrebateuseritem.FieldExpiresAt) {
+		fields = append(fields, resetrebateuseritem.FieldExpiresAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ResetRebateUserItemMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ResetRebateUserItemMutation) ClearField(name string) error {
+	switch name {
+	case resetrebateuseritem.FieldRebateRatio:
+		m.ClearRebateRatio()
+		return nil
+	case resetrebateuseritem.FieldGrantID:
+		m.ClearGrantID()
+		return nil
+	case resetrebateuseritem.FieldExpiresAt:
+		m.ClearExpiresAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ResetRebateUserItem nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ResetRebateUserItemMutation) ResetField(name string) error {
+	switch name {
+	case resetrebateuseritem.FieldBatchID:
+		m.ResetBatchID()
+		return nil
+	case resetrebateuseritem.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case resetrebateuseritem.FieldEmail:
+		m.ResetEmail()
+		return nil
+	case resetrebateuseritem.FieldUsername:
+		m.ResetUsername()
+		return nil
+	case resetrebateuseritem.FieldUserStatus:
+		m.ResetUserStatus()
+		return nil
+	case resetrebateuseritem.FieldUserDeleted:
+		m.ResetUserDeleted()
+		return nil
+	case resetrebateuseritem.FieldActualAmount:
+		m.ResetActualAmount()
+		return nil
+	case resetrebateuseritem.FieldRebateRatio:
+		m.ResetRebateRatio()
+		return nil
+	case resetrebateuseritem.FieldRebateAmount:
+		m.ResetRebateAmount()
+		return nil
+	case resetrebateuseritem.FieldIssued:
+		m.ResetIssued()
+		return nil
+	case resetrebateuseritem.FieldExclusionReason:
+		m.ResetExclusionReason()
+		return nil
+	case resetrebateuseritem.FieldGrantID:
+		m.ResetGrantID()
+		return nil
+	case resetrebateuseritem.FieldExpiresAt:
+		m.ResetExpiresAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ResetRebateUserItem field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ResetRebateUserItemMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ResetRebateUserItemMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ResetRebateUserItemMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ResetRebateUserItemMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ResetRebateUserItemMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ResetRebateUserItemMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ResetRebateUserItemMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown ResetRebateUserItem unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ResetRebateUserItemMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown ResetRebateUserItem edge %s", name)
 }
 
 // SecuritySecretMutation represents an operation that mutates the SecuritySecret nodes in the graph.

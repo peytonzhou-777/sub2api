@@ -1548,6 +1548,149 @@ var (
 			},
 		},
 	}
+	// ResetRebateAccountItemsColumns holds the columns for the "reset_rebate_account_items" table.
+	ResetRebateAccountItemsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "batch_id", Type: field.TypeInt64},
+		{Name: "account_id", Type: field.TypeInt64},
+		{Name: "account_name", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "platform", Type: field.TypeString, Size: 50, Default: ""},
+		{Name: "account_type", Type: field.TypeString, Size: 20, Default: ""},
+		{Name: "is_shadow", Type: field.TypeBool, Default: false},
+		{Name: "in_group", Type: field.TypeBool, Default: false},
+		{Name: "schedulable", Type: field.TypeBool, Default: false},
+		{Name: "consumed_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "available_count", Type: field.TypeInt, Nullable: true},
+		{Name: "weekly_used_percent", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(12,8)"}},
+		{Name: "weekly_window_seconds", Type: field.TypeInt64, Nullable: true},
+		{Name: "included", Type: field.TypeBool, Default: false},
+		{Name: "exclusion_reason", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "error_code", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "error_message", Type: field.TypeString, Size: 240, Default: ""},
+		{Name: "fetched_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// ResetRebateAccountItemsTable holds the schema information for the "reset_rebate_account_items" table.
+	ResetRebateAccountItemsTable = &schema.Table{
+		Name:       "reset_rebate_account_items",
+		Columns:    ResetRebateAccountItemsColumns,
+		PrimaryKey: []*schema.Column{ResetRebateAccountItemsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "resetrebateaccountitem_batch_id_account_id",
+				Unique:  true,
+				Columns: []*schema.Column{ResetRebateAccountItemsColumns[1], ResetRebateAccountItemsColumns[2]},
+			},
+			{
+				Name:    "resetrebateaccountitem_batch_id_included",
+				Unique:  false,
+				Columns: []*schema.Column{ResetRebateAccountItemsColumns[1], ResetRebateAccountItemsColumns[13]},
+			},
+		},
+	}
+	// ResetRebateBatchesColumns holds the columns for the "reset_rebate_batches" table.
+	ResetRebateBatchesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "group_id", Type: field.TypeInt64},
+		{Name: "group_name", Type: field.TypeString, Size: 100},
+		{Name: "admin_id", Type: field.TypeInt64},
+		{Name: "admin_email", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "period_start", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "period_end", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "status", Type: field.TypeString, Size: 20, Default: "running"},
+		{Name: "progress_total", Type: field.TypeInt, Default: 0},
+		{Name: "progress_completed", Type: field.TypeInt, Default: 0},
+		{Name: "progress_succeeded", Type: field.TypeInt, Default: 0},
+		{Name: "progress_failed", Type: field.TypeInt, Default: 0},
+		{Name: "participant_count", Type: field.TypeInt, Default: 0},
+		{Name: "actual_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "refundable_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "failed_account_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "weekly_usage_percent", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(12,8)"}},
+		{Name: "refundable_percent", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(12,8)"}},
+		{Name: "suggested_ratio", Type: field.TypeInt, Default: 0},
+		{Name: "configured_ratio", Type: field.TypeInt, Nullable: true},
+		{Name: "issued_user_count", Type: field.TypeInt, Default: 0},
+		{Name: "excluded_user_count", Type: field.TypeInt, Default: 0},
+		{Name: "issued_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "failure_code", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "failure_message", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "rebate_reason", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "execution_attempts", Type: field.TypeInt, Default: 0},
+		{Name: "completed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "snapshot_expires_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "issued_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "executed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// ResetRebateBatchesTable holds the schema information for the "reset_rebate_batches" table.
+	ResetRebateBatchesTable = &schema.Table{
+		Name:       "reset_rebate_batches",
+		Columns:    ResetRebateBatchesColumns,
+		PrimaryKey: []*schema.Column{ResetRebateBatchesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "resetrebatebatch_group_id_period_start_period_end",
+				Unique:  false,
+				Columns: []*schema.Column{ResetRebateBatchesColumns[1], ResetRebateBatchesColumns[5], ResetRebateBatchesColumns[6]},
+			},
+			{
+				Name:    "resetrebatebatch_admin_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{ResetRebateBatchesColumns[3], ResetRebateBatchesColumns[31]},
+			},
+			{
+				Name:    "resetrebatebatch_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{ResetRebateBatchesColumns[7], ResetRebateBatchesColumns[31]},
+			},
+		},
+	}
+	// ResetRebateUserItemsColumns holds the columns for the "reset_rebate_user_items" table.
+	ResetRebateUserItemsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "batch_id", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "email", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "username", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "user_status", Type: field.TypeString, Size: 20, Default: ""},
+		{Name: "user_deleted", Type: field.TypeBool, Default: false},
+		{Name: "actual_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "rebate_ratio", Type: field.TypeInt, Nullable: true},
+		{Name: "rebate_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "issued", Type: field.TypeBool, Default: false},
+		{Name: "exclusion_reason", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "grant_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// ResetRebateUserItemsTable holds the schema information for the "reset_rebate_user_items" table.
+	ResetRebateUserItemsTable = &schema.Table{
+		Name:       "reset_rebate_user_items",
+		Columns:    ResetRebateUserItemsColumns,
+		PrimaryKey: []*schema.Column{ResetRebateUserItemsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "resetrebateuseritem_batch_id_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{ResetRebateUserItemsColumns[1], ResetRebateUserItemsColumns[2]},
+			},
+			{
+				Name:    "resetrebateuseritem_batch_id_rebate_amount",
+				Unique:  false,
+				Columns: []*schema.Column{ResetRebateUserItemsColumns[1], ResetRebateUserItemsColumns[9]},
+			},
+			{
+				Name:    "resetrebateuseritem_batch_id_email",
+				Unique:  false,
+				Columns: []*schema.Column{ResetRebateUserItemsColumns[1], ResetRebateUserItemsColumns[3]},
+			},
+			{
+				Name:    "resetrebateuseritem_batch_id_username",
+				Unique:  false,
+				Columns: []*schema.Column{ResetRebateUserItemsColumns[1], ResetRebateUserItemsColumns[4]},
+			},
+		},
+	}
 	// SecuritySecretsColumns holds the columns for the "security_secrets" table.
 	SecuritySecretsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -2259,6 +2402,9 @@ var (
 		RechargeBonusCampaignsTable,
 		RechargeBonusParticipationsTable,
 		RedeemCodesTable,
+		ResetRebateAccountItemsTable,
+		ResetRebateBatchesTable,
+		ResetRebateUserItemsTable,
 		SecuritySecretsTable,
 		SettingsTable,
 		SubscriptionPlansTable,
@@ -2386,6 +2532,15 @@ func init() {
 	RedeemCodesTable.ForeignKeys[1].RefTable = UsersTable
 	RedeemCodesTable.Annotation = &entsql.Annotation{
 		Table: "redeem_codes",
+	}
+	ResetRebateAccountItemsTable.Annotation = &entsql.Annotation{
+		Table: "reset_rebate_account_items",
+	}
+	ResetRebateBatchesTable.Annotation = &entsql.Annotation{
+		Table: "reset_rebate_batches",
+	}
+	ResetRebateUserItemsTable.Annotation = &entsql.Annotation{
+		Table: "reset_rebate_user_items",
 	}
 	SecuritySecretsTable.Annotation = &entsql.Annotation{
 		Table: "security_secrets",

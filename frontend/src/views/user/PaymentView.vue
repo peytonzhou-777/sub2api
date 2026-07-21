@@ -325,7 +325,7 @@
                 >
                   <div class="flex items-center justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
                     <h3 class="font-semibold text-gray-900 dark:text-white">
-                      {{ t('payment.account.limitedCreditTitle', { id: credit.id }) }}
+                      {{ limitedCreditTitle(credit) }}
                     </h3>
                     <span class="shrink-0 text-xs" :class="limitedCreditExpiryClass(credit.expires_at)">
                       {{ formatLimitedCreditRemaining(credit.expires_at) }}
@@ -463,6 +463,24 @@ const sortedLimitedCredits = computed(() =>
     return byExpiry || a.id - b.id
   }),
 )
+
+// limitedCreditSourceReason 为固定投放来源补充展示文案，其余来源使用后端返回的动态原因。
+function limitedCreditSourceReason(credit: LimitedCreditGrant): string {
+  if (credit.source_type === 'redeem_code') {
+    return t('payment.account.redeemCodeCreditReason')
+  }
+  if (credit.source_type === 'default_user_setting') {
+    return t('payment.account.defaultUserCreditReason')
+  }
+  return credit.source_reason?.trim() || ''
+}
+
+// limitedCreditTitle 将来源文案直接并入限时额度标题，空文案保持简洁标题。
+function limitedCreditTitle(credit: LimitedCreditGrant): string {
+  const reason = limitedCreditSourceReason(credit)
+  if (!reason) return t('payment.account.limitedCreditTitle', { id: credit.id })
+  return t('payment.account.limitedCreditTitleWithReason', { id: credit.id, reason })
+}
 
 // 账户页金额统一保留两位小数。
 function formatAccountMoney(value: number): string {

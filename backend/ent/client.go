@@ -44,6 +44,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonuscampaign"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonusparticipation"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateaccountitem"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebatebatch"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseritem"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -125,6 +128,12 @@ type Client struct {
 	RechargeBonusParticipation *RechargeBonusParticipationClient
 	// RedeemCode is the client for interacting with the RedeemCode builders.
 	RedeemCode *RedeemCodeClient
+	// ResetRebateAccountItem is the client for interacting with the ResetRebateAccountItem builders.
+	ResetRebateAccountItem *ResetRebateAccountItemClient
+	// ResetRebateBatch is the client for interacting with the ResetRebateBatch builders.
+	ResetRebateBatch *ResetRebateBatchClient
+	// ResetRebateUserItem is the client for interacting with the ResetRebateUserItem builders.
+	ResetRebateUserItem *ResetRebateUserItemClient
 	// SecuritySecret is the client for interacting with the SecuritySecret builders.
 	SecuritySecret *SecuritySecretClient
 	// Setting is the client for interacting with the Setting builders.
@@ -193,6 +202,9 @@ func (c *Client) init() {
 	c.RechargeBonusCampaign = NewRechargeBonusCampaignClient(c.config)
 	c.RechargeBonusParticipation = NewRechargeBonusParticipationClient(c.config)
 	c.RedeemCode = NewRedeemCodeClient(c.config)
+	c.ResetRebateAccountItem = NewResetRebateAccountItemClient(c.config)
+	c.ResetRebateBatch = NewResetRebateBatchClient(c.config)
+	c.ResetRebateUserItem = NewResetRebateUserItemClient(c.config)
 	c.SecuritySecret = NewSecuritySecretClient(c.config)
 	c.Setting = NewSettingClient(c.config)
 	c.SubscriptionPlan = NewSubscriptionPlanClient(c.config)
@@ -328,6 +340,9 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		RechargeBonusCampaign:         NewRechargeBonusCampaignClient(cfg),
 		RechargeBonusParticipation:    NewRechargeBonusParticipationClient(cfg),
 		RedeemCode:                    NewRedeemCodeClient(cfg),
+		ResetRebateAccountItem:        NewResetRebateAccountItemClient(cfg),
+		ResetRebateBatch:              NewResetRebateBatchClient(cfg),
+		ResetRebateUserItem:           NewResetRebateUserItemClient(cfg),
 		SecuritySecret:                NewSecuritySecretClient(cfg),
 		Setting:                       NewSettingClient(cfg),
 		SubscriptionPlan:              NewSubscriptionPlanClient(cfg),
@@ -390,6 +405,9 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		RechargeBonusCampaign:         NewRechargeBonusCampaignClient(cfg),
 		RechargeBonusParticipation:    NewRechargeBonusParticipationClient(cfg),
 		RedeemCode:                    NewRedeemCodeClient(cfg),
+		ResetRebateAccountItem:        NewResetRebateAccountItemClient(cfg),
+		ResetRebateBatch:              NewResetRebateBatchClient(cfg),
+		ResetRebateUserItem:           NewResetRebateUserItemClient(cfg),
 		SecuritySecret:                NewSecuritySecretClient(cfg),
 		Setting:                       NewSettingClient(cfg),
 		SubscriptionPlan:              NewSubscriptionPlanClient(cfg),
@@ -441,6 +459,7 @@ func (c *Client) Use(hooks ...Hook) {
 		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
 		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
 		c.Proxy, c.RechargeBonusCampaign, c.RechargeBonusParticipation, c.RedeemCode,
+		c.ResetRebateAccountItem, c.ResetRebateBatch, c.ResetRebateUserItem,
 		c.SecuritySecret, c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile,
 		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
 		c.UserAttributeDefinition, c.UserAttributeValue, c.UserLimitedCreditGrant,
@@ -462,6 +481,7 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
 		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
 		c.Proxy, c.RechargeBonusCampaign, c.RechargeBonusParticipation, c.RedeemCode,
+		c.ResetRebateAccountItem, c.ResetRebateBatch, c.ResetRebateUserItem,
 		c.SecuritySecret, c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile,
 		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
 		c.UserAttributeDefinition, c.UserAttributeValue, c.UserLimitedCreditGrant,
@@ -532,6 +552,12 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.RechargeBonusParticipation.mutate(ctx, m)
 	case *RedeemCodeMutation:
 		return c.RedeemCode.mutate(ctx, m)
+	case *ResetRebateAccountItemMutation:
+		return c.ResetRebateAccountItem.mutate(ctx, m)
+	case *ResetRebateBatchMutation:
+		return c.ResetRebateBatch.mutate(ctx, m)
+	case *ResetRebateUserItemMutation:
+		return c.ResetRebateUserItem.mutate(ctx, m)
 	case *SecuritySecretMutation:
 		return c.SecuritySecret.mutate(ctx, m)
 	case *SettingMutation:
@@ -5103,6 +5129,405 @@ func (c *RedeemCodeClient) mutate(ctx context.Context, m *RedeemCodeMutation) (V
 	}
 }
 
+// ResetRebateAccountItemClient is a client for the ResetRebateAccountItem schema.
+type ResetRebateAccountItemClient struct {
+	config
+}
+
+// NewResetRebateAccountItemClient returns a client for the ResetRebateAccountItem from the given config.
+func NewResetRebateAccountItemClient(c config) *ResetRebateAccountItemClient {
+	return &ResetRebateAccountItemClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `resetrebateaccountitem.Hooks(f(g(h())))`.
+func (c *ResetRebateAccountItemClient) Use(hooks ...Hook) {
+	c.hooks.ResetRebateAccountItem = append(c.hooks.ResetRebateAccountItem, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `resetrebateaccountitem.Intercept(f(g(h())))`.
+func (c *ResetRebateAccountItemClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ResetRebateAccountItem = append(c.inters.ResetRebateAccountItem, interceptors...)
+}
+
+// Create returns a builder for creating a ResetRebateAccountItem entity.
+func (c *ResetRebateAccountItemClient) Create() *ResetRebateAccountItemCreate {
+	mutation := newResetRebateAccountItemMutation(c.config, OpCreate)
+	return &ResetRebateAccountItemCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ResetRebateAccountItem entities.
+func (c *ResetRebateAccountItemClient) CreateBulk(builders ...*ResetRebateAccountItemCreate) *ResetRebateAccountItemCreateBulk {
+	return &ResetRebateAccountItemCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ResetRebateAccountItemClient) MapCreateBulk(slice any, setFunc func(*ResetRebateAccountItemCreate, int)) *ResetRebateAccountItemCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ResetRebateAccountItemCreateBulk{err: fmt.Errorf("calling to ResetRebateAccountItemClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ResetRebateAccountItemCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ResetRebateAccountItemCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ResetRebateAccountItem.
+func (c *ResetRebateAccountItemClient) Update() *ResetRebateAccountItemUpdate {
+	mutation := newResetRebateAccountItemMutation(c.config, OpUpdate)
+	return &ResetRebateAccountItemUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ResetRebateAccountItemClient) UpdateOne(_m *ResetRebateAccountItem) *ResetRebateAccountItemUpdateOne {
+	mutation := newResetRebateAccountItemMutation(c.config, OpUpdateOne, withResetRebateAccountItem(_m))
+	return &ResetRebateAccountItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ResetRebateAccountItemClient) UpdateOneID(id int64) *ResetRebateAccountItemUpdateOne {
+	mutation := newResetRebateAccountItemMutation(c.config, OpUpdateOne, withResetRebateAccountItemID(id))
+	return &ResetRebateAccountItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ResetRebateAccountItem.
+func (c *ResetRebateAccountItemClient) Delete() *ResetRebateAccountItemDelete {
+	mutation := newResetRebateAccountItemMutation(c.config, OpDelete)
+	return &ResetRebateAccountItemDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ResetRebateAccountItemClient) DeleteOne(_m *ResetRebateAccountItem) *ResetRebateAccountItemDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ResetRebateAccountItemClient) DeleteOneID(id int64) *ResetRebateAccountItemDeleteOne {
+	builder := c.Delete().Where(resetrebateaccountitem.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ResetRebateAccountItemDeleteOne{builder}
+}
+
+// Query returns a query builder for ResetRebateAccountItem.
+func (c *ResetRebateAccountItemClient) Query() *ResetRebateAccountItemQuery {
+	return &ResetRebateAccountItemQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeResetRebateAccountItem},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ResetRebateAccountItem entity by its id.
+func (c *ResetRebateAccountItemClient) Get(ctx context.Context, id int64) (*ResetRebateAccountItem, error) {
+	return c.Query().Where(resetrebateaccountitem.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ResetRebateAccountItemClient) GetX(ctx context.Context, id int64) *ResetRebateAccountItem {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ResetRebateAccountItemClient) Hooks() []Hook {
+	return c.hooks.ResetRebateAccountItem
+}
+
+// Interceptors returns the client interceptors.
+func (c *ResetRebateAccountItemClient) Interceptors() []Interceptor {
+	return c.inters.ResetRebateAccountItem
+}
+
+func (c *ResetRebateAccountItemClient) mutate(ctx context.Context, m *ResetRebateAccountItemMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ResetRebateAccountItemCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ResetRebateAccountItemUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ResetRebateAccountItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ResetRebateAccountItemDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ResetRebateAccountItem mutation op: %q", m.Op())
+	}
+}
+
+// ResetRebateBatchClient is a client for the ResetRebateBatch schema.
+type ResetRebateBatchClient struct {
+	config
+}
+
+// NewResetRebateBatchClient returns a client for the ResetRebateBatch from the given config.
+func NewResetRebateBatchClient(c config) *ResetRebateBatchClient {
+	return &ResetRebateBatchClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `resetrebatebatch.Hooks(f(g(h())))`.
+func (c *ResetRebateBatchClient) Use(hooks ...Hook) {
+	c.hooks.ResetRebateBatch = append(c.hooks.ResetRebateBatch, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `resetrebatebatch.Intercept(f(g(h())))`.
+func (c *ResetRebateBatchClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ResetRebateBatch = append(c.inters.ResetRebateBatch, interceptors...)
+}
+
+// Create returns a builder for creating a ResetRebateBatch entity.
+func (c *ResetRebateBatchClient) Create() *ResetRebateBatchCreate {
+	mutation := newResetRebateBatchMutation(c.config, OpCreate)
+	return &ResetRebateBatchCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ResetRebateBatch entities.
+func (c *ResetRebateBatchClient) CreateBulk(builders ...*ResetRebateBatchCreate) *ResetRebateBatchCreateBulk {
+	return &ResetRebateBatchCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ResetRebateBatchClient) MapCreateBulk(slice any, setFunc func(*ResetRebateBatchCreate, int)) *ResetRebateBatchCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ResetRebateBatchCreateBulk{err: fmt.Errorf("calling to ResetRebateBatchClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ResetRebateBatchCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ResetRebateBatchCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ResetRebateBatch.
+func (c *ResetRebateBatchClient) Update() *ResetRebateBatchUpdate {
+	mutation := newResetRebateBatchMutation(c.config, OpUpdate)
+	return &ResetRebateBatchUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ResetRebateBatchClient) UpdateOne(_m *ResetRebateBatch) *ResetRebateBatchUpdateOne {
+	mutation := newResetRebateBatchMutation(c.config, OpUpdateOne, withResetRebateBatch(_m))
+	return &ResetRebateBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ResetRebateBatchClient) UpdateOneID(id int64) *ResetRebateBatchUpdateOne {
+	mutation := newResetRebateBatchMutation(c.config, OpUpdateOne, withResetRebateBatchID(id))
+	return &ResetRebateBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ResetRebateBatch.
+func (c *ResetRebateBatchClient) Delete() *ResetRebateBatchDelete {
+	mutation := newResetRebateBatchMutation(c.config, OpDelete)
+	return &ResetRebateBatchDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ResetRebateBatchClient) DeleteOne(_m *ResetRebateBatch) *ResetRebateBatchDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ResetRebateBatchClient) DeleteOneID(id int64) *ResetRebateBatchDeleteOne {
+	builder := c.Delete().Where(resetrebatebatch.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ResetRebateBatchDeleteOne{builder}
+}
+
+// Query returns a query builder for ResetRebateBatch.
+func (c *ResetRebateBatchClient) Query() *ResetRebateBatchQuery {
+	return &ResetRebateBatchQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeResetRebateBatch},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ResetRebateBatch entity by its id.
+func (c *ResetRebateBatchClient) Get(ctx context.Context, id int64) (*ResetRebateBatch, error) {
+	return c.Query().Where(resetrebatebatch.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ResetRebateBatchClient) GetX(ctx context.Context, id int64) *ResetRebateBatch {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ResetRebateBatchClient) Hooks() []Hook {
+	return c.hooks.ResetRebateBatch
+}
+
+// Interceptors returns the client interceptors.
+func (c *ResetRebateBatchClient) Interceptors() []Interceptor {
+	return c.inters.ResetRebateBatch
+}
+
+func (c *ResetRebateBatchClient) mutate(ctx context.Context, m *ResetRebateBatchMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ResetRebateBatchCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ResetRebateBatchUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ResetRebateBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ResetRebateBatchDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ResetRebateBatch mutation op: %q", m.Op())
+	}
+}
+
+// ResetRebateUserItemClient is a client for the ResetRebateUserItem schema.
+type ResetRebateUserItemClient struct {
+	config
+}
+
+// NewResetRebateUserItemClient returns a client for the ResetRebateUserItem from the given config.
+func NewResetRebateUserItemClient(c config) *ResetRebateUserItemClient {
+	return &ResetRebateUserItemClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `resetrebateuseritem.Hooks(f(g(h())))`.
+func (c *ResetRebateUserItemClient) Use(hooks ...Hook) {
+	c.hooks.ResetRebateUserItem = append(c.hooks.ResetRebateUserItem, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `resetrebateuseritem.Intercept(f(g(h())))`.
+func (c *ResetRebateUserItemClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ResetRebateUserItem = append(c.inters.ResetRebateUserItem, interceptors...)
+}
+
+// Create returns a builder for creating a ResetRebateUserItem entity.
+func (c *ResetRebateUserItemClient) Create() *ResetRebateUserItemCreate {
+	mutation := newResetRebateUserItemMutation(c.config, OpCreate)
+	return &ResetRebateUserItemCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ResetRebateUserItem entities.
+func (c *ResetRebateUserItemClient) CreateBulk(builders ...*ResetRebateUserItemCreate) *ResetRebateUserItemCreateBulk {
+	return &ResetRebateUserItemCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ResetRebateUserItemClient) MapCreateBulk(slice any, setFunc func(*ResetRebateUserItemCreate, int)) *ResetRebateUserItemCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ResetRebateUserItemCreateBulk{err: fmt.Errorf("calling to ResetRebateUserItemClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ResetRebateUserItemCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ResetRebateUserItemCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ResetRebateUserItem.
+func (c *ResetRebateUserItemClient) Update() *ResetRebateUserItemUpdate {
+	mutation := newResetRebateUserItemMutation(c.config, OpUpdate)
+	return &ResetRebateUserItemUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ResetRebateUserItemClient) UpdateOne(_m *ResetRebateUserItem) *ResetRebateUserItemUpdateOne {
+	mutation := newResetRebateUserItemMutation(c.config, OpUpdateOne, withResetRebateUserItem(_m))
+	return &ResetRebateUserItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ResetRebateUserItemClient) UpdateOneID(id int64) *ResetRebateUserItemUpdateOne {
+	mutation := newResetRebateUserItemMutation(c.config, OpUpdateOne, withResetRebateUserItemID(id))
+	return &ResetRebateUserItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ResetRebateUserItem.
+func (c *ResetRebateUserItemClient) Delete() *ResetRebateUserItemDelete {
+	mutation := newResetRebateUserItemMutation(c.config, OpDelete)
+	return &ResetRebateUserItemDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ResetRebateUserItemClient) DeleteOne(_m *ResetRebateUserItem) *ResetRebateUserItemDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ResetRebateUserItemClient) DeleteOneID(id int64) *ResetRebateUserItemDeleteOne {
+	builder := c.Delete().Where(resetrebateuseritem.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ResetRebateUserItemDeleteOne{builder}
+}
+
+// Query returns a query builder for ResetRebateUserItem.
+func (c *ResetRebateUserItemClient) Query() *ResetRebateUserItemQuery {
+	return &ResetRebateUserItemQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeResetRebateUserItem},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ResetRebateUserItem entity by its id.
+func (c *ResetRebateUserItemClient) Get(ctx context.Context, id int64) (*ResetRebateUserItem, error) {
+	return c.Query().Where(resetrebateuseritem.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ResetRebateUserItemClient) GetX(ctx context.Context, id int64) *ResetRebateUserItem {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ResetRebateUserItemClient) Hooks() []Hook {
+	return c.hooks.ResetRebateUserItem
+}
+
+// Interceptors returns the client interceptors.
+func (c *ResetRebateUserItemClient) Interceptors() []Interceptor {
+	return c.inters.ResetRebateUserItem
+}
+
+func (c *ResetRebateUserItemClient) mutate(ctx context.Context, m *ResetRebateUserItemMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ResetRebateUserItemCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ResetRebateUserItemUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ResetRebateUserItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ResetRebateUserItemDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ResetRebateUserItem mutation op: %q", m.Op())
+	}
+}
+
 // SecuritySecretClient is a client for the SecuritySecret schema.
 type SecuritySecretClient struct {
 	config
@@ -7494,7 +7919,8 @@ type (
 		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
 		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
 		PromoCodeUsage, Proxy, RechargeBonusCampaign, RechargeBonusParticipation,
-		RedeemCode, SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
+		RedeemCode, ResetRebateAccountItem, ResetRebateBatch, ResetRebateUserItem,
+		SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
 		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
 		UserAttributeValue, UserLimitedCreditGrant, UserLimitedCreditLedger,
 		UserPlatformQuota, UserSubscription []ent.Hook
@@ -7507,7 +7933,8 @@ type (
 		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
 		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
 		PromoCodeUsage, Proxy, RechargeBonusCampaign, RechargeBonusParticipation,
-		RedeemCode, SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
+		RedeemCode, ResetRebateAccountItem, ResetRebateBatch, ResetRebateUserItem,
+		SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
 		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
 		UserAttributeValue, UserLimitedCreditGrant, UserLimitedCreditLedger,
 		UserPlatformQuota, UserSubscription []ent.Interceptor

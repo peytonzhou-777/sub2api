@@ -41,6 +41,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonuscampaign"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonusparticipation"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateaccountitem"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebatebatch"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseritem"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -144,6 +147,9 @@ func checkColumn(t, c string) error {
 			rechargebonuscampaign.Table:         rechargebonuscampaign.ValidColumn,
 			rechargebonusparticipation.Table:    rechargebonusparticipation.ValidColumn,
 			redeemcode.Table:                    redeemcode.ValidColumn,
+			resetrebateaccountitem.Table:        resetrebateaccountitem.ValidColumn,
+			resetrebatebatch.Table:              resetrebatebatch.ValidColumn,
+			resetrebateuseritem.Table:           resetrebateuseritem.ValidColumn,
 			securitysecret.Table:                securitysecret.ValidColumn,
 			setting.Table:                       setting.ValidColumn,
 			subscriptionplan.Table:              subscriptionplan.ValidColumn,

@@ -137,3 +137,77 @@ func TestLimitedCreditRepositoryCreateGrantsIndependentDoesNotJoinOuterTransacti
 	require.NoError(t, err)
 	require.Equal(t, 1, ledgerCount)
 }
+
+func TestLimitedCreditRepositoryListActiveByUserAttachesSourceReasons(t *testing.T) {
+	ctx := context.Background()
+	repo, client := newLimitedCreditRepoSQLite(t)
+	userID := mustCreateLimitedCreditRepoUser(t, ctx, client)
+	now := time.Now().UTC()
+
+	resetBatch, err := client.ResetRebateBatch.Create().
+		SetGroupID(1).
+		SetGroupName("测试分组").
+		SetAdminID(1).
+		SetPeriodStart(now.Add(-time.Hour)).
+		SetPeriodEnd(now).
+		SetRebateReason("官方重置！本站返利！").
+		Save(ctx)
+	require.NoError(t, err)
+
+	order, err := client.PaymentOrder.Create().
+		SetUserID(userID).
+		SetUserEmail("source@example.com").
+		SetUserName("source-user").
+		SetAmount(10).
+		SetPayAmount(10).
+		SetRechargeCode("SOURCE-ORDER").
+		SetOutTradeNo("SOURCE-ORDER").
+		SetPaymentType("test").
+		SetPaymentTradeNo("SOURCE-TRADE").
+		SetOrderType("balance").
+		SetStatus("COMPLETED").
+		SetExpiresAt(now.Add(time.Hour)).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("example.com").
+		SetRechargeBonusCampaignID(2).
+		SetRechargeBonusCampaignName("暑期充值活动").
+		Save(ctx)
+	require.NoError(t, err)
+
+	recurringBatch, err := client.RecurringCreditBatch.Create().
+		SetTaskID(3).
+		SetTaskName("每周赠额").
+		SetScheduledAt(now).
+		SetExpiresAt(now.AddDate(0, 0, 7)).
+		SetQualificationStart(now.Add(-24 * time.Hour)).
+		SetQualificationEnd(now).
+		SetConfigVersion(1).
+		SetScheduleType("weekly").
+		SetLocalTime("09:00").
+		SetTimezone("UTC").
+		SetAmount(2).
+		SetExecutionMode("finite").
+		SetStatus("succeeded").
+		Save(ctx)
+	require.NoError(t, err)
+
+	for _, grant := range []*service.LimitedCreditGrant{
+		{UserID: userID, SourceType: service.LimitedCreditSourceResetRebate, SourceID: &resetBatch.ID, InitialAmount: 1, ExpiresAt: now.Add(time.Hour)},
+		{UserID: userID, SourceType: service.LimitedCreditSourceRechargeBonus, SourceID: &order.ID, InitialAmount: 2, ExpiresAt: now.Add(2 * time.Hour)},
+		{UserID: userID, SourceType: service.LimitedCreditSourceRecurring, SourceID: &recurringBatch.ID, InitialAmount: 3, ExpiresAt: now.Add(3 * time.Hour)},
+	} {
+		_, err = repo.CreateGrant(ctx, grant)
+		require.NoError(t, err)
+	}
+
+	grants, err := repo.ListActiveByUser(ctx, userID)
+	require.NoError(t, err)
+	require.Len(t, grants, 3)
+	reasons := make(map[string]string, len(grants))
+	for _, grant := range grants {
+		reasons[grant.SourceType] = grant.SourceReason
+	}
+	require.Equal(t, "官方重置！本站返利！", reasons[service.LimitedCreditSourceResetRebate])
+	require.Equal(t, "暑期充值活动", reasons[service.LimitedCreditSourceRechargeBonus])
+	require.Equal(t, "每周赠额", reasons[service.LimitedCreditSourceRecurring])
+}

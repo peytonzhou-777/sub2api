@@ -93,6 +93,15 @@ type RechargeBonusParticipation func(*sql.Selector)
 // RedeemCode is the predicate function for redeemcode builders.
 type RedeemCode func(*sql.Selector)
 
+// ResetRebateAccountItem is the predicate function for resetrebateaccountitem builders.
+type ResetRebateAccountItem func(*sql.Selector)
+
+// ResetRebateBatch is the predicate function for resetrebatebatch builders.
+type ResetRebateBatch func(*sql.Selector)
+
+// ResetRebateUserItem is the predicate function for resetrebateuseritem builders.
+type ResetRebateUserItem func(*sql.Selector)
+
 // SecuritySecret is the predicate function for securitysecret builders.
 type SecuritySecret func(*sql.Selector)
 

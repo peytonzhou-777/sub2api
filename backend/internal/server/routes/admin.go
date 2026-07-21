@@ -113,6 +113,8 @@ func RegisterAdminRoutes(
 
 		// 邀请返利（专属用户管理）
 		registerAffiliateRoutes(admin, h)
+		// 重置返利
+		registerResetRebateRoutes(admin, h)
 
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
@@ -142,6 +144,22 @@ func registerAuditLogRoutes(admin *gin.RouterGroup, h *handler.Handlers, _ middl
 		auditLogs.GET("/:id", h.Admin.AuditLog.Get)
 		// 清空需现场 TOTP 校验（在 handler 内强制），不复用 step-up sudo 窗口
 		auditLogs.POST("/clear", h.Admin.AuditLog.Clear)
+	}
+}
+
+// registerResetRebateRoutes 注册管理员重置返利完整流程。
+func registerResetRebateRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	rebates := admin.Group("/reset-rebates")
+	{
+		rebates.GET("", h.Admin.ResetRebate.List)
+		rebates.POST("", h.Admin.ResetRebate.Create)
+		rebates.GET("/latest-executed-period-end", h.Admin.ResetRebate.LatestExecutedPeriodEnd)
+		rebates.GET("/:id", h.Admin.ResetRebate.Get)
+		rebates.GET("/:id/accounts", h.Admin.ResetRebate.ListAccounts)
+		rebates.GET("/:id/preview", h.Admin.ResetRebate.Preview)
+		rebates.GET("/:id/users.csv", h.Admin.ResetRebate.ExportUsers)
+		rebates.POST("/:id/execute", h.Admin.ResetRebate.Execute)
+		rebates.DELETE("/:id", h.Admin.ResetRebate.Delete)
 	}
 }
 
