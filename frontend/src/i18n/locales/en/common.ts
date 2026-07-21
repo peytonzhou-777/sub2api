@@ -272,6 +272,7 @@ export default {
     promoCodeLabel: 'Promo Code',
     promoCodePlaceholder: 'Enter promo code (optional)',
     promoCodeValid: 'Valid! You will receive ${amount} bonus balance',
+    promoCodeLimitedCreditValid: 'Valid! You will receive ${amount} limited credit for {days} days',
     promoCodeInvalid: 'Invalid promo code',
     promoCodeNotFound: 'Promo code not found',
     promoCodeExpired: 'This promo code has expired',

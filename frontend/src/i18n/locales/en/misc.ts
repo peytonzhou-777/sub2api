@@ -377,6 +377,7 @@ export default {
       limitedCreditTitle: 'Limited Credit #{id}',
       limitedCreditTitleWithReason: 'Limited Credit #{id} ({reason})',
       redeemCodeCreditReason: 'Redeem code credit',
+      promoCodeCreditReason: 'Promo code redemption',
       defaultUserCreditReason: 'New user trial credit',
       usage: 'Credit Usage',
       daysRemaining: '{days} days remaining',

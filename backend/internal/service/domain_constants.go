@@ -551,3 +551,9 @@ const AdminAPIKeyPrefix = "admin-"
 // SettingKeyAllowUserViewErrorRequests controls whether end users can view
 // their own failed requests on the usage page. Default false (opt-in).
 const SettingKeyAllowUserViewErrorRequests = "allow_user_view_error_requests"
+
+// 优惠码奖励类型常量
+const (
+	PromoCodeRewardTypeBalance       = "balance"
+	PromoCodeRewardTypeLimitedCredit = "limited_credit"
+)

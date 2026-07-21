@@ -25,6 +25,10 @@ type PromoCodeUsage struct {
 	UserID int64 `json:"user_id,omitempty"`
 	// 实际赠送金额
 	BonusAmount float64 `json:"bonus_amount,omitempty"`
+	// 奖励类型快照: balance, limited_credit
+	RewardType string `json:"reward_type,omitempty"`
+	// 限时额度有效期天数快照，0表示永久余额
+	ValidityDays int `json:"validity_days,omitempty"`
 	// 使用时间
 	UsedAt time.Time `json:"used_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -73,6 +77,10 @@ func (*PromoCodeUsage) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case promocodeusage.FieldBonusAmount:
 			values[i] = new(sql.NullFloat64)
+		case promocodeusage.FieldRewardType:
+			values[i] = new(sql.NullString)
+		case promocodeusage.FieldValidityDays:
+			values[i] = new(sql.NullInt64)
 		case promocodeusage.FieldID, promocodeusage.FieldPromoCodeID, promocodeusage.FieldUserID:
 			values[i] = new(sql.NullInt64)
 		case promocodeusage.FieldUsedAt:
@@ -115,6 +123,18 @@ func (_m *PromoCodeUsage) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field bonus_amount", values[i])
 			} else if value.Valid {
 				_m.BonusAmount = value.Float64
+			}
+		case promocodeusage.FieldRewardType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field reward_type", values[i])
+			} else if value.Valid {
+				_m.RewardType = value.String
+			}
+		case promocodeusage.FieldValidityDays:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field validity_days", values[i])
+			} else if value.Valid {
+				_m.ValidityDays = int(value.Int64)
 			}
 		case promocodeusage.FieldUsedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {

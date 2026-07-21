@@ -401,6 +401,7 @@ export default {
       limitedCreditTitle: '限时额度 #{id}',
       limitedCreditTitleWithReason: '限时额度 #{id} （{reason}）',
       redeemCodeCreditReason: '兑换码兑换额度',
+      promoCodeCreditReason: '优惠码兑换',
       defaultUserCreditReason: '新用户体验额度',
       usage: '额度用量',
       daysRemaining: '剩余 {days} 天',

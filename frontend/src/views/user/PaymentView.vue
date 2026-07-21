@@ -466,6 +466,9 @@ const sortedLimitedCredits = computed(() =>
 
 // limitedCreditSourceReason 为固定投放来源补充展示文案，其余来源使用后端返回的动态原因。
 function limitedCreditSourceReason(credit: LimitedCreditGrant): string {
+  if (credit.source_type === 'promo_code') {
+    return t('payment.account.promoCodeCreditReason')
+  }
   if (credit.source_type === 'redeem_code') {
     return t('payment.account.redeemCodeCreditReason')
   }

@@ -460,6 +460,10 @@ export default {
       columns: {
         code: 'Code',
         bonusAmount: 'Bonus Amount',
+      rewardType: 'Reward Type',
+      rewardBalance: 'Balance',
+      rewardLimitedCredit: 'Limited credit',
+      validityDays: 'Validity days',
         maxUses: 'Max Uses',
         usedCount: 'Used',
         usage: 'Usage',

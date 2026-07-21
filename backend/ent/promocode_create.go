@@ -35,6 +35,18 @@ func (_c *PromoCodeCreate) SetBonusAmount(v float64) *PromoCodeCreate {
 	return _c
 }
 
+// SetRewardType 设置奖励类型字段。
+func (_c *PromoCodeCreate) SetRewardType(v string) *PromoCodeCreate {
+	_c.mutation.SetRewardType(v)
+	return _c
+}
+
+// SetValidityDays 设置有效期天数。
+func (_c *PromoCodeCreate) SetValidityDays(v int) *PromoCodeCreate {
+	_c.mutation.SetValidityDays(v)
+	return _c
+}
+
 // SetNillableBonusAmount sets the "bonus_amount" field if the given value is not nil.
 func (_c *PromoCodeCreate) SetNillableBonusAmount(v *float64) *PromoCodeCreate {
 	if v != nil {
@@ -191,6 +203,12 @@ func (_c *PromoCodeCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *PromoCodeCreate) defaults() {
+	if _, ok := _c.mutation.RewardType(); !ok {
+		_c.SetRewardType(promocode.DefaultRewardType)
+	}
+	if _, ok := _c.mutation.ValidityDays(); !ok {
+		_c.SetValidityDays(promocode.DefaultValidityDays)
+	}
 	if _, ok := _c.mutation.BonusAmount(); !ok {
 		v := promocode.DefaultBonusAmount
 		_c.mutation.SetBonusAmount(v)
@@ -284,6 +302,14 @@ func (_c *PromoCodeCreate) createSpec() (*PromoCode, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.BonusAmount(); ok {
 		_spec.SetField(promocode.FieldBonusAmount, field.TypeFloat64, value)
 		_node.BonusAmount = value
+	}
+	if value, ok := _c.mutation.RewardType(); ok {
+		_spec.SetField(promocode.FieldRewardType, field.TypeString, value)
+		_node.RewardType = value
+	}
+	if value, ok := _c.mutation.ValidityDays(); ok {
+		_spec.SetField(promocode.FieldValidityDays, field.TypeInt, value)
+		_node.ValidityDays = value
 	}
 	if value, ok := _c.mutation.MaxUses(); ok {
 		_spec.SetField(promocode.FieldMaxUses, field.TypeInt, value)

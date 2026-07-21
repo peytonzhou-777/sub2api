@@ -176,7 +176,7 @@
             <div v-if="promoValidation.valid" class="mt-2 flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 dark:bg-green-900/20">
               <Icon name="gift" size="sm" class="text-green-600 dark:text-green-400" />
               <span class="text-sm text-green-700 dark:text-green-400">
-                {{ t('auth.promoCodeValid', { amount: promoValidation.bonusAmount?.toFixed(2) }) }}
+                {{ promoValidation.rewardType === 'limited_credit' ? t('auth.promoCodeLimitedCreditValid', { amount: promoValidation.bonusAmount?.toFixed(2), days: promoValidation.validityDays }) : t('auth.promoCodeValid', { amount: promoValidation.bonusAmount?.toFixed(2) }) }}
               </span>
             </div>
           </transition>
@@ -379,6 +379,8 @@ const promoValidation = reactive({
   valid: false,
   invalid: false,
   bonusAmount: null as number | null,
+  rewardType: 'balance' as 'balance' | 'limited_credit',
+  validityDays: 0,
   message: ''
 })
 let promoValidateTimeout: ReturnType<typeof setTimeout> | null = null
@@ -579,6 +581,8 @@ function handlePromoCodeInput(): void {
   promoValidation.valid = false
   promoValidation.invalid = false
   promoValidation.bonusAmount = null
+  promoValidation.rewardType = 'balance'
+  promoValidation.validityDays = 0
   promoValidation.message = ''
 
   if (!code) {
@@ -608,11 +612,15 @@ async function validatePromoCodeDebounced(code: string): Promise<void> {
       promoValidation.valid = true
       promoValidation.invalid = false
       promoValidation.bonusAmount = result.bonus_amount || 0
+      promoValidation.rewardType = result.reward_type || 'balance'
+      promoValidation.validityDays = result.validity_days || 0
       promoValidation.message = ''
     } else {
       promoValidation.valid = false
       promoValidation.invalid = true
       promoValidation.bonusAmount = null
+      promoValidation.rewardType = 'balance'
+      promoValidation.validityDays = 0
       // 根据错误码显示对应的翻译
       promoValidation.message = getPromoErrorMessage(result.error_code)
     }

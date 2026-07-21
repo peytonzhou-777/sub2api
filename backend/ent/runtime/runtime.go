@@ -1567,34 +1567,50 @@ func init() {
 	promocodeDescBonusAmount := promocodeFields[1].Descriptor()
 	// promocode.DefaultBonusAmount holds the default value on creation for the bonus_amount field.
 	promocode.DefaultBonusAmount = promocodeDescBonusAmount.Default.(float64)
+	// promocodeDescRewardType 是 reward_type 字段的 schema 描述。
+	promocodeDescRewardType := promocodeFields[2].Descriptor()
+	// promocode.DefaultRewardType 保存创建时 reward_type 字段的默认值。
+	promocode.DefaultRewardType = promocodeDescRewardType.Default.(string)
+	// promocodeDescValidityDays 是 validity_days 字段的 schema 描述。
+	promocodeDescValidityDays := promocodeFields[3].Descriptor()
+	// promocode.DefaultValidityDays 保存创建时 validity_days 字段的默认值。
+	promocode.DefaultValidityDays = promocodeDescValidityDays.Default.(int)
 	// promocodeDescMaxUses is the schema descriptor for max_uses field.
-	promocodeDescMaxUses := promocodeFields[2].Descriptor()
+	promocodeDescMaxUses := promocodeFields[4].Descriptor()
 	// promocode.DefaultMaxUses holds the default value on creation for the max_uses field.
 	promocode.DefaultMaxUses = promocodeDescMaxUses.Default.(int)
 	// promocodeDescUsedCount is the schema descriptor for used_count field.
-	promocodeDescUsedCount := promocodeFields[3].Descriptor()
+	promocodeDescUsedCount := promocodeFields[5].Descriptor()
 	// promocode.DefaultUsedCount holds the default value on creation for the used_count field.
 	promocode.DefaultUsedCount = promocodeDescUsedCount.Default.(int)
 	// promocodeDescStatus is the schema descriptor for status field.
-	promocodeDescStatus := promocodeFields[4].Descriptor()
+	promocodeDescStatus := promocodeFields[6].Descriptor()
 	// promocode.DefaultStatus holds the default value on creation for the status field.
 	promocode.DefaultStatus = promocodeDescStatus.Default.(string)
 	// promocode.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	promocode.StatusValidator = promocodeDescStatus.Validators[0].(func(string) error)
 	// promocodeDescCreatedAt is the schema descriptor for created_at field.
-	promocodeDescCreatedAt := promocodeFields[7].Descriptor()
+	promocodeDescCreatedAt := promocodeFields[9].Descriptor()
 	// promocode.DefaultCreatedAt holds the default value on creation for the created_at field.
 	promocode.DefaultCreatedAt = promocodeDescCreatedAt.Default.(func() time.Time)
 	// promocodeDescUpdatedAt is the schema descriptor for updated_at field.
-	promocodeDescUpdatedAt := promocodeFields[8].Descriptor()
+	promocodeDescUpdatedAt := promocodeFields[10].Descriptor()
 	// promocode.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	promocode.DefaultUpdatedAt = promocodeDescUpdatedAt.Default.(func() time.Time)
 	// promocode.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	promocode.UpdateDefaultUpdatedAt = promocodeDescUpdatedAt.UpdateDefault.(func() time.Time)
 	promocodeusageFields := schema.PromoCodeUsage{}.Fields()
 	_ = promocodeusageFields
+	// promocodeusageDescRewardType 是 reward_type 字段的 schema 描述。
+	promocodeusageDescRewardType := promocodeusageFields[3].Descriptor()
+	// promocodeusage.DefaultRewardType 保存创建时 reward_type 字段的默认值。
+	promocodeusage.DefaultRewardType = promocodeusageDescRewardType.Default.(string)
+	// promocodeusageDescValidityDays 是 validity_days 字段的 schema 描述。
+	promocodeusageDescValidityDays := promocodeusageFields[4].Descriptor()
+	// promocodeusage.DefaultValidityDays 保存创建时 validity_days 字段的默认值。
+	promocodeusage.DefaultValidityDays = promocodeusageDescValidityDays.Default.(int)
 	// promocodeusageDescUsedAt is the schema descriptor for used_at field.
-	promocodeusageDescUsedAt := promocodeusageFields[3].Descriptor()
+	promocodeusageDescUsedAt := promocodeusageFields[5].Descriptor()
 	// promocodeusage.DefaultUsedAt holds the default value on creation for the used_at field.
 	promocodeusage.DefaultUsedAt = promocodeusageDescUsedAt.Default.(func() time.Time)
 	proxyMixin := schema.Proxy{}.Mixin()

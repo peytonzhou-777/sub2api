@@ -654,25 +654,29 @@ type BulkAssignResult struct {
 
 // PromoCode 注册优惠码
 type PromoCode struct {
-	ID          int64      `json:"id"`
-	Code        string     `json:"code"`
-	BonusAmount float64    `json:"bonus_amount"`
-	MaxUses     int        `json:"max_uses"`
-	UsedCount   int        `json:"used_count"`
-	Status      string     `json:"status"`
-	ExpiresAt   *time.Time `json:"expires_at"`
-	Notes       string     `json:"notes"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID           int64      `json:"id"`
+	Code         string     `json:"code"`
+	BonusAmount  float64    `json:"bonus_amount"`
+	RewardType   string     `json:"reward_type"`
+	ValidityDays int        `json:"validity_days"`
+	MaxUses      int        `json:"max_uses"`
+	UsedCount    int        `json:"used_count"`
+	Status       string     `json:"status"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+	Notes        string     `json:"notes"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 // PromoCodeUsage 优惠码使用记录
 type PromoCodeUsage struct {
-	ID          int64     `json:"id"`
-	PromoCodeID int64     `json:"promo_code_id"`
-	UserID      int64     `json:"user_id"`
-	BonusAmount float64   `json:"bonus_amount"`
-	UsedAt      time.Time `json:"used_at"`
+	ID           int64     `json:"id"`
+	PromoCodeID  int64     `json:"promo_code_id"`
+	UserID       int64     `json:"user_id"`
+	BonusAmount  float64   `json:"bonus_amount"`
+	RewardType   string    `json:"reward_type"`
+	ValidityDays int       `json:"validity_days"`
+	UsedAt       time.Time `json:"used_at"`
 
 	User *User `json:"user,omitempty"`
 }

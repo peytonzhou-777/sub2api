@@ -19,7 +19,9 @@ const (
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
 	// FieldBonusAmount holds the string denoting the bonus_amount field in the database.
-	FieldBonusAmount = "bonus_amount"
+	FieldBonusAmount  = "bonus_amount"
+	FieldRewardType   = "reward_type"
+	FieldValidityDays = "validity_days"
 	// FieldUsedAt holds the string denoting the used_at field in the database.
 	FieldUsedAt = "used_at"
 	// EdgePromoCode holds the string denoting the promo_code edge name in mutations.
@@ -50,6 +52,8 @@ var Columns = []string{
 	FieldPromoCodeID,
 	FieldUserID,
 	FieldBonusAmount,
+	FieldRewardType,
+	FieldValidityDays,
 	FieldUsedAt,
 }
 
@@ -64,6 +68,10 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultRewardType holds the default value on creation for the "reward_type" field.
+	DefaultRewardType string
+	// DefaultValidityDays holds the default value on creation for the "validity_days" field.
+	DefaultValidityDays int
 	// DefaultUsedAt holds the default value on creation for the "used_at" field.
 	DefaultUsedAt func() time.Time
 )

@@ -26,6 +26,8 @@ func (r *promoCodeRepository) Create(ctx context.Context, code *service.PromoCod
 	builder := client.PromoCode.Create().
 		SetCode(code.Code).
 		SetBonusAmount(code.BonusAmount).
+		SetRewardType(code.RewardType).
+		SetValidityDays(code.ValidityDays).
 		SetMaxUses(code.MaxUses).
 		SetUsedCount(code.UsedCount).
 		SetStatus(code.Status).
@@ -92,6 +94,8 @@ func (r *promoCodeRepository) Update(ctx context.Context, code *service.PromoCod
 	builder := client.PromoCode.UpdateOneID(code.ID).
 		SetCode(code.Code).
 		SetBonusAmount(code.BonusAmount).
+		SetRewardType(code.RewardType).
+		SetValidityDays(code.ValidityDays).
 		SetMaxUses(code.MaxUses).
 		SetUsedCount(code.UsedCount).
 		SetStatus(code.Status).
@@ -189,6 +193,8 @@ func (r *promoCodeRepository) CreateUsage(ctx context.Context, usage *service.Pr
 		SetPromoCodeID(usage.PromoCodeID).
 		SetUserID(usage.UserID).
 		SetBonusAmount(usage.BonusAmount).
+		SetRewardType(usage.RewardType).
+		SetValidityDays(usage.ValidityDays).
 		SetUsedAt(usage.UsedAt).
 		Save(ctx)
 	if err != nil {
@@ -254,16 +260,18 @@ func promoCodeEntityToService(m *dbent.PromoCode) *service.PromoCode {
 		return nil
 	}
 	return &service.PromoCode{
-		ID:          m.ID,
-		Code:        m.Code,
-		BonusAmount: m.BonusAmount,
-		MaxUses:     m.MaxUses,
-		UsedCount:   m.UsedCount,
-		Status:      m.Status,
-		ExpiresAt:   m.ExpiresAt,
-		Notes:       derefString(m.Notes),
-		CreatedAt:   m.CreatedAt,
-		UpdatedAt:   m.UpdatedAt,
+		ID:           m.ID,
+		Code:         m.Code,
+		BonusAmount:  m.BonusAmount,
+		RewardType:   m.RewardType,
+		ValidityDays: m.ValidityDays,
+		MaxUses:      m.MaxUses,
+		UsedCount:    m.UsedCount,
+		Status:       m.Status,
+		ExpiresAt:    m.ExpiresAt,
+		Notes:        derefString(m.Notes),
+		CreatedAt:    m.CreatedAt,
+		UpdatedAt:    m.UpdatedAt,
 	}
 }
 
@@ -282,11 +290,13 @@ func promoCodeUsageEntityToService(m *dbent.PromoCodeUsage) *service.PromoCodeUs
 		return nil
 	}
 	out := &service.PromoCodeUsage{
-		ID:          m.ID,
-		PromoCodeID: m.PromoCodeID,
-		UserID:      m.UserID,
-		BonusAmount: m.BonusAmount,
-		UsedAt:      m.UsedAt,
+		ID:           m.ID,
+		PromoCodeID:  m.PromoCodeID,
+		UserID:       m.UserID,
+		BonusAmount:  m.BonusAmount,
+		RewardType:   m.RewardType,
+		ValidityDays: m.ValidityDays,
+		UsedAt:       m.UsedAt,
 	}
 	if m.Edges.User != nil {
 		out.User = userEntityToService(m.Edges.User)

@@ -17,7 +17,9 @@ const (
 	// FieldCode holds the string denoting the code field in the database.
 	FieldCode = "code"
 	// FieldBonusAmount holds the string denoting the bonus_amount field in the database.
-	FieldBonusAmount = "bonus_amount"
+	FieldBonusAmount  = "bonus_amount"
+	FieldRewardType   = "reward_type"
+	FieldValidityDays = "validity_days"
 	// FieldMaxUses holds the string denoting the max_uses field in the database.
 	FieldMaxUses = "max_uses"
 	// FieldUsedCount holds the string denoting the used_count field in the database.
@@ -50,6 +52,8 @@ var Columns = []string{
 	FieldID,
 	FieldCode,
 	FieldBonusAmount,
+	FieldRewardType,
+	FieldValidityDays,
 	FieldMaxUses,
 	FieldUsedCount,
 	FieldStatus,
@@ -74,6 +78,10 @@ var (
 	CodeValidator func(string) error
 	// DefaultBonusAmount holds the default value on creation for the "bonus_amount" field.
 	DefaultBonusAmount float64
+	// DefaultRewardType holds the default value on creation for the "reward_type" field.
+	DefaultRewardType string
+	// DefaultValidityDays holds the default value on creation for the "validity_days" field.
+	DefaultValidityDays int
 	// DefaultMaxUses holds the default value on creation for the "max_uses" field.
 	DefaultMaxUses int
 	// DefaultUsedCount holds the default value on creation for the "used_count" field.

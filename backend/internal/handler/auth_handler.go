@@ -444,10 +444,12 @@ type ValidatePromoCodeRequest struct {
 
 // ValidatePromoCodeResponse 验证优惠码响应
 type ValidatePromoCodeResponse struct {
-	Valid       bool    `json:"valid"`
-	BonusAmount float64 `json:"bonus_amount,omitempty"`
-	ErrorCode   string  `json:"error_code,omitempty"`
-	Message     string  `json:"message,omitempty"`
+	Valid        bool    `json:"valid"`
+	BonusAmount  float64 `json:"bonus_amount,omitempty"`
+	RewardType   string  `json:"reward_type,omitempty"`
+	ValidityDays int     `json:"validity_days,omitempty"`
+	ErrorCode    string  `json:"error_code,omitempty"`
+	Message      string  `json:"message,omitempty"`
 }
 
 // ValidatePromoCode 验证优惠码（公开接口，注册前调用）
@@ -501,8 +503,10 @@ func (h *AuthHandler) ValidatePromoCode(c *gin.Context) {
 	}
 
 	response.Success(c, ValidatePromoCodeResponse{
-		Valid:       true,
-		BonusAmount: promoCode.BonusAmount,
+		Valid:        true,
+		BonusAmount:  promoCode.BonusAmount,
+		RewardType:   promoCode.RewardType,
+		ValidityDays: promoCode.ValidityDays,
 	})
 }
 

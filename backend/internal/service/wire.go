@@ -708,6 +708,25 @@ func ProvideAPIKeyService(
 	return svc
 }
 
+// ProvidePromoService 注入优惠码服务及限时额度发放依赖。
+func ProvidePromoService(
+	promoRepo PromoCodeRepository,
+	userRepo UserRepository,
+	billingCacheService *BillingCacheService,
+	entClient *dbent.Client,
+	authCacheInvalidator APIKeyAuthCacheInvalidator,
+	limitedCreditService *LimitedCreditService,
+) *PromoService {
+	return NewPromoService(
+		promoRepo,
+		userRepo,
+		billingCacheService,
+		entClient,
+		authCacheInvalidator,
+		WithPromoLimitedCreditGranter(limitedCreditService),
+	)
+}
+
 // ProviderSet is the Wire provider set for all services
 var ProviderSet = wire.NewSet(
 	// Core services
@@ -725,7 +744,7 @@ var ProviderSet = wire.NewSet(
 	NewResetRebateService,
 	NewRecurringCreditService,
 	NewRechargeBonusService,
-	NewPromoService,
+	ProvidePromoService,
 	NewUsageService,
 	NewDashboardService,
 	ProvidePricingService,

@@ -42,6 +42,18 @@ func (_c *PromoCodeUsageCreate) SetBonusAmount(v float64) *PromoCodeUsageCreate 
 	return _c
 }
 
+// SetRewardType 设置奖励类型字段。
+func (_c *PromoCodeUsageCreate) SetRewardType(v string) *PromoCodeUsageCreate {
+	_c.mutation.SetRewardType(v)
+	return _c
+}
+
+// SetValidityDays 设置有效期天数。
+func (_c *PromoCodeUsageCreate) SetValidityDays(v int) *PromoCodeUsageCreate {
+	_c.mutation.SetValidityDays(v)
+	return _c
+}
+
 // SetUsedAt sets the "used_at" field.
 func (_c *PromoCodeUsageCreate) SetUsedAt(v time.Time) *PromoCodeUsageCreate {
 	_c.mutation.SetUsedAt(v)
@@ -101,6 +113,12 @@ func (_c *PromoCodeUsageCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *PromoCodeUsageCreate) defaults() {
+	if _, ok := _c.mutation.RewardType(); !ok {
+		_c.SetRewardType(promocodeusage.DefaultRewardType)
+	}
+	if _, ok := _c.mutation.ValidityDays(); !ok {
+		_c.SetValidityDays(promocodeusage.DefaultValidityDays)
+	}
 	if _, ok := _c.mutation.UsedAt(); !ok {
 		v := promocodeusage.DefaultUsedAt()
 		_c.mutation.SetUsedAt(v)
@@ -157,6 +175,14 @@ func (_c *PromoCodeUsageCreate) createSpec() (*PromoCodeUsage, *sqlgraph.CreateS
 	if value, ok := _c.mutation.BonusAmount(); ok {
 		_spec.SetField(promocodeusage.FieldBonusAmount, field.TypeFloat64, value)
 		_node.BonusAmount = value
+	}
+	if value, ok := _c.mutation.RewardType(); ok {
+		_spec.SetField(promocodeusage.FieldRewardType, field.TypeString, value)
+		_node.RewardType = value
+	}
+	if value, ok := _c.mutation.ValidityDays(); ok {
+		_spec.SetField(promocodeusage.FieldValidityDays, field.TypeInt, value)
+		_node.ValidityDays = value
 	}
 	if value, ok := _c.mutation.UsedAt(); ok {
 		_spec.SetField(promocodeusage.FieldUsedAt, field.TypeTime, value)

@@ -4,7 +4,7 @@ export default {
       balanceConflict: { title: '用户资料已发生变化', message: '该用户资料已发生变化，页面已刷新最新数据。是否使用最新数据重试本次额度调整？', retry: '确认重试', retryExhausted: '用户资料再次发生变化，请确认最新数据后重新操作' },
       actions: { none: '', 'balance-add': '增加永久余额', 'balance-subtract': '扣减永久余额', 'limited-create': '新增限时额度', 'limited-used': '调整已用额度', 'limited-limit': '调整上限额度', 'limited-expiry': '调整限时额度有效期', 'limited-reset': '重置限时额度', 'limited-revoke': '作废限时额度' },
       tabs: { users: '用户额度', rechargeActivities: '充值活动', recurringGrants: '赠额任务', resetRebates: '重置返利' },
-      sources: { redeem_code: '兑换码', default_user_setting: '默认设置', recharge_bonus: '充值赠送', admin_manual: '管理员发放', reset_rebate: '重置返利', recurring_grant: '赠额任务' },
+      sources: { promo_code: '优惠码兑换', redeem_code: '兑换码', default_user_setting: '默认设置', recharge_bonus: '充值赠送', admin_manual: '管理员发放', reset_rebate: '重置返利', recurring_grant: '赠额任务' },
       statuses: { active: '生效中', depleted: '已耗尽', expired: '已过期', revoked: '已作废' },
       events: { grant: '额度发放', consume: '请求扣费', reserve: '额度冻结', capture: '冻结结算', release: '冻结释放', admin_increase_limit: '管理员增加上限', admin_decrease_limit: '管理员扣减上限', admin_increase_used: '管理员增加已用', admin_decrease_used: '管理员扣减已用', admin_extend_expiry: '管理员延长有效期', admin_reduce_expiry: '管理员缩短有效期', admin_reset: '管理员重置', admin_revoke: '管理员作废' },
       balanceEvents: { balance: '兑换码或充值', admin_balance: '管理员调整', affiliate_balance: '返利转入' },

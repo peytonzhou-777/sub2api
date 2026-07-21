@@ -21,6 +21,10 @@ type PromoCode struct {
 	Code string `json:"code,omitempty"`
 	// 赠送余额金额
 	BonusAmount float64 `json:"bonus_amount,omitempty"`
+	// 奖励类型: balance, limited_credit
+	RewardType string `json:"reward_type,omitempty"`
+	// 限时额度有效期天数，0表示永久余额
+	ValidityDays int `json:"validity_days,omitempty"`
 	// 最大使用次数，0表示无限制
 	MaxUses int `json:"max_uses,omitempty"`
 	// 已使用次数
@@ -66,6 +70,10 @@ func (*PromoCode) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case promocode.FieldBonusAmount:
 			values[i] = new(sql.NullFloat64)
+		case promocode.FieldRewardType:
+			values[i] = new(sql.NullString)
+		case promocode.FieldValidityDays:
+			values[i] = new(sql.NullInt64)
 		case promocode.FieldID, promocode.FieldMaxUses, promocode.FieldUsedCount:
 			values[i] = new(sql.NullInt64)
 		case promocode.FieldCode, promocode.FieldStatus, promocode.FieldNotes:
@@ -104,6 +112,18 @@ func (_m *PromoCode) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field bonus_amount", values[i])
 			} else if value.Valid {
 				_m.BonusAmount = value.Float64
+			}
+		case promocode.FieldRewardType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field reward_type", values[i])
+			} else if value.Valid {
+				_m.RewardType = value.String
+			}
+		case promocode.FieldValidityDays:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field validity_days", values[i])
+			} else if value.Valid {
+				_m.ValidityDays = int(value.Int64)
 			}
 		case promocode.FieldMaxUses:
 			if value, ok := values[i].(*sql.NullInt64); !ok {

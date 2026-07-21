@@ -50,6 +50,18 @@ func (_u *PromoCodeUpdate) SetBonusAmount(v float64) *PromoCodeUpdate {
 	return _u
 }
 
+// SetRewardType 设置奖励类型字段。
+func (_u *PromoCodeUpdate) SetRewardType(v string) *PromoCodeUpdate {
+	_u.mutation.SetRewardType(v)
+	return _u
+}
+
+// SetValidityDays 设置有效期天数。
+func (_u *PromoCodeUpdate) SetValidityDays(v int) *PromoCodeUpdate {
+	_u.mutation.SetValidityDays(v)
+	return _u
+}
+
 // SetNillableBonusAmount sets the "bonus_amount" field if the given value is not nil.
 func (_u *PromoCodeUpdate) SetNillableBonusAmount(v *float64) *PromoCodeUpdate {
 	if v != nil {
@@ -276,6 +288,12 @@ func (_u *PromoCodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.BonusAmount(); ok {
 		_spec.SetField(promocode.FieldBonusAmount, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.RewardType(); ok {
+		_spec.SetField(promocode.FieldRewardType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ValidityDays(); ok {
+		_spec.SetField(promocode.FieldValidityDays, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.AddedBonusAmount(); ok {
 		_spec.AddField(promocode.FieldBonusAmount, field.TypeFloat64, value)
 	}
@@ -392,6 +410,18 @@ func (_u *PromoCodeUpdateOne) SetNillableCode(v *string) *PromoCodeUpdateOne {
 func (_u *PromoCodeUpdateOne) SetBonusAmount(v float64) *PromoCodeUpdateOne {
 	_u.mutation.ResetBonusAmount()
 	_u.mutation.SetBonusAmount(v)
+	return _u
+}
+
+// SetRewardType 设置奖励类型字段。
+func (_u *PromoCodeUpdateOne) SetRewardType(v string) *PromoCodeUpdateOne {
+	_u.mutation.SetRewardType(v)
+	return _u
+}
+
+// SetValidityDays 设置有效期天数。
+func (_u *PromoCodeUpdateOne) SetValidityDays(v int) *PromoCodeUpdateOne {
+	_u.mutation.SetValidityDays(v)
 	return _u
 }
 
@@ -650,6 +680,12 @@ func (_u *PromoCodeUpdateOne) sqlSave(ctx context.Context) (_node *PromoCode, er
 	}
 	if value, ok := _u.mutation.BonusAmount(); ok {
 		_spec.SetField(promocode.FieldBonusAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RewardType(); ok {
+		_spec.SetField(promocode.FieldRewardType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ValidityDays(); ok {
+		_spec.SetField(promocode.FieldValidityDays, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedBonusAmount(); ok {
 		_spec.AddField(promocode.FieldBonusAmount, field.TypeFloat64, value)

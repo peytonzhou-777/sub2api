@@ -457,6 +457,10 @@ export default {
       columns: {
         code: '优惠码',
         bonusAmount: '赠送金额',
+      rewardType: '奖励类型',
+      rewardBalance: '普通余额',
+      rewardLimitedCredit: '限时额度',
+      validityDays: '有效期（天）',
         maxUses: '最大使用次数',
         usedCount: '已使用',
         usage: '使用量',

@@ -834,16 +834,18 @@ func PromoCodeFromService(pc *service.PromoCode) *PromoCode {
 		return nil
 	}
 	return &PromoCode{
-		ID:          pc.ID,
-		Code:        pc.Code,
-		BonusAmount: pc.BonusAmount,
-		MaxUses:     pc.MaxUses,
-		UsedCount:   pc.UsedCount,
-		Status:      pc.Status,
-		ExpiresAt:   pc.ExpiresAt,
-		Notes:       pc.Notes,
-		CreatedAt:   pc.CreatedAt,
-		UpdatedAt:   pc.UpdatedAt,
+		ID:           pc.ID,
+		Code:         pc.Code,
+		BonusAmount:  pc.BonusAmount,
+		RewardType:   pc.RewardType,
+		ValidityDays: pc.ValidityDays,
+		MaxUses:      pc.MaxUses,
+		UsedCount:    pc.UsedCount,
+		Status:       pc.Status,
+		ExpiresAt:    pc.ExpiresAt,
+		Notes:        pc.Notes,
+		CreatedAt:    pc.CreatedAt,
+		UpdatedAt:    pc.UpdatedAt,
 	}
 }
 
@@ -852,11 +854,13 @@ func PromoCodeUsageFromService(u *service.PromoCodeUsage) *PromoCodeUsage {
 		return nil
 	}
 	return &PromoCodeUsage{
-		ID:          u.ID,
-		PromoCodeID: u.PromoCodeID,
-		UserID:      u.UserID,
-		BonusAmount: u.BonusAmount,
-		UsedAt:      u.UsedAt,
-		User:        UserFromServiceShallow(u.User),
+		ID:           u.ID,
+		PromoCodeID:  u.PromoCodeID,
+		UserID:       u.UserID,
+		BonusAmount:  u.BonusAmount,
+		RewardType:   u.RewardType,
+		ValidityDays: u.ValidityDays,
+		UsedAt:       u.UsedAt,
+		User:         UserFromServiceShallow(u.User),
 	}
 }
