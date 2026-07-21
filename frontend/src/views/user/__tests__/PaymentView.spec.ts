@@ -30,6 +30,10 @@ const limitedCreditState = vi.hoisted(() => ({
   remainingAmount: 0,
   fetchActiveLimitedCredits: vi.fn().mockResolvedValue(undefined),
 }))
+const subscriptionState = vi.hoisted(() => ({
+  activeSubscriptions: [] as Array<Record<string, unknown>>,
+  fetchActiveSubscriptions: vi.fn().mockResolvedValue([]),
+}))
 const showError = vi.hoisted(() => vi.fn())
 const showInfo = vi.hoisted(() => vi.fn())
 const showWarning = vi.hoisted(() => vi.fn())
@@ -101,6 +105,9 @@ vi.mock('@/stores/payment', () => ({
 vi.mock('@/stores/limitedCredits', () => ({
   useLimitedCreditStore: () => limitedCreditState,
 }))
+vi.mock('@/stores/subscriptions', () => ({
+  useSubscriptionStore: () => subscriptionState,
+}))
 vi.mock('@/stores', () => ({
   useAppStore: () => ({
     showError,
@@ -125,6 +132,8 @@ beforeEach(() => {
   limitedCreditState.loading = false
   limitedCreditState.remainingAmount = 0
   limitedCreditState.fetchActiveLimitedCredits.mockReset().mockResolvedValue(undefined)
+  subscriptionState.activeSubscriptions = []
+  subscriptionState.fetchActiveSubscriptions.mockReset().mockResolvedValue([])
 })
 
 function checkoutInfoFixture(overrides: Partial<CheckoutInfoResponse> = {}) {
