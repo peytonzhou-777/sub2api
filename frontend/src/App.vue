@@ -53,7 +53,7 @@ watch(
   { deep: true }
 )
 
-// Watch for authentication state and manage subscription data + announcements
+// Watch for authentication state and manage cached user data + announcements
 function onVisibilityChange() {
   if (document.visibilityState === 'visible' && authStore.isAuthenticated) {
     announcementStore.fetchAnnouncements()
@@ -75,11 +75,7 @@ watch(
         })
       }
 
-      // User logged in: preload subscriptions/limited credits and start polling
-      subscriptionStore.fetchActiveSubscriptions().catch((error) => {
-        console.error('Failed to preload subscriptions:', error)
-      })
-      subscriptionStore.startPolling()
+      // 用户登录后仅预加载限时额度；订阅状态不再用于用户侧展示。
       limitedCreditStore.fetchActiveLimitedCredits().catch((error) => {
         console.error('Failed to preload limited credits:', error)
       })

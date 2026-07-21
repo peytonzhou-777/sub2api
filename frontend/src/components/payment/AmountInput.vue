@@ -11,14 +11,21 @@
           :key="amt"
           type="button"
           :class="[
-            'rounded-lg border-2 px-4 py-3 text-center font-medium transition-colors',
+            'relative flex min-h-[52px] items-center justify-center rounded-lg border-2 px-4 py-3 text-center font-medium transition-colors',
             modelValue === amt
               ? 'border-primary-500 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-900/40 dark:text-primary-300'
               : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-200 dark:hover:border-dark-500',
           ]"
           @click="selectAmount(amt)"
         >
-          {{ amt }}
+          <span>{{ amt }}</span>
+          <span
+            v-if="bonusAmounts[amt] > 0"
+            data-test="quick-amount-bonus"
+            class="absolute right-2 top-1 text-[10px] font-semibold leading-none text-red-600 dark:text-red-400"
+          >
+            +{{ bonusAmounts[amt].toFixed(2) }}$
+          </span>
         </button>
       </div>
     </div>
@@ -54,10 +61,12 @@ const props = withDefaults(defineProps<{
   modelValue: number | null
   min?: number
   max?: number
+  bonusAmounts?: Record<number, number>
 }>(), {
   amounts: () => [10, 20, 50, 100, 200, 500, 1000, 2000, 5000],
   min: 0,
   max: 0,
+  bonusAmounts: () => ({}),
 })
 
 const emit = defineEmits<{
