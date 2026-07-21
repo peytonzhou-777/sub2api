@@ -272,6 +272,13 @@ func TestContentModerationRuntimeSnapshotRefreshFailureKeepsStaleConfig(t *testi
 	require.NoError(t, err)
 	require.True(t, decision.Blocked)
 
+	// 显式构造过期快照，避免 Windows 时钟粒度使 1ns TTL 未触发刷新。
+	snapshot := svc.runtimeSnapshot.Load()
+	require.NotNil(t, snapshot)
+	expired := *snapshot
+	expired.loadedAt = time.Now().Add(-time.Second)
+	svc.runtimeSnapshot.Store(&expired)
+
 	repo.failMultiple(errors.New("database unavailable"))
 	decision, err = svc.Check(context.Background(), input)
 	require.NoError(t, err)
