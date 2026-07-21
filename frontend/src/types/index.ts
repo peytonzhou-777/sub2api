@@ -2244,6 +2244,8 @@ export interface PromoCode {
   id: number
   code: string
   bonus_amount: number
+  reward_type: 'balance' | 'limited_credit'
+  validity_days: number
   max_uses: number
   used_count: number
   status: 'active' | 'disabled'
@@ -2258,6 +2260,8 @@ export interface PromoCodeUsage {
   promo_code_id: number
   user_id: number
   bonus_amount: number
+  reward_type: 'balance' | 'limited_credit'
+  validity_days: number
   used_at: string
   user?: User
 }
@@ -2265,6 +2269,8 @@ export interface PromoCodeUsage {
 export interface CreatePromoCodeRequest {
   code?: string
   bonus_amount: number
+  reward_type?: 'balance' | 'limited_credit'
+  validity_days?: number
   max_uses?: number
   expires_at?: number | null
   notes?: string
@@ -2273,6 +2279,8 @@ export interface CreatePromoCodeRequest {
 export interface UpdatePromoCodeRequest {
   code?: string
   bonus_amount?: number
+  reward_type?: 'balance' | 'limited_credit'
+  validity_days?: number
   max_uses?: number
   status?: 'active' | 'disabled'
   expires_at?: number | null

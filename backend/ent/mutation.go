@@ -35657,6 +35657,9 @@ type PromoCodeMutation struct {
 	code                 *string
 	bonus_amount         *float64
 	addbonus_amount      *float64
+	reward_type          *string
+	validity_days        *int
+	addvalidity_days     *int
 	max_uses             *int
 	addmax_uses          *int
 	used_count           *int
@@ -35863,6 +35866,98 @@ func (m *PromoCodeMutation) AddedBonusAmount() (r float64, exists bool) {
 func (m *PromoCodeMutation) ResetBonusAmount() {
 	m.bonus_amount = nil
 	m.addbonus_amount = nil
+}
+
+// SetRewardType sets the "reward_type" field.
+func (m *PromoCodeMutation) SetRewardType(s string) {
+	m.reward_type = &s
+}
+
+// RewardType returns the value of the "reward_type" field in the mutation.
+func (m *PromoCodeMutation) RewardType() (r string, exists bool) {
+	v := m.reward_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRewardType returns the old "reward_type" field's value of the PromoCode entity.
+// If the PromoCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromoCodeMutation) OldRewardType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRewardType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRewardType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRewardType: %w", err)
+	}
+	return oldValue.RewardType, nil
+}
+
+// ResetRewardType resets all changes to the "reward_type" field.
+func (m *PromoCodeMutation) ResetRewardType() {
+	m.reward_type = nil
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (m *PromoCodeMutation) SetValidityDays(i int) {
+	m.validity_days = &i
+	m.addvalidity_days = nil
+}
+
+// ValidityDays returns the value of the "validity_days" field in the mutation.
+func (m *PromoCodeMutation) ValidityDays() (r int, exists bool) {
+	v := m.validity_days
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValidityDays returns the old "validity_days" field's value of the PromoCode entity.
+// If the PromoCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromoCodeMutation) OldValidityDays(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValidityDays is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValidityDays requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValidityDays: %w", err)
+	}
+	return oldValue.ValidityDays, nil
+}
+
+// AddValidityDays adds i to the "validity_days" field.
+func (m *PromoCodeMutation) AddValidityDays(i int) {
+	if m.addvalidity_days != nil {
+		*m.addvalidity_days += i
+	} else {
+		m.addvalidity_days = &i
+	}
+}
+
+// AddedValidityDays returns the value that was added to the "validity_days" field in this mutation.
+func (m *PromoCodeMutation) AddedValidityDays() (r int, exists bool) {
+	v := m.addvalidity_days
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetValidityDays resets all changes to the "validity_days" field.
+func (m *PromoCodeMutation) ResetValidityDays() {
+	m.validity_days = nil
+	m.addvalidity_days = nil
 }
 
 // SetMaxUses sets the "max_uses" field.
@@ -36271,12 +36366,18 @@ func (m *PromoCodeMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PromoCodeMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 11)
 	if m.code != nil {
 		fields = append(fields, promocode.FieldCode)
 	}
 	if m.bonus_amount != nil {
 		fields = append(fields, promocode.FieldBonusAmount)
+	}
+	if m.reward_type != nil {
+		fields = append(fields, promocode.FieldRewardType)
+	}
+	if m.validity_days != nil {
+		fields = append(fields, promocode.FieldValidityDays)
 	}
 	if m.max_uses != nil {
 		fields = append(fields, promocode.FieldMaxUses)
@@ -36311,6 +36412,10 @@ func (m *PromoCodeMutation) Field(name string) (ent.Value, bool) {
 		return m.Code()
 	case promocode.FieldBonusAmount:
 		return m.BonusAmount()
+	case promocode.FieldRewardType:
+		return m.RewardType()
+	case promocode.FieldValidityDays:
+		return m.ValidityDays()
 	case promocode.FieldMaxUses:
 		return m.MaxUses()
 	case promocode.FieldUsedCount:
@@ -36338,6 +36443,10 @@ func (m *PromoCodeMutation) OldField(ctx context.Context, name string) (ent.Valu
 		return m.OldCode(ctx)
 	case promocode.FieldBonusAmount:
 		return m.OldBonusAmount(ctx)
+	case promocode.FieldRewardType:
+		return m.OldRewardType(ctx)
+	case promocode.FieldValidityDays:
+		return m.OldValidityDays(ctx)
 	case promocode.FieldMaxUses:
 		return m.OldMaxUses(ctx)
 	case promocode.FieldUsedCount:
@@ -36374,6 +36483,20 @@ func (m *PromoCodeMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBonusAmount(v)
+		return nil
+	case promocode.FieldRewardType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRewardType(v)
+		return nil
+	case promocode.FieldValidityDays:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValidityDays(v)
 		return nil
 	case promocode.FieldMaxUses:
 		v, ok := value.(int)
@@ -36435,6 +36558,9 @@ func (m *PromoCodeMutation) AddedFields() []string {
 	if m.addbonus_amount != nil {
 		fields = append(fields, promocode.FieldBonusAmount)
 	}
+	if m.addvalidity_days != nil {
+		fields = append(fields, promocode.FieldValidityDays)
+	}
 	if m.addmax_uses != nil {
 		fields = append(fields, promocode.FieldMaxUses)
 	}
@@ -36451,6 +36577,8 @@ func (m *PromoCodeMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case promocode.FieldBonusAmount:
 		return m.AddedBonusAmount()
+	case promocode.FieldValidityDays:
+		return m.AddedValidityDays()
 	case promocode.FieldMaxUses:
 		return m.AddedMaxUses()
 	case promocode.FieldUsedCount:
@@ -36470,6 +36598,13 @@ func (m *PromoCodeMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddBonusAmount(v)
+		return nil
+	case promocode.FieldValidityDays:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddValidityDays(v)
 		return nil
 	case promocode.FieldMaxUses:
 		v, ok := value.(int)
@@ -36532,6 +36667,12 @@ func (m *PromoCodeMutation) ResetField(name string) error {
 		return nil
 	case promocode.FieldBonusAmount:
 		m.ResetBonusAmount()
+		return nil
+	case promocode.FieldRewardType:
+		m.ResetRewardType()
+		return nil
+	case promocode.FieldValidityDays:
+		m.ResetValidityDays()
 		return nil
 	case promocode.FieldMaxUses:
 		m.ResetMaxUses()
@@ -36650,6 +36791,9 @@ type PromoCodeUsageMutation struct {
 	id                *int64
 	bonus_amount      *float64
 	addbonus_amount   *float64
+	reward_type       *string
+	validity_days     *int
+	addvalidity_days  *int
 	used_at           *time.Time
 	clearedFields     map[string]struct{}
 	promo_code        *int64
@@ -36887,6 +37031,98 @@ func (m *PromoCodeUsageMutation) ResetBonusAmount() {
 	m.addbonus_amount = nil
 }
 
+// SetRewardType sets the "reward_type" field.
+func (m *PromoCodeUsageMutation) SetRewardType(s string) {
+	m.reward_type = &s
+}
+
+// RewardType returns the value of the "reward_type" field in the mutation.
+func (m *PromoCodeUsageMutation) RewardType() (r string, exists bool) {
+	v := m.reward_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRewardType returns the old "reward_type" field's value of the PromoCodeUsage entity.
+// If the PromoCodeUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromoCodeUsageMutation) OldRewardType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRewardType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRewardType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRewardType: %w", err)
+	}
+	return oldValue.RewardType, nil
+}
+
+// ResetRewardType resets all changes to the "reward_type" field.
+func (m *PromoCodeUsageMutation) ResetRewardType() {
+	m.reward_type = nil
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (m *PromoCodeUsageMutation) SetValidityDays(i int) {
+	m.validity_days = &i
+	m.addvalidity_days = nil
+}
+
+// ValidityDays returns the value of the "validity_days" field in the mutation.
+func (m *PromoCodeUsageMutation) ValidityDays() (r int, exists bool) {
+	v := m.validity_days
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValidityDays returns the old "validity_days" field's value of the PromoCodeUsage entity.
+// If the PromoCodeUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromoCodeUsageMutation) OldValidityDays(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValidityDays is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValidityDays requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValidityDays: %w", err)
+	}
+	return oldValue.ValidityDays, nil
+}
+
+// AddValidityDays adds i to the "validity_days" field.
+func (m *PromoCodeUsageMutation) AddValidityDays(i int) {
+	if m.addvalidity_days != nil {
+		*m.addvalidity_days += i
+	} else {
+		m.addvalidity_days = &i
+	}
+}
+
+// AddedValidityDays returns the value that was added to the "validity_days" field in this mutation.
+func (m *PromoCodeUsageMutation) AddedValidityDays() (r int, exists bool) {
+	v := m.addvalidity_days
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetValidityDays resets all changes to the "validity_days" field.
+func (m *PromoCodeUsageMutation) ResetValidityDays() {
+	m.validity_days = nil
+	m.addvalidity_days = nil
+}
+
 // SetUsedAt sets the "used_at" field.
 func (m *PromoCodeUsageMutation) SetUsedAt(t time.Time) {
 	m.used_at = &t
@@ -37011,7 +37247,7 @@ func (m *PromoCodeUsageMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PromoCodeUsageMutation) Fields() []string {
-	fields := make([]string, 0, 4)
+	fields := make([]string, 0, 6)
 	if m.promo_code != nil {
 		fields = append(fields, promocodeusage.FieldPromoCodeID)
 	}
@@ -37020,6 +37256,12 @@ func (m *PromoCodeUsageMutation) Fields() []string {
 	}
 	if m.bonus_amount != nil {
 		fields = append(fields, promocodeusage.FieldBonusAmount)
+	}
+	if m.reward_type != nil {
+		fields = append(fields, promocodeusage.FieldRewardType)
+	}
+	if m.validity_days != nil {
+		fields = append(fields, promocodeusage.FieldValidityDays)
 	}
 	if m.used_at != nil {
 		fields = append(fields, promocodeusage.FieldUsedAt)
@@ -37038,6 +37280,10 @@ func (m *PromoCodeUsageMutation) Field(name string) (ent.Value, bool) {
 		return m.UserID()
 	case promocodeusage.FieldBonusAmount:
 		return m.BonusAmount()
+	case promocodeusage.FieldRewardType:
+		return m.RewardType()
+	case promocodeusage.FieldValidityDays:
+		return m.ValidityDays()
 	case promocodeusage.FieldUsedAt:
 		return m.UsedAt()
 	}
@@ -37055,6 +37301,10 @@ func (m *PromoCodeUsageMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldUserID(ctx)
 	case promocodeusage.FieldBonusAmount:
 		return m.OldBonusAmount(ctx)
+	case promocodeusage.FieldRewardType:
+		return m.OldRewardType(ctx)
+	case promocodeusage.FieldValidityDays:
+		return m.OldValidityDays(ctx)
 	case promocodeusage.FieldUsedAt:
 		return m.OldUsedAt(ctx)
 	}
@@ -37087,6 +37337,20 @@ func (m *PromoCodeUsageMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetBonusAmount(v)
 		return nil
+	case promocodeusage.FieldRewardType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRewardType(v)
+		return nil
+	case promocodeusage.FieldValidityDays:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValidityDays(v)
+		return nil
 	case promocodeusage.FieldUsedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -37105,6 +37369,9 @@ func (m *PromoCodeUsageMutation) AddedFields() []string {
 	if m.addbonus_amount != nil {
 		fields = append(fields, promocodeusage.FieldBonusAmount)
 	}
+	if m.addvalidity_days != nil {
+		fields = append(fields, promocodeusage.FieldValidityDays)
+	}
 	return fields
 }
 
@@ -37115,6 +37382,8 @@ func (m *PromoCodeUsageMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case promocodeusage.FieldBonusAmount:
 		return m.AddedBonusAmount()
+	case promocodeusage.FieldValidityDays:
+		return m.AddedValidityDays()
 	}
 	return nil, false
 }
@@ -37130,6 +37399,13 @@ func (m *PromoCodeUsageMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddBonusAmount(v)
+		return nil
+	case promocodeusage.FieldValidityDays:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddValidityDays(v)
 		return nil
 	}
 	return fmt.Errorf("unknown PromoCodeUsage numeric field %s", name)
@@ -37166,6 +37442,12 @@ func (m *PromoCodeUsageMutation) ResetField(name string) error {
 		return nil
 	case promocodeusage.FieldBonusAmount:
 		m.ResetBonusAmount()
+		return nil
+	case promocodeusage.FieldRewardType:
+		m.ResetRewardType()
+		return nil
+	case promocodeusage.FieldValidityDays:
+		m.ResetValidityDays()
 		return nil
 	case promocodeusage.FieldUsedAt:
 		m.ResetUsedAt()

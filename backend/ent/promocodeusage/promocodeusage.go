@@ -20,6 +20,10 @@ const (
 	FieldUserID = "user_id"
 	// FieldBonusAmount holds the string denoting the bonus_amount field in the database.
 	FieldBonusAmount = "bonus_amount"
+	// FieldRewardType holds the string denoting the reward_type field in the database.
+	FieldRewardType = "reward_type"
+	// FieldValidityDays holds the string denoting the validity_days field in the database.
+	FieldValidityDays = "validity_days"
 	// FieldUsedAt holds the string denoting the used_at field in the database.
 	FieldUsedAt = "used_at"
 	// EdgePromoCode holds the string denoting the promo_code edge name in mutations.
@@ -50,6 +54,8 @@ var Columns = []string{
 	FieldPromoCodeID,
 	FieldUserID,
 	FieldBonusAmount,
+	FieldRewardType,
+	FieldValidityDays,
 	FieldUsedAt,
 }
 
@@ -64,6 +70,12 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultRewardType holds the default value on creation for the "reward_type" field.
+	DefaultRewardType string
+	// RewardTypeValidator is a validator for the "reward_type" field. It is called by the builders before save.
+	RewardTypeValidator func(string) error
+	// DefaultValidityDays holds the default value on creation for the "validity_days" field.
+	DefaultValidityDays int
 	// DefaultUsedAt holds the default value on creation for the "used_at" field.
 	DefaultUsedAt func() time.Time
 )
@@ -89,6 +101,16 @@ func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 // ByBonusAmount orders the results by the bonus_amount field.
 func ByBonusAmount(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBonusAmount, opts...).ToFunc()
+}
+
+// ByRewardType orders the results by the reward_type field.
+func ByRewardType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRewardType, opts...).ToFunc()
+}
+
+// ByValidityDays orders the results by the validity_days field.
+func ByValidityDays(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldValidityDays, opts...).ToFunc()
 }
 
 // ByUsedAt orders the results by the used_at field.

@@ -15,6 +15,7 @@ const (
 	LimitedCreditSourceAffiliateRebate    = "affiliate_rebate"
 	LimitedCreditSourceRechargeBonus      = "recharge_bonus"
 	LimitedCreditStatusActive             = "active"
+	LimitedCreditSourcePromoCode          = "promo_code"
 	LimitedCreditStatusDepleted           = "depleted"
 	LimitedCreditStatusExpired            = "expired"
 )
@@ -183,6 +184,33 @@ func (s *LimitedCreditService) GrantFromAuthSourceSettings(ctx context.Context, 
 		grants = append(grants, *created)
 	}
 	return grants, nil
+}
+
+// GrantFromPromoCode 通过注册优惠码发放一份限时额度，并复用调用方事务。
+func (s *LimitedCreditService) GrantFromPromoCode(ctx context.Context, userID int64, code *PromoCode) (*LimitedCreditGrant, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("limited credit service is not configured")
+	}
+	if code == nil {
+		return nil, fmt.Errorf("promo code is required")
+	}
+	if code.ID <= 0 || userID <= 0 {
+		return nil, fmt.Errorf("user id and promo code id must be greater than zero")
+	}
+	if code.BonusAmount <= 0 || code.ValidityDays <= 0 {
+		return nil, fmt.Errorf("promo limited credit amount and validity must be greater than zero")
+	}
+	sourceID := code.ID
+	return s.repo.CreateGrant(ctx, &LimitedCreditGrant{
+		UserID:        userID,
+		SourceType:    LimitedCreditSourcePromoCode,
+		SourceID:      &sourceID,
+		InitialAmount: code.BonusAmount,
+		ExpiresAt:     time.Now().UTC().AddDate(0, 0, code.ValidityDays),
+		Status:        LimitedCreditStatusActive,
+		Notes:         fmt.Sprintf("通过优惠码 %s 注册赠送", code.Code),
+	})
+
 }
 
 // GrantFromRechargeBonus 为一笔充值订单发放固定 30 天有效的限时额度。

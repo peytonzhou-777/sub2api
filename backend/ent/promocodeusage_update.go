@@ -79,6 +79,41 @@ func (_u *PromoCodeUsageUpdate) AddBonusAmount(v float64) *PromoCodeUsageUpdate 
 	return _u
 }
 
+// SetRewardType sets the "reward_type" field.
+func (_u *PromoCodeUsageUpdate) SetRewardType(v string) *PromoCodeUsageUpdate {
+	_u.mutation.SetRewardType(v)
+	return _u
+}
+
+// SetNillableRewardType sets the "reward_type" field if the given value is not nil.
+func (_u *PromoCodeUsageUpdate) SetNillableRewardType(v *string) *PromoCodeUsageUpdate {
+	if v != nil {
+		_u.SetRewardType(*v)
+	}
+	return _u
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (_u *PromoCodeUsageUpdate) SetValidityDays(v int) *PromoCodeUsageUpdate {
+	_u.mutation.ResetValidityDays()
+	_u.mutation.SetValidityDays(v)
+	return _u
+}
+
+// SetNillableValidityDays sets the "validity_days" field if the given value is not nil.
+func (_u *PromoCodeUsageUpdate) SetNillableValidityDays(v *int) *PromoCodeUsageUpdate {
+	if v != nil {
+		_u.SetValidityDays(*v)
+	}
+	return _u
+}
+
+// AddValidityDays adds value to the "validity_days" field.
+func (_u *PromoCodeUsageUpdate) AddValidityDays(v int) *PromoCodeUsageUpdate {
+	_u.mutation.AddValidityDays(v)
+	return _u
+}
+
 // SetUsedAt sets the "used_at" field.
 func (_u *PromoCodeUsageUpdate) SetUsedAt(v time.Time) *PromoCodeUsageUpdate {
 	_u.mutation.SetUsedAt(v)
@@ -149,6 +184,11 @@ func (_u *PromoCodeUsageUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *PromoCodeUsageUpdate) check() error {
+	if v, ok := _u.mutation.RewardType(); ok {
+		if err := promocodeusage.RewardTypeValidator(v); err != nil {
+			return &ValidationError{Name: "reward_type", err: fmt.Errorf(`ent: validator failed for field "PromoCodeUsage.reward_type": %w`, err)}
+		}
+	}
 	if _u.mutation.PromoCodeCleared() && len(_u.mutation.PromoCodeIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "PromoCodeUsage.promo_code"`)
 	}
@@ -175,6 +215,15 @@ func (_u *PromoCodeUsageUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.AddedBonusAmount(); ok {
 		_spec.AddField(promocodeusage.FieldBonusAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RewardType(); ok {
+		_spec.SetField(promocodeusage.FieldRewardType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ValidityDays(); ok {
+		_spec.SetField(promocodeusage.FieldValidityDays, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedValidityDays(); ok {
+		_spec.AddField(promocodeusage.FieldValidityDays, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.UsedAt(); ok {
 		_spec.SetField(promocodeusage.FieldUsedAt, field.TypeTime, value)
@@ -306,6 +355,41 @@ func (_u *PromoCodeUsageUpdateOne) AddBonusAmount(v float64) *PromoCodeUsageUpda
 	return _u
 }
 
+// SetRewardType sets the "reward_type" field.
+func (_u *PromoCodeUsageUpdateOne) SetRewardType(v string) *PromoCodeUsageUpdateOne {
+	_u.mutation.SetRewardType(v)
+	return _u
+}
+
+// SetNillableRewardType sets the "reward_type" field if the given value is not nil.
+func (_u *PromoCodeUsageUpdateOne) SetNillableRewardType(v *string) *PromoCodeUsageUpdateOne {
+	if v != nil {
+		_u.SetRewardType(*v)
+	}
+	return _u
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (_u *PromoCodeUsageUpdateOne) SetValidityDays(v int) *PromoCodeUsageUpdateOne {
+	_u.mutation.ResetValidityDays()
+	_u.mutation.SetValidityDays(v)
+	return _u
+}
+
+// SetNillableValidityDays sets the "validity_days" field if the given value is not nil.
+func (_u *PromoCodeUsageUpdateOne) SetNillableValidityDays(v *int) *PromoCodeUsageUpdateOne {
+	if v != nil {
+		_u.SetValidityDays(*v)
+	}
+	return _u
+}
+
+// AddValidityDays adds value to the "validity_days" field.
+func (_u *PromoCodeUsageUpdateOne) AddValidityDays(v int) *PromoCodeUsageUpdateOne {
+	_u.mutation.AddValidityDays(v)
+	return _u
+}
+
 // SetUsedAt sets the "used_at" field.
 func (_u *PromoCodeUsageUpdateOne) SetUsedAt(v time.Time) *PromoCodeUsageUpdateOne {
 	_u.mutation.SetUsedAt(v)
@@ -389,6 +473,11 @@ func (_u *PromoCodeUsageUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *PromoCodeUsageUpdateOne) check() error {
+	if v, ok := _u.mutation.RewardType(); ok {
+		if err := promocodeusage.RewardTypeValidator(v); err != nil {
+			return &ValidationError{Name: "reward_type", err: fmt.Errorf(`ent: validator failed for field "PromoCodeUsage.reward_type": %w`, err)}
+		}
+	}
 	if _u.mutation.PromoCodeCleared() && len(_u.mutation.PromoCodeIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "PromoCodeUsage.promo_code"`)
 	}
@@ -432,6 +521,15 @@ func (_u *PromoCodeUsageUpdateOne) sqlSave(ctx context.Context) (_node *PromoCod
 	}
 	if value, ok := _u.mutation.AddedBonusAmount(); ok {
 		_spec.AddField(promocodeusage.FieldBonusAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RewardType(); ok {
+		_spec.SetField(promocodeusage.FieldRewardType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ValidityDays(); ok {
+		_spec.SetField(promocodeusage.FieldValidityDays, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedValidityDays(); ok {
+		_spec.AddField(promocodeusage.FieldValidityDays, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.UsedAt(); ok {
 		_spec.SetField(promocodeusage.FieldUsedAt, field.TypeTime, value)

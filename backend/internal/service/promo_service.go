@@ -29,6 +29,20 @@ type PromoService struct {
 	billingCacheService  *BillingCacheService
 	entClient            *dbent.Client
 	authCacheInvalidator APIKeyAuthCacheInvalidator
+	limitedCreditGranter PromoLimitedCreditGranter
+}
+
+// PromoLimitedCreditGranter 定义优惠码发放限时额度的能力。
+type PromoLimitedCreditGranter interface {
+	GrantFromPromoCode(context.Context, int64, *PromoCode) (*LimitedCreditGrant, error)
+}
+
+// PromoServiceOption 配置优惠码服务的可选依赖。
+type PromoServiceOption func(*PromoService)
+
+// WithPromoLimitedCreditGranter 注入限时额度发放器。
+func WithPromoLimitedCreditGranter(granter PromoLimitedCreditGranter) PromoServiceOption {
+	return func(service *PromoService) { service.limitedCreditGranter = granter }
 }
 
 // NewPromoService 创建优惠码服务实例
@@ -38,14 +52,21 @@ func NewPromoService(
 	billingCacheService *BillingCacheService,
 	entClient *dbent.Client,
 	authCacheInvalidator APIKeyAuthCacheInvalidator,
+	options ...PromoServiceOption,
 ) *PromoService {
-	return &PromoService{
+	service := &PromoService{
 		promoRepo:            promoRepo,
 		userRepo:             userRepo,
 		billingCacheService:  billingCacheService,
 		entClient:            entClient,
 		authCacheInvalidator: authCacheInvalidator,
 	}
+	for _, option := range options {
+		if option != nil {
+			option(service)
+		}
+	}
+	return service
 }
 
 // ValidatePromoCode 验证优惠码（注册前调用）
@@ -66,6 +87,15 @@ func (s *PromoService) ValidatePromoCode(ctx context.Context, code string) (*Pro
 		return nil, err
 	}
 
+	rewardType, validityDays, err := NormalizePromoReward(promoCode.RewardType, promoCode.ValidityDays)
+	if err != nil {
+		return nil, err
+	}
+	promoCode.RewardType = rewardType
+	promoCode.ValidityDays = validityDays
+	if err := ValidatePromoReward(rewardType, promoCode.BonusAmount, validityDays); err != nil {
+		return nil, err
+	}
 	return promoCode, nil
 }
 
@@ -114,6 +144,15 @@ func (s *PromoService) ApplyPromoCode(ctx context.Context, userID int64, code st
 		return err
 	}
 
+	rewardType, validityDays, err := NormalizePromoReward(promoCode.RewardType, promoCode.ValidityDays)
+	if err != nil {
+		return err
+	}
+	promoCode.RewardType = rewardType
+	promoCode.ValidityDays = validityDays
+	if err := ValidatePromoReward(rewardType, promoCode.BonusAmount, validityDays); err != nil {
+		return err
+	}
 	// 在事务中检查用户是否已使用过此优惠码
 	existing, err := s.promoRepo.GetUsageByPromoCodeAndUser(txCtx, promoCode.ID, userID)
 	if err != nil {
@@ -123,17 +162,26 @@ func (s *PromoService) ApplyPromoCode(ctx context.Context, userID int64, code st
 		return ErrPromoCodeAlreadyUsed
 	}
 
-	// 增加用户余额
-	if err := s.userRepo.UpdateBalance(txCtx, userID, promoCode.BonusAmount); err != nil {
+	// 按奖励类型发放永久余额或限时额度。
+	if promoCode.RewardType == PromoCodeRewardTypeLimitedCredit {
+		if s.limitedCreditGranter == nil {
+			return fmt.Errorf("limited credit service is not configured")
+		}
+		if _, err := s.limitedCreditGranter.GrantFromPromoCode(txCtx, userID, promoCode); err != nil {
+			return fmt.Errorf("grant limited credit: %w", err)
+		}
+	} else if err := s.userRepo.UpdateBalance(txCtx, userID, promoCode.BonusAmount); err != nil {
 		return fmt.Errorf("update user balance: %w", err)
 	}
 
 	// 创建使用记录
 	usage := &PromoCodeUsage{
-		PromoCodeID: promoCode.ID,
-		UserID:      userID,
-		BonusAmount: promoCode.BonusAmount,
-		UsedAt:      time.Now(),
+		PromoCodeID:  promoCode.ID,
+		UserID:       userID,
+		BonusAmount:  promoCode.BonusAmount,
+		RewardType:   promoCode.RewardType,
+		ValidityDays: promoCode.ValidityDays,
+		UsedAt:       time.Now(),
 	}
 	if err := s.promoRepo.CreateUsage(txCtx, usage); err != nil {
 		return fmt.Errorf("create usage record: %w", err)
@@ -190,14 +238,24 @@ func (s *PromoService) Create(ctx context.Context, input *CreatePromoCodeInput) 
 		}
 	}
 
+	rewardType, validityDays, err := NormalizePromoReward(input.RewardType, input.ValidityDays)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidatePromoReward(rewardType, input.BonusAmount, validityDays); err != nil {
+		return nil, err
+	}
+
 	promoCode := &PromoCode{
-		Code:        strings.ToUpper(code),
-		BonusAmount: input.BonusAmount,
-		MaxUses:     input.MaxUses,
-		UsedCount:   0,
-		Status:      PromoCodeStatusActive,
-		ExpiresAt:   input.ExpiresAt,
-		Notes:       input.Notes,
+		Code:         strings.ToUpper(code),
+		BonusAmount:  input.BonusAmount,
+		RewardType:   rewardType,
+		ValidityDays: validityDays,
+		MaxUses:      input.MaxUses,
+		UsedCount:    0,
+		Status:       PromoCodeStatusActive,
+		ExpiresAt:    input.ExpiresAt,
+		Notes:        input.Notes,
 	}
 
 	if err := s.promoRepo.Create(ctx, promoCode); err != nil {
@@ -229,6 +287,21 @@ func (s *PromoService) Update(ctx context.Context, id int64, input *UpdatePromoC
 	if input.BonusAmount != nil {
 		promoCode.BonusAmount = *input.BonusAmount
 	}
+	if input.RewardType != nil {
+		promoCode.RewardType = *input.RewardType
+	}
+	if input.ValidityDays != nil {
+		promoCode.ValidityDays = *input.ValidityDays
+	}
+	rewardType, validityDays, err := NormalizePromoReward(promoCode.RewardType, promoCode.ValidityDays)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidatePromoReward(rewardType, promoCode.BonusAmount, validityDays); err != nil {
+		return nil, err
+	}
+	promoCode.RewardType = rewardType
+	promoCode.ValidityDays = validityDays
 	if input.MaxUses != nil {
 		promoCode.MaxUses = *input.MaxUses
 	}

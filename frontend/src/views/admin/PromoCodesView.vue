@@ -188,6 +188,14 @@
           />
         </div>
         <div>
+          <label class="input-label">{{ t('admin.promo.rewardType') }}</label>
+          <Select v-model="createForm.reward_type" :options="rewardTypeOptions" />
+        </div>
+        <div v-if="createForm.reward_type === 'limited_credit'">
+          <label class="input-label">{{ t('admin.promo.validityDays') }}</label>
+          <input v-model.number="createForm.validity_days" type="number" min="1" max="36500" required class="input" />
+        </div>
+        <div>
           <label class="input-label">
             {{ t('admin.promo.maxUses') }}
             <span class="ml-1 text-xs font-normal text-gray-400">({{ t('admin.promo.zeroUnlimited') }})</span>
@@ -261,6 +269,14 @@
             required
             class="input"
           />
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.promo.rewardType') }}</label>
+          <Select v-model="editForm.reward_type" :options="rewardTypeOptions" />
+        </div>
+        <div v-if="editForm.reward_type === 'limited_credit'">
+          <label class="input-label">{{ t('admin.promo.validityDays') }}</label>
+          <input v-model.number="editForm.validity_days" type="number" min="1" max="36500" required class="input" />
         </div>
         <div>
           <label class="input-label">
@@ -342,6 +358,9 @@
               </p>
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {{ formatDateTime(usage.used_at) }}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {{ usage.reward_type === 'limited_credit' ? t('admin.promo.rewardLimitedCredit') + ' (' + usage.validity_days + 'd)' : t('admin.promo.rewardBalance') }}
               </p>
             </div>
           </div>
@@ -451,6 +470,8 @@ const usagesTotal = ref(0)
 const createForm = reactive({
   code: '',
   bonus_amount: 1,
+  reward_type: 'balance' as 'balance' | 'limited_credit',
+  validity_days: 30,
   max_uses: 0,
   expires_at_str: '',
   notes: ''
@@ -459,6 +480,8 @@ const createForm = reactive({
 const editForm = reactive({
   code: '',
   bonus_amount: 0,
+  reward_type: 'balance' as 'balance' | 'limited_credit',
+  validity_days: 30,
   max_uses: 0,
   status: 'active' as 'active' | 'disabled',
   expires_at_str: '',
@@ -472,6 +495,11 @@ const filterStatusOptions = computed(() => [
   { value: 'disabled', label: t('admin.promo.statusDisabled') }
 ])
 
+const rewardTypeOptions = computed(() => [
+  { value: 'balance', label: t('admin.promo.rewardBalance') },
+  { value: 'limited_credit', label: t('admin.promo.rewardLimitedCredit') }
+])
+
 const statusOptions = computed(() => [
   { value: 'active', label: t('admin.promo.statusActive') },
   { value: 'disabled', label: t('admin.promo.statusDisabled') }
@@ -480,6 +508,7 @@ const statusOptions = computed(() => [
 const columns = computed<Column[]>(() => [
   { key: 'code', label: t('admin.promo.columns.code') },
   { key: 'bonus_amount', label: t('admin.promo.columns.bonusAmount'), sortable: true },
+  { key: 'reward_type', label: t('admin.promo.columns.rewardType') },
   { key: 'usage', label: t('admin.promo.columns.usage') },
   { key: 'status', label: t('admin.promo.columns.status'), sortable: true },
   { key: 'expires_at', label: t('admin.promo.columns.expiresAt'), sortable: true },
@@ -598,6 +627,8 @@ const handleCreate = async () => {
     await adminAPI.promo.create({
       code: createForm.code || undefined,
       bonus_amount: createForm.bonus_amount,
+      reward_type: createForm.reward_type,
+      validity_days: createForm.reward_type === 'limited_credit' ? createForm.validity_days : 0,
       max_uses: createForm.max_uses,
       expires_at: createForm.expires_at_str ? Math.floor(new Date(createForm.expires_at_str).getTime() / 1000) : undefined,
       notes: createForm.notes || undefined
@@ -616,6 +647,8 @@ const handleCreate = async () => {
 const resetCreateForm = () => {
   createForm.code = ''
   createForm.bonus_amount = 1
+  createForm.reward_type = 'balance'
+  createForm.validity_days = 30
   createForm.max_uses = 0
   createForm.expires_at_str = ''
   createForm.notes = ''
@@ -626,6 +659,8 @@ const handleEdit = (code: PromoCode) => {
   editingCode.value = code
   editForm.code = code.code
   editForm.bonus_amount = code.bonus_amount
+  editForm.reward_type = code.reward_type || 'balance'
+  editForm.validity_days = code.validity_days || 30
   editForm.max_uses = code.max_uses
   editForm.status = code.status
   editForm.expires_at_str = code.expires_at
@@ -648,6 +683,8 @@ const handleUpdate = async () => {
     await adminAPI.promo.update(editingCode.value.id, {
       code: editForm.code,
       bonus_amount: editForm.bonus_amount,
+      reward_type: editForm.reward_type,
+      validity_days: editForm.reward_type === 'limited_credit' ? editForm.validity_days : 0,
       max_uses: editForm.max_uses,
       status: editForm.status,
       expires_at: editForm.expires_at_str ? Math.floor(new Date(editForm.expires_at_str).getTime() / 1000) : 0,

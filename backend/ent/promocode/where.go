@@ -65,6 +65,16 @@ func BonusAmount(v float64) predicate.PromoCode {
 	return predicate.PromoCode(sql.FieldEQ(FieldBonusAmount, v))
 }
 
+// RewardType applies equality check predicate on the "reward_type" field. It's identical to RewardTypeEQ.
+func RewardType(v string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldEQ(FieldRewardType, v))
+}
+
+// ValidityDays applies equality check predicate on the "validity_days" field. It's identical to ValidityDaysEQ.
+func ValidityDays(v int) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldEQ(FieldValidityDays, v))
+}
+
 // MaxUses applies equality check predicate on the "max_uses" field. It's identical to MaxUsesEQ.
 func MaxUses(v int) predicate.PromoCode {
 	return predicate.PromoCode(sql.FieldEQ(FieldMaxUses, v))
@@ -203,6 +213,111 @@ func BonusAmountLT(v float64) predicate.PromoCode {
 // BonusAmountLTE applies the LTE predicate on the "bonus_amount" field.
 func BonusAmountLTE(v float64) predicate.PromoCode {
 	return predicate.PromoCode(sql.FieldLTE(FieldBonusAmount, v))
+}
+
+// RewardTypeEQ applies the EQ predicate on the "reward_type" field.
+func RewardTypeEQ(v string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldEQ(FieldRewardType, v))
+}
+
+// RewardTypeNEQ applies the NEQ predicate on the "reward_type" field.
+func RewardTypeNEQ(v string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldNEQ(FieldRewardType, v))
+}
+
+// RewardTypeIn applies the In predicate on the "reward_type" field.
+func RewardTypeIn(vs ...string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldIn(FieldRewardType, vs...))
+}
+
+// RewardTypeNotIn applies the NotIn predicate on the "reward_type" field.
+func RewardTypeNotIn(vs ...string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldNotIn(FieldRewardType, vs...))
+}
+
+// RewardTypeGT applies the GT predicate on the "reward_type" field.
+func RewardTypeGT(v string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldGT(FieldRewardType, v))
+}
+
+// RewardTypeGTE applies the GTE predicate on the "reward_type" field.
+func RewardTypeGTE(v string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldGTE(FieldRewardType, v))
+}
+
+// RewardTypeLT applies the LT predicate on the "reward_type" field.
+func RewardTypeLT(v string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldLT(FieldRewardType, v))
+}
+
+// RewardTypeLTE applies the LTE predicate on the "reward_type" field.
+func RewardTypeLTE(v string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldLTE(FieldRewardType, v))
+}
+
+// RewardTypeContains applies the Contains predicate on the "reward_type" field.
+func RewardTypeContains(v string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldContains(FieldRewardType, v))
+}
+
+// RewardTypeHasPrefix applies the HasPrefix predicate on the "reward_type" field.
+func RewardTypeHasPrefix(v string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldHasPrefix(FieldRewardType, v))
+}
+
+// RewardTypeHasSuffix applies the HasSuffix predicate on the "reward_type" field.
+func RewardTypeHasSuffix(v string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldHasSuffix(FieldRewardType, v))
+}
+
+// RewardTypeEqualFold applies the EqualFold predicate on the "reward_type" field.
+func RewardTypeEqualFold(v string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldEqualFold(FieldRewardType, v))
+}
+
+// RewardTypeContainsFold applies the ContainsFold predicate on the "reward_type" field.
+func RewardTypeContainsFold(v string) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldContainsFold(FieldRewardType, v))
+}
+
+// ValidityDaysEQ applies the EQ predicate on the "validity_days" field.
+func ValidityDaysEQ(v int) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldEQ(FieldValidityDays, v))
+}
+
+// ValidityDaysNEQ applies the NEQ predicate on the "validity_days" field.
+func ValidityDaysNEQ(v int) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldNEQ(FieldValidityDays, v))
+}
+
+// ValidityDaysIn applies the In predicate on the "validity_days" field.
+func ValidityDaysIn(vs ...int) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldIn(FieldValidityDays, vs...))
+}
+
+// ValidityDaysNotIn applies the NotIn predicate on the "validity_days" field.
+func ValidityDaysNotIn(vs ...int) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldNotIn(FieldValidityDays, vs...))
+}
+
+// ValidityDaysGT applies the GT predicate on the "validity_days" field.
+func ValidityDaysGT(v int) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldGT(FieldValidityDays, v))
+}
+
+// ValidityDaysGTE applies the GTE predicate on the "validity_days" field.
+func ValidityDaysGTE(v int) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldGTE(FieldValidityDays, v))
+}
+
+// ValidityDaysLT applies the LT predicate on the "validity_days" field.
+func ValidityDaysLT(v int) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldLT(FieldValidityDays, v))
+}
+
+// ValidityDaysLTE applies the LTE predicate on the "validity_days" field.
+func ValidityDaysLTE(v int) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldLTE(FieldValidityDays, v))
 }
 
 // MaxUsesEQ applies the EQ predicate on the "max_uses" field.

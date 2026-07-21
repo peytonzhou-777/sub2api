@@ -64,6 +64,41 @@ func (_u *PromoCodeUpdate) AddBonusAmount(v float64) *PromoCodeUpdate {
 	return _u
 }
 
+// SetRewardType sets the "reward_type" field.
+func (_u *PromoCodeUpdate) SetRewardType(v string) *PromoCodeUpdate {
+	_u.mutation.SetRewardType(v)
+	return _u
+}
+
+// SetNillableRewardType sets the "reward_type" field if the given value is not nil.
+func (_u *PromoCodeUpdate) SetNillableRewardType(v *string) *PromoCodeUpdate {
+	if v != nil {
+		_u.SetRewardType(*v)
+	}
+	return _u
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (_u *PromoCodeUpdate) SetValidityDays(v int) *PromoCodeUpdate {
+	_u.mutation.ResetValidityDays()
+	_u.mutation.SetValidityDays(v)
+	return _u
+}
+
+// SetNillableValidityDays sets the "validity_days" field if the given value is not nil.
+func (_u *PromoCodeUpdate) SetNillableValidityDays(v *int) *PromoCodeUpdate {
+	if v != nil {
+		_u.SetValidityDays(*v)
+	}
+	return _u
+}
+
+// AddValidityDays adds value to the "validity_days" field.
+func (_u *PromoCodeUpdate) AddValidityDays(v int) *PromoCodeUpdate {
+	_u.mutation.AddValidityDays(v)
+	return _u
+}
+
 // SetMaxUses sets the "max_uses" field.
 func (_u *PromoCodeUpdate) SetMaxUses(v int) *PromoCodeUpdate {
 	_u.mutation.ResetMaxUses()
@@ -250,6 +285,11 @@ func (_u *PromoCodeUpdate) check() error {
 			return &ValidationError{Name: "code", err: fmt.Errorf(`ent: validator failed for field "PromoCode.code": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RewardType(); ok {
+		if err := promocode.RewardTypeValidator(v); err != nil {
+			return &ValidationError{Name: "reward_type", err: fmt.Errorf(`ent: validator failed for field "PromoCode.reward_type": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := promocode.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "PromoCode.status": %w`, err)}
@@ -278,6 +318,15 @@ func (_u *PromoCodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedBonusAmount(); ok {
 		_spec.AddField(promocode.FieldBonusAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RewardType(); ok {
+		_spec.SetField(promocode.FieldRewardType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ValidityDays(); ok {
+		_spec.SetField(promocode.FieldValidityDays, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedValidityDays(); ok {
+		_spec.AddField(promocode.FieldValidityDays, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.MaxUses(); ok {
 		_spec.SetField(promocode.FieldMaxUses, field.TypeInt, value)
@@ -406,6 +455,41 @@ func (_u *PromoCodeUpdateOne) SetNillableBonusAmount(v *float64) *PromoCodeUpdat
 // AddBonusAmount adds value to the "bonus_amount" field.
 func (_u *PromoCodeUpdateOne) AddBonusAmount(v float64) *PromoCodeUpdateOne {
 	_u.mutation.AddBonusAmount(v)
+	return _u
+}
+
+// SetRewardType sets the "reward_type" field.
+func (_u *PromoCodeUpdateOne) SetRewardType(v string) *PromoCodeUpdateOne {
+	_u.mutation.SetRewardType(v)
+	return _u
+}
+
+// SetNillableRewardType sets the "reward_type" field if the given value is not nil.
+func (_u *PromoCodeUpdateOne) SetNillableRewardType(v *string) *PromoCodeUpdateOne {
+	if v != nil {
+		_u.SetRewardType(*v)
+	}
+	return _u
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (_u *PromoCodeUpdateOne) SetValidityDays(v int) *PromoCodeUpdateOne {
+	_u.mutation.ResetValidityDays()
+	_u.mutation.SetValidityDays(v)
+	return _u
+}
+
+// SetNillableValidityDays sets the "validity_days" field if the given value is not nil.
+func (_u *PromoCodeUpdateOne) SetNillableValidityDays(v *int) *PromoCodeUpdateOne {
+	if v != nil {
+		_u.SetValidityDays(*v)
+	}
+	return _u
+}
+
+// AddValidityDays adds value to the "validity_days" field.
+func (_u *PromoCodeUpdateOne) AddValidityDays(v int) *PromoCodeUpdateOne {
+	_u.mutation.AddValidityDays(v)
 	return _u
 }
 
@@ -608,6 +692,11 @@ func (_u *PromoCodeUpdateOne) check() error {
 			return &ValidationError{Name: "code", err: fmt.Errorf(`ent: validator failed for field "PromoCode.code": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RewardType(); ok {
+		if err := promocode.RewardTypeValidator(v); err != nil {
+			return &ValidationError{Name: "reward_type", err: fmt.Errorf(`ent: validator failed for field "PromoCode.reward_type": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := promocode.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "PromoCode.status": %w`, err)}
@@ -653,6 +742,15 @@ func (_u *PromoCodeUpdateOne) sqlSave(ctx context.Context) (_node *PromoCode, er
 	}
 	if value, ok := _u.mutation.AddedBonusAmount(); ok {
 		_spec.AddField(promocode.FieldBonusAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RewardType(); ok {
+		_spec.SetField(promocode.FieldRewardType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ValidityDays(); ok {
+		_spec.SetField(promocode.FieldValidityDays, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedValidityDays(); ok {
+		_spec.AddField(promocode.FieldValidityDays, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.MaxUses(); ok {
 		_spec.SetField(promocode.FieldMaxUses, field.TypeInt, value)

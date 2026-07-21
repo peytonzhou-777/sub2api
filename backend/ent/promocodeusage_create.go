@@ -42,6 +42,34 @@ func (_c *PromoCodeUsageCreate) SetBonusAmount(v float64) *PromoCodeUsageCreate 
 	return _c
 }
 
+// SetRewardType sets the "reward_type" field.
+func (_c *PromoCodeUsageCreate) SetRewardType(v string) *PromoCodeUsageCreate {
+	_c.mutation.SetRewardType(v)
+	return _c
+}
+
+// SetNillableRewardType sets the "reward_type" field if the given value is not nil.
+func (_c *PromoCodeUsageCreate) SetNillableRewardType(v *string) *PromoCodeUsageCreate {
+	if v != nil {
+		_c.SetRewardType(*v)
+	}
+	return _c
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (_c *PromoCodeUsageCreate) SetValidityDays(v int) *PromoCodeUsageCreate {
+	_c.mutation.SetValidityDays(v)
+	return _c
+}
+
+// SetNillableValidityDays sets the "validity_days" field if the given value is not nil.
+func (_c *PromoCodeUsageCreate) SetNillableValidityDays(v *int) *PromoCodeUsageCreate {
+	if v != nil {
+		_c.SetValidityDays(*v)
+	}
+	return _c
+}
+
 // SetUsedAt sets the "used_at" field.
 func (_c *PromoCodeUsageCreate) SetUsedAt(v time.Time) *PromoCodeUsageCreate {
 	_c.mutation.SetUsedAt(v)
@@ -101,6 +129,14 @@ func (_c *PromoCodeUsageCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *PromoCodeUsageCreate) defaults() {
+	if _, ok := _c.mutation.RewardType(); !ok {
+		v := promocodeusage.DefaultRewardType
+		_c.mutation.SetRewardType(v)
+	}
+	if _, ok := _c.mutation.ValidityDays(); !ok {
+		v := promocodeusage.DefaultValidityDays
+		_c.mutation.SetValidityDays(v)
+	}
 	if _, ok := _c.mutation.UsedAt(); !ok {
 		v := promocodeusage.DefaultUsedAt()
 		_c.mutation.SetUsedAt(v)
@@ -117,6 +153,17 @@ func (_c *PromoCodeUsageCreate) check() error {
 	}
 	if _, ok := _c.mutation.BonusAmount(); !ok {
 		return &ValidationError{Name: "bonus_amount", err: errors.New(`ent: missing required field "PromoCodeUsage.bonus_amount"`)}
+	}
+	if _, ok := _c.mutation.RewardType(); !ok {
+		return &ValidationError{Name: "reward_type", err: errors.New(`ent: missing required field "PromoCodeUsage.reward_type"`)}
+	}
+	if v, ok := _c.mutation.RewardType(); ok {
+		if err := promocodeusage.RewardTypeValidator(v); err != nil {
+			return &ValidationError{Name: "reward_type", err: fmt.Errorf(`ent: validator failed for field "PromoCodeUsage.reward_type": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.ValidityDays(); !ok {
+		return &ValidationError{Name: "validity_days", err: errors.New(`ent: missing required field "PromoCodeUsage.validity_days"`)}
 	}
 	if _, ok := _c.mutation.UsedAt(); !ok {
 		return &ValidationError{Name: "used_at", err: errors.New(`ent: missing required field "PromoCodeUsage.used_at"`)}
@@ -157,6 +204,14 @@ func (_c *PromoCodeUsageCreate) createSpec() (*PromoCodeUsage, *sqlgraph.CreateS
 	if value, ok := _c.mutation.BonusAmount(); ok {
 		_spec.SetField(promocodeusage.FieldBonusAmount, field.TypeFloat64, value)
 		_node.BonusAmount = value
+	}
+	if value, ok := _c.mutation.RewardType(); ok {
+		_spec.SetField(promocodeusage.FieldRewardType, field.TypeString, value)
+		_node.RewardType = value
+	}
+	if value, ok := _c.mutation.ValidityDays(); ok {
+		_spec.SetField(promocodeusage.FieldValidityDays, field.TypeInt, value)
+		_node.ValidityDays = value
 	}
 	if value, ok := _c.mutation.UsedAt(); ok {
 		_spec.SetField(promocodeusage.FieldUsedAt, field.TypeTime, value)
@@ -290,6 +345,36 @@ func (u *PromoCodeUsageUpsert) AddBonusAmount(v float64) *PromoCodeUsageUpsert {
 	return u
 }
 
+// SetRewardType sets the "reward_type" field.
+func (u *PromoCodeUsageUpsert) SetRewardType(v string) *PromoCodeUsageUpsert {
+	u.Set(promocodeusage.FieldRewardType, v)
+	return u
+}
+
+// UpdateRewardType sets the "reward_type" field to the value that was provided on create.
+func (u *PromoCodeUsageUpsert) UpdateRewardType() *PromoCodeUsageUpsert {
+	u.SetExcluded(promocodeusage.FieldRewardType)
+	return u
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (u *PromoCodeUsageUpsert) SetValidityDays(v int) *PromoCodeUsageUpsert {
+	u.Set(promocodeusage.FieldValidityDays, v)
+	return u
+}
+
+// UpdateValidityDays sets the "validity_days" field to the value that was provided on create.
+func (u *PromoCodeUsageUpsert) UpdateValidityDays() *PromoCodeUsageUpsert {
+	u.SetExcluded(promocodeusage.FieldValidityDays)
+	return u
+}
+
+// AddValidityDays adds v to the "validity_days" field.
+func (u *PromoCodeUsageUpsert) AddValidityDays(v int) *PromoCodeUsageUpsert {
+	u.Add(promocodeusage.FieldValidityDays, v)
+	return u
+}
+
 // SetUsedAt sets the "used_at" field.
 func (u *PromoCodeUsageUpsert) SetUsedAt(v time.Time) *PromoCodeUsageUpsert {
 	u.Set(promocodeusage.FieldUsedAt, v)
@@ -388,6 +473,41 @@ func (u *PromoCodeUsageUpsertOne) AddBonusAmount(v float64) *PromoCodeUsageUpser
 func (u *PromoCodeUsageUpsertOne) UpdateBonusAmount() *PromoCodeUsageUpsertOne {
 	return u.Update(func(s *PromoCodeUsageUpsert) {
 		s.UpdateBonusAmount()
+	})
+}
+
+// SetRewardType sets the "reward_type" field.
+func (u *PromoCodeUsageUpsertOne) SetRewardType(v string) *PromoCodeUsageUpsertOne {
+	return u.Update(func(s *PromoCodeUsageUpsert) {
+		s.SetRewardType(v)
+	})
+}
+
+// UpdateRewardType sets the "reward_type" field to the value that was provided on create.
+func (u *PromoCodeUsageUpsertOne) UpdateRewardType() *PromoCodeUsageUpsertOne {
+	return u.Update(func(s *PromoCodeUsageUpsert) {
+		s.UpdateRewardType()
+	})
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (u *PromoCodeUsageUpsertOne) SetValidityDays(v int) *PromoCodeUsageUpsertOne {
+	return u.Update(func(s *PromoCodeUsageUpsert) {
+		s.SetValidityDays(v)
+	})
+}
+
+// AddValidityDays adds v to the "validity_days" field.
+func (u *PromoCodeUsageUpsertOne) AddValidityDays(v int) *PromoCodeUsageUpsertOne {
+	return u.Update(func(s *PromoCodeUsageUpsert) {
+		s.AddValidityDays(v)
+	})
+}
+
+// UpdateValidityDays sets the "validity_days" field to the value that was provided on create.
+func (u *PromoCodeUsageUpsertOne) UpdateValidityDays() *PromoCodeUsageUpsertOne {
+	return u.Update(func(s *PromoCodeUsageUpsert) {
+		s.UpdateValidityDays()
 	})
 }
 
@@ -655,6 +775,41 @@ func (u *PromoCodeUsageUpsertBulk) AddBonusAmount(v float64) *PromoCodeUsageUpse
 func (u *PromoCodeUsageUpsertBulk) UpdateBonusAmount() *PromoCodeUsageUpsertBulk {
 	return u.Update(func(s *PromoCodeUsageUpsert) {
 		s.UpdateBonusAmount()
+	})
+}
+
+// SetRewardType sets the "reward_type" field.
+func (u *PromoCodeUsageUpsertBulk) SetRewardType(v string) *PromoCodeUsageUpsertBulk {
+	return u.Update(func(s *PromoCodeUsageUpsert) {
+		s.SetRewardType(v)
+	})
+}
+
+// UpdateRewardType sets the "reward_type" field to the value that was provided on create.
+func (u *PromoCodeUsageUpsertBulk) UpdateRewardType() *PromoCodeUsageUpsertBulk {
+	return u.Update(func(s *PromoCodeUsageUpsert) {
+		s.UpdateRewardType()
+	})
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (u *PromoCodeUsageUpsertBulk) SetValidityDays(v int) *PromoCodeUsageUpsertBulk {
+	return u.Update(func(s *PromoCodeUsageUpsert) {
+		s.SetValidityDays(v)
+	})
+}
+
+// AddValidityDays adds v to the "validity_days" field.
+func (u *PromoCodeUsageUpsertBulk) AddValidityDays(v int) *PromoCodeUsageUpsertBulk {
+	return u.Update(func(s *PromoCodeUsageUpsert) {
+		s.AddValidityDays(v)
+	})
+}
+
+// UpdateValidityDays sets the "validity_days" field to the value that was provided on create.
+func (u *PromoCodeUsageUpsertBulk) UpdateValidityDays() *PromoCodeUsageUpsertBulk {
+	return u.Update(func(s *PromoCodeUsageUpsert) {
+		s.UpdateValidityDays()
 	})
 }
 

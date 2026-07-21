@@ -34,6 +34,13 @@ func (PromoCodeUsage) Fields() []ent.Field {
 		field.Float("bonus_amount").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Comment("实际赠送金额"),
+		field.String("reward_type").
+			MaxLen(32).
+			Default("balance").
+			Comment("奖励类型快照: balance, limited_credit"),
+		field.Int("validity_days").
+			Default(0).
+			Comment("限时额度有效期天数快照，0表示永久余额"),
 		field.Time("used_at").
 			Default(time.Now).
 			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}).

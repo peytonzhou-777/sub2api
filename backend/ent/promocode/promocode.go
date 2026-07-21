@@ -18,6 +18,10 @@ const (
 	FieldCode = "code"
 	// FieldBonusAmount holds the string denoting the bonus_amount field in the database.
 	FieldBonusAmount = "bonus_amount"
+	// FieldRewardType holds the string denoting the reward_type field in the database.
+	FieldRewardType = "reward_type"
+	// FieldValidityDays holds the string denoting the validity_days field in the database.
+	FieldValidityDays = "validity_days"
 	// FieldMaxUses holds the string denoting the max_uses field in the database.
 	FieldMaxUses = "max_uses"
 	// FieldUsedCount holds the string denoting the used_count field in the database.
@@ -50,6 +54,8 @@ var Columns = []string{
 	FieldID,
 	FieldCode,
 	FieldBonusAmount,
+	FieldRewardType,
+	FieldValidityDays,
 	FieldMaxUses,
 	FieldUsedCount,
 	FieldStatus,
@@ -74,6 +80,12 @@ var (
 	CodeValidator func(string) error
 	// DefaultBonusAmount holds the default value on creation for the "bonus_amount" field.
 	DefaultBonusAmount float64
+	// DefaultRewardType holds the default value on creation for the "reward_type" field.
+	DefaultRewardType string
+	// RewardTypeValidator is a validator for the "reward_type" field. It is called by the builders before save.
+	RewardTypeValidator func(string) error
+	// DefaultValidityDays holds the default value on creation for the "validity_days" field.
+	DefaultValidityDays int
 	// DefaultMaxUses holds the default value on creation for the "max_uses" field.
 	DefaultMaxUses int
 	// DefaultUsedCount holds the default value on creation for the "used_count" field.
@@ -106,6 +118,16 @@ func ByCode(opts ...sql.OrderTermOption) OrderOption {
 // ByBonusAmount orders the results by the bonus_amount field.
 func ByBonusAmount(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBonusAmount, opts...).ToFunc()
+}
+
+// ByRewardType orders the results by the reward_type field.
+func ByRewardType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRewardType, opts...).ToFunc()
+}
+
+// ByValidityDays orders the results by the validity_days field.
+func ByValidityDays(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldValidityDays, opts...).ToFunc()
 }
 
 // ByMaxUses orders the results by the max_uses field.
