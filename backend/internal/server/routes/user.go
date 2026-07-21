@@ -122,6 +122,13 @@ func RegisterUserRoutes(
 			subscriptions.GET("/summary", h.Subscription.GetSummary)
 		}
 
+		// 用户限时额度
+		limitedCredits := authenticated.Group("/limited-credits")
+		{
+			limitedCredits.GET("/active", h.LimitedCredit.GetActive)
+			limitedCredits.GET("/summary", h.LimitedCredit.GetSummary)
+		}
+
 		// 渠道监控（用户只读）
 		monitors := authenticated.Group("/channel-monitors")
 		{

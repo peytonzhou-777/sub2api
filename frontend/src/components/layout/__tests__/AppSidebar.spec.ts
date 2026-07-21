@@ -53,3 +53,29 @@ describe('AppSidebar header styles', () => {
     expect(sidebarBrandBlockMatch?.[0]).not.toContain('overflow: hidden;')
   })
 })
+
+describe('AppSidebar user account navigation', () => {
+  const routerPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../router/index.ts')
+  const appPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../App.vue')
+  const headerPath = resolve(dirname(fileURLToPath(import.meta.url)), '../AppHeader.vue')
+  const routerSource = readFileSync(routerPath, 'utf8')
+  const appSource = readFileSync(appPath, 'utf8')
+  const headerSource = readFileSync(headerPath, 'utf8')
+
+  it('hides the user subscription entry and keeps My Account behind the payment flag', () => {
+    expect(componentSource).not.toContain("{ path: '/subscriptions', label: t('nav.mySubscriptions')")
+    expect(componentSource).toContain("{ path: '/purchase', label: t('nav.myAccount')")
+    expect(componentSource).toContain("featureFlag: flagPayment")
+  })
+
+  it('redirects the legacy subscription route to the account tab', () => {
+    expect(routerSource).toContain("redirect: { path: '/purchase', query: { tab: 'account' } }")
+    expect(routerSource).toContain("titleKey: 'nav.myAccount'")
+  })
+
+  it('does not preload, poll, or render user subscriptions globally', () => {
+    expect(appSource).not.toContain('fetchActiveSubscriptions')
+    expect(appSource).not.toContain('subscriptionStore.startPolling')
+    expect(headerSource).not.toContain('SubscriptionProgressMini')
+  })
+})

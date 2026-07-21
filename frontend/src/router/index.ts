@@ -281,13 +281,13 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/subscriptions',
     name: 'Subscriptions',
-    component: () => import('@/views/user/SubscriptionsView.vue'),
+    redirect: { path: '/purchase', query: { tab: 'account' } },
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
-      title: 'My Subscriptions',
-      titleKey: 'userSubscriptions.title',
-      descriptionKey: 'userSubscriptions.description'
+      requiresPayment: true,
+      title: 'My Account',
+      titleKey: 'nav.myAccount'
     }
   },
   {
@@ -297,8 +297,8 @@ const routes: RouteRecordRaw[] = [
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
-      title: 'Purchase Subscription',
-      titleKey: 'nav.buySubscription',
+      title: 'My Account',
+      titleKey: 'nav.myAccount',
       descriptionKey: 'purchase.description',
       requiresPayment: true
     }

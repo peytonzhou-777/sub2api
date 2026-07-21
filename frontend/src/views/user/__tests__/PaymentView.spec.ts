@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import PaymentView from '../PaymentView.vue'
 import { PAYMENT_RECOVERY_STORAGE_KEY } from '@/components/payment/paymentFlow'
-import { formatPaymentAmount } from '@/components/payment/currency'
-import type { CheckoutInfoResponse, MethodLimit, SubscriptionPlan } from '@/types/payment'
+import type { CheckoutInfoResponse, MethodLimit, RechargeBonusTier, SubscriptionPlan } from '@/types/payment'
 
 const routeState = vi.hoisted(() => ({
   path: '/purchase',
@@ -15,7 +14,18 @@ const routerPush = vi.hoisted(() => vi.fn())
 const routerResolve = vi.hoisted(() => vi.fn(() => ({ href: '/payment/stripe?mock=1' })))
 const createOrder = vi.hoisted(() => vi.fn())
 const refreshUser = vi.hoisted(() => vi.fn())
-const fetchActiveSubscriptions = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const authState = vi.hoisted(() => ({
+  user: {
+    username: 'demo-user',
+    balance: 0,
+  },
+}))
+const limitedCreditState = vi.hoisted(() => ({
+  activeCredits: [] as Array<Record<string, unknown>>,
+  loading: false,
+  remainingAmount: 0,
+  fetchActiveLimitedCredits: vi.fn().mockResolvedValue(undefined),
+}))
 const showError = vi.hoisted(() => vi.fn())
 const showInfo = vi.hoisted(() => vi.fn())
 const showWarning = vi.hoisted(() => vi.fn())
@@ -40,17 +50,19 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string) => key,
+      t: (key: string, params?: Record<string, unknown>) => {
+        if (key === 'payment.rechargeBonus.countdownDaysHours') {
+          return `${params?.days}天${params?.hours}小时`
+        }
+        return key
+      },
     }),
   }
 })
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
-    user: {
-      username: 'demo-user',
-      balance: 0,
-    },
+    user: authState.user,
     refreshUser,
   }),
 }))
@@ -61,13 +73,9 @@ vi.mock('@/stores/payment', () => ({
   }),
 }))
 
-vi.mock('@/stores/subscriptions', () => ({
-  useSubscriptionStore: () => ({
-    activeSubscriptions: [],
-    fetchActiveSubscriptions,
-  }),
+vi.mock('@/stores/limitedCredits', () => ({
+  useLimitedCreditStore: () => limitedCreditState,
 }))
-
 vi.mock('@/stores', () => ({
   useAppStore: () => ({
     showError,
@@ -85,6 +93,14 @@ vi.mock('@/api/payment', () => ({
 vi.mock('@/utils/device', () => ({
   isMobileDevice: () => true,
 }))
+
+beforeEach(() => {
+  authState.user.balance = 0
+  limitedCreditState.activeCredits = []
+  limitedCreditState.loading = false
+  limitedCreditState.remainingAmount = 0
+  limitedCreditState.fetchActiveLimitedCredits.mockReset().mockResolvedValue(undefined)
+})
 
 function checkoutInfoFixture(overrides: Partial<CheckoutInfoResponse> = {}) {
   const wxpayMethod: MethodLimit = {
@@ -200,44 +216,12 @@ function oauthOrderFixture() {
   }
 }
 
-async function mountSubscriptionConfirm(options: Parameters<typeof checkoutInfoWithPlansFixture>[0] = {}) {
-  vi.useRealTimers()
-  routeState.path = '/purchase'
-  routeState.query = {
-    tab: 'subscription',
-    group: '3',
-  }
-  routerReplace.mockReset().mockResolvedValue(undefined)
-  routerPush.mockReset().mockResolvedValue(undefined)
-  routerResolve.mockClear()
-  createOrder.mockReset()
-  refreshUser.mockReset()
-  fetchActiveSubscriptions.mockReset().mockResolvedValue(undefined)
-  showError.mockReset()
-  showInfo.mockReset()
-  showWarning.mockReset()
-  getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoWithPlansFixture(options))
-  bridgeInvoke.mockReset()
-  window.localStorage.clear()
-  ;(window as Window & { WeixinJSBridge?: { invoke: typeof bridgeInvoke } }).WeixinJSBridge = undefined
-
-  const wrapper = shallowMount(PaymentView, {
-    global: {
-      stubs: {
-        AppLayout: {
-          template: '<div><slot /></div>',
-        },
-        Teleport: true,
-        Transition: false,
-      },
-    },
-  })
-  await flushPromises()
-  await flushPromises()
-  return wrapper
-}
-
-async function mountRechargeWithCampaign(description = '充值越多，赠送越多') {
+async function mountRechargeWithCampaign(
+  description = '充值越多，赠送越多',
+  tiers: RechargeBonusTier[] = [
+    { min_amount: 100, max_amount: 1000, min_rate: 10, max_rate: 10 },
+  ],
+) {
   vi.useRealTimers()
   routeState.path = '/purchase'
   routeState.query = {}
@@ -246,7 +230,6 @@ async function mountRechargeWithCampaign(description = '充值越多，赠送越
   routerResolve.mockClear()
   createOrder.mockReset()
   refreshUser.mockReset()
-  fetchActiveSubscriptions.mockReset().mockResolvedValue(undefined)
   showError.mockReset()
   showInfo.mockReset()
   showWarning.mockReset()
@@ -259,9 +242,7 @@ async function mountRechargeWithCampaign(description = '充值越多，赠送越
       start_at: '2026-07-01T00:00:00Z',
       end_at: '2026-08-01T00:00:00Z',
       participation_limit: 2,
-      tiers: [
-        { min_amount: 100, max_amount: 1000, min_rate: 10, max_rate: 10 },
-      ],
+      tiers,
       status: 'active',
       created_at: '2026-06-01T00:00:00Z',
       updated_at: '2026-06-01T00:00:00Z',
@@ -279,6 +260,8 @@ async function mountRechargeWithCampaign(description = '充值越多，赠送越
           template: '<div><slot /></div>',
         },
         AmountInput: {
+          name: 'AmountInput',
+          props: ['modelValue', 'bonusAmounts'],
           template: '<button data-test="amount-input" @click="$emit(\'update:modelValue\', 300)">set</button>',
         },
         PaymentMethodSelector: true,
@@ -300,6 +283,50 @@ describe('PaymentView recharge bonus campaign', () => {
     expect(panel.exists()).toBe(true)
     expect(panel.text()).toContain('暑期充值活动')
     expect(panel.text()).toContain('充值越多，赠送越多')
+  })
+
+  it('shows the countdown to the campaign end time', async () => {
+    const now = new Date('2026-07-31T17:01:04Z').getTime()
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now)
+
+    const wrapper = await mountRechargeWithCampaign()
+
+    expect(wrapper.get('[data-test="recharge-bonus-countdown"]').text()).toContain('06:58:56')
+    dateNow.mockRestore()
+  })
+
+  it('shows days and hours when more than 24 hours remain', async () => {
+    const now = new Date('2026-07-25T17:00:00Z').getTime()
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now)
+
+    const wrapper = await mountRechargeWithCampaign()
+
+    expect(wrapper.get('[data-test="recharge-bonus-countdown"]').text()).toContain('6天7小时')
+    dateNow.mockRestore()
+  })
+
+  it('calculates limited-credit bonuses for each eligible quick amount', async () => {
+    const wrapper = await mountRechargeWithCampaign()
+    const bonusAmounts = wrapper.getComponent({ name: 'AmountInput' }).props('bonusAmounts') as Record<number, number>
+
+    expect(bonusAmounts[20]).toBeUndefined()
+    expect(bonusAmounts[50]).toBe(10)
+    expect(bonusAmounts[100]).toBe(20)
+    expect(bonusAmounts[500]).toBe(100)
+    expect(bonusAmounts[1000]).toBeUndefined()
+  })
+
+  it('shows interpolated limited-credit bonuses with two decimal places', async () => {
+    const wrapper = await mountRechargeWithCampaign('充值越多，赠送越多', [
+      { min_amount: 100, max_amount: 1000, min_rate: 5, max_rate: 10 },
+    ])
+
+    await wrapper.get('[data-test="amount-input"]').trigger('click')
+    await flushPromises()
+
+    const creditedRow = wrapper.get('[data-test="credited-amount-row"]')
+    expect(creditedRow.text()).toContain('+$46.67')
+    expect(creditedRow.text()).not.toContain('46.666666')
   })
 
   it('shows the campaign name without an empty description placeholder', async () => {
@@ -324,97 +351,139 @@ describe('PaymentView recharge bonus campaign', () => {
     expect(creditedRow.text()).toContain('$600.00')
     expect(creditedRow.text()).toContain('$60.00')
     expect(creditedRow.text()).not.toContain('暑期充值活动')
-    expect(wrapper.find('[data-test="recharge-bonus-limit-hint"]').exists()).toBe(true)
+    const limitHint = wrapper.get('[data-test="recharge-bonus-limit-hint"]')
+    expect(limitHint.classes()).toContain('text-right')
   })
 })
 
-describe('PaymentView subscription confirmation amounts', () => {
-  it('shows converted CNY pay amount using the subscription rate, not the balance multiplier', async () => {
-    const wrapper = await mountSubscriptionConfirm({
-      checkout: {
-        balance_recharge_multiplier: 0.14,
-        subscription_usd_to_cny_rate: 7.15,
-      },
-      method: {
-        currency: 'CNY',
-      },
-      plan: {
-        price: 9.99,
-        original_price: 12.99,
+
+describe('PaymentView account tab', () => {
+  async function mountAccount(overrides: Partial<CheckoutInfoResponse> = {}) {
+    routeState.path = '/purchase'
+    routeState.query = { tab: 'account' }
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture(overrides))
+    window.localStorage.clear()
+
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          PaymentMethodSelector: true,
+          Teleport: true,
+          Transition: false,
+        },
       },
     })
+    await flushPromises()
+    await flushPromises()
+    return wrapper
+  }
 
-    const text = wrapper.text()
-    const convertedPrice = formatPaymentAmount(71.43, 'CNY')
-    const convertedOriginalPrice = formatPaymentAmount(92.88, 'CNY')
+  it('shows the total balance and sorts active limited credits by expiration', async () => {
+    authState.user.balance = 20
+    limitedCreditState.remainingAmount = 12
+    limitedCreditState.activeCredits = [
+      {
+        id: 2, initial_amount: 10, used_amount: 2, frozen_amount: 0,
+        remaining_amount: 8, available_amount: 8,
+        expires_at: '2099-02-01T00:00:00Z', status: 'active',
+        created_at: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 1, initial_amount: 5, used_amount: 1, frozen_amount: 0,
+        remaining_amount: 4, available_amount: 4,
+        expires_at: '2099-01-01T00:00:00Z', status: 'active',
+        created_at: '2026-01-01T00:00:00Z',
+      },
+    ]
 
-    expect(text).toContain(convertedPrice)
-    expect(text).toContain(convertedOriginalPrice)
-    expect(text).not.toContain(formatPaymentAmount(9.99, 'CNY'))
-    // 换算必须使用订阅汇率（×7.15），而不是余额倍率（÷0.14 = 71.36）
-    expect(text).not.toContain(formatPaymentAmount(71.36, 'CNY'))
-    expect(wrapper.findAll('button').some(button => button.text().includes(convertedPrice))).toBe(true)
+    const wrapper = await mountAccount()
+
+    expect(wrapper.get('[data-test="account-total-balance"]').text()).toBe('$32.00')
+    expect(wrapper.get('[data-test="permanent-balance"]').text()).toBe('$20.00')
+    expect(wrapper.get('[data-test="limited-balance"]').text()).toBe('$12.00')
+    expect(wrapper.get('[data-test="limited-balance-card"]').classes()).toEqual(
+      wrapper.get('[data-test="permanent-balance-card"]').classes(),
+    )
+    expect(wrapper.get('[data-test="limited-balance-label"]').classes()).toContain('text-gray-500')
+    expect(wrapper.get('[data-test="limited-balance"]').classes()).toContain('text-green-600')
+    expect(wrapper.get('[data-test="limited-credit-list"]').classes()).not.toContain('max-w-2xl')
+    const items = wrapper.findAll('[data-test="limited-credit-item"]')
+    expect(items).toHaveLength(2)
+    expect(items[0].text()).toContain('$1.00 / $5.00')
+    expect(items[1].text()).toContain('$2.00 / $10.00')
+    expect(items[0].findAll('[data-test="limited-credit-expiration"]')).toHaveLength(1)
+    expect((items[0].text().match(/payment.account.daysRemaining/g) || [])).toHaveLength(1)
   })
 
-  it('keeps plan price when the subscription rate is not configured or payment currency is not CNY', async () => {
-    // opt-in 回归锁：即使余额倍率已配置，未配置订阅汇率时 CNY 订阅仍按 price 直付
-    const cnyWrapper = await mountSubscriptionConfirm({
-      checkout: {
-        balance_recharge_multiplier: 0.14,
-        subscription_usd_to_cny_rate: 0,
-      },
-      method: {
-        currency: 'CNY',
-      },
-      plan: {
-        price: 7.99,
-      },
-    })
-
-    expect(cnyWrapper.text()).toContain(formatPaymentAmount(7.99, 'CNY'))
-    expect(cnyWrapper.text()).not.toContain(formatPaymentAmount(57.07, 'CNY'))
-    expect(cnyWrapper.text()).not.toContain(formatPaymentAmount(57.13, 'CNY'))
-
-    const usdWrapper = await mountSubscriptionConfirm({
-      checkout: {
-        subscription_usd_to_cny_rate: 7.15,
-      },
-      method: {
-        currency: 'USD',
-      },
-      plan: {
-        price: 7.99,
-        original_price: 9.99,
-      },
-    })
-
-    expect(usdWrapper.text()).toContain(formatPaymentAmount(7.99, 'USD'))
-    expect(usdWrapper.text()).toContain(formatPaymentAmount(9.99, 'USD'))
+  it('shows the account empty state when no active limited credit exists', async () => {
+    const wrapper = await mountAccount()
+    expect(wrapper.find('[data-test="limited-credit-empty"]').exists()).toBe(true)
   })
 
-  it('adds fee rate after CNY rate conversion to match backend pay_amount', async () => {
-    const wrapper = await mountSubscriptionConfirm({
-      checkout: {
-        subscription_usd_to_cny_rate: 7.15,
-        recharge_fee_rate: 2.5,
-      },
-      method: {
-        currency: 'CNY',
-      },
-      plan: {
-        price: 9.99,
+  it('keeps recharge as default, ignores the legacy subscription tab, and hides subscription plans', async () => {
+    routeState.path = '/purchase'
+    routeState.query = { tab: 'subscription' }
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoWithPlansFixture())
+
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          AmountInput: true,
+          PaymentMethodSelector: true,
+          Teleport: true,
+          Transition: false,
+        },
       },
     })
+    await flushPromises()
+    await flushPromises()
 
-    const text = wrapper.text()
-    const convertedPrice = formatPaymentAmount(71.43, 'CNY')
-    const fee = formatPaymentAmount(1.79, 'CNY')
-    const total = formatPaymentAmount(73.22, 'CNY')
+    expect(wrapper.find('[data-test="account-balance-panel"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('payment.tabAccount')
+    expect(wrapper.text()).not.toContain('Starter')
+    expect(wrapper.text()).not.toContain('demo-user')
+    expect(wrapper.text()).not.toContain('payment.rechargeAccount')
+  })
 
-    expect(text).toContain(convertedPrice)
-    expect(text).toContain(fee)
-    expect(text).toContain(total)
-    expect(wrapper.findAll('button').some(button => button.text().includes(total))).toBe(true)
+  it('shows only the account content when balance recharge is disabled', async () => {
+    routeState.query = {}
+    const wrapper = await mountAccount({ balance_disabled: true })
+
+    expect(wrapper.find('[data-test="account-balance-panel"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('payment.tabTopUp')
+  })
+
+  it('refreshes the user and limited credits after a balance order succeeds', async () => {
+    routeState.query = {}
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture())
+    window.localStorage.setItem(PAYMENT_RECOVERY_STORAGE_KEY, JSON.stringify({
+      orderId: 999, amount: 50, qrCode: 'mock-qr',
+      expiresAt: '2099-01-01T00:10:00.000Z', paymentType: 'wxpay',
+      payUrl: '', outTradeNo: 'sub2_balance_999', clientSecret: '',
+      intentId: '', currency: 'CNY', countryCode: '', paymentEnv: '',
+      payAmount: 50, orderType: 'balance', paymentMode: 'qr',
+      resumeToken: '', createdAt: Date.now(),
+    }))
+
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          PaymentStatusPanel: {
+            template: '<button data-test="payment-success" @click="$emit(\'success\')" />',
+          },
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="payment-success"]').trigger('click')
+
+    expect(refreshUser).toHaveBeenCalled()
+    expect(limitedCreditState.fetchActiveLimitedCredits).toHaveBeenCalledWith(true)
   })
 })
 
@@ -428,7 +497,6 @@ describe('PaymentView payment recovery', () => {
     routerResolve.mockClear()
     createOrder.mockReset()
     refreshUser.mockReset()
-    fetchActiveSubscriptions.mockReset().mockResolvedValue(undefined)
     showError.mockReset()
     showInfo.mockReset()
     showWarning.mockReset()
@@ -512,7 +580,6 @@ describe('PaymentView WeChat JSAPI flow', () => {
     routerResolve.mockClear()
     createOrder.mockReset()
     refreshUser.mockReset()
-    fetchActiveSubscriptions.mockReset().mockResolvedValue(undefined)
     showError.mockReset()
     showInfo.mockReset()
     showWarning.mockReset()

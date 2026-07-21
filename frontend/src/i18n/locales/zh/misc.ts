@@ -1,27 +1,5 @@
 export default {
 
-  // Subscription Progress (Header component)
-  subscriptionProgress: {
-    title: '我的权益',
-    viewDetails: '查看权益详情',
-    activeCount: '{count} 个有效权益',
-    subscriptions: '订阅',
-    limitedCredits: '限时额度',
-    limitedCreditTitle: '限时额度 #{id}',
-    daily: '每日',
-    weekly: '每周',
-    monthly: '每月',
-    used: '已用',
-    remaining: '剩余',
-    frozen: '冻结',
-    daysRemaining: '剩余 {days} 天',
-    expired: '已过期',
-    expiresToday: '今天到期',
-    expiresTomorrow: '明天到期',
-    viewAll: '查看全部订阅',
-    noSubscriptions: '暂无有效订阅',
-    unlimited: '无限制'
-  },
 
   // Version Badge
   version: {
@@ -66,8 +44,8 @@ export default {
 
   // Recharge / Subscription Page
   purchase: {
-    title: '充值/订阅',
-    description: '通过内嵌页面完成充值/订阅',
+    title: '我的账户',
+    description: '查看账户余额、限时额度并完成充值',
     openInNewTab: '新窗口打开',
     notEnabledTitle: '该功能未开启',
     notEnabledDesc: '管理员暂未开启充值/订阅入口，请联系管理员。',
@@ -413,6 +391,21 @@ export default {
     noActiveSubscription: '暂无有效订阅',
     tabTopUp: '充值',
     tabSubscribe: '订阅',
+    tabAccount: '账户',
+    account: {
+      balanceTitle: '账户余额',
+      permanentBalance: '永久额度',
+      limitedBalance: '限时额度',
+      limitedCreditDetails: '限时额度详情',
+      noLimitedCredits: '暂无有效限时额度',
+      limitedCreditTitle: '限时额度 #{id}',
+      usage: '额度用量',
+      daysRemaining: '剩余 {days} 天',
+      expiresToday: '今天到期',
+      expiresTomorrow: '明天到期',
+      expired: '已过期',
+      expiresAt: '{time} 到期'
+    },
     noPlans: '暂无可用订阅套餐',
     notAvailable: '充值功能暂未开放',
     confirmSubscription: '确认订阅',
@@ -423,8 +416,10 @@ export default {
     rechargeRatePreview: '当前倍率：1 CNY = {usd} USD',
     rechargeBonus: {
       title: '充值活动',
+      countdown: '活动倒计时：',
+      countdownDaysHours: '{days}天{hours}小时',
       limitedCreditWithDays: '限时额度（有效期 {days} 天）',
-      limitHint: '最终赠送以到账时剩余参与次数为准',
+      limitHint: '最终是否赠送以到账时实际剩余参与次数为准',
     },
     rechargeActivities: {
       create: '新建活动',

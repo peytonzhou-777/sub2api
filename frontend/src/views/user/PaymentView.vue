@@ -5,7 +5,7 @@
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
       </div>
       <template v-else>
-        <!-- Tab Switcher (hide during payment and subscription confirm) -->
+        <!-- Tab Switcher (hide during payment) -->
         <div v-if="tabs.length > 1 && paymentPhase === 'select' && !selectedPlan" class="flex space-x-1 rounded-xl bg-gray-100 p-1 dark:bg-dark-800">
           <button v-for="tab in tabs" :key="tab.key"
             class="flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all"
@@ -35,30 +35,30 @@
         <template v-else>
           <!-- Top-up Tab -->
           <template v-if="activeTab === 'recharge'">
-            <!-- Recharge Account Card -->
-            <div class="card p-5">
-              <p class="text-xs font-medium text-gray-400 dark:text-gray-500">{{ t('payment.rechargeAccount') }}</p>
-              <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">{{ user?.username || '' }}</p>
-              <p class="mt-0.5 text-sm font-medium text-green-600 dark:text-green-400">{{ t('payment.currentBalance') }}: {{ user?.balance?.toFixed(2) || '0.00' }}</p>
-            </div>
             <div v-if="enabledMethods.length === 0" class="card py-16 text-center">
               <p class="text-gray-500 dark:text-gray-400">{{ t('payment.notAvailable') }}</p>
             </div>
             <template v-else>
             <div v-if="checkout.recharge_bonus_activity" data-test="recharge-bonus-campaign" class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/30">
-              <div class="flex items-start gap-3">
-                <Icon name="gift" size="md" class="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
-                <div class="min-w-0">
-                  <p class="text-xs font-medium text-red-600 dark:text-red-400">{{ t('payment.rechargeBonus.title') }}</p>
-                  <h3 class="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">{{ checkout.recharge_bonus_activity.name }}</h3>
-                  <p v-if="checkout.recharge_bonus_activity.description" data-test="recharge-bonus-description" class="mt-1 whitespace-pre-line text-sm leading-5 text-gray-600 dark:text-gray-300">{{ checkout.recharge_bonus_activity.description }}</p>
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex min-w-0 items-start gap-3">
+                  <Icon name="gift" size="md" class="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
+                  <div class="min-w-0">
+                    <p class="text-xs font-medium text-red-600 dark:text-red-400">{{ t('payment.rechargeBonus.title') }}</p>
+                    <h3 class="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">{{ checkout.recharge_bonus_activity.name }}</h3>
+                    <p v-if="checkout.recharge_bonus_activity.description" data-test="recharge-bonus-description" class="mt-1 whitespace-pre-line text-sm leading-5 text-gray-600 dark:text-gray-300">{{ checkout.recharge_bonus_activity.description }}</p>
+                  </div>
                 </div>
+                <p data-test="recharge-bonus-countdown" class="shrink-0 self-end text-xs font-medium text-red-600 dark:text-red-400 sm:self-start">
+                  {{ t('payment.rechargeBonus.countdown') }}{{ rechargeBonusCountdown }}
+                </p>
               </div>
             </div>
             <div class="card p-6">
               <AmountInput
                 v-model="amount"
-                :amounts="[10, 20, 50, 100, 200, 500, 1000, 2000, 5000]"
+                :amounts="quickRechargeAmounts"
+                :bonus-amounts="quickAmountBonusAmounts"
                 :min="globalMinAmount"
                 :max="globalMaxAmount"
               />
@@ -86,7 +86,7 @@
                     </span>
                   </span>
                 </div>
-                <p v-if="rechargeBonusAmount > 0 && hasLimitedRechargeBonus" data-test="recharge-bonus-limit-hint" class="text-xs text-red-600 dark:text-red-400">
+                <p v-if="rechargeBonusAmount > 0 && hasLimitedRechargeBonus" data-test="recharge-bonus-limit-hint" class="text-right text-xs text-red-600 dark:text-red-400">
                   {{ t('payment.rechargeBonus.limitHint') }}
                 </p>
                 <p v-if="balanceRechargeMultiplier !== 1" class="text-xs text-gray-500 dark:text-gray-400">
@@ -262,6 +262,99 @@
         </div>
       </Transition>
     </Teleport>
+          <!-- Account Tab -->
+          <template v-else>
+            <section data-test="account-balance-panel" class="card p-6">
+              <p class="text-sm font-medium text-gray-500 dark:text-gray-400">
+                {{ t('payment.account.balanceTitle') }}
+              </p>
+              <p data-test="account-total-balance" class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
+                {{ formatAccountMoney(accountTotalBalance) }}
+              </p>
+              <div class="mt-5 grid gap-3 sm:grid-cols-2">
+                <div data-test="permanent-balance-card" class="rounded-lg bg-gray-50 px-4 py-3 dark:bg-dark-700/60">
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('payment.account.permanentBalance') }}
+                  </p>
+                  <p data-test="permanent-balance" class="mt-1 text-base font-semibold text-gray-900 dark:text-white">
+                    {{ formatAccountMoney(permanentBalance) }}
+                  </p>
+                </div>
+                <div data-test="limited-balance-card" class="rounded-lg bg-gray-50 px-4 py-3 dark:bg-dark-700/60">
+                  <p data-test="limited-balance-label" class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('payment.account.limitedBalance') }}
+                  </p>
+                  <p data-test="limited-balance" class="mt-1 text-base font-semibold" :class="limitedBalanceSignalClass">
+                    {{ formatAccountMoney(limitedCreditBalance) }}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section data-test="limited-credit-details">
+              <h2 class="mb-3 text-base font-semibold text-gray-900 dark:text-white">
+                {{ t('payment.account.limitedCreditDetails') }}
+              </h2>
+
+              <div v-if="limitedCreditStore.loading && sortedLimitedCredits.length === 0" class="flex justify-center py-12">
+                <div class="h-7 w-7 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />
+              </div>
+              <div v-else-if="sortedLimitedCredits.length === 0" data-test="limited-credit-empty" class="card py-12 text-center">
+                <Icon name="creditCard" size="xl" class="mx-auto mb-3 text-gray-300 dark:text-dark-600" />
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                  {{ t('payment.account.noLimitedCredits') }}
+                </p>
+              </div>
+              <div v-else data-test="limited-credit-list" class="space-y-4">
+                <article
+                  v-for="credit in sortedLimitedCredits"
+                  :key="credit.id"
+                  data-test="limited-credit-item"
+                  class="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800"
+                >
+                  <div class="flex items-center justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
+                    <h3 class="font-semibold text-gray-900 dark:text-white">
+                      {{ t('payment.account.limitedCreditTitle', { id: credit.id }) }}
+                    </h3>
+                    <span class="shrink-0 text-xs" :class="limitedCreditExpiryClass(credit.expires_at)">
+                      {{ formatLimitedCreditRemaining(credit.expires_at) }}
+                    </span>
+                  </div>
+                  <div class="space-y-3 p-5">
+                    <div class="flex items-center justify-between gap-4 text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">
+                        {{ t('payment.account.usage') }}
+                      </span>
+                      <span class="font-medium text-gray-900 dark:text-white">
+                        {{ formatAccountMoney(credit.used_amount) }} / {{ formatAccountMoney(credit.initial_amount) }}
+                      </span>
+                    </div>
+                    <div class="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
+                      <div
+                        class="h-full rounded-full transition-all duration-300"
+                        :class="limitedCreditProgressClass(credit)"
+                        :style="{ width: limitedCreditProgressWidth(credit) }"
+                      />
+                    </div>
+                    <div class="text-right text-xs text-gray-500 dark:text-gray-400">
+                      <span data-test="limited-credit-expiration">{{ t('payment.account.expiresAt', { time: formatDateTime(credit.expires_at) }) }}</span>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </section>
+          </template>
+        </template>
+        <div v-if="(checkout.help_text || checkout.help_image_url) && paymentPhase === 'select' && activeTab === 'recharge'" class="card p-4">
+          <div class="flex flex-col items-center gap-3">
+            <img v-if="checkout.help_image_url" :src="checkout.help_image_url" alt=""
+              class="h-40 max-w-full cursor-pointer rounded-lg object-contain transition-opacity hover:opacity-80"
+              @click="previewImage = checkout.help_image_url" />
+            <p v-if="checkout.help_text" class="text-center text-sm text-gray-500 dark:text-gray-400">{{ checkout.help_text }}</p>
+          </div>
+        </div>
+      </template>
+    </div>
     <!-- Image Preview Overlay -->
     <Teleport to="body">
       <Transition name="modal">
@@ -274,19 +367,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { usePaymentStore } from '@/stores/payment'
 import { useSubscriptionStore } from '@/stores/subscriptions'
 import { useAppStore } from '@/stores'
+import { useLimitedCreditStore } from '@/stores/limitedCredits'
 import { paymentAPI } from '@/api/payment'
 import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiError'
 import { isMobileDevice } from '@/utils/device'
 import { calculateCreditedBalancePreview, calculateRechargeBonusPreview } from '@/utils/rechargeBonus'
 import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel, type PeakRateFields } from '@/utils/peak-rate'
+import { getLimitedCreditAggregateSignalLevel } from '@/utils/limitedCreditStatus'
 import type { SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType } from '@/types/payment'
+import type { LimitedCreditGrant } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AmountInput from '@/components/payment/AmountInput.vue'
 import PaymentMethodSelector from '@/components/payment/PaymentMethodSelector.vue'
@@ -302,12 +398,13 @@ import {
   type PaymentRecoverySnapshot,
   writePaymentRecoverySnapshot,
 } from '@/components/payment/paymentFlow'
-import { platformAccentBarClass, platformBadgeLightClass, platformBadgeClass, platformTextClass, platformLabel } from '@/utils/platformColors'
-import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
 import PaymentStatusPanel from '@/components/payment/PaymentStatusPanel.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { DEFAULT_PAYMENT_CURRENCY, formatPaymentAmount, normalizePaymentCurrency } from '@/components/payment/currency'
 import { planValiditySuffix as validitySuffixOf } from '@/components/payment/validity'
+import { formatDateTime } from '@/utils/format'
+import { platformAccentBarClass, platformBadgeLightClass, platformBadgeClass, platformTextClass, platformLabel } from '@/utils/platformColors'
+import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue
 import type { PaymentMethodOption } from '@/components/payment/PaymentMethodSelector.vue'
 import { buildPaymentErrorToastMessage, describePaymentScenarioError } from './paymentUx'
 import { hasWechatResumeQuery, parseWechatResumeRoute, stripWechatResumeQuery } from './paymentWechatResume'
@@ -322,6 +419,7 @@ const subscriptionStore = useSubscriptionStore()
 const appStore = useAppStore()
 
 const user = computed(() => authStore.user)
+const limitedCreditStore = useLimitedCreditStore()
 const activeSubscriptions = computed(() => subscriptionStore.activeSubscriptions)
 
 function getDaysRemaining(expiresAt: string): number {
@@ -337,11 +435,68 @@ function subscriptionPeakRateLabel(sub: { group?: PeakRateFields | null }): stri
   return formatPeakRateWindow(sub.group, serverTimezoneLabel(appStore.cachedPublicSettings?.server_utc_offset))
 }
 
+const permanentBalance = computed(() => Number(user.value?.balance || 0))
+const limitedCreditBalance = computed(() => limitedCreditStore.remainingAmount)
+const accountTotalBalance = computed(() => permanentBalance.value + limitedCreditBalance.value)
+const limitedBalanceSignalClass = computed(() => {
+  const level = getLimitedCreditAggregateSignalLevel(limitedCreditStore.activeCredits)
+  if (level === 'red') return 'text-red-600 dark:text-red-400'
+  if (level === 'yellow') return 'text-yellow-500 dark:text-yellow-400'
+  if (level === 'green') return 'text-green-600 dark:text-green-400'
+  return 'text-gray-900 dark:text-white'
+})
+const sortedLimitedCredits = computed(() =>
+  [...limitedCreditStore.activeCredits].sort((a, b) => {
+    const byExpiry = new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime()
+    return byExpiry || a.id - b.id
+  }),
+)
+
+// 账户页金额统一保留两位小数。
+function formatAccountMoney(value: number): string {
+  return '$' + Number(value || 0).toFixed(2)
+}
+
+function limitedCreditUsagePercentage(credit: LimitedCreditGrant): number {
+  if (!credit.initial_amount) return 0
+  return Math.min(Math.max((Number(credit.used_amount || 0) / credit.initial_amount) * 100, 0), 100)
+}
+
+function limitedCreditProgressWidth(credit: LimitedCreditGrant): string {
+  return `${limitedCreditUsagePercentage(credit)}%`
+}
+
+function limitedCreditProgressClass(credit: LimitedCreditGrant): string {
+  const percentage = limitedCreditUsagePercentage(credit)
+  if (percentage >= 90) return 'bg-red-500'
+  if (percentage >= 70) return 'bg-orange-500'
+  return 'bg-emerald-500'
+}
+
+function limitedCreditDaysRemaining(expiresAt: string): number {
+  return Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+}
+
+function formatLimitedCreditRemaining(expiresAt: string): string {
+  const days = limitedCreditDaysRemaining(expiresAt)
+  if (days < 0) return t('payment.account.expired')
+  if (days === 0) return t('payment.account.expiresToday')
+  if (days === 1) return t('payment.account.expiresTomorrow')
+  return t('payment.account.daysRemaining', { days })
+}
+
+function limitedCreditExpiryClass(expiresAt: string): string {
+  const days = limitedCreditDaysRemaining(expiresAt)
+  if (days <= 3) return 'text-red-600 dark:text-red-400'
+  if (days <= 7) return 'text-orange-600 dark:text-orange-400'
+  return 'text-gray-500 dark:text-gray-400'
+}
+
 const loading = ref(true)
 const submitting = ref(false)
 const errorMessage = ref('')
 const errorHintMessage = ref('')
-const activeTab = ref<'recharge' | 'subscription'>('recharge')
+const activeTab = ref<'recharge' | 'subscription' | 'account'>(route.query.tab === 'account' ? 'account' : route.query.tab === 'subscription' ? 'subscription' : 'recharge')
 const amount = ref<number | null>(null)
 const selectedMethod = ref('')
 const selectedPlan = ref<SubscriptionPlan | null>(null)
@@ -499,16 +654,16 @@ function onPaymentDone() {
   const wasSubscription = paymentState.value.orderType === 'subscription'
   resetPayment()
   selectedPlan.value = null
-  if (wasSubscription) {
-    subscriptionStore.fetchActiveSubscriptions(true).catch(() => {})
-  }
+  if (wasSubscription) subscriptionStore.fetchActiveSubscriptions(true).catch(() => {})
 }
 
 async function onPaymentSuccess() {
   const completedPayment = { ...paymentState.value }
   removeRecoverySnapshot()
   authStore.refreshUser()
-  if (paymentState.value.orderType === 'subscription') {
+  if (paymentState.value.orderType === 'balance') {
+    limitedCreditStore.fetchActiveLimitedCredits(true).catch(() => {})
+  } else if (paymentState.value.orderType === 'subscription') {
     subscriptionStore.fetchActiveSubscriptions(true).catch(() => {})
   }
   await redirectToPaymentResult(completedPayment)
@@ -526,24 +681,27 @@ const checkout = ref<CheckoutInfoResponse>({
 })
 
 const tabs = computed(() => {
-  const result: { key: 'recharge' | 'subscription'; label: string }[] = []
+  const result: { key: 'recharge' | 'subscription' | 'account'; label: string }[] = []
   if (!checkout.value.balance_disabled) result.push({ key: 'recharge', label: t('payment.tabTopUp') })
   result.push({ key: 'subscription', label: t('payment.tabSubscribe') })
+  result.push({ key: 'account', label: t('payment.tabAccount') })
   return result
 })
 
 const visibleMethods = computed(() => getVisibleMethods(checkout.value.methods))
 const enabledMethods = computed(() => Object.keys(visibleMethods.value))
 const validAmount = computed(() => amount.value ?? 0)
+const quickRechargeAmounts = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000]
 const balanceRechargeMultiplier = computed(() => {
   const multiplier = checkout.value.balance_recharge_multiplier
   return Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 1
 })
-// 订阅 CNY 换算汇率（1 USD = X CNY）。0 = 未配置，订阅保持 price 直付（与后端 opt-in 条件严格镜像）。
+// 订阅 CNY 换算汇率（1 USD = X CNY），未配置时保持原价。
 const subscriptionUsdToCnyRate = computed(() => {
   const rate = checkout.value.subscription_usd_to_cny_rate
   return Number.isFinite(rate) && rate > 0 ? rate : 0
 })
+
 const creditedAmount = computed(() =>
   calculateCreditedBalancePreview(validAmount.value, balanceRechargeMultiplier.value),
 )
@@ -556,20 +714,67 @@ const rechargeBonusAmount = computed(() => {
 })
 const rechargeBonusValidityDays = computed(() => checkout.value.recharge_bonus_activity?.validity_days ?? 30)
 const hasLimitedRechargeBonus = computed(() => (checkout.value.recharge_bonus_activity?.participation_limit ?? 0) > 0)
+const quickAmountBonusAmounts = computed<Record<number, number>>(() => {
+  const activity = checkout.value.recharge_bonus_activity
+  if (!activity || activity.remaining_count === 0) return {}
 
-// 限时额度最多保留 8 位小数，且与普通额度一样至少展示 2 位。
-function formatLimitedCreditAmount(value: number): string {
-  const [integer, fraction = ''] = value.toFixed(8).split('.')
-  const trimmed = fraction.replace(/0+$/, '')
-  const normalized = trimmed.length >= 2 ? trimmed : trimmed.padEnd(2, '0')
-  return integer + '.' + normalized
+  return quickRechargeAmounts.reduce<Record<number, number>>((result, quickAmount) => {
+    const credited = calculateCreditedBalancePreview(quickAmount, balanceRechargeMultiplier.value)
+    const bonus = calculateRechargeBonusPreview(credited, activity.tiers)
+    if (bonus > 0) result[quickAmount] = bonus
+    return result
+  }, {})
+})
+const rechargeBonusCountdownNow = ref(Date.now())
+let rechargeBonusCountdownTimer: ReturnType<typeof setInterval> | null = null
+
+const rechargeBonusCountdown = computed(() => {
+  const endAt = checkout.value.recharge_bonus_activity?.end_at
+  if (!endAt) return '00:00:00'
+
+  const remainingSeconds = Math.max(0, Math.floor((new Date(endAt).getTime() - rechargeBonusCountdownNow.value) / 1000))
+  if (remainingSeconds > 86_400) {
+    return t('payment.rechargeBonus.countdownDaysHours', {
+      days: Math.floor(remainingSeconds / 86_400),
+      hours: Math.floor((remainingSeconds % 86_400) / 3600),
+    })
+  }
+
+  const hours = Math.floor(remainingSeconds / 3600)
+  const minutes = Math.floor((remainingSeconds % 3600) / 60)
+  const seconds = remainingSeconds % 60
+  return [hours, minutes, seconds].map(value => String(value).padStart(2, '0')).join(':')
+})
+
+// startRechargeBonusCountdown 每秒刷新活动剩余时间，并在活动结束后停止定时器。
+function startRechargeBonusCountdown() {
+  stopRechargeBonusCountdown()
+  rechargeBonusCountdownNow.value = Date.now()
+  const endAt = checkout.value.recharge_bonus_activity?.end_at
+  if (!endAt || new Date(endAt).getTime() <= rechargeBonusCountdownNow.value) return
+
+  rechargeBonusCountdownTimer = setInterval(() => {
+    rechargeBonusCountdownNow.value = Date.now()
+    if (new Date(endAt).getTime() <= rechargeBonusCountdownNow.value) {
+      stopRechargeBonusCountdown()
+    }
+  }, 1000)
 }
 
-// Adaptive grid: center single card, 2-col for 2 plans, 3-col for 3+
+function stopRechargeBonusCountdown() {
+  if (!rechargeBonusCountdownTimer) return
+  clearInterval(rechargeBonusCountdownTimer)
+  rechargeBonusCountdownTimer = null
+}
+
+// 限时额度展示统一四舍五入保留两位小数，实际结算仍使用后端 8 位精度。
+function formatLimitedCreditAmount(value: number): string {
+  return value.toFixed(2)
+}
+
 const planGridClass = computed(() => {
   const n = checkout.value.plans.length
-  if (n <= 2) return 'grid grid-cols-1 gap-5 sm:grid-cols-2'
-  return 'grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3'
+  return n <= 2 ? 'grid grid-cols-1 gap-5 sm:grid-cols-2' : 'grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3'
 })
 
 // Check if an amount fits a method's [min, max]. 0 = no limit.
@@ -610,10 +815,7 @@ const localeCode = computed(() => {
 
 function currencyFractionDigits(currency: string): number {
   try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-    }).resolvedOptions().maximumFractionDigits ?? 2
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 2
   } catch {
     return 2
   }
@@ -690,49 +892,6 @@ const canSubmit = computed(() =>
     && selectedLimit.value?.available !== false
 )
 
-const subPaymentAmount = computed(() => {
-  const price = selectedPlan.value?.price ?? 0
-  return subscriptionPaymentAmountForCurrency(price, selectedCurrency.value)
-})
-
-const subFeeAmount = computed(() => {
-  if (feeRate.value <= 0 || subPaymentAmount.value <= 0) return 0
-  return ceilPaymentAmount((subPaymentAmount.value * feeRate.value) / 100, selectedCurrency.value)
-})
-
-const subTotalAmount = computed(() => {
-  if (feeRate.value <= 0 || subPaymentAmount.value <= 0) return subPaymentAmount.value
-  return roundPaymentAmount(subPaymentAmount.value + subFeeAmount.value, selectedCurrency.value)
-})
-
-function subscriptionTotalAmountForCurrency(value: number, currency: string): number {
-  const paymentAmount = subscriptionPaymentAmountForCurrency(value, currency)
-  if (feeRate.value <= 0 || paymentAmount <= 0) return paymentAmount
-  const fee = ceilPaymentAmount((paymentAmount * feeRate.value) / 100, currency)
-  return roundPaymentAmount(paymentAmount + fee, currency)
-}
-
-// Subscription-specific: method options based on gateway pay amount
-const subMethodOptions = computed<PaymentMethodOption[]>(() => {
-  const price = selectedPlan.value?.price ?? 0
-  return enabledMethods.value.map((type) => {
-    const ml = visibleMethods.value[type]
-    const currency = normalizePaymentCurrency(ml?.currency)
-    return {
-      type,
-      display_name: ml?.display_name,
-      fee_rate: ml?.fee_rate ?? 0,
-      available: ml?.available !== false && amountFitsMethod(subscriptionTotalAmountForCurrency(price, currency), type),
-    }
-  })
-})
-
-const canSubmitSubscription = computed(() =>
-  selectedPlan.value !== null
-    && amountFitsMethod(subTotalAmount.value, selectedMethod.value)
-    && selectedLimit.value?.available !== false
-)
-
 // Auto-switch to first available method when current selection can't handle the amount
 watch(() => [validAmount.value, selectedMethod.value] as const, ([amt, method]) => {
   if (amt <= 0 || amountFitsMethod(amt, method)) return
@@ -792,6 +951,48 @@ function closeRenewalModal() {
   showRenewalModal.value = false
   renewGroupId.value = null
 }
+
+const subPaymentAmount = computed(() => {
+  const price = selectedPlan.value?.price ?? 0
+  return subscriptionPaymentAmountForCurrency(price, selectedCurrency.value)
+})
+
+const subFeeAmount = computed(() => {
+  if (feeRate.value <= 0 || subPaymentAmount.value <= 0) return 0
+  return ceilPaymentAmount((subPaymentAmount.value * feeRate.value) / 100, selectedCurrency.value)
+})
+
+const subTotalAmount = computed(() => {
+  if (feeRate.value <= 0 || subPaymentAmount.value <= 0) return subPaymentAmount.value
+  return roundPaymentAmount(subPaymentAmount.value + subFeeAmount.value, selectedCurrency.value)
+})
+
+function subscriptionTotalAmountForCurrency(value: number, currency: string): number {
+  const paymentAmount = subscriptionPaymentAmountForCurrency(value, currency)
+  if (feeRate.value <= 0 || paymentAmount <= 0) return paymentAmount
+  const fee = ceilPaymentAmount((paymentAmount * feeRate.value) / 100, currency)
+  return roundPaymentAmount(paymentAmount + fee, currency)
+}
+
+const subMethodOptions = computed<PaymentMethodOption[]>(() => {
+  const price = selectedPlan.value?.price ?? 0
+  return enabledMethods.value.map((type) => {
+    const ml = visibleMethods.value[type]
+    const currency = normalizePaymentCurrency(ml?.currency)
+    return {
+      type,
+      display_name: ml?.display_name,
+      fee_rate: ml?.fee_rate ?? 0,
+      available: ml?.available !== false && amountFitsMethod(subscriptionTotalAmountForCurrency(price, currency), type),
+    }
+  })
+})
+
+const canSubmitSubscription = computed(() =>
+  selectedPlan.value !== null
+    && amountFitsMethod(subTotalAmount.value, selectedMethod.value)
+    && selectedLimit.value?.available !== false
+)
 
 async function handleSubmitRecharge() {
   if (!canSubmit.value || submitting.value) return
@@ -1111,9 +1312,6 @@ async function resumeWechatPaymentFromQuery() {
   if (resume.orderType === 'balance' && resume.orderAmount > 0) {
     amount.value = resume.orderAmount
   }
-  if (resume.orderType === 'subscription' && resume.planId) {
-    selectedPlan.value = checkout.value.plans.find(plan => plan.id === resume.planId) ?? null
-  }
 
   await router.replace({ path: route.path, query: stripWechatResumeQuery(route.query) })
 
@@ -1139,6 +1337,7 @@ onMounted(async () => {
   try {
     const res = await paymentAPI.getCheckoutInfo()
     checkout.value = res.data
+    startRechargeBonusCountdown()
     if (enabledMethods.value.length) {
       const order: readonly string[] = METHOD_ORDER
       const sorted = [...enabledMethods.value].sort((a, b) => {
@@ -1177,7 +1376,9 @@ onMounted(async () => {
     if (checkout.value.balance_disabled) {
       activeTab.value = 'subscription'
     }
-    // Handle renewal navigation: ?tab=subscription&group=123
+    if (route.query.tab === 'account') {
+      activeTab.value = 'account'
+    }
     if (route.query.tab === 'subscription') {
       activeTab.value = 'subscription'
       if (route.query.group) {
@@ -1193,7 +1394,12 @@ onMounted(async () => {
     }
   } catch (err: unknown) { appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error'))) }
   finally { loading.value = false }
-  // Fetch active subscriptions (uses cache, non-blocking)
+  // 确保账户页使用当前有效限时额度。
+  limitedCreditStore.fetchActiveLimitedCredits().catch(() => {})
   subscriptionStore.fetchActiveSubscriptions().catch(() => {})
+})
+
+onBeforeUnmount(() => {
+  stopRechargeBonusCountdown()
 })
 </script>

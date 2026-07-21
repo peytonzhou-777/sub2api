@@ -21,8 +21,8 @@
         </div>
       </div>
 
-      <!-- Right: Announcements + Docs + Language + Subscriptions + Balance + User Dropdown -->
-      <div class="flex min-w-0 items-center gap-1 sm:gap-3">
+      <!-- Right: Announcements + Docs + Language + Balance + User Dropdown -->
+      <div class="flex items-center gap-3">
         <!-- Announcement Bell -->
         <AnnouncementBell v-if="user" />
 
@@ -40,9 +40,6 @@
 
         <!-- Language Switcher -->
         <LocaleSwitcher />
-
-        <!-- Subscription Progress (for users with active subscriptions) -->
-        <SubscriptionProgressMini v-if="user" />
 
         <!-- Balance Display -->
         <div
@@ -62,29 +59,34 @@
               d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"
             />
           </svg>
-          <span class="text-sm font-semibold text-primary-700 dark:text-primary-300">
-            {{ formatHeaderMoney(availableBalance) }}
-          </span>
-          <span
-            v-if="frozenBalance > 0"
-            class="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
-          >
-            {{ balanceFrozenLabel }}
+          <span data-test="header-balance" class="text-sm font-semibold text-primary-700 dark:text-primary-300">
+            {{ balanceDisplayText }}
           </span>
           <div
-            class="pointer-events-none absolute right-0 top-full mt-2 hidden w-56 rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-lg group-hover:block dark:border-dark-700 dark:bg-dark-800"
+            v-if="limitedCreditSignals.length > 0"
+            data-test="limited-credit-signals"
+            class="flex items-center gap-0.5"
+            :title="limitedCreditText"
+          >
+            <span
+              v-for="signal in limitedCreditSignals.slice(0, 4)"
+              :key="signal.key"
+              data-test="limited-credit-signal"
+              class="h-2 w-2 rounded-full"
+              :class="signal.className"
+            />
+          </div>
+          <div
+            data-test="balance-popover"
+            class="pointer-events-auto absolute right-0 top-full mt-2 hidden w-64 rounded-lg border before:absolute before:-top-2 before:left-0 before:h-2 before:w-full before:content-[''] border-gray-200 bg-white p-3 text-xs shadow-lg group-hover:block dark:border-dark-700 dark:bg-dark-800"
           >
             <div class="flex items-center justify-between">
               <span class="text-gray-500 dark:text-dark-400">{{ ordinaryBalanceText }}</span>
               <span class="font-medium text-gray-900 dark:text-white">{{ formatHeaderMoney(ordinaryAvailableBalance) }}</span>
             </div>
-            <div v-if="limitedCreditRemainingBalance > 0" class="mt-2 flex items-center justify-between">
+            <div v-if="limitedCreditRemainingBalance > 0" data-test="limited-credit-total" class="mt-2 flex items-center justify-between">
               <span class="text-gray-500 dark:text-dark-400">{{ limitedCreditText }}</span>
               <span class="font-medium text-emerald-700 dark:text-emerald-300">{{ formatHeaderMoney(limitedCreditRemainingBalance) }}</span>
-            </div>
-            <div class="mt-2 flex items-center justify-between">
-              <span class="text-gray-500 dark:text-dark-400">{{ balanceFrozenText }}</span>
-              <span class="font-medium text-amber-700 dark:text-amber-200">{{ formatHeaderMoney(frozenBalance) }}</span>
             </div>
             <div class="mt-2 border-t border-gray-100 pt-2 dark:border-dark-700">
               <div class="flex items-center justify-between">
@@ -92,6 +94,29 @@
                 <span class="font-semibold text-gray-900 dark:text-white">{{ formatHeaderMoney(totalBalance) }}</span>
               </div>
             </div>
+            <div
+              v-if="earliestExpiringLimitedCredit"
+              data-test="earliest-limited-credit"
+              class="mt-2 border-t border-gray-100 pt-2 dark:border-dark-700"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-gray-500 dark:text-dark-400">{{ earliestLimitedCreditText }}</span>
+                <span class="font-medium text-red-600 dark:text-red-400">
+                  {{ formatHeaderMoney(earliestExpiringLimitedCredit.remaining_amount) }}
+                </span>
+              </div>
+              <div class="mt-1 text-right text-[11px] text-gray-400 dark:text-dark-400">
+                {{ formatLimitedCreditExpiration(earliestExpiringLimitedCredit.expires_at) }}
+              </div>
+            </div>
+            <router-link
+              v-if="limitedCreditRemainingBalance > 0 && paymentEnabled"
+              data-test="limited-credit-details-link"
+              to="/purchase?tab=account"
+              class="mt-2 block border-t border-gray-100 pt-2 text-center font-medium text-primary-600 hover:underline dark:border-dark-700 dark:text-primary-400"
+            >
+              {{ viewLimitedCreditDetailsText }}
+            </router-link>
           </div>
         </div>
 
@@ -139,13 +164,10 @@
                   {{ t('common.balance') }}
                 </div>
                 <div class="text-sm font-semibold text-primary-600 dark:text-primary-400">
-                  {{ formatHeaderMoney(availableBalance) }}
+                  {{ balanceDisplayText }}
                 </div>
                 <div v-if="limitedCreditRemainingBalance > 0" class="mt-1 text-xs text-emerald-600 dark:text-emerald-300">
                   {{ limitedCreditText }} {{ formatHeaderMoney(limitedCreditRemainingBalance) }}
-                </div>
-                <div v-if="frozenBalance > 0" class="mt-1 text-xs text-amber-600 dark:text-amber-300">
-                  {{ balanceFrozenText }} {{ formatHeaderMoney(frozenBalance) }}
                 </div>
               </div>
 
@@ -253,10 +275,11 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore, useAuthStore, useLimitedCreditStore, useOnboardingStore } from '@/stores'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
-import SubscriptionProgressMini from '@/components/common/SubscriptionProgressMini.vue'
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { sanitizeUrl } from '@/utils/url'
+import { formatDateOnly } from '@/utils/format'
+import { getLimitedCreditSignalLevel } from '@/utils/limitedCreditStatus'
 
 const router = useRouter()
 const route = useRoute()
@@ -272,19 +295,33 @@ const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
 const contactInfo = computed(() => appStore.contactInfo)
 const docUrl = computed(() => sanitizeUrl(appStore.docUrl))
+const paymentEnabled = computed(() => appStore.cachedPublicSettings?.payment_enabled !== false)
 const avatarUrl = computed(() => user.value?.avatar_url?.trim() || '')
 const ordinaryAvailableBalance = computed(() => Number(user.value?.balance || 0))
-const ordinaryFrozenBalance = computed(() => Number(user.value?.frozen_balance || 0))
 const limitedCreditRemainingBalance = computed(() => limitedCreditStore.remainingAmount)
-const limitedCreditFrozenBalance = computed(() => limitedCreditStore.frozenAmount)
-const availableBalance = computed(() => ordinaryAvailableBalance.value + limitedCreditRemainingBalance.value)
-const frozenBalance = computed(() => ordinaryFrozenBalance.value + limitedCreditFrozenBalance.value)
-const totalBalance = computed(() => ordinaryAvailableBalance.value + ordinaryFrozenBalance.value + limitedCreditRemainingBalance.value)
+const totalBalance = computed(() => ordinaryAvailableBalance.value + limitedCreditRemainingBalance.value)
 const ordinaryBalanceText = computed(() => t('common.ordinaryBalance') === 'common.ordinaryBalance' ? '普通余额' : t('common.ordinaryBalance'))
-const balanceFrozenText = computed(() => t('common.frozenBalance') === 'common.frozenBalance' ? '冻结金额' : t('common.frozenBalance'))
 const balanceTotalText = computed(() => t('common.totalBalance') === 'common.totalBalance' ? '总余额' : t('common.totalBalance'))
-const limitedCreditText = computed(() => t('common.limitedCredit') === 'common.limitedCredit' ? '限时额度' : t('common.limitedCredit'))
-const balanceFrozenLabel = computed(() => `${balanceFrozenText.value} ${formatHeaderMoney(frozenBalance.value)}`)
+const limitedCreditText = computed(() => t('common.limitedBalance') === 'common.limitedBalance' ? '限时余额' : t('common.limitedBalance'))
+const earliestLimitedCreditText = computed(() => t('common.earliestExpiringLimitedBalance'))
+const viewLimitedCreditDetailsText = computed(() => t('common.viewLimitedBalanceDetails'))
+const balanceDisplayText = computed(() => formatHeaderMoney(totalBalance.value))
+const earliestExpiringLimitedCredit = computed(() => {
+  return [...limitedCreditStore.activeCredits].sort((a, b) => {
+    const byExpiry = new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime()
+    return byExpiry || a.id - b.id
+  })[0] ?? null
+})
+const limitedCreditSignals = computed(() =>
+  limitedCreditStore.activeCredits.map((credit) => ({
+    key: `limited-credit-${credit.id}`,
+    className: {
+      red: 'bg-red-500',
+      yellow: 'bg-yellow-400',
+      green: 'bg-green-500',
+    }[getLimitedCreditSignalLevel(credit)],
+  })),
+)
 
 // 只在标准模式的管理员下显示新手引导按钮
 const showOnboardingButton = computed(() => {
@@ -362,6 +399,11 @@ function handleReplayGuide() {
   onboardingStore.replay()
 }
 
+// formatLimitedCreditExpiration 按浏览器时区展示最早到期限时余额的日期。
+function formatLimitedCreditExpiration(expiresAt: string): string {
+  return t('common.expiresOn', { date: formatDateOnly(expiresAt) })
+}
+
 function formatHeaderMoney(value: number) {
   if (!Number.isFinite(value)) return '$0.00'
   return `$${value.toFixed(2)}`
@@ -394,3 +436,4 @@ onBeforeUnmount(() => {
   transform: scale(0.95) translateY(-4px);
 }
 </style>
+

@@ -1,27 +1,5 @@
 export default {
 
-  // Subscription Progress (Header component)
-  subscriptionProgress: {
-    title: 'My Benefits',
-    viewDetails: 'View benefit details',
-    activeCount: '{count} active benefit(s)',
-    subscriptions: 'Subscriptions',
-    limitedCredits: 'Limited Credits',
-    limitedCreditTitle: 'Limited Credit #{id}',
-    daily: 'Daily',
-    weekly: 'Weekly',
-    monthly: 'Monthly',
-    used: 'Used',
-    remaining: 'Remaining',
-    frozen: 'Frozen',
-    daysRemaining: '{days} days left',
-    expired: 'Expired',
-    expiresToday: 'Expires today',
-    expiresTomorrow: 'Expires tomorrow',
-    viewAll: 'View all subscriptions',
-    noSubscriptions: 'No active subscriptions',
-    unlimited: 'Unlimited'
-  },
 
   // Version Badge
   version: {
@@ -67,8 +45,8 @@ export default {
 
   // Recharge / Subscription Page
   purchase: {
-    title: 'Recharge / Subscription',
-    description: 'Recharge balance or purchase subscription via the embedded page',
+    title: 'My Account',
+    description: 'View account balances, limited credits, and top up',
     openInNewTab: 'Open in new tab',
     notEnabledTitle: 'Feature not enabled',
     notEnabledDesc: 'The administrator has not enabled the recharge/subscription entry. Please contact admin.',
@@ -389,6 +367,21 @@ export default {
     noActiveSubscription: 'No active subscription',
     tabTopUp: 'Top Up',
     tabSubscribe: 'Subscribe',
+    tabAccount: 'Account',
+    account: {
+      balanceTitle: 'Account Balance',
+      permanentBalance: 'Permanent Credit',
+      limitedBalance: 'Limited Credit',
+      limitedCreditDetails: 'Limited Credit Details',
+      noLimitedCredits: 'No active limited credits',
+      limitedCreditTitle: 'Limited Credit #{id}',
+      usage: 'Credit Usage',
+      daysRemaining: '{days} days remaining',
+      expiresToday: 'Expires today',
+      expiresTomorrow: 'Expires tomorrow',
+      expired: 'Expired',
+      expiresAt: 'Expires at {time}'
+    },
     noPlans: 'No subscription plans available',
     notAvailable: 'Top-up is currently unavailable',
     confirmSubscription: 'Confirm Subscription',
@@ -399,8 +392,10 @@ export default {
     rechargeRatePreview: 'Current rate: 1 CNY = {usd} USD',
     rechargeBonus: {
       title: 'Recharge Promotion',
+      countdown: 'Countdown: ',
+      countdownDaysHours: '{days}d {hours}h',
       limitedCreditWithDays: 'limited credit ({days} days)',
-      limitHint: 'The final bonus depends on your remaining participation count when payment is credited.',
+      limitHint: 'Whether the bonus is granted depends on your actual remaining participation count when payment is credited.',
     },
     rechargeActivities: {
       create: 'New Activity',
