@@ -601,3 +601,16 @@ func TestListModelNamesByProvider_EmptyCatalog(t *testing.T) {
 	require.NotNil(t, got)
 	require.Empty(t, got)
 }
+
+func TestCopyPricingFile(t *testing.T) {
+	dir := t.TempDir()
+	sourcePath := filepath.Join(dir, "source.json")
+	targetPath := filepath.Join(dir, "target.json")
+	content := []byte(`{"model":{"input_cost_per_token":0.000001}}`)
+	require.NoError(t, os.WriteFile(sourcePath, content, 0644))
+
+	require.NoError(t, copyPricingFile(sourcePath, targetPath))
+	copied, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+	require.Equal(t, content, copied)
+}

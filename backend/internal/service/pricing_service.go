@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -576,26 +577,48 @@ func (s *PricingService) mergeFallbackPricingData(data map[string]*LiteLLMModelP
 
 // useFallbackPricing 使用回退价格文件
 func (s *PricingService) useFallbackPricing() error {
-	fallbackFile := s.cfg.Pricing.FallbackFile
-
+	fallbackFile, err := filepath.Abs(filepath.Clean(s.cfg.Pricing.FallbackFile))
+	if err != nil {
+		return fmt.Errorf("normalize fallback file path: %w", err)
+	}
 	if _, err := os.Stat(fallbackFile); os.IsNotExist(err) {
 		return fmt.Errorf("fallback file not found: %s", fallbackFile)
 	}
 
 	logger.LegacyPrintf("service.pricing", "[Pricing] Using fallback file: %s", fallbackFile)
 
-	// 复制到数据目录
-	data, err := os.ReadFile(fallbackFile)
+	pricingFile, err := filepath.Abs(filepath.Clean(s.getPricingFilePath()))
 	if err != nil {
-		return fmt.Errorf("read fallback failed: %w", err)
+		return fmt.Errorf("normalize pricing file path: %w", err)
 	}
-
-	pricingFile := s.getPricingFilePath()
-	if err := os.WriteFile(pricingFile, data, 0644); err != nil {
+	if err := copyPricingFile(fallbackFile, pricingFile); err != nil {
 		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to copy fallback: %v", err)
 	}
 
 	return s.loadPricingData(fallbackFile)
+}
+
+// copyPricingFile 流式复制价格文件，并检查目标文件关闭错误。
+func copyPricingFile(sourcePath, targetPath string) error {
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("open source pricing file: %w", err)
+	}
+	defer func() { _ = source.Close() }()
+
+	target, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("open target pricing file: %w", err)
+	}
+	defer func() { _ = target.Close() }()
+
+	if _, err := io.Copy(target, source); err != nil {
+		return fmt.Errorf("copy pricing file: %w", err)
+	}
+	if err := target.Close(); err != nil {
+		return fmt.Errorf("close target pricing file: %w", err)
+	}
+	return nil
 }
 
 // fetchRemoteHash 从远程获取哈希值
