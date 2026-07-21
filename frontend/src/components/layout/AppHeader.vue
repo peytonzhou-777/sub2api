@@ -1,8 +1,8 @@
 <template>
-  <header class="glass sticky top-0 z-30 border-b border-gray-200/50 dark:border-dark-700/50">
-    <div class="flex h-16 items-center justify-between gap-2 px-2 sm:px-4 md:px-6">
-      <!-- Left: Mobile Menu Toggle + Page Title -->
-      <div class="flex shrink-0 items-center gap-2 sm:gap-4">
+  <header class="codex-app-header top-0">
+    <!-- 顶部状态区直接展示工作台光圈背景。 -->
+    <div class="codex-status-bar flex items-center justify-between px-3 md:px-5">
+      <div class="flex items-center">
         <button
           @click="toggleMobileSidebar"
           class="btn-ghost btn-icon lg:hidden"
@@ -10,15 +10,6 @@
         >
           <Icon name="menu" size="md" />
         </button>
-
-        <div class="hidden lg:block">
-          <h1 class="text-lg font-semibold text-gray-900 dark:text-white">
-            {{ pageTitle }}
-          </h1>
-          <p v-if="pageDescription" class="text-xs text-gray-500 dark:text-dark-400">
-            {{ pageDescription }}
-          </p>
-        </div>
       </div>
 
       <!-- Right: Announcements + Docs + Language + Balance + User Dropdown -->
@@ -44,10 +35,10 @@
         <!-- Balance Display -->
         <div
           v-if="user"
-          class="group relative hidden items-center gap-2 rounded-xl bg-primary-50 px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
+          class="balance-chip group relative hidden items-center gap-2"
         >
           <svg
-            class="h-4 w-4 text-primary-600 dark:text-primary-400"
+            class="balance-chip-icon h-4 w-4"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -59,7 +50,7 @@
               d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"
             />
           </svg>
-          <span data-test="header-balance" class="text-sm font-semibold text-primary-700 dark:text-primary-300">
+          <span data-test="header-balance" class="balance-chip-value text-sm font-medium">
             {{ balanceDisplayText }}
           </span>
           <div
@@ -76,15 +67,15 @@
           </div>
           <div
             data-test="balance-popover"
-            class="pointer-events-auto absolute right-0 top-full mt-2 hidden w-64 rounded-lg border before:absolute before:-top-2 before:left-0 before:h-2 before:w-full before:content-[''] border-gray-200 bg-white p-3 text-xs shadow-lg group-hover:block dark:border-dark-700 dark:bg-dark-800"
+            class="balance-popover pointer-events-auto absolute right-0 top-full mt-2 hidden w-64 p-3 text-xs before:absolute before:-top-2 before:left-0 before:h-2 before:w-full before:content-[''] group-hover:block"
           >
             <div class="flex items-center justify-between">
               <span class="text-gray-500 dark:text-dark-400">{{ ordinaryBalanceText }}</span>
               <span class="font-medium text-gray-900 dark:text-white">{{ formatHeaderMoney(ordinaryAvailableBalance) }}</span>
             </div>
             <div v-if="limitedCreditRemainingBalance > 0" data-test="limited-credit-total" class="mt-2 flex items-center justify-between">
-              <span class="text-gray-500 dark:text-dark-400">{{ limitedCreditText }}</span>
-              <span class="font-medium text-emerald-700 dark:text-emerald-300">{{ formatHeaderMoney(limitedCreditRemainingBalance) }}</span>
+              <span class="balance-limited-label">{{ limitedCreditText }}</span>
+              <span class="balance-positive font-medium">{{ formatHeaderMoney(limitedCreditRemainingBalance) }}</span>
             </div>
             <div class="mt-2 border-t border-gray-100 pt-2 dark:border-dark-700">
               <div class="flex items-center justify-between">
@@ -99,7 +90,7 @@
             >
               <div class="flex items-center justify-between gap-3">
                 <span class="text-gray-500 dark:text-dark-400">{{ earliestLimitedCreditText }}</span>
-                <span class="font-medium text-red-600 dark:text-red-400">
+                <span class="balance-danger font-medium">
                   {{ formatHeaderMoney(earliestExpiringLimitedCredit.remaining_amount) }}
                 </span>
               </div>
@@ -111,7 +102,7 @@
               v-if="limitedCreditRemainingBalance > 0 && paymentEnabled"
               data-test="limited-credit-details-link"
               to="/purchase?tab=account"
-              class="mt-2 block border-t border-gray-100 pt-2 text-center font-medium text-primary-600 hover:underline dark:border-dark-700 dark:text-primary-400"
+              class="balance-link mt-2 block border-t pt-2 text-center font-medium"
             >
               {{ viewLimitedCreditDetailsText }}
             </router-link>
@@ -119,7 +110,7 @@
         </div>
 
         <!-- User Dropdown -->
-        <div v-if="user" class="relative" ref="dropdownRef">
+        <div v-if="user" class="relative hidden" ref="dropdownRef">
           <button
             @click="toggleDropdown"
             class="flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
@@ -263,6 +254,15 @@
         </div>
       </div>
     </div>
+
+    <!-- 页面标题收入嵌入式内容面板，业务页内容从此处向下连续。 -->
+    <div class="codex-panel-titlebar flex items-center px-4 md:px-6">
+      <div class="min-w-0">
+        <h1 class="truncate text-lg font-semibold text-gray-900 dark:text-white">
+          {{ pageTitle }}
+        </h1>
+      </div>
+    </div>
   </header>
 </template>
 
@@ -361,14 +361,6 @@ const pageTitle = computed(() => {
   return (route.meta.title as string) || ''
 })
 
-const pageDescription = computed(() => {
-  const descKey = route.meta.descriptionKey as string
-  if (descKey) {
-    return t(descKey)
-  }
-  return (route.meta.description as string) || ''
-})
-
 function toggleMobileSidebar() {
   appStore.toggleMobileSidebar()
 }
@@ -423,6 +415,47 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.balance-chip {
+  min-height: 36px;
+  border: 1px solid var(--codex-line);
+  border-radius: var(--codex-pill);
+  background: #151515;
+  padding: 0 12px;
+  color: var(--codex-text);
+  transition: background var(--codex-fast), border-color var(--codex-fast);
+}
+
+.balance-chip:hover {
+  border-color: var(--codex-line-strong);
+  background: var(--codex-panel-hover);
+}
+
+.balance-chip-icon,
+.balance-chip-value {
+  color: #d8d8d8;
+}
+
+.balance-popover {
+  border: 1px solid var(--codex-overlay-border);
+  border-radius: var(--codex-radius);
+  background: var(--codex-overlay);
+  color: var(--codex-text);
+  box-shadow: var(--codex-overlay-highlight), var(--codex-overlay-shadow);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.balance-popover > div,
+.balance-link {
+  border-color: var(--codex-line);
+}
+
+.balance-positive { color: var(--codex-success); }
+.balance-danger { color: var(--codex-danger); }
+.balance-limited-label { color: var(--codex-accent-purple); }
+.balance-link { color: var(--codex-accent-purple); }
+.balance-link:hover,
+.balance-link:focus-visible { color: #ceb7ff; text-decoration: underline; }
+
 .dropdown-enter-active,
 .dropdown-leave-active {
   transition: all 0.2s ease;
@@ -434,4 +467,5 @@ onBeforeUnmount(() => {
   transform: scale(0.95) translateY(-4px);
 }
 </style>
+
 

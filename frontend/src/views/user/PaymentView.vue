@@ -6,10 +6,13 @@
       </div>
       <template v-else>
         <!-- Tab Switcher (hide during payment) -->
-        <div v-if="tabs.length > 1 && paymentPhase === 'select' && !selectedPlan" class="flex space-x-1 rounded-xl bg-gray-100 p-1 dark:bg-dark-800">
+        <div v-if="tabs.length > 1 && paymentPhase === 'select' && !selectedPlan" class="flex gap-1 rounded-xl border border-white/[0.06] bg-[#151515] p-1">
           <button v-for="tab in tabs" :key="tab.key"
-            class="flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all"
-            :class="activeTab === tab.key ? 'bg-white text-gray-900 shadow dark:bg-dark-700 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
+            :data-test="`payment-tab-${tab.key}`"
+            class="flex-1 cursor-pointer rounded-lg border px-4 py-2.5 text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 active:scale-[0.995]"
+            :class="activeTab === tab.key
+              ? 'border-white/[0.12] bg-[#303030] text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_1px_3px_rgb(0_0_0/0.28)]'
+              : 'border-transparent text-[#a1a1a1] hover:border-white/[0.07] hover:bg-[#222222] hover:text-[#f1f1f1]'"
             @click="activeTab = tab.key">{{ tab.label }}</button>
         </div>
         <!-- Payment in progress (shared by recharge and subscription) -->
@@ -46,7 +49,7 @@
                   <div class="min-w-0">
                     <p class="text-xs font-medium text-red-600 dark:text-red-400">{{ t('payment.rechargeBonus.title') }}</p>
                     <h3 class="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">{{ checkout.recharge_bonus_activity.name }}</h3>
-                    <p v-if="checkout.recharge_bonus_activity.description" data-test="recharge-bonus-description" class="mt-1 whitespace-pre-line text-sm leading-5 text-gray-600 dark:text-gray-300">{{ checkout.recharge_bonus_activity.description }}</p>
+                    <p v-if="checkout.recharge_bonus_activity.description" data-test="recharge-bonus-description" class="mt-1 whitespace-pre-line text-sm leading-5 text-gray-900 dark:text-[#f1f1f1]">{{ checkout.recharge_bonus_activity.description }}</p>
                   </div>
                 </div>
                 <p data-test="recharge-bonus-countdown" class="shrink-0 self-end text-xs font-medium text-red-600 dark:text-red-400 sm:self-start">
@@ -59,30 +62,22 @@
                 class="mt-3 text-right text-xs text-gray-600 dark:text-gray-300"
               >
                 {{ t('payment.rechargeBonus.participation', {
-                  completed: checkout.recharge_bonus_activity.completed_count,
-                  limit: checkout.recharge_bonus_activity.participation_limit,
+                  remaining: Math.max(
+                    0,
+                    checkout.recharge_bonus_activity.participation_limit
+                      - checkout.recharge_bonus_activity.completed_count,
+                  ),
                 }) }}
               </p>
             </div>
-            <div class="card p-6">
+            <div data-test="payment-summary-panel" class="card p-6">
               <AmountInput
                 v-model="amount"
-                :amounts="quickRechargeAmounts"
-                :bonus-amounts="quickAmountBonusAmounts"
                 :min="globalMinAmount"
                 :max="globalMaxAmount"
               />
               <p v-if="amountError" class="mt-2 text-xs text-amber-600 dark:text-amber-300">{{ amountError }}</p>
-            </div>
-            <div v-if="enabledMethods.length >= 1" class="card p-6">
-              <PaymentMethodSelector
-                :methods="methodOptions"
-                :selected="selectedMethod"
-                @select="selectedMethod = $event"
-              />
-            </div>
-            <div v-if="validAmount > 0" class="card p-6">
-              <div class="space-y-2 text-sm">
+              <div v-if="validAmount > 0" class="mt-5 space-y-2 border-t border-white/[0.08] pt-4 text-sm">
                 <div data-test="payment-amount-row" class="flex justify-between">
                   <span class="text-gray-500 dark:text-gray-400">{{ t('payment.paymentAmount') }}</span>
                   <span class="text-gray-900 dark:text-white">{{ formatSelectedPaymentAmount(validAmount) }}</span>
@@ -111,6 +106,13 @@
                   <span class="text-lg font-bold text-primary-600 dark:text-primary-400">{{ formatSelectedPaymentAmount(totalAmount) }}</span>
                 </div>
               </div>
+            </div>
+            <div v-if="enabledMethods.length >= 1" data-test="payment-method-panel" class="card p-6">
+              <PaymentMethodSelector
+                :methods="methodOptions"
+                :selected="selectedMethod"
+                @select="selectedMethod = $event"
+              />
             </div>
             <button :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmit || submitting" @click="handleSubmitRecharge">
               <span v-if="submitting" class="flex items-center justify-center gap-2">
@@ -339,10 +341,10 @@
                         {{ formatAccountMoney(credit.used_amount) }} / {{ formatAccountMoney(credit.initial_amount) }}
                       </span>
                     </div>
-                    <div class="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
+                    <div data-test="limited-credit-progress-track" class="h-2 overflow-hidden rounded-full bg-[#444444]">
                       <div
-                        class="h-full rounded-full transition-all duration-300"
-                        :class="limitedCreditProgressClass(credit)"
+                        data-test="limited-credit-progress-fill"
+                        class="h-full rounded-full bg-[#f4f4f4] transition-all duration-300"
                         :style="{ width: limitedCreditProgressWidth(credit) }"
                       />
                     </div>
@@ -476,13 +478,6 @@ function limitedCreditProgressWidth(credit: LimitedCreditGrant): string {
   return `${limitedCreditUsagePercentage(credit)}%`
 }
 
-function limitedCreditProgressClass(credit: LimitedCreditGrant): string {
-  const percentage = limitedCreditUsagePercentage(credit)
-  if (percentage >= 90) return 'bg-red-500'
-  if (percentage >= 70) return 'bg-orange-500'
-  return 'bg-emerald-500'
-}
-
 function limitedCreditDaysRemaining(expiresAt: string): number {
   return Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
 }
@@ -507,7 +502,7 @@ const submitting = ref(false)
 const errorMessage = ref('')
 const errorHintMessage = ref('')
 const activeTab = ref<'recharge' | 'subscription' | 'account'>(route.query.tab === 'account' ? 'account' : route.query.tab === 'subscription' ? 'subscription' : 'recharge')
-const amount = ref<number | null>(null)
+const amount = ref<number | null>(10)
 const selectedMethod = ref('')
 const selectedPlan = ref<SubscriptionPlan | null>(null)
 const previewImage = ref('')
@@ -701,7 +696,6 @@ const tabs = computed(() => {
 const visibleMethods = computed(() => getVisibleMethods(checkout.value.methods))
 const enabledMethods = computed(() => Object.keys(visibleMethods.value))
 const validAmount = computed(() => amount.value ?? 0)
-const quickRechargeAmounts = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000]
 const balanceRechargeMultiplier = computed(() => {
   const multiplier = checkout.value.balance_recharge_multiplier
   return Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 1
@@ -724,17 +718,6 @@ const rechargeBonusAmount = computed(() => {
 })
 const rechargeBonusValidityDays = computed(() => checkout.value.recharge_bonus_activity?.validity_days ?? 30)
 const hasLimitedRechargeBonus = computed(() => (checkout.value.recharge_bonus_activity?.participation_limit ?? 0) > 0)
-const quickAmountBonusAmounts = computed<Record<number, number>>(() => {
-  const activity = checkout.value.recharge_bonus_activity
-  if (!activity || activity.remaining_count === 0) return {}
-
-  return quickRechargeAmounts.reduce<Record<number, number>>((result, quickAmount) => {
-    const credited = calculateCreditedBalancePreview(quickAmount, balanceRechargeMultiplier.value)
-    const bonus = calculateRechargeBonusPreview(credited, activity.tiers)
-    if (bonus > 0) result[quickAmount] = bonus
-    return result
-  }, {})
-})
 const rechargeBonusCountdownNow = ref(Date.now())
 let rechargeBonusCountdownTimer: ReturnType<typeof setInterval> | null = null
 

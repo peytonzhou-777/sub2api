@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
-import AppHeader from '../AppHeader.vue'
+import AppHeader from '../SidebarAccountFooter.vue'
 
 const authState = vi.hoisted(() => ({
   user: {
@@ -82,6 +82,7 @@ describe('AppHeader balance display', () => {
           AnnouncementBell: true,
           LocaleSwitcher: true,
           Icon: true,
+          Transition: false,
           RouterLink: {
             props: ['to'],
             template: '<a :data-to="to"><slot /></a>',
@@ -152,5 +153,33 @@ describe('AppHeader balance display', () => {
     expect(wrapper.find('[data-test="earliest-limited-credit"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="limited-credit-details-link"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="limited-credit-signals"]').exists()).toBe(false)
+  })
+
+  it('keeps the account menu open while the pointer crosses into the popover', async () => {
+    vi.useFakeTimers()
+    const wrapper = mountHeader()
+
+    await wrapper.get('.sidebar-user-trigger').trigger('mouseenter')
+    await wrapper.get('.sidebar-account-footer').trigger('mouseleave')
+    await vi.advanceTimersByTimeAsync(100)
+    await wrapper.get('[data-test="account-popover"]').trigger('mouseenter')
+    await vi.advanceTimersByTimeAsync(180)
+
+    expect(wrapper.find('[data-test="account-popover"]').exists()).toBe(true)
+    vi.useRealTimers()
+  })
+
+  it('keeps the balance popover open while the pointer crosses into it', async () => {
+    vi.useFakeTimers()
+    const wrapper = mountHeader()
+
+    await wrapper.get('[data-test="sidebar-balance"]').trigger('mouseenter')
+    await wrapper.get('.sidebar-account-footer').trigger('mouseleave')
+    await vi.advanceTimersByTimeAsync(100)
+    await wrapper.get('[data-test="balance-popover"]').trigger('mouseenter')
+    await vi.advanceTimersByTimeAsync(180)
+
+    expect(wrapper.get('[data-test="balance-popover"]').isVisible()).toBe(true)
+    vi.useRealTimers()
   })
 })

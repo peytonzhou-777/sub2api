@@ -55,7 +55,10 @@ vi.mock('vue-i18n', async () => {
           return `${params?.days}天${params?.hours}小时`
         }
         if (key === 'payment.rechargeBonus.participation') {
-          return `已参与活动：${params?.completed}/${params?.limit}`
+          return `可参与次数：${params?.remaining}`
+        }
+        if (key === 'payment.rechargeBonus.limitHint') {
+          return '赠送额度以充值到账时可参与活动次数为准'
         }
         return key
       },
@@ -266,7 +269,7 @@ async function mountRechargeWithCampaign(
         },
         AmountInput: {
           name: 'AmountInput',
-          props: ['modelValue', 'bonusAmounts'],
+          props: ['modelValue', 'min', 'max'],
           template: '<button data-test="amount-input" @click="$emit(\'update:modelValue\', 300)">set</button>',
         },
         PaymentMethodSelector: true,
@@ -288,6 +291,7 @@ describe('PaymentView recharge bonus campaign', () => {
     expect(panel.exists()).toBe(true)
     expect(panel.text()).toContain('暑期充值活动')
     expect(panel.text()).toContain('充值越多，赠送越多')
+    expect(panel.get('[data-test="recharge-bonus-description"]').classes()).toContain('dark:text-[#f1f1f1]')
   })
 
   it('shows the countdown to the campaign end time', async () => {
@@ -310,27 +314,16 @@ describe('PaymentView recharge bonus campaign', () => {
     dateNow.mockRestore()
   })
 
-  it('shows the actual participation progress for a limited campaign', async () => {
+  it('shows the remaining participation count for a limited campaign', async () => {
     const wrapper = await mountRechargeWithCampaign('充值越多，赠送越多', undefined, 2, 1)
 
-    expect(wrapper.get('[data-test="recharge-bonus-participation"]').text()).toBe('已参与活动：1/2')
+    expect(wrapper.get('[data-test="recharge-bonus-participation"]').text()).toBe('可参与次数：1')
   })
 
   it('hides participation progress for an unlimited campaign', async () => {
     const wrapper = await mountRechargeWithCampaign('充值越多，赠送越多', undefined, 0, 3)
 
     expect(wrapper.find('[data-test="recharge-bonus-participation"]').exists()).toBe(false)
-  })
-
-  it('calculates limited-credit bonuses for each eligible quick amount', async () => {
-    const wrapper = await mountRechargeWithCampaign()
-    const bonusAmounts = wrapper.getComponent({ name: 'AmountInput' }).props('bonusAmounts') as Record<number, number>
-
-    expect(bonusAmounts[20]).toBeUndefined()
-    expect(bonusAmounts[50]).toBe(10)
-    expect(bonusAmounts[100]).toBe(20)
-    expect(bonusAmounts[500]).toBe(100)
-    expect(bonusAmounts[1000]).toBeUndefined()
   })
 
   it('shows interpolated limited-credit bonuses with two decimal places', async () => {
@@ -356,8 +349,8 @@ describe('PaymentView recharge bonus campaign', () => {
 
   it('shows payment and credited rows together and excludes campaign name from credited row', async () => {
     const wrapper = await mountRechargeWithCampaign()
-    expect(wrapper.find('[data-test="payment-amount-row"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="credited-amount-row"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="payment-amount-row"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="credited-amount-row"]').exists()).toBe(true)
 
     await wrapper.find('[data-test="amount-input"]').trigger('click')
     await flushPromises()
@@ -370,6 +363,10 @@ describe('PaymentView recharge bonus campaign', () => {
     expect(creditedRow.text()).not.toContain('暑期充值活动')
     const limitHint = wrapper.get('[data-test="recharge-bonus-limit-hint"]')
     expect(limitHint.classes()).toContain('text-right')
+    expect(limitHint.text()).toBe('赠送额度以充值到账时可参与活动次数为准')
+    const summaryPanel = wrapper.get('[data-test="payment-summary-panel"]').element
+    const methodPanel = wrapper.get('[data-test="payment-method-panel"]').element
+    expect(summaryPanel.compareDocumentPosition(methodPanel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 
@@ -431,6 +428,10 @@ describe('PaymentView account tab', () => {
     expect(items[1].text()).toContain('$2.00 / $10.00')
     expect(items[0].findAll('[data-test="limited-credit-expiration"]')).toHaveLength(1)
     expect((items[0].text().match(/payment.account.daysRemaining/g) || [])).toHaveLength(1)
+    expect(wrapper.get('[data-test="payment-tab-account"]').classes()).toContain('bg-[#303030]')
+    expect(wrapper.get('[data-test="payment-tab-recharge"]').classes()).toContain('hover:bg-[#222222]')
+    expect(wrapper.get('[data-test="limited-credit-progress-track"]').classes()).toContain('bg-[#444444]')
+    expect(wrapper.get('[data-test="limited-credit-progress-fill"]').classes()).toContain('bg-[#f4f4f4]')
   })
 
   it('shows the account empty state when no active limited credit exists', async () => {

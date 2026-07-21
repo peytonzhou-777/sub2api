@@ -188,6 +188,7 @@
 
   .input-hint {
     @apply mt-1 text-xs text-gray-500 dark:text-dark-400;
+    color: var(--codex-text-muted) !important;
   }
 
   .input-error-text {

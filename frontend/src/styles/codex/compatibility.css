@@ -1,0 +1,29 @@
+html.dark body,
+body {
+  min-height: 100vh;
+  background: var(--codex-canvas);
+  color: var(--codex-text);
+  font-family: var(--codex-font-sans);
+}
+
+html.dark * { border-color: var(--codex-line); }
+html.dark ::selection { background: #fff; color: #000; }
+
+/* 旧 Tailwind 暗色边框统一为中性接缝，消除蓝灰色分区线。 */
+html.dark [class*="dark:border-dark-"] {
+  border-color: var(--codex-seam) !important;
+}
+
+/* 旧页面上的浅色 utility 在固定暗色工作台内统一收口。 */
+.codex-workbench .bg-white,
+.codex-workbench .dark\:bg-dark-800 { background-color: var(--codex-panel) !important; }
+.codex-workbench .bg-gray-50,
+.codex-workbench .dark\:bg-dark-950 { background-color: var(--codex-canvas) !important; }
+.codex-workbench .text-gray-900,
+.codex-workbench .dark\:text-white { color: var(--codex-text) !important; }
+.codex-workbench .text-gray-500,
+.codex-workbench .text-gray-600,
+.codex-workbench .dark\:text-dark-400 { color: var(--codex-text-muted) !important; }
+.codex-workbench .shadow-lg,
+.codex-workbench .shadow-xl,
+.codex-workbench .shadow-card { box-shadow: none !important; }

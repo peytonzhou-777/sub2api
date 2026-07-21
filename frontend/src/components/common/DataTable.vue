@@ -213,7 +213,7 @@
             :data-row-id="resolveRowKey(item.row, item.index)"
             :data-index="item.index"
             :ref="item.measure ? measureElement : undefined"
-            class="hover:bg-gray-50 dark:hover:bg-dark-800"
+            class="codex-table-row"
             :class="{
               'cursor-pointer': clickableRows,
               'bg-primary-50/40 dark:bg-primary-900/10': selectable && isRowSelected(item.row, item.index)
@@ -557,7 +557,7 @@ const applySortState = (state: PersistedSortState | null) => {
 
 const getSortIndicatorClass = (key: string, order: 'asc' | 'desc') => {
   return sortKey.value === key && sortOrder.value === order
-    ? 'text-primary-600 dark:text-primary-400'
+    ? 'text-[var(--codex-accent-blue)]'
     : 'text-gray-300 transition-colors dark:text-dark-500'
 }
 
@@ -971,13 +971,21 @@ defineExpose({
 }
 
 .dark .table-wrapper .table-header {
-  background-color: rgb(31 41 55);
+  background-color: #141414;
 }
 
 /* 表体保持在表头下方 */
 .table-body {
   position: relative;
   z-index: 0;
+}
+
+.codex-table-row {
+  transition: background-color var(--codex-fast);
+}
+
+.codex-table-row:hover {
+  background-color: var(--codex-panel-hover);
 }
 
 /* 所有表头单元格固定在顶部 */
@@ -989,7 +997,7 @@ defineExpose({
 }
 
 .dark .sticky-header-cell {
-  background-color: rgb(31 41 55);
+  background-color: #141414;
 }
 
 /* Sticky 列基础样式 */
@@ -1029,7 +1037,7 @@ tbody .sticky-col {
 }
 
 .dark tbody .sticky-col {
-  background-color: rgb(17 24 39);
+  background-color: var(--codex-panel);
 }
 
 /* hover 状态保持 */
@@ -1038,7 +1046,7 @@ tbody tr:hover .sticky-col {
 }
 
 .dark tbody tr:hover .sticky-col {
-  background-color: rgb(31 41 55);
+  background-color: var(--codex-panel-hover);
 }
 
 /* 阴影只在可滚动时显示 */

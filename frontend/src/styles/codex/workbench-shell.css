@@ -1,0 +1,120 @@
+.codex-workbench {
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+  overflow-x: clip;
+  background: #1c1d22;
+  color: var(--codex-text);
+}
+
+/* 一体化青紫光圈铺在工作台底层，侧栏与顶部状态区共同透出。 */
+.codex-workbench::before {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 72% 54% at 78% -9%, rgb(117 66 112 / 0.16) 0%, rgb(73 44 78 / 0.095) 34%, rgb(35 29 43 / 0.035) 66%, transparent 100%),
+    radial-gradient(ellipse 52% 78% at -8% 34%, rgb(28 88 97 / 0.16) 0%, rgb(24 61 70 / 0.09) 38%, rgb(22 39 48 / 0.03) 70%, transparent 100%),
+    radial-gradient(ellipse 58% 76% at 11% 92%, rgb(90 43 86 / 0.15) 0%, rgb(55 34 61 / 0.085) 38%, rgb(31 28 39 / 0.028) 72%, transparent 100%),
+    linear-gradient(135deg, #1d1e23 0%, #1a1d22 48%, #201b22 100%);
+  content: '';
+  pointer-events: none;
+}
+
+.codex-workbench-main { z-index: 1; background: transparent; }
+
+/* 主内容面板使用一体化描边，确保左、右和底部边界与顶部高亮连续。 */
+.codex-workbench-main::after {
+  position: absolute;
+  z-index: 50;
+  inset: 44px 0 0;
+  border: 1px solid var(--codex-line);
+  border-radius: 16px 0 0;
+  content: '';
+  pointer-events: none;
+}
+.codex-workbench-content {
+  position: relative;
+  z-index: 1;
+  min-height: calc(100vh - 100px);
+  margin: 0;
+  padding: 20px 24px 32px;
+}
+
+.codex-panel-surface {
+  background: var(--codex-canvas);
+}
+
+.codex-workbench .sidebar {
+  border-right: 0;
+  background: transparent;
+  backdrop-filter: blur(2px);
+}
+
+.codex-workbench .sidebar.sidebar-collapsed {
+  background: transparent;
+}
+
+.codex-workbench .sidebar-header { height: 56px; border-bottom: 0; padding-inline: 18px; }
+.codex-workbench .sidebar-logo { border-radius: 8px; box-shadow: none; }
+.codex-workbench .sidebar-nav { padding: 10px 8px; }
+.codex-workbench .sidebar-section { margin-bottom: 16px; }
+.codex-workbench .sidebar-section-title { color: var(--codex-accent-purple); }
+.codex-workbench .sidebar-link {
+  min-height: 36px;
+  border-radius: 7px;
+  padding-block: 7px;
+  color: #a8a8a8;
+  font-size: 13px;
+  font-weight: 400;
+}
+.codex-workbench .sidebar-link:hover { background: #1c1c1c; color: #eee; }
+.codex-workbench .sidebar-link-active,
+.codex-workbench .sidebar-link-active:hover { background: #292929; color: #fff; }
+
+.codex-app-header {
+  position: sticky;
+  z-index: 40;
+  background: transparent;
+}
+
+.codex-status-bar {
+  position: relative;
+  z-index: 2;
+  height: 44px;
+  background: rgb(25 27 32 / 0.28);
+  backdrop-filter: blur(16px) saturate(1.08);
+}
+
+.codex-panel-titlebar {
+  position: relative;
+  z-index: 1;
+  height: 56px;
+  border-top: 0;
+  border-bottom: 1px solid #252525;
+  border-top-left-radius: 16px;
+  background: rgb(8 8 8 / 0.96);
+  box-shadow: inset 1px 1px 0 rgb(255 255 255 / 0.018);
+  backdrop-filter: blur(18px);
+}
+
+.codex-workbench .page-title { font-size: 22px; font-weight: 500; letter-spacing: -.02em; }
+.codex-workbench .page-description { color: var(--codex-text-muted); }
+
+@media (max-width: 1023px) {
+  .codex-workbench-content { padding: 16px; }
+  .codex-workbench .sidebar { width: min(86vw, 288px) !important; }
+
+  .codex-panel-titlebar { border-top-left-radius: 13px; }
+  .codex-workbench-main::after { border-top-left-radius: 13px; }
+}
+
+@media (max-width: 640px) {
+  .codex-workbench-content { padding: 12px; }
+  .codex-status-bar { height: 48px; }
+  .codex-panel-titlebar { height: 56px; border-top-left-radius: 11px; }
+  .codex-workbench-main::after { inset-block-start: 48px; border-top-left-radius: 11px; }
+  .codex-workbench-content { min-height: calc(100vh - 104px); }
+  .codex-workbench button,
+  .codex-workbench a[role='button'] { min-height: 44px; }
+}

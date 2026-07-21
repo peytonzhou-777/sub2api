@@ -1,0 +1,191 @@
+/* 迁移兼容层：统一覆盖现有共享组件，保留全部业务模板与状态语义。 */
+.dark .btn,
+.btn {
+  min-height: var(--codex-control-sm);
+  border-radius: var(--codex-pill);
+  box-shadow: none;
+  font-weight: 500;
+  transition: background var(--codex-fast), border-color var(--codex-fast), color var(--codex-fast), transform var(--codex-fast);
+}
+
+.dark .btn-primary,
+.btn-primary {
+  background: #f4f4f4;
+  color: #0a0a0a;
+  box-shadow: none;
+}
+
+.dark .btn-primary:hover,
+.btn-primary:hover { background: #dcdcdc; }
+
+.dark .btn-secondary,
+.btn-secondary {
+  border-color: var(--codex-line);
+  background: var(--codex-panel-raised);
+  color: var(--codex-text);
+}
+
+.dark .btn-secondary:hover,
+.btn-secondary:hover { border-color: var(--codex-line-strong); background: var(--codex-panel-hover); }
+
+.dark .btn-ghost,
+.btn-ghost { color: var(--codex-text-muted); }
+.dark .btn-ghost:hover,
+.btn-ghost:hover { background: var(--codex-panel-hover); color: var(--codex-text); }
+
+.dark .input,
+.input,
+.dark select,
+.dark textarea {
+  min-height: var(--codex-control);
+  border-color: var(--codex-line);
+  border-radius: var(--codex-radius);
+  background: #121212;
+  color: var(--codex-text);
+  box-shadow: none;
+}
+
+.dark .input:focus,
+.input:focus,
+.dark select:focus,
+.dark textarea:focus {
+  border-color: #666;
+  box-shadow: 0 0 0 2px rgb(255 255 255 / .14);
+}
+
+.dark .input::placeholder,
+.input::placeholder,
+.dark textarea::placeholder,
+textarea::placeholder {
+  color: var(--codex-text-muted);
+  opacity: 1;
+}
+
+.dark .card,
+.card,
+.dark .glass-card,
+.glass-card,
+.dark .card-glass,
+.card-glass,
+.dark .stat-card,
+.stat-card {
+  border-color: var(--codex-line);
+  border-radius: var(--codex-radius-lg);
+  background: var(--codex-panel);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.card-hover:hover {
+  border-color: var(--codex-line-strong);
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+.dark .table-container,
+.table-container { border-color: var(--codex-line); border-radius: var(--codex-radius); background: var(--codex-panel); }
+.dark .table th,
+.table th { height: 40px; border-color: var(--codex-line); background: #141414; color: var(--codex-text-muted); }
+.dark .table td,
+.table td { height: 44px; border-color: #242424; color: #d7d7d7; }
+.dark .table tbody tr:hover,
+.table tbody tr:hover { background: #1d1d1d; }
+
+.dark .empty-state-description,
+.empty-state-description { color: var(--codex-text-muted); }
+
+.dark .dropdown,
+.dropdown,
+.dark .modal-content,
+.modal-content,
+.dark .dialog-container,
+.dialog-container {
+  border-color: var(--codex-line-strong);
+  border-radius: var(--codex-radius-lg);
+  background: #1b1b1b;
+  color: var(--codex-text);
+  box-shadow: 0 16px 48px rgb(0 0 0 / .45);
+}
+
+.dark .dropdown-item,
+.dropdown-item { min-height: 36px; border-radius: 7px; color: #d8d8d8; }
+.dark .dropdown-item:hover,
+.dropdown-item:hover { background: #292929; color: #fff; }
+
+.dark .dropdown,
+.dropdown {
+  border-color: var(--codex-overlay-border);
+  background: var(--codex-overlay);
+  box-shadow: var(--codex-overlay-highlight), var(--codex-overlay-shadow);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.codex-seam-top,
+.codex-seam-bottom {
+  border-color: var(--codex-seam) !important;
+}
+
+.modal-overlay,
+.dialog-overlay { background: rgb(0 0 0 / .7); backdrop-filter: blur(8px); }
+
+.dark .tabs,
+.tabs { border: 1px solid var(--codex-line); border-radius: var(--codex-radius); background: #111; }
+.dark .tab-active,
+.tab-active { background: #2a2a2a; color: #fff; box-shadow: none; }
+
+.dark .skeleton,
+.skeleton { background: #272727; }
+.progress { background: #2b2b2b; }
+.progress-bar { background: #eee; }
+
+.codex-subtle-action {
+  border-radius: 6px;
+  color: var(--codex-text-muted) !important;
+  transition: background var(--codex-fast), color var(--codex-fast);
+}
+
+.codex-subtle-action:hover:not(:disabled) {
+  background: var(--codex-panel-hover) !important;
+  color: var(--codex-accent-blue) !important;
+}
+
+.codex-subtle-action:focus-visible {
+  color: var(--codex-text) !important;
+}
+
+/* Codex 风格开关：紧凑轨道、白色圆点与清晰的蓝色开启态。 */
+.codex-switch {
+  position: relative;
+  display: inline-flex;
+  width: 32px;
+  height: 20px;
+  flex: 0 0 auto;
+  cursor: pointer;
+  align-items: center;
+  border: 0;
+  border-radius: var(--codex-pill);
+  padding: 2px;
+  transition: background-color var(--codex-fast) var(--codex-ease), opacity var(--codex-fast);
+}
+
+.codex-switch-off { background: var(--codex-switch-off); }
+.codex-switch-on { background: var(--codex-switch-on); }
+.codex-switch:hover:not(:disabled) { filter: brightness(1.08); }
+.codex-switch:disabled { cursor: not-allowed; opacity: 0.45; }
+
+.codex-switch-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
+  transform: translateX(0);
+  transition: transform var(--codex-standard) var(--codex-ease);
+}
+
+.codex-switch-thumb-on { transform: translateX(12px); }
+
+:focus-visible {
+  outline: 2px solid var(--codex-focus);
+  outline-offset: 2px;
+}

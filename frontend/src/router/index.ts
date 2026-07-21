@@ -189,7 +189,7 @@ const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       requiresAdmin: false,
       title: 'Dashboard',
-      titleKey: 'dashboard.title',
+      titleKey: 'nav.workbenchOverview',
       descriptionKey: 'dashboard.welcomeMessage'
     }
   },
@@ -201,7 +201,7 @@ const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       requiresAdmin: false,
       title: 'API Keys',
-      titleKey: 'keys.title',
+      titleKey: 'nav.workbenchKeys',
       descriptionKey: 'keys.description'
     }
   },
@@ -226,7 +226,7 @@ const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       requiresAdmin: false,
       title: 'Usage Records',
-      titleKey: 'usage.title',
+      titleKey: 'nav.workbenchRecords',
       descriptionKey: 'usage.description'
     }
   },
@@ -287,7 +287,7 @@ const routes: RouteRecordRaw[] = [
       requiresAdmin: false,
       requiresPayment: true,
       title: 'My Account',
-      titleKey: 'nav.myAccount'
+      titleKey: 'nav.workbenchWallet'
     }
   },
   {
@@ -298,7 +298,7 @@ const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       requiresAdmin: false,
       title: 'My Account',
-      titleKey: 'nav.myAccount',
+      titleKey: 'nav.workbenchWallet',
       descriptionKey: 'purchase.description',
       requiresPayment: true
     }
@@ -311,7 +311,7 @@ const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       requiresAdmin: false,
       title: 'My Orders',
-      titleKey: 'nav.myOrders',
+      titleKey: 'nav.workbenchOrders',
       requiresPayment: true
     }
   },

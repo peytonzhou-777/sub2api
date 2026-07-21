@@ -8,8 +8,6 @@ export default {
     viewOnGithub: '在 GitHub 上查看',
     viewDocs: '查看文档',
     docs: '文档',
-    switchToLight: '切换到浅色模式',
-    switchToDark: '切换到深色模式',
     dashboard: '控制台',
     login: '登录',
     getStarted: '立即开始',
@@ -94,8 +92,8 @@ export default {
       }
     },
     providers: {
-      title: '已支持的 AI 模型',
-      description: '一个 API，多种选择',
+      title: '官渠账号',
+      description: '重置同享',
       supported: '已支持',
       soon: '即将推出',
       claude: 'Claude',

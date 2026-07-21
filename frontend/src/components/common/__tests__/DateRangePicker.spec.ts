@@ -45,7 +45,8 @@ describe('DateRangePicker', () => {
       },
       global: {
         stubs: {
-          Icon: true
+          Icon: true,
+          Teleport: true
         }
       }
     })
@@ -64,12 +65,14 @@ describe('DateRangePicker', () => {
       },
       global: {
         stubs: {
-          Icon: true
+          Icon: true,
+          Teleport: true
         }
       }
     })
 
     await wrapper.find('.date-picker-trigger').trigger('click')
+    expect(wrapper.get('.date-picker-dropdown').attributes('style')).toContain('z-index: 100000020')
     const presetButton = wrapper.findAll('.date-picker-preset').find((node) =>
       node.text().includes('Last 24 Hours')
     )

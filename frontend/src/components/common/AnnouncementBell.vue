@@ -23,15 +23,15 @@
       <Transition name="modal-fade">
         <div
           v-if="isModalOpen"
-          class="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-gradient-to-br from-black/70 via-black/60 to-black/70 p-4 pt-[8vh] backdrop-blur-md"
+          class="announcement-center-overlay fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-4 pt-[8vh]"
           @click="closeModal"
         >
           <div
-            class="w-full max-w-[620px] overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-black/5 dark:bg-dark-800 dark:ring-white/10"
+            class="announcement-center-panel w-full max-w-[620px] overflow-hidden"
             @click.stop
           >
             <!-- Header with Gradient -->
-            <div class="relative overflow-hidden border-b border-gray-100/80 bg-gradient-to-br from-blue-50/50 to-indigo-50/30 px-6 py-5 dark:border-dark-700/50 dark:from-blue-900/10 dark:to-indigo-900/5">
+            <div class="announcement-center-header relative overflow-hidden px-6 py-5">
               <div class="relative z-10 flex items-start justify-between">
                 <div>
                   <div class="flex items-center gap-2">
@@ -70,7 +70,7 @@
             </div>
 
             <!-- Body -->
-            <div class="max-h-[65vh] overflow-y-auto">
+            <div class="announcement-center-body max-h-[65vh] overflow-y-auto">
               <!-- Loading -->
               <div v-if="loading" class="flex items-center justify-center py-16">
                 <div class="relative">
@@ -183,15 +183,15 @@
       <Transition name="modal-fade">
         <div
           v-if="detailModalOpen && selectedAnnouncement"
-          class="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-gradient-to-br from-black/70 via-black/60 to-black/70 p-4 pt-[6vh] backdrop-blur-md"
+          class="announcement-center-overlay fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto p-4 pt-[6vh]"
           @click="closeDetail"
         >
           <div
-            class="w-full max-w-[780px] overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-black/5 dark:bg-dark-800 dark:ring-white/10"
+            class="announcement-center-panel announcement-detail-panel w-full max-w-[780px] overflow-hidden"
             @click.stop
           >
             <!-- Header with Decorative Elements -->
-            <div class="relative overflow-hidden border-b border-gray-100 bg-gradient-to-br from-blue-50/80 via-indigo-50/50 to-purple-50/30 px-8 py-6 dark:border-dark-700 dark:from-blue-900/20 dark:via-indigo-900/10 dark:to-purple-900/5">
+            <div class="announcement-center-header announcement-detail-header relative overflow-hidden px-8 py-6">
               <!-- Decorative background elements -->
               <div class="absolute right-0 top-0 h-full w-64 bg-gradient-to-l from-indigo-100/30 to-transparent dark:from-indigo-900/20"></div>
               <div class="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gradient-to-br from-blue-400/20 to-indigo-500/20 blur-3xl"></div>
@@ -258,7 +258,7 @@
             </div>
 
             <!-- Body with Enhanced Markdown -->
-            <div class="max-h-[60vh] overflow-y-auto bg-white px-8 py-8 dark:bg-dark-800">
+            <div class="announcement-center-body max-h-[60vh] overflow-y-auto px-8 py-8">
               <!-- Content with decorative border -->
               <div class="relative">
                 <!-- Decorative left border -->
@@ -274,7 +274,7 @@
             </div>
 
             <!-- Footer with Actions -->
-            <div class="border-t border-gray-100 bg-gray-50/50 px-8 py-5 dark:border-dark-700 dark:bg-dark-900/30">
+            <div class="announcement-center-footer px-8 py-5">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                   <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -421,6 +421,65 @@ watch(
 </script>
 
 <style scoped>
+.announcement-center-overlay {
+  background: rgb(0 0 0 / 0.68);
+  backdrop-filter: blur(10px) saturate(0.9);
+}
+
+.announcement-center-panel {
+  position: relative;
+  border: 1px solid var(--codex-overlay-border);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgb(45 45 49 / 0.92), rgb(25 25 28 / 0.94));
+  color: var(--codex-text);
+  box-shadow: var(--codex-overlay-highlight), 0 28px 90px rgb(0 0 0 / 0.62);
+  backdrop-filter: blur(28px) saturate(1.18);
+}
+
+.announcement-center-panel::before {
+  position: absolute;
+  z-index: 0;
+  top: -150px;
+  right: -100px;
+  width: 360px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(181 140 255 / 0.18), rgb(120 184 255 / 0.08) 45%, transparent 72%);
+  content: '';
+  filter: blur(16px);
+  pointer-events: none;
+}
+
+.announcement-center-header {
+  border-bottom: 1px solid var(--codex-seam);
+  background: rgb(37 37 40 / 0.56);
+}
+
+.announcement-center-header > * { position: relative; z-index: 1; }
+.announcement-center-header > .absolute { opacity: 0.35; }
+.announcement-center-body { position: relative; z-index: 1; background: rgb(15 15 17 / 0.48); }
+.announcement-center-footer { border-top: 1px solid var(--codex-seam); background: rgb(31 31 34 / 0.7); }
+
+.announcement-center-panel :deep(.text-gray-900),
+.announcement-center-panel :deep(.dark\:text-white) { color: var(--codex-text) !important; }
+.announcement-center-panel :deep(.text-gray-600),
+.announcement-center-panel :deep(.text-gray-500),
+.announcement-center-panel :deep(.dark\:text-gray-400) { color: var(--codex-text-muted) !important; }
+.announcement-center-panel :deep(.border-gray-100),
+.announcement-center-panel :deep(.dark\:border-dark-700) { border-color: var(--codex-seam) !important; }
+.announcement-center-panel :deep(.hover\:bg-gray-50:hover),
+.announcement-center-panel :deep(.dark\:hover\:bg-dark-700\/30:hover) { background: rgb(255 255 255 / 0.055) !important; }
+.announcement-center-panel :deep(.bg-blue-50\/30),
+.announcement-center-panel :deep(.dark\:bg-blue-900\/5) { background: rgb(120 184 255 / 0.055) !important; }
+
+.announcement-detail-panel { max-height: calc(100vh - 48px); }
+.announcement-detail-header { background: linear-gradient(110deg, rgb(42 45 52 / 0.82), rgb(38 33 48 / 0.72)); }
+
+@media (max-width: 640px) {
+  .announcement-center-overlay { align-items: flex-end; padding: 12px; }
+  .announcement-center-panel { max-height: calc(100vh - 24px); border-radius: 16px; }
+}
+
 /* Modal Animations */
 .modal-fade-enter-active {
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);

@@ -13,7 +13,7 @@
         <!-- Modal panel -->
         <div ref="dialogRef" :class="['modal-content', widthClasses]" @click.stop>
           <!-- Header -->
-          <div class="modal-header">
+          <div class="modal-header codex-seam-bottom">
             <h3 :id="dialogId" class="modal-title">
               {{ title }}
             </h3>
@@ -33,7 +33,7 @@
           </div>
 
           <!-- Footer -->
-          <div v-if="$slots.footer" class="modal-footer">
+          <div v-if="$slots.footer" class="modal-footer codex-seam-top">
             <slot name="footer"></slot>
           </div>
         </div>

@@ -91,7 +91,7 @@
           :class="[
             'relative inline-flex items-center border px-4 py-2 text-sm font-medium',
             pageNum === page
-              ? 'z-10 border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400'
+              ? 'pagination-page-active z-10'
               : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600',
             typeof pageNum !== 'number' && 'cursor-default'
           ]"
@@ -243,5 +243,15 @@ const submitJump = () => {
 <style scoped>
 .page-size-select :deep(.select-trigger) {
   @apply px-3 py-1.5 text-sm;
+}
+
+.pagination-page-active {
+  border-color: rgb(120 184 255 / 0.58);
+  background: rgb(120 184 255 / 0.14);
+  color: var(--codex-accent-blue);
+}
+
+.pagination-page-active:hover {
+  background: rgb(120 184 255 / 0.2);
 }
 </style>

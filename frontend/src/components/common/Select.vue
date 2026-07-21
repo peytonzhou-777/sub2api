@@ -103,7 +103,7 @@
                   v-if="isSelected(option)"
                   name="check"
                   size="sm"
-                  class="text-primary-500"
+                  class="text-white"
                   :stroke-width="2"
                 />
               </slot>
@@ -461,27 +461,47 @@ onUnmounted(() => {
 
 <style scoped>
 .select-trigger {
-  @apply flex w-full items-center justify-between gap-2;
-  @apply rounded-xl px-4 py-2.5 text-sm;
-  @apply bg-white dark:bg-dark-800;
-  @apply border border-gray-200 dark:border-dark-600;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply transition-all duration-200;
-  @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
-  @apply hover:border-gray-300 dark:hover:border-dark-500;
-  @apply cursor-pointer;
+  display: flex;
+  width: 100%;
+  min-height: var(--codex-control);
+  cursor: pointer;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 1px solid var(--codex-line);
+  border-radius: var(--codex-radius);
+  background: #121212;
+  padding: 0.625rem 0.875rem;
+  color: var(--codex-text);
+  font-size: 0.875rem;
+  transition: background var(--codex-fast), border-color var(--codex-fast), box-shadow var(--codex-fast);
+}
+
+.select-trigger:hover {
+  border-color: var(--codex-line-strong);
+  background: #171717;
+}
+
+.select-trigger:focus-visible {
+  border-color: #666;
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.14);
 }
 
 .select-trigger-open {
-  @apply border-primary-500 ring-2 ring-primary-500/30;
+  border-color: #666;
+  background: #171717;
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.14);
 }
 
 .select-trigger-error {
-  @apply border-red-500 focus:border-red-500 focus:ring-red-500/30;
+  border-color: var(--codex-danger);
 }
 
 .select-trigger-disabled {
-  @apply cursor-not-allowed bg-gray-100 opacity-60 dark:bg-dark-900;
+  cursor: not-allowed;
+  background: #0d0d0d;
+  opacity: 0.55;
 }
 
 .select-value {
@@ -489,7 +509,8 @@ onUnmounted(() => {
 }
 
 .select-icon {
-  @apply flex-shrink-0 text-gray-400 dark:text-dark-400;
+  flex-shrink: 0;
+  color: var(--codex-text-faint);
 }
 
 .select-clear {
@@ -501,25 +522,36 @@ onUnmounted(() => {
 
 <style>
 .select-dropdown-portal {
-  @apply w-max min-w-[200px];
-  @apply bg-white dark:bg-dark-800;
-  @apply rounded-xl;
-  @apply border border-gray-200 dark:border-dark-700;
-  @apply shadow-lg shadow-black/10 dark:shadow-black/30;
-  @apply overflow-hidden;
+  width: max-content;
+  min-width: 200px;
+  overflow: hidden;
+  border: 1px solid var(--codex-overlay-border);
+  border-radius: var(--codex-radius);
+  background: var(--codex-overlay);
+  color: var(--codex-text);
+  box-shadow: var(--codex-overlay-highlight), var(--codex-overlay-shadow);
+  backdrop-filter: blur(18px) saturate(1.18);
   pointer-events: auto !important;
 }
 
 .select-dropdown-portal .select-search {
-  @apply flex items-center gap-2 px-3 py-2;
-  @apply border-b border-gray-100 dark:border-dark-700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--codex-line);
+  padding: 0.5rem 0.75rem;
 }
 
 .select-dropdown-portal .select-search-input {
-  @apply flex-1 bg-transparent text-sm;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply placeholder:text-gray-400 dark:placeholder:text-dark-400;
-  @apply focus:outline-none;
+  flex: 1;
+  background: transparent;
+  color: var(--codex-text);
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.select-dropdown-portal .select-search-input::placeholder {
+  color: var(--codex-text-faint);
 }
 
 .select-dropdown-portal .select-options {
@@ -527,21 +559,33 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-option {
-  @apply flex items-center justify-between gap-2;
-  @apply px-4 py-2.5 text-sm;
-  @apply text-gray-700 dark:text-gray-300;
-  @apply cursor-pointer transition-colors duration-150;
-  @apply hover:bg-gray-50 dark:hover:bg-dark-700;
+  display: flex;
+  min-height: 36px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 2px 4px;
+  border-radius: 7px;
+  padding: 0.5rem 0.75rem;
+  color: #d7d7d7;
+  font-size: 0.875rem;
+  transition: background var(--codex-fast), color var(--codex-fast);
   pointer-events: auto !important;
 }
 
+.select-dropdown-portal .select-option:hover {
+  background: var(--codex-panel-hover);
+  color: #fff;
+}
+
 .select-dropdown-portal .select-option-selected {
-  @apply bg-primary-50 dark:bg-primary-900/20;
-  @apply text-primary-700 dark:text-primary-300;
+  background: #303030;
+  color: var(--codex-accent-blue);
 }
 
 .select-dropdown-portal .select-option-focused {
-  @apply bg-gray-100 dark:bg-dark-700;
+  background: var(--codex-panel-hover);
 }
 
 .select-dropdown-portal .select-option-disabled {
@@ -549,14 +593,18 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-option-group {
-  @apply cursor-default select-none;
-  @apply bg-gray-50 dark:bg-dark-900;
-  @apply text-[11px] font-bold uppercase tracking-wider;
-  @apply text-gray-500 dark:text-gray-400;
+  cursor: default;
+  user-select: none;
+  background: transparent;
+  color: var(--codex-accent-purple);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .select-dropdown-portal .select-option-group:hover {
-  @apply bg-gray-50 dark:bg-dark-900;
+  background: transparent;
 }
 
 .select-dropdown-portal .select-option-label {
@@ -564,8 +612,10 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-empty {
-  @apply px-4 py-8 text-center text-sm;
-  @apply text-gray-500 dark:text-dark-400;
+  padding: 2rem 1rem;
+  color: var(--codex-text-muted);
+  text-align: center;
+  font-size: 0.875rem;
 }
 
 .select-dropdown-enter-active,
