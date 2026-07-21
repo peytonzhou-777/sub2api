@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
@@ -1123,13 +1124,17 @@ func (k oidcJWK) publicKey() (any, error) {
 		return &rsa.PublicKey{N: n, E: e}, nil
 	case "EC":
 		var curve elliptic.Curve
+		var validationCurve ecdh.Curve
 		switch strings.TrimSpace(k.Crv) {
 		case "P-256":
 			curve = elliptic.P256()
+			validationCurve = ecdh.P256()
 		case "P-384":
 			curve = elliptic.P384()
+			validationCurve = ecdh.P384()
 		case "P-521":
 			curve = elliptic.P521()
+			validationCurve = ecdh.P521()
 		default:
 			return nil, fmt.Errorf("unsupported ec curve: %s", k.Crv)
 		}
@@ -1141,8 +1146,16 @@ func (k oidcJWK) publicKey() (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode ec y: %w", err)
 		}
-		if !curve.IsOnCurve(x, y) {
-			return nil, errors.New("ec point is not on curve")
+		coordinateSize := (curve.Params().BitSize + 7) / 8
+		if x.BitLen() > curve.Params().BitSize || y.BitLen() > curve.Params().BitSize {
+			return nil, errors.New("ec point coordinate exceeds curve size")
+		}
+		encodedPoint := make([]byte, 1+2*coordinateSize)
+		encodedPoint[0] = 4
+		x.FillBytes(encodedPoint[1 : 1+coordinateSize])
+		y.FillBytes(encodedPoint[1+coordinateSize:])
+		if _, err := validationCurve.NewPublicKey(encodedPoint); err != nil {
+			return nil, fmt.Errorf("ec point is not on curve: %w", err)
 		}
 		return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
 	default:
