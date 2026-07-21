@@ -418,6 +418,7 @@ export default {
       title: '充值活动',
       countdown: '活动倒计时：',
       countdownDaysHours: '{days}天{hours}小时',
+      participation: '已参与活动：{completed}/{limit}',
       limitedCreditWithDays: '限时额度（有效期 {days} 天）',
       limitHint: '最终是否赠送以到账时实际剩余参与次数为准',
     },

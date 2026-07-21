@@ -96,21 +96,19 @@ describe('AppHeader balance display', () => {
     expect(wrapper.get('[data-test="header-balance"]').text()).toBe('$1010.00')
   })
 
-  it('shows green, yellow, and red signals for active limited credits', () => {
+  it('shows only the signal for the earliest expiring limited credit', () => {
     const now = Date.now()
     limitedCreditState.activeCredits = [
       { id: 1, initial_amount: 10, used_amount: 1, remaining_amount: 9, expires_at: new Date(now + 30 * 86_400_000).toISOString() },
-      { id: 2, initial_amount: 10, used_amount: 7, remaining_amount: 3, expires_at: new Date(now + 30 * 86_400_000).toISOString() },
-      { id: 3, initial_amount: 10, used_amount: 9, remaining_amount: 1, expires_at: new Date(now + 30 * 86_400_000).toISOString() },
+      { id: 2, initial_amount: 10, used_amount: 7, remaining_amount: 3, expires_at: new Date(now + 2 * 86_400_000).toISOString() },
+      { id: 3, initial_amount: 10, used_amount: 9, remaining_amount: 1, expires_at: new Date(now + 10 * 86_400_000).toISOString() },
     ]
 
     const wrapper = mountHeader()
     const signals = wrapper.findAll('[data-test="limited-credit-signal"]')
 
-    expect(signals).toHaveLength(3)
-    expect(signals[0].classes()).toContain('bg-green-500')
-    expect(signals[1].classes()).toContain('bg-yellow-400')
-    expect(signals[2].classes()).toContain('bg-red-500')
+    expect(signals).toHaveLength(1)
+    expect(signals[0].classes()).toContain('bg-red-500')
   })
 
   it('does not render frozen balance in the balance bar or popover', () => {

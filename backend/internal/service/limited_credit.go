@@ -31,6 +31,7 @@ type LimitedCreditGrant struct {
 	Notes         string    `json:"notes,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+	ValidityDays  *int      `json:"validity_days,omitempty"`
 }
 
 // RemainingAmount 返回未使用完的总剩余额度，包含已冻结部分。

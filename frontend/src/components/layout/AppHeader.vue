@@ -63,17 +63,15 @@
             {{ balanceDisplayText }}
           </span>
           <div
-            v-if="limitedCreditSignals.length > 0"
+            v-if="limitedCreditSignal"
             data-test="limited-credit-signals"
             class="flex items-center gap-0.5"
             :title="limitedCreditText"
           >
             <span
-              v-for="signal in limitedCreditSignals.slice(0, 4)"
-              :key="signal.key"
               data-test="limited-credit-signal"
               class="h-2 w-2 rounded-full"
-              :class="signal.className"
+              :class="limitedCreditSignal"
             />
           </div>
           <div
@@ -312,16 +310,16 @@ const earliestExpiringLimitedCredit = computed(() => {
     return byExpiry || a.id - b.id
   })[0] ?? null
 })
-const limitedCreditSignals = computed(() =>
-  limitedCreditStore.activeCredits.map((credit) => ({
-    key: `limited-credit-${credit.id}`,
-    className: {
+// 顶部仅展示最先到期额度的信号状态，避免多份额度产生多个信号灯。
+const limitedCreditSignal = computed(() => {
+  const credit = earliestExpiringLimitedCredit.value
+  if (!credit) return null
+  return {
       red: 'bg-red-500',
       yellow: 'bg-yellow-400',
       green: 'bg-green-500',
-    }[getLimitedCreditSignalLevel(credit)],
-  })),
-)
+  }[getLimitedCreditSignalLevel(credit)]
+})
 
 // 只在标准模式的管理员下显示新手引导按钮
 const showOnboardingButton = computed(() => {

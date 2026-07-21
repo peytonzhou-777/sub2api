@@ -54,6 +54,9 @@ vi.mock('vue-i18n', async () => {
         if (key === 'payment.rechargeBonus.countdownDaysHours') {
           return `${params?.days}天${params?.hours}小时`
         }
+        if (key === 'payment.rechargeBonus.participation') {
+          return `已参与活动：${params?.completed}/${params?.limit}`
+        }
         return key
       },
     }),
@@ -221,6 +224,8 @@ async function mountRechargeWithCampaign(
   tiers: RechargeBonusTier[] = [
     { min_amount: 100, max_amount: 1000, min_rate: 10, max_rate: 10 },
   ],
+  participationLimit = 2,
+  completedCount = 0,
 ) {
   vi.useRealTimers()
   routeState.path = '/purchase'
@@ -241,13 +246,13 @@ async function mountRechargeWithCampaign(
       description,
       start_at: '2026-07-01T00:00:00Z',
       end_at: '2026-08-01T00:00:00Z',
-      participation_limit: 2,
+      participation_limit: participationLimit,
       tiers,
       status: 'active',
       created_at: '2026-06-01T00:00:00Z',
       updated_at: '2026-06-01T00:00:00Z',
-      completed_count: 0,
-      remaining_count: 2,
+      completed_count: completedCount,
+      remaining_count: participationLimit > 0 ? Math.max(0, participationLimit - completedCount) : null,
       validity_days: 30,
     },
   }))
@@ -303,6 +308,18 @@ describe('PaymentView recharge bonus campaign', () => {
 
     expect(wrapper.get('[data-test="recharge-bonus-countdown"]').text()).toContain('6天7小时')
     dateNow.mockRestore()
+  })
+
+  it('shows the actual participation progress for a limited campaign', async () => {
+    const wrapper = await mountRechargeWithCampaign('充值越多，赠送越多', undefined, 2, 1)
+
+    expect(wrapper.get('[data-test="recharge-bonus-participation"]').text()).toBe('已参与活动：1/2')
+  })
+
+  it('hides participation progress for an unlimited campaign', async () => {
+    const wrapper = await mountRechargeWithCampaign('充值越多，赠送越多', undefined, 0, 3)
+
+    expect(wrapper.find('[data-test="recharge-bonus-participation"]').exists()).toBe(false)
   })
 
   it('calculates limited-credit bonuses for each eligible quick amount', async () => {

@@ -53,6 +53,16 @@
                   {{ t('payment.rechargeBonus.countdown') }}{{ rechargeBonusCountdown }}
                 </p>
               </div>
+              <p
+                v-if="checkout.recharge_bonus_activity.participation_limit > 0"
+                data-test="recharge-bonus-participation"
+                class="mt-3 text-right text-xs text-gray-600 dark:text-gray-300"
+              >
+                {{ t('payment.rechargeBonus.participation', {
+                  completed: checkout.recharge_bonus_activity.completed_count,
+                  limit: checkout.recharge_bonus_activity.participation_limit,
+                }) }}
+              </p>
             </div>
             <div class="card p-6">
               <AmountInput

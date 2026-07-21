@@ -394,6 +394,7 @@ export default {
       title: 'Recharge Promotion',
       countdown: 'Countdown: ',
       countdownDaysHours: '{days}d {hours}h',
+      participation: 'Participated: {completed}/{limit}',
       limitedCreditWithDays: 'limited credit ({days} days)',
       limitHint: 'Whether the bonus is granted depends on your actual remaining participation count when payment is credited.',
     },
