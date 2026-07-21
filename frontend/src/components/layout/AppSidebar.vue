@@ -705,6 +705,7 @@ const adminNavItems = computed((): NavItem[] => {
       children: [
         { path: '/admin/credits', label: t('admin.credits.tabs.users'), icon: UsersIcon },
         { path: '/admin/credits/recharge-activities', label: t('admin.credits.tabs.rechargeActivities'), icon: GiftIcon },
+        { path: '/admin/credits/recurring-grants', label: t('admin.credits.tabs.recurringGrants'), icon: GiftIcon },
         { path: '/admin/credits/reset-rebates', label: t('admin.credits.tabs.resetRebates'), icon: CreditCardIcon },
       ],
     },

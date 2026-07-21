@@ -723,6 +723,7 @@ var ProviderSet = wire.NewSet(
 	ProvideRedeemService,
 	NewLimitedCreditService,
 	NewResetRebateService,
+	NewRecurringCreditService,
 	NewRechargeBonusService,
 	NewPromoService,
 	NewUsageService,
@@ -821,6 +822,7 @@ var ProviderSet = wire.NewSet(
 	ProvidePaymentConfigService,
 	ProvidePaymentService,
 	ProvidePaymentOrderExpiryService,
+	ProvideRecurringCreditRunner,
 	ProvideBalanceNotifyService,
 	ProvideChannelMonitorService,
 	ProvideChannelMonitorRunner,
@@ -862,6 +864,13 @@ func ProvidePaymentOrderExpiryService(paymentSvc *PaymentService, lockCache Lead
 	svc.SetLeaderLock(lockCache, db)
 	svc.Start()
 	return svc
+}
+
+// ProvideRecurringCreditRunner 创建并启动数据库驱动的循环赠额执行器。
+func ProvideRecurringCreditRunner(recurringService *RecurringCreditService, db *sql.DB) *RecurringCreditRunner {
+	runner := NewRecurringCreditRunner(recurringService, db)
+	runner.Start()
+	return runner
 }
 
 // ProvideChannelMonitorService 创建渠道监控服务（CRUD + RunCheck + 用户视图聚合）。

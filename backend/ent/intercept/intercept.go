@@ -37,6 +37,10 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonuscampaign"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonusparticipation"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcreditbatch"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredittask"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredittaskaudit"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredituseritem"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateaccountitem"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebatebatch"
@@ -869,6 +873,114 @@ func (f TraverseRechargeBonusParticipation) Traverse(ctx context.Context, q ent.
 	return fmt.Errorf("unexpected query type %T. expect *ent.RechargeBonusParticipationQuery", q)
 }
 
+// The RecurringCreditBatchFunc type is an adapter to allow the use of ordinary function as a Querier.
+type RecurringCreditBatchFunc func(context.Context, *ent.RecurringCreditBatchQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f RecurringCreditBatchFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.RecurringCreditBatchQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.RecurringCreditBatchQuery", q)
+}
+
+// The TraverseRecurringCreditBatch type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseRecurringCreditBatch func(context.Context, *ent.RecurringCreditBatchQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseRecurringCreditBatch) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseRecurringCreditBatch) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.RecurringCreditBatchQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.RecurringCreditBatchQuery", q)
+}
+
+// The RecurringCreditTaskFunc type is an adapter to allow the use of ordinary function as a Querier.
+type RecurringCreditTaskFunc func(context.Context, *ent.RecurringCreditTaskQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f RecurringCreditTaskFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.RecurringCreditTaskQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.RecurringCreditTaskQuery", q)
+}
+
+// The TraverseRecurringCreditTask type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseRecurringCreditTask func(context.Context, *ent.RecurringCreditTaskQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseRecurringCreditTask) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseRecurringCreditTask) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.RecurringCreditTaskQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.RecurringCreditTaskQuery", q)
+}
+
+// The RecurringCreditTaskAuditFunc type is an adapter to allow the use of ordinary function as a Querier.
+type RecurringCreditTaskAuditFunc func(context.Context, *ent.RecurringCreditTaskAuditQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f RecurringCreditTaskAuditFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.RecurringCreditTaskAuditQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.RecurringCreditTaskAuditQuery", q)
+}
+
+// The TraverseRecurringCreditTaskAudit type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseRecurringCreditTaskAudit func(context.Context, *ent.RecurringCreditTaskAuditQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseRecurringCreditTaskAudit) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseRecurringCreditTaskAudit) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.RecurringCreditTaskAuditQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.RecurringCreditTaskAuditQuery", q)
+}
+
+// The RecurringCreditUserItemFunc type is an adapter to allow the use of ordinary function as a Querier.
+type RecurringCreditUserItemFunc func(context.Context, *ent.RecurringCreditUserItemQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f RecurringCreditUserItemFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.RecurringCreditUserItemQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.RecurringCreditUserItemQuery", q)
+}
+
+// The TraverseRecurringCreditUserItem type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseRecurringCreditUserItem func(context.Context, *ent.RecurringCreditUserItemQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseRecurringCreditUserItem) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseRecurringCreditUserItem) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.RecurringCreditUserItemQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.RecurringCreditUserItemQuery", q)
+}
+
 // The RedeemCodeFunc type is an adapter to allow the use of ordinary function as a Querier.
 type RedeemCodeFunc func(context.Context, *ent.RedeemCodeQuery) (ent.Value, error)
 
@@ -1414,6 +1526,14 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.RechargeBonusCampaignQuery, predicate.RechargeBonusCampaign, rechargebonuscampaign.OrderOption]{typ: ent.TypeRechargeBonusCampaign, tq: q}, nil
 	case *ent.RechargeBonusParticipationQuery:
 		return &query[*ent.RechargeBonusParticipationQuery, predicate.RechargeBonusParticipation, rechargebonusparticipation.OrderOption]{typ: ent.TypeRechargeBonusParticipation, tq: q}, nil
+	case *ent.RecurringCreditBatchQuery:
+		return &query[*ent.RecurringCreditBatchQuery, predicate.RecurringCreditBatch, recurringcreditbatch.OrderOption]{typ: ent.TypeRecurringCreditBatch, tq: q}, nil
+	case *ent.RecurringCreditTaskQuery:
+		return &query[*ent.RecurringCreditTaskQuery, predicate.RecurringCreditTask, recurringcredittask.OrderOption]{typ: ent.TypeRecurringCreditTask, tq: q}, nil
+	case *ent.RecurringCreditTaskAuditQuery:
+		return &query[*ent.RecurringCreditTaskAuditQuery, predicate.RecurringCreditTaskAudit, recurringcredittaskaudit.OrderOption]{typ: ent.TypeRecurringCreditTaskAudit, tq: q}, nil
+	case *ent.RecurringCreditUserItemQuery:
+		return &query[*ent.RecurringCreditUserItemQuery, predicate.RecurringCreditUserItem, recurringcredituseritem.OrderOption]{typ: ent.TypeRecurringCreditUserItem, tq: q}, nil
 	case *ent.RedeemCodeQuery:
 		return &query[*ent.RedeemCodeQuery, predicate.RedeemCode, redeemcode.OrderOption]{typ: ent.TypeRedeemCode, tq: q}, nil
 	case *ent.ResetRebateAccountItemQuery:

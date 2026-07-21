@@ -41,6 +41,10 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonuscampaign"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonusparticipation"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcreditbatch"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredittask"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredittaskaudit"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredituseritem"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateaccountitem"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebatebatch"
@@ -99,6 +103,10 @@ const (
 	TypeProxy                         = "Proxy"
 	TypeRechargeBonusCampaign         = "RechargeBonusCampaign"
 	TypeRechargeBonusParticipation    = "RechargeBonusParticipation"
+	TypeRecurringCreditBatch          = "RecurringCreditBatch"
+	TypeRecurringCreditTask           = "RecurringCreditTask"
+	TypeRecurringCreditTaskAudit      = "RecurringCreditTaskAudit"
+	TypeRecurringCreditUserItem       = "RecurringCreditUserItem"
 	TypeRedeemCode                    = "RedeemCode"
 	TypeResetRebateAccountItem        = "ResetRebateAccountItem"
 	TypeResetRebateBatch              = "ResetRebateBatch"
@@ -39213,6 +39221,7150 @@ func (m *RechargeBonusParticipationMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *RechargeBonusParticipationMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown RechargeBonusParticipation edge %s", name)
+}
+
+// RecurringCreditBatchMutation represents an operation that mutates the RecurringCreditBatch nodes in the graph.
+type RecurringCreditBatchMutation struct {
+	config
+	op                         Op
+	typ                        string
+	id                         *int64
+	task_id                    *int64
+	addtask_id                 *int64
+	task_name                  *string
+	scheduled_at               *time.Time
+	expires_at                 *time.Time
+	qualification_start        *time.Time
+	qualification_end          *time.Time
+	qualification_cutoff_at    *time.Time
+	config_version             *int
+	addconfig_version          *int
+	eligibility_policy         *string
+	schedule_type              *string
+	day_of_month               *int
+	addday_of_month            *int
+	day_of_week                *int
+	addday_of_week             *int
+	local_time                 *string
+	timezone                   *string
+	amount                     *float64
+	addamount                  *float64
+	validity_days              *int
+	addvalidity_days           *int
+	execution_mode             *string
+	status                     *string
+	claimed_at                 *time.Time
+	lease_owner                *string
+	lease_expires_at           *time.Time
+	heartbeat_at               *time.Time
+	attempt_count              *int
+	addattempt_count           *int
+	eligible_user_count        *int
+	addeligible_user_count     *int
+	issued_user_count          *int
+	addissued_user_count       *int
+	excluded_user_count        *int
+	addexcluded_user_count     *int
+	usage_eligible_count       *int
+	addusage_eligible_count    *int
+	recharge_eligible_count    *int
+	addrecharge_eligible_count *int
+	api_active_count           *int
+	addapi_active_count        *int
+	site_active_count          *int
+	addsite_active_count       *int
+	both_active_count          *int
+	addboth_active_count       *int
+	snapshot_completed_at      *time.Time
+	issued_amount              *float64
+	addissued_amount           *float64
+	failure_code               *string
+	failure_message            *string
+	finished_at                *time.Time
+	created_at                 *time.Time
+	updated_at                 *time.Time
+	clearedFields              map[string]struct{}
+	done                       bool
+	oldValue                   func(context.Context) (*RecurringCreditBatch, error)
+	predicates                 []predicate.RecurringCreditBatch
+}
+
+var _ ent.Mutation = (*RecurringCreditBatchMutation)(nil)
+
+// recurringcreditbatchOption allows management of the mutation configuration using functional options.
+type recurringcreditbatchOption func(*RecurringCreditBatchMutation)
+
+// newRecurringCreditBatchMutation creates new mutation for the RecurringCreditBatch entity.
+func newRecurringCreditBatchMutation(c config, op Op, opts ...recurringcreditbatchOption) *RecurringCreditBatchMutation {
+	m := &RecurringCreditBatchMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRecurringCreditBatch,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRecurringCreditBatchID sets the ID field of the mutation.
+func withRecurringCreditBatchID(id int64) recurringcreditbatchOption {
+	return func(m *RecurringCreditBatchMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RecurringCreditBatch
+		)
+		m.oldValue = func(ctx context.Context) (*RecurringCreditBatch, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RecurringCreditBatch.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRecurringCreditBatch sets the old RecurringCreditBatch of the mutation.
+func withRecurringCreditBatch(node *RecurringCreditBatch) recurringcreditbatchOption {
+	return func(m *RecurringCreditBatchMutation) {
+		m.oldValue = func(context.Context) (*RecurringCreditBatch, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RecurringCreditBatchMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RecurringCreditBatchMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RecurringCreditBatchMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RecurringCreditBatchMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RecurringCreditBatch.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetTaskID sets the "task_id" field.
+func (m *RecurringCreditBatchMutation) SetTaskID(i int64) {
+	m.task_id = &i
+	m.addtask_id = nil
+}
+
+// TaskID returns the value of the "task_id" field in the mutation.
+func (m *RecurringCreditBatchMutation) TaskID() (r int64, exists bool) {
+	v := m.task_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTaskID returns the old "task_id" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldTaskID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTaskID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTaskID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTaskID: %w", err)
+	}
+	return oldValue.TaskID, nil
+}
+
+// AddTaskID adds i to the "task_id" field.
+func (m *RecurringCreditBatchMutation) AddTaskID(i int64) {
+	if m.addtask_id != nil {
+		*m.addtask_id += i
+	} else {
+		m.addtask_id = &i
+	}
+}
+
+// AddedTaskID returns the value that was added to the "task_id" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedTaskID() (r int64, exists bool) {
+	v := m.addtask_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTaskID resets all changes to the "task_id" field.
+func (m *RecurringCreditBatchMutation) ResetTaskID() {
+	m.task_id = nil
+	m.addtask_id = nil
+}
+
+// SetTaskName sets the "task_name" field.
+func (m *RecurringCreditBatchMutation) SetTaskName(s string) {
+	m.task_name = &s
+}
+
+// TaskName returns the value of the "task_name" field in the mutation.
+func (m *RecurringCreditBatchMutation) TaskName() (r string, exists bool) {
+	v := m.task_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTaskName returns the old "task_name" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldTaskName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTaskName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTaskName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTaskName: %w", err)
+	}
+	return oldValue.TaskName, nil
+}
+
+// ResetTaskName resets all changes to the "task_name" field.
+func (m *RecurringCreditBatchMutation) ResetTaskName() {
+	m.task_name = nil
+}
+
+// SetScheduledAt sets the "scheduled_at" field.
+func (m *RecurringCreditBatchMutation) SetScheduledAt(t time.Time) {
+	m.scheduled_at = &t
+}
+
+// ScheduledAt returns the value of the "scheduled_at" field in the mutation.
+func (m *RecurringCreditBatchMutation) ScheduledAt() (r time.Time, exists bool) {
+	v := m.scheduled_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScheduledAt returns the old "scheduled_at" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldScheduledAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScheduledAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScheduledAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScheduledAt: %w", err)
+	}
+	return oldValue.ScheduledAt, nil
+}
+
+// ResetScheduledAt resets all changes to the "scheduled_at" field.
+func (m *RecurringCreditBatchMutation) ResetScheduledAt() {
+	m.scheduled_at = nil
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *RecurringCreditBatchMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *RecurringCreditBatchMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldExpiresAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *RecurringCreditBatchMutation) ResetExpiresAt() {
+	m.expires_at = nil
+}
+
+// SetQualificationStart sets the "qualification_start" field.
+func (m *RecurringCreditBatchMutation) SetQualificationStart(t time.Time) {
+	m.qualification_start = &t
+}
+
+// QualificationStart returns the value of the "qualification_start" field in the mutation.
+func (m *RecurringCreditBatchMutation) QualificationStart() (r time.Time, exists bool) {
+	v := m.qualification_start
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQualificationStart returns the old "qualification_start" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldQualificationStart(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQualificationStart is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQualificationStart requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQualificationStart: %w", err)
+	}
+	return oldValue.QualificationStart, nil
+}
+
+// ResetQualificationStart resets all changes to the "qualification_start" field.
+func (m *RecurringCreditBatchMutation) ResetQualificationStart() {
+	m.qualification_start = nil
+}
+
+// SetQualificationEnd sets the "qualification_end" field.
+func (m *RecurringCreditBatchMutation) SetQualificationEnd(t time.Time) {
+	m.qualification_end = &t
+}
+
+// QualificationEnd returns the value of the "qualification_end" field in the mutation.
+func (m *RecurringCreditBatchMutation) QualificationEnd() (r time.Time, exists bool) {
+	v := m.qualification_end
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQualificationEnd returns the old "qualification_end" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldQualificationEnd(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQualificationEnd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQualificationEnd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQualificationEnd: %w", err)
+	}
+	return oldValue.QualificationEnd, nil
+}
+
+// ResetQualificationEnd resets all changes to the "qualification_end" field.
+func (m *RecurringCreditBatchMutation) ResetQualificationEnd() {
+	m.qualification_end = nil
+}
+
+// SetQualificationCutoffAt sets the "qualification_cutoff_at" field.
+func (m *RecurringCreditBatchMutation) SetQualificationCutoffAt(t time.Time) {
+	m.qualification_cutoff_at = &t
+}
+
+// QualificationCutoffAt returns the value of the "qualification_cutoff_at" field in the mutation.
+func (m *RecurringCreditBatchMutation) QualificationCutoffAt() (r time.Time, exists bool) {
+	v := m.qualification_cutoff_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQualificationCutoffAt returns the old "qualification_cutoff_at" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldQualificationCutoffAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQualificationCutoffAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQualificationCutoffAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQualificationCutoffAt: %w", err)
+	}
+	return oldValue.QualificationCutoffAt, nil
+}
+
+// ClearQualificationCutoffAt clears the value of the "qualification_cutoff_at" field.
+func (m *RecurringCreditBatchMutation) ClearQualificationCutoffAt() {
+	m.qualification_cutoff_at = nil
+	m.clearedFields[recurringcreditbatch.FieldQualificationCutoffAt] = struct{}{}
+}
+
+// QualificationCutoffAtCleared returns if the "qualification_cutoff_at" field was cleared in this mutation.
+func (m *RecurringCreditBatchMutation) QualificationCutoffAtCleared() bool {
+	_, ok := m.clearedFields[recurringcreditbatch.FieldQualificationCutoffAt]
+	return ok
+}
+
+// ResetQualificationCutoffAt resets all changes to the "qualification_cutoff_at" field.
+func (m *RecurringCreditBatchMutation) ResetQualificationCutoffAt() {
+	m.qualification_cutoff_at = nil
+	delete(m.clearedFields, recurringcreditbatch.FieldQualificationCutoffAt)
+}
+
+// SetConfigVersion sets the "config_version" field.
+func (m *RecurringCreditBatchMutation) SetConfigVersion(i int) {
+	m.config_version = &i
+	m.addconfig_version = nil
+}
+
+// ConfigVersion returns the value of the "config_version" field in the mutation.
+func (m *RecurringCreditBatchMutation) ConfigVersion() (r int, exists bool) {
+	v := m.config_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldConfigVersion returns the old "config_version" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldConfigVersion(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldConfigVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldConfigVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldConfigVersion: %w", err)
+	}
+	return oldValue.ConfigVersion, nil
+}
+
+// AddConfigVersion adds i to the "config_version" field.
+func (m *RecurringCreditBatchMutation) AddConfigVersion(i int) {
+	if m.addconfig_version != nil {
+		*m.addconfig_version += i
+	} else {
+		m.addconfig_version = &i
+	}
+}
+
+// AddedConfigVersion returns the value that was added to the "config_version" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedConfigVersion() (r int, exists bool) {
+	v := m.addconfig_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetConfigVersion resets all changes to the "config_version" field.
+func (m *RecurringCreditBatchMutation) ResetConfigVersion() {
+	m.config_version = nil
+	m.addconfig_version = nil
+}
+
+// SetEligibilityPolicy sets the "eligibility_policy" field.
+func (m *RecurringCreditBatchMutation) SetEligibilityPolicy(s string) {
+	m.eligibility_policy = &s
+}
+
+// EligibilityPolicy returns the value of the "eligibility_policy" field in the mutation.
+func (m *RecurringCreditBatchMutation) EligibilityPolicy() (r string, exists bool) {
+	v := m.eligibility_policy
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEligibilityPolicy returns the old "eligibility_policy" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldEligibilityPolicy(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEligibilityPolicy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEligibilityPolicy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEligibilityPolicy: %w", err)
+	}
+	return oldValue.EligibilityPolicy, nil
+}
+
+// ResetEligibilityPolicy resets all changes to the "eligibility_policy" field.
+func (m *RecurringCreditBatchMutation) ResetEligibilityPolicy() {
+	m.eligibility_policy = nil
+}
+
+// SetScheduleType sets the "schedule_type" field.
+func (m *RecurringCreditBatchMutation) SetScheduleType(s string) {
+	m.schedule_type = &s
+}
+
+// ScheduleType returns the value of the "schedule_type" field in the mutation.
+func (m *RecurringCreditBatchMutation) ScheduleType() (r string, exists bool) {
+	v := m.schedule_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScheduleType returns the old "schedule_type" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldScheduleType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScheduleType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScheduleType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScheduleType: %w", err)
+	}
+	return oldValue.ScheduleType, nil
+}
+
+// ResetScheduleType resets all changes to the "schedule_type" field.
+func (m *RecurringCreditBatchMutation) ResetScheduleType() {
+	m.schedule_type = nil
+}
+
+// SetDayOfMonth sets the "day_of_month" field.
+func (m *RecurringCreditBatchMutation) SetDayOfMonth(i int) {
+	m.day_of_month = &i
+	m.addday_of_month = nil
+}
+
+// DayOfMonth returns the value of the "day_of_month" field in the mutation.
+func (m *RecurringCreditBatchMutation) DayOfMonth() (r int, exists bool) {
+	v := m.day_of_month
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDayOfMonth returns the old "day_of_month" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldDayOfMonth(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDayOfMonth is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDayOfMonth requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDayOfMonth: %w", err)
+	}
+	return oldValue.DayOfMonth, nil
+}
+
+// AddDayOfMonth adds i to the "day_of_month" field.
+func (m *RecurringCreditBatchMutation) AddDayOfMonth(i int) {
+	if m.addday_of_month != nil {
+		*m.addday_of_month += i
+	} else {
+		m.addday_of_month = &i
+	}
+}
+
+// AddedDayOfMonth returns the value that was added to the "day_of_month" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedDayOfMonth() (r int, exists bool) {
+	v := m.addday_of_month
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDayOfMonth clears the value of the "day_of_month" field.
+func (m *RecurringCreditBatchMutation) ClearDayOfMonth() {
+	m.day_of_month = nil
+	m.addday_of_month = nil
+	m.clearedFields[recurringcreditbatch.FieldDayOfMonth] = struct{}{}
+}
+
+// DayOfMonthCleared returns if the "day_of_month" field was cleared in this mutation.
+func (m *RecurringCreditBatchMutation) DayOfMonthCleared() bool {
+	_, ok := m.clearedFields[recurringcreditbatch.FieldDayOfMonth]
+	return ok
+}
+
+// ResetDayOfMonth resets all changes to the "day_of_month" field.
+func (m *RecurringCreditBatchMutation) ResetDayOfMonth() {
+	m.day_of_month = nil
+	m.addday_of_month = nil
+	delete(m.clearedFields, recurringcreditbatch.FieldDayOfMonth)
+}
+
+// SetDayOfWeek sets the "day_of_week" field.
+func (m *RecurringCreditBatchMutation) SetDayOfWeek(i int) {
+	m.day_of_week = &i
+	m.addday_of_week = nil
+}
+
+// DayOfWeek returns the value of the "day_of_week" field in the mutation.
+func (m *RecurringCreditBatchMutation) DayOfWeek() (r int, exists bool) {
+	v := m.day_of_week
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDayOfWeek returns the old "day_of_week" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldDayOfWeek(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDayOfWeek is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDayOfWeek requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDayOfWeek: %w", err)
+	}
+	return oldValue.DayOfWeek, nil
+}
+
+// AddDayOfWeek adds i to the "day_of_week" field.
+func (m *RecurringCreditBatchMutation) AddDayOfWeek(i int) {
+	if m.addday_of_week != nil {
+		*m.addday_of_week += i
+	} else {
+		m.addday_of_week = &i
+	}
+}
+
+// AddedDayOfWeek returns the value that was added to the "day_of_week" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedDayOfWeek() (r int, exists bool) {
+	v := m.addday_of_week
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDayOfWeek clears the value of the "day_of_week" field.
+func (m *RecurringCreditBatchMutation) ClearDayOfWeek() {
+	m.day_of_week = nil
+	m.addday_of_week = nil
+	m.clearedFields[recurringcreditbatch.FieldDayOfWeek] = struct{}{}
+}
+
+// DayOfWeekCleared returns if the "day_of_week" field was cleared in this mutation.
+func (m *RecurringCreditBatchMutation) DayOfWeekCleared() bool {
+	_, ok := m.clearedFields[recurringcreditbatch.FieldDayOfWeek]
+	return ok
+}
+
+// ResetDayOfWeek resets all changes to the "day_of_week" field.
+func (m *RecurringCreditBatchMutation) ResetDayOfWeek() {
+	m.day_of_week = nil
+	m.addday_of_week = nil
+	delete(m.clearedFields, recurringcreditbatch.FieldDayOfWeek)
+}
+
+// SetLocalTime sets the "local_time" field.
+func (m *RecurringCreditBatchMutation) SetLocalTime(s string) {
+	m.local_time = &s
+}
+
+// LocalTime returns the value of the "local_time" field in the mutation.
+func (m *RecurringCreditBatchMutation) LocalTime() (r string, exists bool) {
+	v := m.local_time
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLocalTime returns the old "local_time" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldLocalTime(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLocalTime is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLocalTime requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLocalTime: %w", err)
+	}
+	return oldValue.LocalTime, nil
+}
+
+// ResetLocalTime resets all changes to the "local_time" field.
+func (m *RecurringCreditBatchMutation) ResetLocalTime() {
+	m.local_time = nil
+}
+
+// SetTimezone sets the "timezone" field.
+func (m *RecurringCreditBatchMutation) SetTimezone(s string) {
+	m.timezone = &s
+}
+
+// Timezone returns the value of the "timezone" field in the mutation.
+func (m *RecurringCreditBatchMutation) Timezone() (r string, exists bool) {
+	v := m.timezone
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTimezone returns the old "timezone" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldTimezone(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTimezone is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTimezone requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTimezone: %w", err)
+	}
+	return oldValue.Timezone, nil
+}
+
+// ResetTimezone resets all changes to the "timezone" field.
+func (m *RecurringCreditBatchMutation) ResetTimezone() {
+	m.timezone = nil
+}
+
+// SetAmount sets the "amount" field.
+func (m *RecurringCreditBatchMutation) SetAmount(f float64) {
+	m.amount = &f
+	m.addamount = nil
+}
+
+// Amount returns the value of the "amount" field in the mutation.
+func (m *RecurringCreditBatchMutation) Amount() (r float64, exists bool) {
+	v := m.amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAmount returns the old "amount" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAmount: %w", err)
+	}
+	return oldValue.Amount, nil
+}
+
+// AddAmount adds f to the "amount" field.
+func (m *RecurringCreditBatchMutation) AddAmount(f float64) {
+	if m.addamount != nil {
+		*m.addamount += f
+	} else {
+		m.addamount = &f
+	}
+}
+
+// AddedAmount returns the value that was added to the "amount" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedAmount() (r float64, exists bool) {
+	v := m.addamount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAmount resets all changes to the "amount" field.
+func (m *RecurringCreditBatchMutation) ResetAmount() {
+	m.amount = nil
+	m.addamount = nil
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (m *RecurringCreditBatchMutation) SetValidityDays(i int) {
+	m.validity_days = &i
+	m.addvalidity_days = nil
+}
+
+// ValidityDays returns the value of the "validity_days" field in the mutation.
+func (m *RecurringCreditBatchMutation) ValidityDays() (r int, exists bool) {
+	v := m.validity_days
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValidityDays returns the old "validity_days" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldValidityDays(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValidityDays is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValidityDays requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValidityDays: %w", err)
+	}
+	return oldValue.ValidityDays, nil
+}
+
+// AddValidityDays adds i to the "validity_days" field.
+func (m *RecurringCreditBatchMutation) AddValidityDays(i int) {
+	if m.addvalidity_days != nil {
+		*m.addvalidity_days += i
+	} else {
+		m.addvalidity_days = &i
+	}
+}
+
+// AddedValidityDays returns the value that was added to the "validity_days" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedValidityDays() (r int, exists bool) {
+	v := m.addvalidity_days
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearValidityDays clears the value of the "validity_days" field.
+func (m *RecurringCreditBatchMutation) ClearValidityDays() {
+	m.validity_days = nil
+	m.addvalidity_days = nil
+	m.clearedFields[recurringcreditbatch.FieldValidityDays] = struct{}{}
+}
+
+// ValidityDaysCleared returns if the "validity_days" field was cleared in this mutation.
+func (m *RecurringCreditBatchMutation) ValidityDaysCleared() bool {
+	_, ok := m.clearedFields[recurringcreditbatch.FieldValidityDays]
+	return ok
+}
+
+// ResetValidityDays resets all changes to the "validity_days" field.
+func (m *RecurringCreditBatchMutation) ResetValidityDays() {
+	m.validity_days = nil
+	m.addvalidity_days = nil
+	delete(m.clearedFields, recurringcreditbatch.FieldValidityDays)
+}
+
+// SetExecutionMode sets the "execution_mode" field.
+func (m *RecurringCreditBatchMutation) SetExecutionMode(s string) {
+	m.execution_mode = &s
+}
+
+// ExecutionMode returns the value of the "execution_mode" field in the mutation.
+func (m *RecurringCreditBatchMutation) ExecutionMode() (r string, exists bool) {
+	v := m.execution_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExecutionMode returns the old "execution_mode" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldExecutionMode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExecutionMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExecutionMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExecutionMode: %w", err)
+	}
+	return oldValue.ExecutionMode, nil
+}
+
+// ResetExecutionMode resets all changes to the "execution_mode" field.
+func (m *RecurringCreditBatchMutation) ResetExecutionMode() {
+	m.execution_mode = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *RecurringCreditBatchMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *RecurringCreditBatchMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *RecurringCreditBatchMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetClaimedAt sets the "claimed_at" field.
+func (m *RecurringCreditBatchMutation) SetClaimedAt(t time.Time) {
+	m.claimed_at = &t
+}
+
+// ClaimedAt returns the value of the "claimed_at" field in the mutation.
+func (m *RecurringCreditBatchMutation) ClaimedAt() (r time.Time, exists bool) {
+	v := m.claimed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClaimedAt returns the old "claimed_at" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldClaimedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClaimedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClaimedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClaimedAt: %w", err)
+	}
+	return oldValue.ClaimedAt, nil
+}
+
+// ClearClaimedAt clears the value of the "claimed_at" field.
+func (m *RecurringCreditBatchMutation) ClearClaimedAt() {
+	m.claimed_at = nil
+	m.clearedFields[recurringcreditbatch.FieldClaimedAt] = struct{}{}
+}
+
+// ClaimedAtCleared returns if the "claimed_at" field was cleared in this mutation.
+func (m *RecurringCreditBatchMutation) ClaimedAtCleared() bool {
+	_, ok := m.clearedFields[recurringcreditbatch.FieldClaimedAt]
+	return ok
+}
+
+// ResetClaimedAt resets all changes to the "claimed_at" field.
+func (m *RecurringCreditBatchMutation) ResetClaimedAt() {
+	m.claimed_at = nil
+	delete(m.clearedFields, recurringcreditbatch.FieldClaimedAt)
+}
+
+// SetLeaseOwner sets the "lease_owner" field.
+func (m *RecurringCreditBatchMutation) SetLeaseOwner(s string) {
+	m.lease_owner = &s
+}
+
+// LeaseOwner returns the value of the "lease_owner" field in the mutation.
+func (m *RecurringCreditBatchMutation) LeaseOwner() (r string, exists bool) {
+	v := m.lease_owner
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLeaseOwner returns the old "lease_owner" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldLeaseOwner(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLeaseOwner is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLeaseOwner requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLeaseOwner: %w", err)
+	}
+	return oldValue.LeaseOwner, nil
+}
+
+// ResetLeaseOwner resets all changes to the "lease_owner" field.
+func (m *RecurringCreditBatchMutation) ResetLeaseOwner() {
+	m.lease_owner = nil
+}
+
+// SetLeaseExpiresAt sets the "lease_expires_at" field.
+func (m *RecurringCreditBatchMutation) SetLeaseExpiresAt(t time.Time) {
+	m.lease_expires_at = &t
+}
+
+// LeaseExpiresAt returns the value of the "lease_expires_at" field in the mutation.
+func (m *RecurringCreditBatchMutation) LeaseExpiresAt() (r time.Time, exists bool) {
+	v := m.lease_expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLeaseExpiresAt returns the old "lease_expires_at" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldLeaseExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLeaseExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLeaseExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLeaseExpiresAt: %w", err)
+	}
+	return oldValue.LeaseExpiresAt, nil
+}
+
+// ClearLeaseExpiresAt clears the value of the "lease_expires_at" field.
+func (m *RecurringCreditBatchMutation) ClearLeaseExpiresAt() {
+	m.lease_expires_at = nil
+	m.clearedFields[recurringcreditbatch.FieldLeaseExpiresAt] = struct{}{}
+}
+
+// LeaseExpiresAtCleared returns if the "lease_expires_at" field was cleared in this mutation.
+func (m *RecurringCreditBatchMutation) LeaseExpiresAtCleared() bool {
+	_, ok := m.clearedFields[recurringcreditbatch.FieldLeaseExpiresAt]
+	return ok
+}
+
+// ResetLeaseExpiresAt resets all changes to the "lease_expires_at" field.
+func (m *RecurringCreditBatchMutation) ResetLeaseExpiresAt() {
+	m.lease_expires_at = nil
+	delete(m.clearedFields, recurringcreditbatch.FieldLeaseExpiresAt)
+}
+
+// SetHeartbeatAt sets the "heartbeat_at" field.
+func (m *RecurringCreditBatchMutation) SetHeartbeatAt(t time.Time) {
+	m.heartbeat_at = &t
+}
+
+// HeartbeatAt returns the value of the "heartbeat_at" field in the mutation.
+func (m *RecurringCreditBatchMutation) HeartbeatAt() (r time.Time, exists bool) {
+	v := m.heartbeat_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldHeartbeatAt returns the old "heartbeat_at" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldHeartbeatAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldHeartbeatAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldHeartbeatAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldHeartbeatAt: %w", err)
+	}
+	return oldValue.HeartbeatAt, nil
+}
+
+// ClearHeartbeatAt clears the value of the "heartbeat_at" field.
+func (m *RecurringCreditBatchMutation) ClearHeartbeatAt() {
+	m.heartbeat_at = nil
+	m.clearedFields[recurringcreditbatch.FieldHeartbeatAt] = struct{}{}
+}
+
+// HeartbeatAtCleared returns if the "heartbeat_at" field was cleared in this mutation.
+func (m *RecurringCreditBatchMutation) HeartbeatAtCleared() bool {
+	_, ok := m.clearedFields[recurringcreditbatch.FieldHeartbeatAt]
+	return ok
+}
+
+// ResetHeartbeatAt resets all changes to the "heartbeat_at" field.
+func (m *RecurringCreditBatchMutation) ResetHeartbeatAt() {
+	m.heartbeat_at = nil
+	delete(m.clearedFields, recurringcreditbatch.FieldHeartbeatAt)
+}
+
+// SetAttemptCount sets the "attempt_count" field.
+func (m *RecurringCreditBatchMutation) SetAttemptCount(i int) {
+	m.attempt_count = &i
+	m.addattempt_count = nil
+}
+
+// AttemptCount returns the value of the "attempt_count" field in the mutation.
+func (m *RecurringCreditBatchMutation) AttemptCount() (r int, exists bool) {
+	v := m.attempt_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAttemptCount returns the old "attempt_count" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldAttemptCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAttemptCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAttemptCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAttemptCount: %w", err)
+	}
+	return oldValue.AttemptCount, nil
+}
+
+// AddAttemptCount adds i to the "attempt_count" field.
+func (m *RecurringCreditBatchMutation) AddAttemptCount(i int) {
+	if m.addattempt_count != nil {
+		*m.addattempt_count += i
+	} else {
+		m.addattempt_count = &i
+	}
+}
+
+// AddedAttemptCount returns the value that was added to the "attempt_count" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedAttemptCount() (r int, exists bool) {
+	v := m.addattempt_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAttemptCount resets all changes to the "attempt_count" field.
+func (m *RecurringCreditBatchMutation) ResetAttemptCount() {
+	m.attempt_count = nil
+	m.addattempt_count = nil
+}
+
+// SetEligibleUserCount sets the "eligible_user_count" field.
+func (m *RecurringCreditBatchMutation) SetEligibleUserCount(i int) {
+	m.eligible_user_count = &i
+	m.addeligible_user_count = nil
+}
+
+// EligibleUserCount returns the value of the "eligible_user_count" field in the mutation.
+func (m *RecurringCreditBatchMutation) EligibleUserCount() (r int, exists bool) {
+	v := m.eligible_user_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEligibleUserCount returns the old "eligible_user_count" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldEligibleUserCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEligibleUserCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEligibleUserCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEligibleUserCount: %w", err)
+	}
+	return oldValue.EligibleUserCount, nil
+}
+
+// AddEligibleUserCount adds i to the "eligible_user_count" field.
+func (m *RecurringCreditBatchMutation) AddEligibleUserCount(i int) {
+	if m.addeligible_user_count != nil {
+		*m.addeligible_user_count += i
+	} else {
+		m.addeligible_user_count = &i
+	}
+}
+
+// AddedEligibleUserCount returns the value that was added to the "eligible_user_count" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedEligibleUserCount() (r int, exists bool) {
+	v := m.addeligible_user_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetEligibleUserCount resets all changes to the "eligible_user_count" field.
+func (m *RecurringCreditBatchMutation) ResetEligibleUserCount() {
+	m.eligible_user_count = nil
+	m.addeligible_user_count = nil
+}
+
+// SetIssuedUserCount sets the "issued_user_count" field.
+func (m *RecurringCreditBatchMutation) SetIssuedUserCount(i int) {
+	m.issued_user_count = &i
+	m.addissued_user_count = nil
+}
+
+// IssuedUserCount returns the value of the "issued_user_count" field in the mutation.
+func (m *RecurringCreditBatchMutation) IssuedUserCount() (r int, exists bool) {
+	v := m.issued_user_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIssuedUserCount returns the old "issued_user_count" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldIssuedUserCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIssuedUserCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIssuedUserCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIssuedUserCount: %w", err)
+	}
+	return oldValue.IssuedUserCount, nil
+}
+
+// AddIssuedUserCount adds i to the "issued_user_count" field.
+func (m *RecurringCreditBatchMutation) AddIssuedUserCount(i int) {
+	if m.addissued_user_count != nil {
+		*m.addissued_user_count += i
+	} else {
+		m.addissued_user_count = &i
+	}
+}
+
+// AddedIssuedUserCount returns the value that was added to the "issued_user_count" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedIssuedUserCount() (r int, exists bool) {
+	v := m.addissued_user_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetIssuedUserCount resets all changes to the "issued_user_count" field.
+func (m *RecurringCreditBatchMutation) ResetIssuedUserCount() {
+	m.issued_user_count = nil
+	m.addissued_user_count = nil
+}
+
+// SetExcludedUserCount sets the "excluded_user_count" field.
+func (m *RecurringCreditBatchMutation) SetExcludedUserCount(i int) {
+	m.excluded_user_count = &i
+	m.addexcluded_user_count = nil
+}
+
+// ExcludedUserCount returns the value of the "excluded_user_count" field in the mutation.
+func (m *RecurringCreditBatchMutation) ExcludedUserCount() (r int, exists bool) {
+	v := m.excluded_user_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExcludedUserCount returns the old "excluded_user_count" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldExcludedUserCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExcludedUserCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExcludedUserCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExcludedUserCount: %w", err)
+	}
+	return oldValue.ExcludedUserCount, nil
+}
+
+// AddExcludedUserCount adds i to the "excluded_user_count" field.
+func (m *RecurringCreditBatchMutation) AddExcludedUserCount(i int) {
+	if m.addexcluded_user_count != nil {
+		*m.addexcluded_user_count += i
+	} else {
+		m.addexcluded_user_count = &i
+	}
+}
+
+// AddedExcludedUserCount returns the value that was added to the "excluded_user_count" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedExcludedUserCount() (r int, exists bool) {
+	v := m.addexcluded_user_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetExcludedUserCount resets all changes to the "excluded_user_count" field.
+func (m *RecurringCreditBatchMutation) ResetExcludedUserCount() {
+	m.excluded_user_count = nil
+	m.addexcluded_user_count = nil
+}
+
+// SetUsageEligibleCount sets the "usage_eligible_count" field.
+func (m *RecurringCreditBatchMutation) SetUsageEligibleCount(i int) {
+	m.usage_eligible_count = &i
+	m.addusage_eligible_count = nil
+}
+
+// UsageEligibleCount returns the value of the "usage_eligible_count" field in the mutation.
+func (m *RecurringCreditBatchMutation) UsageEligibleCount() (r int, exists bool) {
+	v := m.usage_eligible_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsageEligibleCount returns the old "usage_eligible_count" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldUsageEligibleCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsageEligibleCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsageEligibleCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsageEligibleCount: %w", err)
+	}
+	return oldValue.UsageEligibleCount, nil
+}
+
+// AddUsageEligibleCount adds i to the "usage_eligible_count" field.
+func (m *RecurringCreditBatchMutation) AddUsageEligibleCount(i int) {
+	if m.addusage_eligible_count != nil {
+		*m.addusage_eligible_count += i
+	} else {
+		m.addusage_eligible_count = &i
+	}
+}
+
+// AddedUsageEligibleCount returns the value that was added to the "usage_eligible_count" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedUsageEligibleCount() (r int, exists bool) {
+	v := m.addusage_eligible_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUsageEligibleCount resets all changes to the "usage_eligible_count" field.
+func (m *RecurringCreditBatchMutation) ResetUsageEligibleCount() {
+	m.usage_eligible_count = nil
+	m.addusage_eligible_count = nil
+}
+
+// SetRechargeEligibleCount sets the "recharge_eligible_count" field.
+func (m *RecurringCreditBatchMutation) SetRechargeEligibleCount(i int) {
+	m.recharge_eligible_count = &i
+	m.addrecharge_eligible_count = nil
+}
+
+// RechargeEligibleCount returns the value of the "recharge_eligible_count" field in the mutation.
+func (m *RecurringCreditBatchMutation) RechargeEligibleCount() (r int, exists bool) {
+	v := m.recharge_eligible_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRechargeEligibleCount returns the old "recharge_eligible_count" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldRechargeEligibleCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRechargeEligibleCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRechargeEligibleCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRechargeEligibleCount: %w", err)
+	}
+	return oldValue.RechargeEligibleCount, nil
+}
+
+// AddRechargeEligibleCount adds i to the "recharge_eligible_count" field.
+func (m *RecurringCreditBatchMutation) AddRechargeEligibleCount(i int) {
+	if m.addrecharge_eligible_count != nil {
+		*m.addrecharge_eligible_count += i
+	} else {
+		m.addrecharge_eligible_count = &i
+	}
+}
+
+// AddedRechargeEligibleCount returns the value that was added to the "recharge_eligible_count" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedRechargeEligibleCount() (r int, exists bool) {
+	v := m.addrecharge_eligible_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRechargeEligibleCount resets all changes to the "recharge_eligible_count" field.
+func (m *RecurringCreditBatchMutation) ResetRechargeEligibleCount() {
+	m.recharge_eligible_count = nil
+	m.addrecharge_eligible_count = nil
+}
+
+// SetAPIActiveCount sets the "api_active_count" field.
+func (m *RecurringCreditBatchMutation) SetAPIActiveCount(i int) {
+	m.api_active_count = &i
+	m.addapi_active_count = nil
+}
+
+// APIActiveCount returns the value of the "api_active_count" field in the mutation.
+func (m *RecurringCreditBatchMutation) APIActiveCount() (r int, exists bool) {
+	v := m.api_active_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIActiveCount returns the old "api_active_count" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldAPIActiveCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIActiveCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIActiveCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIActiveCount: %w", err)
+	}
+	return oldValue.APIActiveCount, nil
+}
+
+// AddAPIActiveCount adds i to the "api_active_count" field.
+func (m *RecurringCreditBatchMutation) AddAPIActiveCount(i int) {
+	if m.addapi_active_count != nil {
+		*m.addapi_active_count += i
+	} else {
+		m.addapi_active_count = &i
+	}
+}
+
+// AddedAPIActiveCount returns the value that was added to the "api_active_count" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedAPIActiveCount() (r int, exists bool) {
+	v := m.addapi_active_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAPIActiveCount resets all changes to the "api_active_count" field.
+func (m *RecurringCreditBatchMutation) ResetAPIActiveCount() {
+	m.api_active_count = nil
+	m.addapi_active_count = nil
+}
+
+// SetSiteActiveCount sets the "site_active_count" field.
+func (m *RecurringCreditBatchMutation) SetSiteActiveCount(i int) {
+	m.site_active_count = &i
+	m.addsite_active_count = nil
+}
+
+// SiteActiveCount returns the value of the "site_active_count" field in the mutation.
+func (m *RecurringCreditBatchMutation) SiteActiveCount() (r int, exists bool) {
+	v := m.site_active_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSiteActiveCount returns the old "site_active_count" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldSiteActiveCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSiteActiveCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSiteActiveCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSiteActiveCount: %w", err)
+	}
+	return oldValue.SiteActiveCount, nil
+}
+
+// AddSiteActiveCount adds i to the "site_active_count" field.
+func (m *RecurringCreditBatchMutation) AddSiteActiveCount(i int) {
+	if m.addsite_active_count != nil {
+		*m.addsite_active_count += i
+	} else {
+		m.addsite_active_count = &i
+	}
+}
+
+// AddedSiteActiveCount returns the value that was added to the "site_active_count" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedSiteActiveCount() (r int, exists bool) {
+	v := m.addsite_active_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSiteActiveCount resets all changes to the "site_active_count" field.
+func (m *RecurringCreditBatchMutation) ResetSiteActiveCount() {
+	m.site_active_count = nil
+	m.addsite_active_count = nil
+}
+
+// SetBothActiveCount sets the "both_active_count" field.
+func (m *RecurringCreditBatchMutation) SetBothActiveCount(i int) {
+	m.both_active_count = &i
+	m.addboth_active_count = nil
+}
+
+// BothActiveCount returns the value of the "both_active_count" field in the mutation.
+func (m *RecurringCreditBatchMutation) BothActiveCount() (r int, exists bool) {
+	v := m.both_active_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBothActiveCount returns the old "both_active_count" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldBothActiveCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBothActiveCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBothActiveCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBothActiveCount: %w", err)
+	}
+	return oldValue.BothActiveCount, nil
+}
+
+// AddBothActiveCount adds i to the "both_active_count" field.
+func (m *RecurringCreditBatchMutation) AddBothActiveCount(i int) {
+	if m.addboth_active_count != nil {
+		*m.addboth_active_count += i
+	} else {
+		m.addboth_active_count = &i
+	}
+}
+
+// AddedBothActiveCount returns the value that was added to the "both_active_count" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedBothActiveCount() (r int, exists bool) {
+	v := m.addboth_active_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBothActiveCount resets all changes to the "both_active_count" field.
+func (m *RecurringCreditBatchMutation) ResetBothActiveCount() {
+	m.both_active_count = nil
+	m.addboth_active_count = nil
+}
+
+// SetSnapshotCompletedAt sets the "snapshot_completed_at" field.
+func (m *RecurringCreditBatchMutation) SetSnapshotCompletedAt(t time.Time) {
+	m.snapshot_completed_at = &t
+}
+
+// SnapshotCompletedAt returns the value of the "snapshot_completed_at" field in the mutation.
+func (m *RecurringCreditBatchMutation) SnapshotCompletedAt() (r time.Time, exists bool) {
+	v := m.snapshot_completed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSnapshotCompletedAt returns the old "snapshot_completed_at" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldSnapshotCompletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSnapshotCompletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSnapshotCompletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSnapshotCompletedAt: %w", err)
+	}
+	return oldValue.SnapshotCompletedAt, nil
+}
+
+// ClearSnapshotCompletedAt clears the value of the "snapshot_completed_at" field.
+func (m *RecurringCreditBatchMutation) ClearSnapshotCompletedAt() {
+	m.snapshot_completed_at = nil
+	m.clearedFields[recurringcreditbatch.FieldSnapshotCompletedAt] = struct{}{}
+}
+
+// SnapshotCompletedAtCleared returns if the "snapshot_completed_at" field was cleared in this mutation.
+func (m *RecurringCreditBatchMutation) SnapshotCompletedAtCleared() bool {
+	_, ok := m.clearedFields[recurringcreditbatch.FieldSnapshotCompletedAt]
+	return ok
+}
+
+// ResetSnapshotCompletedAt resets all changes to the "snapshot_completed_at" field.
+func (m *RecurringCreditBatchMutation) ResetSnapshotCompletedAt() {
+	m.snapshot_completed_at = nil
+	delete(m.clearedFields, recurringcreditbatch.FieldSnapshotCompletedAt)
+}
+
+// SetIssuedAmount sets the "issued_amount" field.
+func (m *RecurringCreditBatchMutation) SetIssuedAmount(f float64) {
+	m.issued_amount = &f
+	m.addissued_amount = nil
+}
+
+// IssuedAmount returns the value of the "issued_amount" field in the mutation.
+func (m *RecurringCreditBatchMutation) IssuedAmount() (r float64, exists bool) {
+	v := m.issued_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIssuedAmount returns the old "issued_amount" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldIssuedAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIssuedAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIssuedAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIssuedAmount: %w", err)
+	}
+	return oldValue.IssuedAmount, nil
+}
+
+// AddIssuedAmount adds f to the "issued_amount" field.
+func (m *RecurringCreditBatchMutation) AddIssuedAmount(f float64) {
+	if m.addissued_amount != nil {
+		*m.addissued_amount += f
+	} else {
+		m.addissued_amount = &f
+	}
+}
+
+// AddedIssuedAmount returns the value that was added to the "issued_amount" field in this mutation.
+func (m *RecurringCreditBatchMutation) AddedIssuedAmount() (r float64, exists bool) {
+	v := m.addissued_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetIssuedAmount resets all changes to the "issued_amount" field.
+func (m *RecurringCreditBatchMutation) ResetIssuedAmount() {
+	m.issued_amount = nil
+	m.addissued_amount = nil
+}
+
+// SetFailureCode sets the "failure_code" field.
+func (m *RecurringCreditBatchMutation) SetFailureCode(s string) {
+	m.failure_code = &s
+}
+
+// FailureCode returns the value of the "failure_code" field in the mutation.
+func (m *RecurringCreditBatchMutation) FailureCode() (r string, exists bool) {
+	v := m.failure_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailureCode returns the old "failure_code" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldFailureCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailureCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailureCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailureCode: %w", err)
+	}
+	return oldValue.FailureCode, nil
+}
+
+// ResetFailureCode resets all changes to the "failure_code" field.
+func (m *RecurringCreditBatchMutation) ResetFailureCode() {
+	m.failure_code = nil
+}
+
+// SetFailureMessage sets the "failure_message" field.
+func (m *RecurringCreditBatchMutation) SetFailureMessage(s string) {
+	m.failure_message = &s
+}
+
+// FailureMessage returns the value of the "failure_message" field in the mutation.
+func (m *RecurringCreditBatchMutation) FailureMessage() (r string, exists bool) {
+	v := m.failure_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailureMessage returns the old "failure_message" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldFailureMessage(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailureMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailureMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailureMessage: %w", err)
+	}
+	return oldValue.FailureMessage, nil
+}
+
+// ResetFailureMessage resets all changes to the "failure_message" field.
+func (m *RecurringCreditBatchMutation) ResetFailureMessage() {
+	m.failure_message = nil
+}
+
+// SetFinishedAt sets the "finished_at" field.
+func (m *RecurringCreditBatchMutation) SetFinishedAt(t time.Time) {
+	m.finished_at = &t
+}
+
+// FinishedAt returns the value of the "finished_at" field in the mutation.
+func (m *RecurringCreditBatchMutation) FinishedAt() (r time.Time, exists bool) {
+	v := m.finished_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFinishedAt returns the old "finished_at" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldFinishedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFinishedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFinishedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFinishedAt: %w", err)
+	}
+	return oldValue.FinishedAt, nil
+}
+
+// ClearFinishedAt clears the value of the "finished_at" field.
+func (m *RecurringCreditBatchMutation) ClearFinishedAt() {
+	m.finished_at = nil
+	m.clearedFields[recurringcreditbatch.FieldFinishedAt] = struct{}{}
+}
+
+// FinishedAtCleared returns if the "finished_at" field was cleared in this mutation.
+func (m *RecurringCreditBatchMutation) FinishedAtCleared() bool {
+	_, ok := m.clearedFields[recurringcreditbatch.FieldFinishedAt]
+	return ok
+}
+
+// ResetFinishedAt resets all changes to the "finished_at" field.
+func (m *RecurringCreditBatchMutation) ResetFinishedAt() {
+	m.finished_at = nil
+	delete(m.clearedFields, recurringcreditbatch.FieldFinishedAt)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *RecurringCreditBatchMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *RecurringCreditBatchMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *RecurringCreditBatchMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *RecurringCreditBatchMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *RecurringCreditBatchMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the RecurringCreditBatch entity.
+// If the RecurringCreditBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditBatchMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *RecurringCreditBatchMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the RecurringCreditBatchMutation builder.
+func (m *RecurringCreditBatchMutation) Where(ps ...predicate.RecurringCreditBatch) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RecurringCreditBatchMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RecurringCreditBatchMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RecurringCreditBatch, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RecurringCreditBatchMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RecurringCreditBatchMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RecurringCreditBatch).
+func (m *RecurringCreditBatchMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RecurringCreditBatchMutation) Fields() []string {
+	fields := make([]string, 0, 38)
+	if m.task_id != nil {
+		fields = append(fields, recurringcreditbatch.FieldTaskID)
+	}
+	if m.task_name != nil {
+		fields = append(fields, recurringcreditbatch.FieldTaskName)
+	}
+	if m.scheduled_at != nil {
+		fields = append(fields, recurringcreditbatch.FieldScheduledAt)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, recurringcreditbatch.FieldExpiresAt)
+	}
+	if m.qualification_start != nil {
+		fields = append(fields, recurringcreditbatch.FieldQualificationStart)
+	}
+	if m.qualification_end != nil {
+		fields = append(fields, recurringcreditbatch.FieldQualificationEnd)
+	}
+	if m.qualification_cutoff_at != nil {
+		fields = append(fields, recurringcreditbatch.FieldQualificationCutoffAt)
+	}
+	if m.config_version != nil {
+		fields = append(fields, recurringcreditbatch.FieldConfigVersion)
+	}
+	if m.eligibility_policy != nil {
+		fields = append(fields, recurringcreditbatch.FieldEligibilityPolicy)
+	}
+	if m.schedule_type != nil {
+		fields = append(fields, recurringcreditbatch.FieldScheduleType)
+	}
+	if m.day_of_month != nil {
+		fields = append(fields, recurringcreditbatch.FieldDayOfMonth)
+	}
+	if m.day_of_week != nil {
+		fields = append(fields, recurringcreditbatch.FieldDayOfWeek)
+	}
+	if m.local_time != nil {
+		fields = append(fields, recurringcreditbatch.FieldLocalTime)
+	}
+	if m.timezone != nil {
+		fields = append(fields, recurringcreditbatch.FieldTimezone)
+	}
+	if m.amount != nil {
+		fields = append(fields, recurringcreditbatch.FieldAmount)
+	}
+	if m.validity_days != nil {
+		fields = append(fields, recurringcreditbatch.FieldValidityDays)
+	}
+	if m.execution_mode != nil {
+		fields = append(fields, recurringcreditbatch.FieldExecutionMode)
+	}
+	if m.status != nil {
+		fields = append(fields, recurringcreditbatch.FieldStatus)
+	}
+	if m.claimed_at != nil {
+		fields = append(fields, recurringcreditbatch.FieldClaimedAt)
+	}
+	if m.lease_owner != nil {
+		fields = append(fields, recurringcreditbatch.FieldLeaseOwner)
+	}
+	if m.lease_expires_at != nil {
+		fields = append(fields, recurringcreditbatch.FieldLeaseExpiresAt)
+	}
+	if m.heartbeat_at != nil {
+		fields = append(fields, recurringcreditbatch.FieldHeartbeatAt)
+	}
+	if m.attempt_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldAttemptCount)
+	}
+	if m.eligible_user_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldEligibleUserCount)
+	}
+	if m.issued_user_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldIssuedUserCount)
+	}
+	if m.excluded_user_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldExcludedUserCount)
+	}
+	if m.usage_eligible_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldUsageEligibleCount)
+	}
+	if m.recharge_eligible_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldRechargeEligibleCount)
+	}
+	if m.api_active_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldAPIActiveCount)
+	}
+	if m.site_active_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldSiteActiveCount)
+	}
+	if m.both_active_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldBothActiveCount)
+	}
+	if m.snapshot_completed_at != nil {
+		fields = append(fields, recurringcreditbatch.FieldSnapshotCompletedAt)
+	}
+	if m.issued_amount != nil {
+		fields = append(fields, recurringcreditbatch.FieldIssuedAmount)
+	}
+	if m.failure_code != nil {
+		fields = append(fields, recurringcreditbatch.FieldFailureCode)
+	}
+	if m.failure_message != nil {
+		fields = append(fields, recurringcreditbatch.FieldFailureMessage)
+	}
+	if m.finished_at != nil {
+		fields = append(fields, recurringcreditbatch.FieldFinishedAt)
+	}
+	if m.created_at != nil {
+		fields = append(fields, recurringcreditbatch.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, recurringcreditbatch.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RecurringCreditBatchMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case recurringcreditbatch.FieldTaskID:
+		return m.TaskID()
+	case recurringcreditbatch.FieldTaskName:
+		return m.TaskName()
+	case recurringcreditbatch.FieldScheduledAt:
+		return m.ScheduledAt()
+	case recurringcreditbatch.FieldExpiresAt:
+		return m.ExpiresAt()
+	case recurringcreditbatch.FieldQualificationStart:
+		return m.QualificationStart()
+	case recurringcreditbatch.FieldQualificationEnd:
+		return m.QualificationEnd()
+	case recurringcreditbatch.FieldQualificationCutoffAt:
+		return m.QualificationCutoffAt()
+	case recurringcreditbatch.FieldConfigVersion:
+		return m.ConfigVersion()
+	case recurringcreditbatch.FieldEligibilityPolicy:
+		return m.EligibilityPolicy()
+	case recurringcreditbatch.FieldScheduleType:
+		return m.ScheduleType()
+	case recurringcreditbatch.FieldDayOfMonth:
+		return m.DayOfMonth()
+	case recurringcreditbatch.FieldDayOfWeek:
+		return m.DayOfWeek()
+	case recurringcreditbatch.FieldLocalTime:
+		return m.LocalTime()
+	case recurringcreditbatch.FieldTimezone:
+		return m.Timezone()
+	case recurringcreditbatch.FieldAmount:
+		return m.Amount()
+	case recurringcreditbatch.FieldValidityDays:
+		return m.ValidityDays()
+	case recurringcreditbatch.FieldExecutionMode:
+		return m.ExecutionMode()
+	case recurringcreditbatch.FieldStatus:
+		return m.Status()
+	case recurringcreditbatch.FieldClaimedAt:
+		return m.ClaimedAt()
+	case recurringcreditbatch.FieldLeaseOwner:
+		return m.LeaseOwner()
+	case recurringcreditbatch.FieldLeaseExpiresAt:
+		return m.LeaseExpiresAt()
+	case recurringcreditbatch.FieldHeartbeatAt:
+		return m.HeartbeatAt()
+	case recurringcreditbatch.FieldAttemptCount:
+		return m.AttemptCount()
+	case recurringcreditbatch.FieldEligibleUserCount:
+		return m.EligibleUserCount()
+	case recurringcreditbatch.FieldIssuedUserCount:
+		return m.IssuedUserCount()
+	case recurringcreditbatch.FieldExcludedUserCount:
+		return m.ExcludedUserCount()
+	case recurringcreditbatch.FieldUsageEligibleCount:
+		return m.UsageEligibleCount()
+	case recurringcreditbatch.FieldRechargeEligibleCount:
+		return m.RechargeEligibleCount()
+	case recurringcreditbatch.FieldAPIActiveCount:
+		return m.APIActiveCount()
+	case recurringcreditbatch.FieldSiteActiveCount:
+		return m.SiteActiveCount()
+	case recurringcreditbatch.FieldBothActiveCount:
+		return m.BothActiveCount()
+	case recurringcreditbatch.FieldSnapshotCompletedAt:
+		return m.SnapshotCompletedAt()
+	case recurringcreditbatch.FieldIssuedAmount:
+		return m.IssuedAmount()
+	case recurringcreditbatch.FieldFailureCode:
+		return m.FailureCode()
+	case recurringcreditbatch.FieldFailureMessage:
+		return m.FailureMessage()
+	case recurringcreditbatch.FieldFinishedAt:
+		return m.FinishedAt()
+	case recurringcreditbatch.FieldCreatedAt:
+		return m.CreatedAt()
+	case recurringcreditbatch.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RecurringCreditBatchMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case recurringcreditbatch.FieldTaskID:
+		return m.OldTaskID(ctx)
+	case recurringcreditbatch.FieldTaskName:
+		return m.OldTaskName(ctx)
+	case recurringcreditbatch.FieldScheduledAt:
+		return m.OldScheduledAt(ctx)
+	case recurringcreditbatch.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
+	case recurringcreditbatch.FieldQualificationStart:
+		return m.OldQualificationStart(ctx)
+	case recurringcreditbatch.FieldQualificationEnd:
+		return m.OldQualificationEnd(ctx)
+	case recurringcreditbatch.FieldQualificationCutoffAt:
+		return m.OldQualificationCutoffAt(ctx)
+	case recurringcreditbatch.FieldConfigVersion:
+		return m.OldConfigVersion(ctx)
+	case recurringcreditbatch.FieldEligibilityPolicy:
+		return m.OldEligibilityPolicy(ctx)
+	case recurringcreditbatch.FieldScheduleType:
+		return m.OldScheduleType(ctx)
+	case recurringcreditbatch.FieldDayOfMonth:
+		return m.OldDayOfMonth(ctx)
+	case recurringcreditbatch.FieldDayOfWeek:
+		return m.OldDayOfWeek(ctx)
+	case recurringcreditbatch.FieldLocalTime:
+		return m.OldLocalTime(ctx)
+	case recurringcreditbatch.FieldTimezone:
+		return m.OldTimezone(ctx)
+	case recurringcreditbatch.FieldAmount:
+		return m.OldAmount(ctx)
+	case recurringcreditbatch.FieldValidityDays:
+		return m.OldValidityDays(ctx)
+	case recurringcreditbatch.FieldExecutionMode:
+		return m.OldExecutionMode(ctx)
+	case recurringcreditbatch.FieldStatus:
+		return m.OldStatus(ctx)
+	case recurringcreditbatch.FieldClaimedAt:
+		return m.OldClaimedAt(ctx)
+	case recurringcreditbatch.FieldLeaseOwner:
+		return m.OldLeaseOwner(ctx)
+	case recurringcreditbatch.FieldLeaseExpiresAt:
+		return m.OldLeaseExpiresAt(ctx)
+	case recurringcreditbatch.FieldHeartbeatAt:
+		return m.OldHeartbeatAt(ctx)
+	case recurringcreditbatch.FieldAttemptCount:
+		return m.OldAttemptCount(ctx)
+	case recurringcreditbatch.FieldEligibleUserCount:
+		return m.OldEligibleUserCount(ctx)
+	case recurringcreditbatch.FieldIssuedUserCount:
+		return m.OldIssuedUserCount(ctx)
+	case recurringcreditbatch.FieldExcludedUserCount:
+		return m.OldExcludedUserCount(ctx)
+	case recurringcreditbatch.FieldUsageEligibleCount:
+		return m.OldUsageEligibleCount(ctx)
+	case recurringcreditbatch.FieldRechargeEligibleCount:
+		return m.OldRechargeEligibleCount(ctx)
+	case recurringcreditbatch.FieldAPIActiveCount:
+		return m.OldAPIActiveCount(ctx)
+	case recurringcreditbatch.FieldSiteActiveCount:
+		return m.OldSiteActiveCount(ctx)
+	case recurringcreditbatch.FieldBothActiveCount:
+		return m.OldBothActiveCount(ctx)
+	case recurringcreditbatch.FieldSnapshotCompletedAt:
+		return m.OldSnapshotCompletedAt(ctx)
+	case recurringcreditbatch.FieldIssuedAmount:
+		return m.OldIssuedAmount(ctx)
+	case recurringcreditbatch.FieldFailureCode:
+		return m.OldFailureCode(ctx)
+	case recurringcreditbatch.FieldFailureMessage:
+		return m.OldFailureMessage(ctx)
+	case recurringcreditbatch.FieldFinishedAt:
+		return m.OldFinishedAt(ctx)
+	case recurringcreditbatch.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case recurringcreditbatch.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown RecurringCreditBatch field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RecurringCreditBatchMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case recurringcreditbatch.FieldTaskID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTaskID(v)
+		return nil
+	case recurringcreditbatch.FieldTaskName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTaskName(v)
+		return nil
+	case recurringcreditbatch.FieldScheduledAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScheduledAt(v)
+		return nil
+	case recurringcreditbatch.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
+		return nil
+	case recurringcreditbatch.FieldQualificationStart:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQualificationStart(v)
+		return nil
+	case recurringcreditbatch.FieldQualificationEnd:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQualificationEnd(v)
+		return nil
+	case recurringcreditbatch.FieldQualificationCutoffAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQualificationCutoffAt(v)
+		return nil
+	case recurringcreditbatch.FieldConfigVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetConfigVersion(v)
+		return nil
+	case recurringcreditbatch.FieldEligibilityPolicy:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEligibilityPolicy(v)
+		return nil
+	case recurringcreditbatch.FieldScheduleType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScheduleType(v)
+		return nil
+	case recurringcreditbatch.FieldDayOfMonth:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDayOfMonth(v)
+		return nil
+	case recurringcreditbatch.FieldDayOfWeek:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDayOfWeek(v)
+		return nil
+	case recurringcreditbatch.FieldLocalTime:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLocalTime(v)
+		return nil
+	case recurringcreditbatch.FieldTimezone:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTimezone(v)
+		return nil
+	case recurringcreditbatch.FieldAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAmount(v)
+		return nil
+	case recurringcreditbatch.FieldValidityDays:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValidityDays(v)
+		return nil
+	case recurringcreditbatch.FieldExecutionMode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExecutionMode(v)
+		return nil
+	case recurringcreditbatch.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case recurringcreditbatch.FieldClaimedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClaimedAt(v)
+		return nil
+	case recurringcreditbatch.FieldLeaseOwner:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLeaseOwner(v)
+		return nil
+	case recurringcreditbatch.FieldLeaseExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLeaseExpiresAt(v)
+		return nil
+	case recurringcreditbatch.FieldHeartbeatAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetHeartbeatAt(v)
+		return nil
+	case recurringcreditbatch.FieldAttemptCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAttemptCount(v)
+		return nil
+	case recurringcreditbatch.FieldEligibleUserCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEligibleUserCount(v)
+		return nil
+	case recurringcreditbatch.FieldIssuedUserCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIssuedUserCount(v)
+		return nil
+	case recurringcreditbatch.FieldExcludedUserCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExcludedUserCount(v)
+		return nil
+	case recurringcreditbatch.FieldUsageEligibleCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsageEligibleCount(v)
+		return nil
+	case recurringcreditbatch.FieldRechargeEligibleCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRechargeEligibleCount(v)
+		return nil
+	case recurringcreditbatch.FieldAPIActiveCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIActiveCount(v)
+		return nil
+	case recurringcreditbatch.FieldSiteActiveCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSiteActiveCount(v)
+		return nil
+	case recurringcreditbatch.FieldBothActiveCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBothActiveCount(v)
+		return nil
+	case recurringcreditbatch.FieldSnapshotCompletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSnapshotCompletedAt(v)
+		return nil
+	case recurringcreditbatch.FieldIssuedAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIssuedAmount(v)
+		return nil
+	case recurringcreditbatch.FieldFailureCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailureCode(v)
+		return nil
+	case recurringcreditbatch.FieldFailureMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailureMessage(v)
+		return nil
+	case recurringcreditbatch.FieldFinishedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFinishedAt(v)
+		return nil
+	case recurringcreditbatch.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case recurringcreditbatch.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditBatch field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RecurringCreditBatchMutation) AddedFields() []string {
+	var fields []string
+	if m.addtask_id != nil {
+		fields = append(fields, recurringcreditbatch.FieldTaskID)
+	}
+	if m.addconfig_version != nil {
+		fields = append(fields, recurringcreditbatch.FieldConfigVersion)
+	}
+	if m.addday_of_month != nil {
+		fields = append(fields, recurringcreditbatch.FieldDayOfMonth)
+	}
+	if m.addday_of_week != nil {
+		fields = append(fields, recurringcreditbatch.FieldDayOfWeek)
+	}
+	if m.addamount != nil {
+		fields = append(fields, recurringcreditbatch.FieldAmount)
+	}
+	if m.addvalidity_days != nil {
+		fields = append(fields, recurringcreditbatch.FieldValidityDays)
+	}
+	if m.addattempt_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldAttemptCount)
+	}
+	if m.addeligible_user_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldEligibleUserCount)
+	}
+	if m.addissued_user_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldIssuedUserCount)
+	}
+	if m.addexcluded_user_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldExcludedUserCount)
+	}
+	if m.addusage_eligible_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldUsageEligibleCount)
+	}
+	if m.addrecharge_eligible_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldRechargeEligibleCount)
+	}
+	if m.addapi_active_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldAPIActiveCount)
+	}
+	if m.addsite_active_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldSiteActiveCount)
+	}
+	if m.addboth_active_count != nil {
+		fields = append(fields, recurringcreditbatch.FieldBothActiveCount)
+	}
+	if m.addissued_amount != nil {
+		fields = append(fields, recurringcreditbatch.FieldIssuedAmount)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RecurringCreditBatchMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case recurringcreditbatch.FieldTaskID:
+		return m.AddedTaskID()
+	case recurringcreditbatch.FieldConfigVersion:
+		return m.AddedConfigVersion()
+	case recurringcreditbatch.FieldDayOfMonth:
+		return m.AddedDayOfMonth()
+	case recurringcreditbatch.FieldDayOfWeek:
+		return m.AddedDayOfWeek()
+	case recurringcreditbatch.FieldAmount:
+		return m.AddedAmount()
+	case recurringcreditbatch.FieldValidityDays:
+		return m.AddedValidityDays()
+	case recurringcreditbatch.FieldAttemptCount:
+		return m.AddedAttemptCount()
+	case recurringcreditbatch.FieldEligibleUserCount:
+		return m.AddedEligibleUserCount()
+	case recurringcreditbatch.FieldIssuedUserCount:
+		return m.AddedIssuedUserCount()
+	case recurringcreditbatch.FieldExcludedUserCount:
+		return m.AddedExcludedUserCount()
+	case recurringcreditbatch.FieldUsageEligibleCount:
+		return m.AddedUsageEligibleCount()
+	case recurringcreditbatch.FieldRechargeEligibleCount:
+		return m.AddedRechargeEligibleCount()
+	case recurringcreditbatch.FieldAPIActiveCount:
+		return m.AddedAPIActiveCount()
+	case recurringcreditbatch.FieldSiteActiveCount:
+		return m.AddedSiteActiveCount()
+	case recurringcreditbatch.FieldBothActiveCount:
+		return m.AddedBothActiveCount()
+	case recurringcreditbatch.FieldIssuedAmount:
+		return m.AddedIssuedAmount()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RecurringCreditBatchMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case recurringcreditbatch.FieldTaskID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTaskID(v)
+		return nil
+	case recurringcreditbatch.FieldConfigVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddConfigVersion(v)
+		return nil
+	case recurringcreditbatch.FieldDayOfMonth:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDayOfMonth(v)
+		return nil
+	case recurringcreditbatch.FieldDayOfWeek:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDayOfWeek(v)
+		return nil
+	case recurringcreditbatch.FieldAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAmount(v)
+		return nil
+	case recurringcreditbatch.FieldValidityDays:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddValidityDays(v)
+		return nil
+	case recurringcreditbatch.FieldAttemptCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAttemptCount(v)
+		return nil
+	case recurringcreditbatch.FieldEligibleUserCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEligibleUserCount(v)
+		return nil
+	case recurringcreditbatch.FieldIssuedUserCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddIssuedUserCount(v)
+		return nil
+	case recurringcreditbatch.FieldExcludedUserCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddExcludedUserCount(v)
+		return nil
+	case recurringcreditbatch.FieldUsageEligibleCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUsageEligibleCount(v)
+		return nil
+	case recurringcreditbatch.FieldRechargeEligibleCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRechargeEligibleCount(v)
+		return nil
+	case recurringcreditbatch.FieldAPIActiveCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAPIActiveCount(v)
+		return nil
+	case recurringcreditbatch.FieldSiteActiveCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSiteActiveCount(v)
+		return nil
+	case recurringcreditbatch.FieldBothActiveCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBothActiveCount(v)
+		return nil
+	case recurringcreditbatch.FieldIssuedAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddIssuedAmount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditBatch numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RecurringCreditBatchMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(recurringcreditbatch.FieldQualificationCutoffAt) {
+		fields = append(fields, recurringcreditbatch.FieldQualificationCutoffAt)
+	}
+	if m.FieldCleared(recurringcreditbatch.FieldDayOfMonth) {
+		fields = append(fields, recurringcreditbatch.FieldDayOfMonth)
+	}
+	if m.FieldCleared(recurringcreditbatch.FieldDayOfWeek) {
+		fields = append(fields, recurringcreditbatch.FieldDayOfWeek)
+	}
+	if m.FieldCleared(recurringcreditbatch.FieldValidityDays) {
+		fields = append(fields, recurringcreditbatch.FieldValidityDays)
+	}
+	if m.FieldCleared(recurringcreditbatch.FieldClaimedAt) {
+		fields = append(fields, recurringcreditbatch.FieldClaimedAt)
+	}
+	if m.FieldCleared(recurringcreditbatch.FieldLeaseExpiresAt) {
+		fields = append(fields, recurringcreditbatch.FieldLeaseExpiresAt)
+	}
+	if m.FieldCleared(recurringcreditbatch.FieldHeartbeatAt) {
+		fields = append(fields, recurringcreditbatch.FieldHeartbeatAt)
+	}
+	if m.FieldCleared(recurringcreditbatch.FieldSnapshotCompletedAt) {
+		fields = append(fields, recurringcreditbatch.FieldSnapshotCompletedAt)
+	}
+	if m.FieldCleared(recurringcreditbatch.FieldFinishedAt) {
+		fields = append(fields, recurringcreditbatch.FieldFinishedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RecurringCreditBatchMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RecurringCreditBatchMutation) ClearField(name string) error {
+	switch name {
+	case recurringcreditbatch.FieldQualificationCutoffAt:
+		m.ClearQualificationCutoffAt()
+		return nil
+	case recurringcreditbatch.FieldDayOfMonth:
+		m.ClearDayOfMonth()
+		return nil
+	case recurringcreditbatch.FieldDayOfWeek:
+		m.ClearDayOfWeek()
+		return nil
+	case recurringcreditbatch.FieldValidityDays:
+		m.ClearValidityDays()
+		return nil
+	case recurringcreditbatch.FieldClaimedAt:
+		m.ClearClaimedAt()
+		return nil
+	case recurringcreditbatch.FieldLeaseExpiresAt:
+		m.ClearLeaseExpiresAt()
+		return nil
+	case recurringcreditbatch.FieldHeartbeatAt:
+		m.ClearHeartbeatAt()
+		return nil
+	case recurringcreditbatch.FieldSnapshotCompletedAt:
+		m.ClearSnapshotCompletedAt()
+		return nil
+	case recurringcreditbatch.FieldFinishedAt:
+		m.ClearFinishedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditBatch nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RecurringCreditBatchMutation) ResetField(name string) error {
+	switch name {
+	case recurringcreditbatch.FieldTaskID:
+		m.ResetTaskID()
+		return nil
+	case recurringcreditbatch.FieldTaskName:
+		m.ResetTaskName()
+		return nil
+	case recurringcreditbatch.FieldScheduledAt:
+		m.ResetScheduledAt()
+		return nil
+	case recurringcreditbatch.FieldExpiresAt:
+		m.ResetExpiresAt()
+		return nil
+	case recurringcreditbatch.FieldQualificationStart:
+		m.ResetQualificationStart()
+		return nil
+	case recurringcreditbatch.FieldQualificationEnd:
+		m.ResetQualificationEnd()
+		return nil
+	case recurringcreditbatch.FieldQualificationCutoffAt:
+		m.ResetQualificationCutoffAt()
+		return nil
+	case recurringcreditbatch.FieldConfigVersion:
+		m.ResetConfigVersion()
+		return nil
+	case recurringcreditbatch.FieldEligibilityPolicy:
+		m.ResetEligibilityPolicy()
+		return nil
+	case recurringcreditbatch.FieldScheduleType:
+		m.ResetScheduleType()
+		return nil
+	case recurringcreditbatch.FieldDayOfMonth:
+		m.ResetDayOfMonth()
+		return nil
+	case recurringcreditbatch.FieldDayOfWeek:
+		m.ResetDayOfWeek()
+		return nil
+	case recurringcreditbatch.FieldLocalTime:
+		m.ResetLocalTime()
+		return nil
+	case recurringcreditbatch.FieldTimezone:
+		m.ResetTimezone()
+		return nil
+	case recurringcreditbatch.FieldAmount:
+		m.ResetAmount()
+		return nil
+	case recurringcreditbatch.FieldValidityDays:
+		m.ResetValidityDays()
+		return nil
+	case recurringcreditbatch.FieldExecutionMode:
+		m.ResetExecutionMode()
+		return nil
+	case recurringcreditbatch.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case recurringcreditbatch.FieldClaimedAt:
+		m.ResetClaimedAt()
+		return nil
+	case recurringcreditbatch.FieldLeaseOwner:
+		m.ResetLeaseOwner()
+		return nil
+	case recurringcreditbatch.FieldLeaseExpiresAt:
+		m.ResetLeaseExpiresAt()
+		return nil
+	case recurringcreditbatch.FieldHeartbeatAt:
+		m.ResetHeartbeatAt()
+		return nil
+	case recurringcreditbatch.FieldAttemptCount:
+		m.ResetAttemptCount()
+		return nil
+	case recurringcreditbatch.FieldEligibleUserCount:
+		m.ResetEligibleUserCount()
+		return nil
+	case recurringcreditbatch.FieldIssuedUserCount:
+		m.ResetIssuedUserCount()
+		return nil
+	case recurringcreditbatch.FieldExcludedUserCount:
+		m.ResetExcludedUserCount()
+		return nil
+	case recurringcreditbatch.FieldUsageEligibleCount:
+		m.ResetUsageEligibleCount()
+		return nil
+	case recurringcreditbatch.FieldRechargeEligibleCount:
+		m.ResetRechargeEligibleCount()
+		return nil
+	case recurringcreditbatch.FieldAPIActiveCount:
+		m.ResetAPIActiveCount()
+		return nil
+	case recurringcreditbatch.FieldSiteActiveCount:
+		m.ResetSiteActiveCount()
+		return nil
+	case recurringcreditbatch.FieldBothActiveCount:
+		m.ResetBothActiveCount()
+		return nil
+	case recurringcreditbatch.FieldSnapshotCompletedAt:
+		m.ResetSnapshotCompletedAt()
+		return nil
+	case recurringcreditbatch.FieldIssuedAmount:
+		m.ResetIssuedAmount()
+		return nil
+	case recurringcreditbatch.FieldFailureCode:
+		m.ResetFailureCode()
+		return nil
+	case recurringcreditbatch.FieldFailureMessage:
+		m.ResetFailureMessage()
+		return nil
+	case recurringcreditbatch.FieldFinishedAt:
+		m.ResetFinishedAt()
+		return nil
+	case recurringcreditbatch.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case recurringcreditbatch.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditBatch field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RecurringCreditBatchMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RecurringCreditBatchMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RecurringCreditBatchMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RecurringCreditBatchMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RecurringCreditBatchMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RecurringCreditBatchMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RecurringCreditBatchMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown RecurringCreditBatch unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RecurringCreditBatchMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown RecurringCreditBatch edge %s", name)
+}
+
+// RecurringCreditTaskMutation represents an operation that mutates the RecurringCreditTask nodes in the graph.
+type RecurringCreditTaskMutation struct {
+	config
+	op                     Op
+	typ                    string
+	id                     *int64
+	name                   *string
+	admin_notes            *string
+	schedule_type          *string
+	day_of_month           *int
+	addday_of_month        *int
+	day_of_week            *int
+	addday_of_week         *int
+	local_time             *string
+	timezone               *string
+	amount                 *float64
+	addamount              *float64
+	validity_days          *int
+	addvalidity_days       *int
+	execution_mode         *string
+	remaining_runs         *int
+	addremaining_runs      *int
+	skip_count             *int
+	addskip_count          *int
+	status                 *string
+	next_run_at            *time.Time
+	version                *int
+	addversion             *int
+	idempotency_key        *string
+	created_by_admin_id    *int64
+	addcreated_by_admin_id *int64
+	created_by_admin_email *string
+	updated_by_admin_id    *int64
+	addupdated_by_admin_id *int64
+	updated_by_admin_email *string
+	deleted_at             *time.Time
+	created_at             *time.Time
+	updated_at             *time.Time
+	clearedFields          map[string]struct{}
+	done                   bool
+	oldValue               func(context.Context) (*RecurringCreditTask, error)
+	predicates             []predicate.RecurringCreditTask
+}
+
+var _ ent.Mutation = (*RecurringCreditTaskMutation)(nil)
+
+// recurringcredittaskOption allows management of the mutation configuration using functional options.
+type recurringcredittaskOption func(*RecurringCreditTaskMutation)
+
+// newRecurringCreditTaskMutation creates new mutation for the RecurringCreditTask entity.
+func newRecurringCreditTaskMutation(c config, op Op, opts ...recurringcredittaskOption) *RecurringCreditTaskMutation {
+	m := &RecurringCreditTaskMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRecurringCreditTask,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRecurringCreditTaskID sets the ID field of the mutation.
+func withRecurringCreditTaskID(id int64) recurringcredittaskOption {
+	return func(m *RecurringCreditTaskMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RecurringCreditTask
+		)
+		m.oldValue = func(ctx context.Context) (*RecurringCreditTask, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RecurringCreditTask.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRecurringCreditTask sets the old RecurringCreditTask of the mutation.
+func withRecurringCreditTask(node *RecurringCreditTask) recurringcredittaskOption {
+	return func(m *RecurringCreditTaskMutation) {
+		m.oldValue = func(context.Context) (*RecurringCreditTask, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RecurringCreditTaskMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RecurringCreditTaskMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RecurringCreditTaskMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RecurringCreditTaskMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RecurringCreditTask.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetName sets the "name" field.
+func (m *RecurringCreditTaskMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *RecurringCreditTaskMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *RecurringCreditTaskMutation) ResetName() {
+	m.name = nil
+}
+
+// SetAdminNotes sets the "admin_notes" field.
+func (m *RecurringCreditTaskMutation) SetAdminNotes(s string) {
+	m.admin_notes = &s
+}
+
+// AdminNotes returns the value of the "admin_notes" field in the mutation.
+func (m *RecurringCreditTaskMutation) AdminNotes() (r string, exists bool) {
+	v := m.admin_notes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAdminNotes returns the old "admin_notes" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldAdminNotes(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAdminNotes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAdminNotes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAdminNotes: %w", err)
+	}
+	return oldValue.AdminNotes, nil
+}
+
+// ResetAdminNotes resets all changes to the "admin_notes" field.
+func (m *RecurringCreditTaskMutation) ResetAdminNotes() {
+	m.admin_notes = nil
+}
+
+// SetScheduleType sets the "schedule_type" field.
+func (m *RecurringCreditTaskMutation) SetScheduleType(s string) {
+	m.schedule_type = &s
+}
+
+// ScheduleType returns the value of the "schedule_type" field in the mutation.
+func (m *RecurringCreditTaskMutation) ScheduleType() (r string, exists bool) {
+	v := m.schedule_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScheduleType returns the old "schedule_type" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldScheduleType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScheduleType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScheduleType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScheduleType: %w", err)
+	}
+	return oldValue.ScheduleType, nil
+}
+
+// ResetScheduleType resets all changes to the "schedule_type" field.
+func (m *RecurringCreditTaskMutation) ResetScheduleType() {
+	m.schedule_type = nil
+}
+
+// SetDayOfMonth sets the "day_of_month" field.
+func (m *RecurringCreditTaskMutation) SetDayOfMonth(i int) {
+	m.day_of_month = &i
+	m.addday_of_month = nil
+}
+
+// DayOfMonth returns the value of the "day_of_month" field in the mutation.
+func (m *RecurringCreditTaskMutation) DayOfMonth() (r int, exists bool) {
+	v := m.day_of_month
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDayOfMonth returns the old "day_of_month" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldDayOfMonth(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDayOfMonth is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDayOfMonth requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDayOfMonth: %w", err)
+	}
+	return oldValue.DayOfMonth, nil
+}
+
+// AddDayOfMonth adds i to the "day_of_month" field.
+func (m *RecurringCreditTaskMutation) AddDayOfMonth(i int) {
+	if m.addday_of_month != nil {
+		*m.addday_of_month += i
+	} else {
+		m.addday_of_month = &i
+	}
+}
+
+// AddedDayOfMonth returns the value that was added to the "day_of_month" field in this mutation.
+func (m *RecurringCreditTaskMutation) AddedDayOfMonth() (r int, exists bool) {
+	v := m.addday_of_month
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDayOfMonth clears the value of the "day_of_month" field.
+func (m *RecurringCreditTaskMutation) ClearDayOfMonth() {
+	m.day_of_month = nil
+	m.addday_of_month = nil
+	m.clearedFields[recurringcredittask.FieldDayOfMonth] = struct{}{}
+}
+
+// DayOfMonthCleared returns if the "day_of_month" field was cleared in this mutation.
+func (m *RecurringCreditTaskMutation) DayOfMonthCleared() bool {
+	_, ok := m.clearedFields[recurringcredittask.FieldDayOfMonth]
+	return ok
+}
+
+// ResetDayOfMonth resets all changes to the "day_of_month" field.
+func (m *RecurringCreditTaskMutation) ResetDayOfMonth() {
+	m.day_of_month = nil
+	m.addday_of_month = nil
+	delete(m.clearedFields, recurringcredittask.FieldDayOfMonth)
+}
+
+// SetDayOfWeek sets the "day_of_week" field.
+func (m *RecurringCreditTaskMutation) SetDayOfWeek(i int) {
+	m.day_of_week = &i
+	m.addday_of_week = nil
+}
+
+// DayOfWeek returns the value of the "day_of_week" field in the mutation.
+func (m *RecurringCreditTaskMutation) DayOfWeek() (r int, exists bool) {
+	v := m.day_of_week
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDayOfWeek returns the old "day_of_week" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldDayOfWeek(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDayOfWeek is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDayOfWeek requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDayOfWeek: %w", err)
+	}
+	return oldValue.DayOfWeek, nil
+}
+
+// AddDayOfWeek adds i to the "day_of_week" field.
+func (m *RecurringCreditTaskMutation) AddDayOfWeek(i int) {
+	if m.addday_of_week != nil {
+		*m.addday_of_week += i
+	} else {
+		m.addday_of_week = &i
+	}
+}
+
+// AddedDayOfWeek returns the value that was added to the "day_of_week" field in this mutation.
+func (m *RecurringCreditTaskMutation) AddedDayOfWeek() (r int, exists bool) {
+	v := m.addday_of_week
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDayOfWeek clears the value of the "day_of_week" field.
+func (m *RecurringCreditTaskMutation) ClearDayOfWeek() {
+	m.day_of_week = nil
+	m.addday_of_week = nil
+	m.clearedFields[recurringcredittask.FieldDayOfWeek] = struct{}{}
+}
+
+// DayOfWeekCleared returns if the "day_of_week" field was cleared in this mutation.
+func (m *RecurringCreditTaskMutation) DayOfWeekCleared() bool {
+	_, ok := m.clearedFields[recurringcredittask.FieldDayOfWeek]
+	return ok
+}
+
+// ResetDayOfWeek resets all changes to the "day_of_week" field.
+func (m *RecurringCreditTaskMutation) ResetDayOfWeek() {
+	m.day_of_week = nil
+	m.addday_of_week = nil
+	delete(m.clearedFields, recurringcredittask.FieldDayOfWeek)
+}
+
+// SetLocalTime sets the "local_time" field.
+func (m *RecurringCreditTaskMutation) SetLocalTime(s string) {
+	m.local_time = &s
+}
+
+// LocalTime returns the value of the "local_time" field in the mutation.
+func (m *RecurringCreditTaskMutation) LocalTime() (r string, exists bool) {
+	v := m.local_time
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLocalTime returns the old "local_time" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldLocalTime(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLocalTime is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLocalTime requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLocalTime: %w", err)
+	}
+	return oldValue.LocalTime, nil
+}
+
+// ResetLocalTime resets all changes to the "local_time" field.
+func (m *RecurringCreditTaskMutation) ResetLocalTime() {
+	m.local_time = nil
+}
+
+// SetTimezone sets the "timezone" field.
+func (m *RecurringCreditTaskMutation) SetTimezone(s string) {
+	m.timezone = &s
+}
+
+// Timezone returns the value of the "timezone" field in the mutation.
+func (m *RecurringCreditTaskMutation) Timezone() (r string, exists bool) {
+	v := m.timezone
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTimezone returns the old "timezone" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldTimezone(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTimezone is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTimezone requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTimezone: %w", err)
+	}
+	return oldValue.Timezone, nil
+}
+
+// ResetTimezone resets all changes to the "timezone" field.
+func (m *RecurringCreditTaskMutation) ResetTimezone() {
+	m.timezone = nil
+}
+
+// SetAmount sets the "amount" field.
+func (m *RecurringCreditTaskMutation) SetAmount(f float64) {
+	m.amount = &f
+	m.addamount = nil
+}
+
+// Amount returns the value of the "amount" field in the mutation.
+func (m *RecurringCreditTaskMutation) Amount() (r float64, exists bool) {
+	v := m.amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAmount returns the old "amount" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAmount: %w", err)
+	}
+	return oldValue.Amount, nil
+}
+
+// AddAmount adds f to the "amount" field.
+func (m *RecurringCreditTaskMutation) AddAmount(f float64) {
+	if m.addamount != nil {
+		*m.addamount += f
+	} else {
+		m.addamount = &f
+	}
+}
+
+// AddedAmount returns the value that was added to the "amount" field in this mutation.
+func (m *RecurringCreditTaskMutation) AddedAmount() (r float64, exists bool) {
+	v := m.addamount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAmount resets all changes to the "amount" field.
+func (m *RecurringCreditTaskMutation) ResetAmount() {
+	m.amount = nil
+	m.addamount = nil
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (m *RecurringCreditTaskMutation) SetValidityDays(i int) {
+	m.validity_days = &i
+	m.addvalidity_days = nil
+}
+
+// ValidityDays returns the value of the "validity_days" field in the mutation.
+func (m *RecurringCreditTaskMutation) ValidityDays() (r int, exists bool) {
+	v := m.validity_days
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValidityDays returns the old "validity_days" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldValidityDays(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValidityDays is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValidityDays requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValidityDays: %w", err)
+	}
+	return oldValue.ValidityDays, nil
+}
+
+// AddValidityDays adds i to the "validity_days" field.
+func (m *RecurringCreditTaskMutation) AddValidityDays(i int) {
+	if m.addvalidity_days != nil {
+		*m.addvalidity_days += i
+	} else {
+		m.addvalidity_days = &i
+	}
+}
+
+// AddedValidityDays returns the value that was added to the "validity_days" field in this mutation.
+func (m *RecurringCreditTaskMutation) AddedValidityDays() (r int, exists bool) {
+	v := m.addvalidity_days
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearValidityDays clears the value of the "validity_days" field.
+func (m *RecurringCreditTaskMutation) ClearValidityDays() {
+	m.validity_days = nil
+	m.addvalidity_days = nil
+	m.clearedFields[recurringcredittask.FieldValidityDays] = struct{}{}
+}
+
+// ValidityDaysCleared returns if the "validity_days" field was cleared in this mutation.
+func (m *RecurringCreditTaskMutation) ValidityDaysCleared() bool {
+	_, ok := m.clearedFields[recurringcredittask.FieldValidityDays]
+	return ok
+}
+
+// ResetValidityDays resets all changes to the "validity_days" field.
+func (m *RecurringCreditTaskMutation) ResetValidityDays() {
+	m.validity_days = nil
+	m.addvalidity_days = nil
+	delete(m.clearedFields, recurringcredittask.FieldValidityDays)
+}
+
+// SetExecutionMode sets the "execution_mode" field.
+func (m *RecurringCreditTaskMutation) SetExecutionMode(s string) {
+	m.execution_mode = &s
+}
+
+// ExecutionMode returns the value of the "execution_mode" field in the mutation.
+func (m *RecurringCreditTaskMutation) ExecutionMode() (r string, exists bool) {
+	v := m.execution_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExecutionMode returns the old "execution_mode" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldExecutionMode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExecutionMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExecutionMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExecutionMode: %w", err)
+	}
+	return oldValue.ExecutionMode, nil
+}
+
+// ResetExecutionMode resets all changes to the "execution_mode" field.
+func (m *RecurringCreditTaskMutation) ResetExecutionMode() {
+	m.execution_mode = nil
+}
+
+// SetRemainingRuns sets the "remaining_runs" field.
+func (m *RecurringCreditTaskMutation) SetRemainingRuns(i int) {
+	m.remaining_runs = &i
+	m.addremaining_runs = nil
+}
+
+// RemainingRuns returns the value of the "remaining_runs" field in the mutation.
+func (m *RecurringCreditTaskMutation) RemainingRuns() (r int, exists bool) {
+	v := m.remaining_runs
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRemainingRuns returns the old "remaining_runs" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldRemainingRuns(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRemainingRuns is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRemainingRuns requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRemainingRuns: %w", err)
+	}
+	return oldValue.RemainingRuns, nil
+}
+
+// AddRemainingRuns adds i to the "remaining_runs" field.
+func (m *RecurringCreditTaskMutation) AddRemainingRuns(i int) {
+	if m.addremaining_runs != nil {
+		*m.addremaining_runs += i
+	} else {
+		m.addremaining_runs = &i
+	}
+}
+
+// AddedRemainingRuns returns the value that was added to the "remaining_runs" field in this mutation.
+func (m *RecurringCreditTaskMutation) AddedRemainingRuns() (r int, exists bool) {
+	v := m.addremaining_runs
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearRemainingRuns clears the value of the "remaining_runs" field.
+func (m *RecurringCreditTaskMutation) ClearRemainingRuns() {
+	m.remaining_runs = nil
+	m.addremaining_runs = nil
+	m.clearedFields[recurringcredittask.FieldRemainingRuns] = struct{}{}
+}
+
+// RemainingRunsCleared returns if the "remaining_runs" field was cleared in this mutation.
+func (m *RecurringCreditTaskMutation) RemainingRunsCleared() bool {
+	_, ok := m.clearedFields[recurringcredittask.FieldRemainingRuns]
+	return ok
+}
+
+// ResetRemainingRuns resets all changes to the "remaining_runs" field.
+func (m *RecurringCreditTaskMutation) ResetRemainingRuns() {
+	m.remaining_runs = nil
+	m.addremaining_runs = nil
+	delete(m.clearedFields, recurringcredittask.FieldRemainingRuns)
+}
+
+// SetSkipCount sets the "skip_count" field.
+func (m *RecurringCreditTaskMutation) SetSkipCount(i int) {
+	m.skip_count = &i
+	m.addskip_count = nil
+}
+
+// SkipCount returns the value of the "skip_count" field in the mutation.
+func (m *RecurringCreditTaskMutation) SkipCount() (r int, exists bool) {
+	v := m.skip_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSkipCount returns the old "skip_count" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldSkipCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSkipCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSkipCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSkipCount: %w", err)
+	}
+	return oldValue.SkipCount, nil
+}
+
+// AddSkipCount adds i to the "skip_count" field.
+func (m *RecurringCreditTaskMutation) AddSkipCount(i int) {
+	if m.addskip_count != nil {
+		*m.addskip_count += i
+	} else {
+		m.addskip_count = &i
+	}
+}
+
+// AddedSkipCount returns the value that was added to the "skip_count" field in this mutation.
+func (m *RecurringCreditTaskMutation) AddedSkipCount() (r int, exists bool) {
+	v := m.addskip_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSkipCount resets all changes to the "skip_count" field.
+func (m *RecurringCreditTaskMutation) ResetSkipCount() {
+	m.skip_count = nil
+	m.addskip_count = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *RecurringCreditTaskMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *RecurringCreditTaskMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *RecurringCreditTaskMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetNextRunAt sets the "next_run_at" field.
+func (m *RecurringCreditTaskMutation) SetNextRunAt(t time.Time) {
+	m.next_run_at = &t
+}
+
+// NextRunAt returns the value of the "next_run_at" field in the mutation.
+func (m *RecurringCreditTaskMutation) NextRunAt() (r time.Time, exists bool) {
+	v := m.next_run_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNextRunAt returns the old "next_run_at" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldNextRunAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNextRunAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNextRunAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNextRunAt: %w", err)
+	}
+	return oldValue.NextRunAt, nil
+}
+
+// ClearNextRunAt clears the value of the "next_run_at" field.
+func (m *RecurringCreditTaskMutation) ClearNextRunAt() {
+	m.next_run_at = nil
+	m.clearedFields[recurringcredittask.FieldNextRunAt] = struct{}{}
+}
+
+// NextRunAtCleared returns if the "next_run_at" field was cleared in this mutation.
+func (m *RecurringCreditTaskMutation) NextRunAtCleared() bool {
+	_, ok := m.clearedFields[recurringcredittask.FieldNextRunAt]
+	return ok
+}
+
+// ResetNextRunAt resets all changes to the "next_run_at" field.
+func (m *RecurringCreditTaskMutation) ResetNextRunAt() {
+	m.next_run_at = nil
+	delete(m.clearedFields, recurringcredittask.FieldNextRunAt)
+}
+
+// SetVersion sets the "version" field.
+func (m *RecurringCreditTaskMutation) SetVersion(i int) {
+	m.version = &i
+	m.addversion = nil
+}
+
+// Version returns the value of the "version" field in the mutation.
+func (m *RecurringCreditTaskMutation) Version() (r int, exists bool) {
+	v := m.version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVersion returns the old "version" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldVersion(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVersion: %w", err)
+	}
+	return oldValue.Version, nil
+}
+
+// AddVersion adds i to the "version" field.
+func (m *RecurringCreditTaskMutation) AddVersion(i int) {
+	if m.addversion != nil {
+		*m.addversion += i
+	} else {
+		m.addversion = &i
+	}
+}
+
+// AddedVersion returns the value that was added to the "version" field in this mutation.
+func (m *RecurringCreditTaskMutation) AddedVersion() (r int, exists bool) {
+	v := m.addversion
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetVersion resets all changes to the "version" field.
+func (m *RecurringCreditTaskMutation) ResetVersion() {
+	m.version = nil
+	m.addversion = nil
+}
+
+// SetIdempotencyKey sets the "idempotency_key" field.
+func (m *RecurringCreditTaskMutation) SetIdempotencyKey(s string) {
+	m.idempotency_key = &s
+}
+
+// IdempotencyKey returns the value of the "idempotency_key" field in the mutation.
+func (m *RecurringCreditTaskMutation) IdempotencyKey() (r string, exists bool) {
+	v := m.idempotency_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIdempotencyKey returns the old "idempotency_key" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldIdempotencyKey(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIdempotencyKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIdempotencyKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIdempotencyKey: %w", err)
+	}
+	return oldValue.IdempotencyKey, nil
+}
+
+// ClearIdempotencyKey clears the value of the "idempotency_key" field.
+func (m *RecurringCreditTaskMutation) ClearIdempotencyKey() {
+	m.idempotency_key = nil
+	m.clearedFields[recurringcredittask.FieldIdempotencyKey] = struct{}{}
+}
+
+// IdempotencyKeyCleared returns if the "idempotency_key" field was cleared in this mutation.
+func (m *RecurringCreditTaskMutation) IdempotencyKeyCleared() bool {
+	_, ok := m.clearedFields[recurringcredittask.FieldIdempotencyKey]
+	return ok
+}
+
+// ResetIdempotencyKey resets all changes to the "idempotency_key" field.
+func (m *RecurringCreditTaskMutation) ResetIdempotencyKey() {
+	m.idempotency_key = nil
+	delete(m.clearedFields, recurringcredittask.FieldIdempotencyKey)
+}
+
+// SetCreatedByAdminID sets the "created_by_admin_id" field.
+func (m *RecurringCreditTaskMutation) SetCreatedByAdminID(i int64) {
+	m.created_by_admin_id = &i
+	m.addcreated_by_admin_id = nil
+}
+
+// CreatedByAdminID returns the value of the "created_by_admin_id" field in the mutation.
+func (m *RecurringCreditTaskMutation) CreatedByAdminID() (r int64, exists bool) {
+	v := m.created_by_admin_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedByAdminID returns the old "created_by_admin_id" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldCreatedByAdminID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedByAdminID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedByAdminID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedByAdminID: %w", err)
+	}
+	return oldValue.CreatedByAdminID, nil
+}
+
+// AddCreatedByAdminID adds i to the "created_by_admin_id" field.
+func (m *RecurringCreditTaskMutation) AddCreatedByAdminID(i int64) {
+	if m.addcreated_by_admin_id != nil {
+		*m.addcreated_by_admin_id += i
+	} else {
+		m.addcreated_by_admin_id = &i
+	}
+}
+
+// AddedCreatedByAdminID returns the value that was added to the "created_by_admin_id" field in this mutation.
+func (m *RecurringCreditTaskMutation) AddedCreatedByAdminID() (r int64, exists bool) {
+	v := m.addcreated_by_admin_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCreatedByAdminID resets all changes to the "created_by_admin_id" field.
+func (m *RecurringCreditTaskMutation) ResetCreatedByAdminID() {
+	m.created_by_admin_id = nil
+	m.addcreated_by_admin_id = nil
+}
+
+// SetCreatedByAdminEmail sets the "created_by_admin_email" field.
+func (m *RecurringCreditTaskMutation) SetCreatedByAdminEmail(s string) {
+	m.created_by_admin_email = &s
+}
+
+// CreatedByAdminEmail returns the value of the "created_by_admin_email" field in the mutation.
+func (m *RecurringCreditTaskMutation) CreatedByAdminEmail() (r string, exists bool) {
+	v := m.created_by_admin_email
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedByAdminEmail returns the old "created_by_admin_email" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldCreatedByAdminEmail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedByAdminEmail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedByAdminEmail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedByAdminEmail: %w", err)
+	}
+	return oldValue.CreatedByAdminEmail, nil
+}
+
+// ResetCreatedByAdminEmail resets all changes to the "created_by_admin_email" field.
+func (m *RecurringCreditTaskMutation) ResetCreatedByAdminEmail() {
+	m.created_by_admin_email = nil
+}
+
+// SetUpdatedByAdminID sets the "updated_by_admin_id" field.
+func (m *RecurringCreditTaskMutation) SetUpdatedByAdminID(i int64) {
+	m.updated_by_admin_id = &i
+	m.addupdated_by_admin_id = nil
+}
+
+// UpdatedByAdminID returns the value of the "updated_by_admin_id" field in the mutation.
+func (m *RecurringCreditTaskMutation) UpdatedByAdminID() (r int64, exists bool) {
+	v := m.updated_by_admin_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedByAdminID returns the old "updated_by_admin_id" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldUpdatedByAdminID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedByAdminID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedByAdminID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedByAdminID: %w", err)
+	}
+	return oldValue.UpdatedByAdminID, nil
+}
+
+// AddUpdatedByAdminID adds i to the "updated_by_admin_id" field.
+func (m *RecurringCreditTaskMutation) AddUpdatedByAdminID(i int64) {
+	if m.addupdated_by_admin_id != nil {
+		*m.addupdated_by_admin_id += i
+	} else {
+		m.addupdated_by_admin_id = &i
+	}
+}
+
+// AddedUpdatedByAdminID returns the value that was added to the "updated_by_admin_id" field in this mutation.
+func (m *RecurringCreditTaskMutation) AddedUpdatedByAdminID() (r int64, exists bool) {
+	v := m.addupdated_by_admin_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUpdatedByAdminID resets all changes to the "updated_by_admin_id" field.
+func (m *RecurringCreditTaskMutation) ResetUpdatedByAdminID() {
+	m.updated_by_admin_id = nil
+	m.addupdated_by_admin_id = nil
+}
+
+// SetUpdatedByAdminEmail sets the "updated_by_admin_email" field.
+func (m *RecurringCreditTaskMutation) SetUpdatedByAdminEmail(s string) {
+	m.updated_by_admin_email = &s
+}
+
+// UpdatedByAdminEmail returns the value of the "updated_by_admin_email" field in the mutation.
+func (m *RecurringCreditTaskMutation) UpdatedByAdminEmail() (r string, exists bool) {
+	v := m.updated_by_admin_email
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedByAdminEmail returns the old "updated_by_admin_email" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldUpdatedByAdminEmail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedByAdminEmail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedByAdminEmail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedByAdminEmail: %w", err)
+	}
+	return oldValue.UpdatedByAdminEmail, nil
+}
+
+// ResetUpdatedByAdminEmail resets all changes to the "updated_by_admin_email" field.
+func (m *RecurringCreditTaskMutation) ResetUpdatedByAdminEmail() {
+	m.updated_by_admin_email = nil
+}
+
+// SetDeletedAt sets the "deleted_at" field.
+func (m *RecurringCreditTaskMutation) SetDeletedAt(t time.Time) {
+	m.deleted_at = &t
+}
+
+// DeletedAt returns the value of the "deleted_at" field in the mutation.
+func (m *RecurringCreditTaskMutation) DeletedAt() (r time.Time, exists bool) {
+	v := m.deleted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDeletedAt returns the old "deleted_at" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldDeletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDeletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDeletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDeletedAt: %w", err)
+	}
+	return oldValue.DeletedAt, nil
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (m *RecurringCreditTaskMutation) ClearDeletedAt() {
+	m.deleted_at = nil
+	m.clearedFields[recurringcredittask.FieldDeletedAt] = struct{}{}
+}
+
+// DeletedAtCleared returns if the "deleted_at" field was cleared in this mutation.
+func (m *RecurringCreditTaskMutation) DeletedAtCleared() bool {
+	_, ok := m.clearedFields[recurringcredittask.FieldDeletedAt]
+	return ok
+}
+
+// ResetDeletedAt resets all changes to the "deleted_at" field.
+func (m *RecurringCreditTaskMutation) ResetDeletedAt() {
+	m.deleted_at = nil
+	delete(m.clearedFields, recurringcredittask.FieldDeletedAt)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *RecurringCreditTaskMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *RecurringCreditTaskMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *RecurringCreditTaskMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *RecurringCreditTaskMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *RecurringCreditTaskMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the RecurringCreditTask entity.
+// If the RecurringCreditTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *RecurringCreditTaskMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the RecurringCreditTaskMutation builder.
+func (m *RecurringCreditTaskMutation) Where(ps ...predicate.RecurringCreditTask) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RecurringCreditTaskMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RecurringCreditTaskMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RecurringCreditTask, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RecurringCreditTaskMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RecurringCreditTaskMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RecurringCreditTask).
+func (m *RecurringCreditTaskMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RecurringCreditTaskMutation) Fields() []string {
+	fields := make([]string, 0, 23)
+	if m.name != nil {
+		fields = append(fields, recurringcredittask.FieldName)
+	}
+	if m.admin_notes != nil {
+		fields = append(fields, recurringcredittask.FieldAdminNotes)
+	}
+	if m.schedule_type != nil {
+		fields = append(fields, recurringcredittask.FieldScheduleType)
+	}
+	if m.day_of_month != nil {
+		fields = append(fields, recurringcredittask.FieldDayOfMonth)
+	}
+	if m.day_of_week != nil {
+		fields = append(fields, recurringcredittask.FieldDayOfWeek)
+	}
+	if m.local_time != nil {
+		fields = append(fields, recurringcredittask.FieldLocalTime)
+	}
+	if m.timezone != nil {
+		fields = append(fields, recurringcredittask.FieldTimezone)
+	}
+	if m.amount != nil {
+		fields = append(fields, recurringcredittask.FieldAmount)
+	}
+	if m.validity_days != nil {
+		fields = append(fields, recurringcredittask.FieldValidityDays)
+	}
+	if m.execution_mode != nil {
+		fields = append(fields, recurringcredittask.FieldExecutionMode)
+	}
+	if m.remaining_runs != nil {
+		fields = append(fields, recurringcredittask.FieldRemainingRuns)
+	}
+	if m.skip_count != nil {
+		fields = append(fields, recurringcredittask.FieldSkipCount)
+	}
+	if m.status != nil {
+		fields = append(fields, recurringcredittask.FieldStatus)
+	}
+	if m.next_run_at != nil {
+		fields = append(fields, recurringcredittask.FieldNextRunAt)
+	}
+	if m.version != nil {
+		fields = append(fields, recurringcredittask.FieldVersion)
+	}
+	if m.idempotency_key != nil {
+		fields = append(fields, recurringcredittask.FieldIdempotencyKey)
+	}
+	if m.created_by_admin_id != nil {
+		fields = append(fields, recurringcredittask.FieldCreatedByAdminID)
+	}
+	if m.created_by_admin_email != nil {
+		fields = append(fields, recurringcredittask.FieldCreatedByAdminEmail)
+	}
+	if m.updated_by_admin_id != nil {
+		fields = append(fields, recurringcredittask.FieldUpdatedByAdminID)
+	}
+	if m.updated_by_admin_email != nil {
+		fields = append(fields, recurringcredittask.FieldUpdatedByAdminEmail)
+	}
+	if m.deleted_at != nil {
+		fields = append(fields, recurringcredittask.FieldDeletedAt)
+	}
+	if m.created_at != nil {
+		fields = append(fields, recurringcredittask.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, recurringcredittask.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RecurringCreditTaskMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case recurringcredittask.FieldName:
+		return m.Name()
+	case recurringcredittask.FieldAdminNotes:
+		return m.AdminNotes()
+	case recurringcredittask.FieldScheduleType:
+		return m.ScheduleType()
+	case recurringcredittask.FieldDayOfMonth:
+		return m.DayOfMonth()
+	case recurringcredittask.FieldDayOfWeek:
+		return m.DayOfWeek()
+	case recurringcredittask.FieldLocalTime:
+		return m.LocalTime()
+	case recurringcredittask.FieldTimezone:
+		return m.Timezone()
+	case recurringcredittask.FieldAmount:
+		return m.Amount()
+	case recurringcredittask.FieldValidityDays:
+		return m.ValidityDays()
+	case recurringcredittask.FieldExecutionMode:
+		return m.ExecutionMode()
+	case recurringcredittask.FieldRemainingRuns:
+		return m.RemainingRuns()
+	case recurringcredittask.FieldSkipCount:
+		return m.SkipCount()
+	case recurringcredittask.FieldStatus:
+		return m.Status()
+	case recurringcredittask.FieldNextRunAt:
+		return m.NextRunAt()
+	case recurringcredittask.FieldVersion:
+		return m.Version()
+	case recurringcredittask.FieldIdempotencyKey:
+		return m.IdempotencyKey()
+	case recurringcredittask.FieldCreatedByAdminID:
+		return m.CreatedByAdminID()
+	case recurringcredittask.FieldCreatedByAdminEmail:
+		return m.CreatedByAdminEmail()
+	case recurringcredittask.FieldUpdatedByAdminID:
+		return m.UpdatedByAdminID()
+	case recurringcredittask.FieldUpdatedByAdminEmail:
+		return m.UpdatedByAdminEmail()
+	case recurringcredittask.FieldDeletedAt:
+		return m.DeletedAt()
+	case recurringcredittask.FieldCreatedAt:
+		return m.CreatedAt()
+	case recurringcredittask.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RecurringCreditTaskMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case recurringcredittask.FieldName:
+		return m.OldName(ctx)
+	case recurringcredittask.FieldAdminNotes:
+		return m.OldAdminNotes(ctx)
+	case recurringcredittask.FieldScheduleType:
+		return m.OldScheduleType(ctx)
+	case recurringcredittask.FieldDayOfMonth:
+		return m.OldDayOfMonth(ctx)
+	case recurringcredittask.FieldDayOfWeek:
+		return m.OldDayOfWeek(ctx)
+	case recurringcredittask.FieldLocalTime:
+		return m.OldLocalTime(ctx)
+	case recurringcredittask.FieldTimezone:
+		return m.OldTimezone(ctx)
+	case recurringcredittask.FieldAmount:
+		return m.OldAmount(ctx)
+	case recurringcredittask.FieldValidityDays:
+		return m.OldValidityDays(ctx)
+	case recurringcredittask.FieldExecutionMode:
+		return m.OldExecutionMode(ctx)
+	case recurringcredittask.FieldRemainingRuns:
+		return m.OldRemainingRuns(ctx)
+	case recurringcredittask.FieldSkipCount:
+		return m.OldSkipCount(ctx)
+	case recurringcredittask.FieldStatus:
+		return m.OldStatus(ctx)
+	case recurringcredittask.FieldNextRunAt:
+		return m.OldNextRunAt(ctx)
+	case recurringcredittask.FieldVersion:
+		return m.OldVersion(ctx)
+	case recurringcredittask.FieldIdempotencyKey:
+		return m.OldIdempotencyKey(ctx)
+	case recurringcredittask.FieldCreatedByAdminID:
+		return m.OldCreatedByAdminID(ctx)
+	case recurringcredittask.FieldCreatedByAdminEmail:
+		return m.OldCreatedByAdminEmail(ctx)
+	case recurringcredittask.FieldUpdatedByAdminID:
+		return m.OldUpdatedByAdminID(ctx)
+	case recurringcredittask.FieldUpdatedByAdminEmail:
+		return m.OldUpdatedByAdminEmail(ctx)
+	case recurringcredittask.FieldDeletedAt:
+		return m.OldDeletedAt(ctx)
+	case recurringcredittask.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case recurringcredittask.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown RecurringCreditTask field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RecurringCreditTaskMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case recurringcredittask.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case recurringcredittask.FieldAdminNotes:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAdminNotes(v)
+		return nil
+	case recurringcredittask.FieldScheduleType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScheduleType(v)
+		return nil
+	case recurringcredittask.FieldDayOfMonth:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDayOfMonth(v)
+		return nil
+	case recurringcredittask.FieldDayOfWeek:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDayOfWeek(v)
+		return nil
+	case recurringcredittask.FieldLocalTime:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLocalTime(v)
+		return nil
+	case recurringcredittask.FieldTimezone:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTimezone(v)
+		return nil
+	case recurringcredittask.FieldAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAmount(v)
+		return nil
+	case recurringcredittask.FieldValidityDays:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValidityDays(v)
+		return nil
+	case recurringcredittask.FieldExecutionMode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExecutionMode(v)
+		return nil
+	case recurringcredittask.FieldRemainingRuns:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRemainingRuns(v)
+		return nil
+	case recurringcredittask.FieldSkipCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSkipCount(v)
+		return nil
+	case recurringcredittask.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case recurringcredittask.FieldNextRunAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNextRunAt(v)
+		return nil
+	case recurringcredittask.FieldVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVersion(v)
+		return nil
+	case recurringcredittask.FieldIdempotencyKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIdempotencyKey(v)
+		return nil
+	case recurringcredittask.FieldCreatedByAdminID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedByAdminID(v)
+		return nil
+	case recurringcredittask.FieldCreatedByAdminEmail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedByAdminEmail(v)
+		return nil
+	case recurringcredittask.FieldUpdatedByAdminID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedByAdminID(v)
+		return nil
+	case recurringcredittask.FieldUpdatedByAdminEmail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedByAdminEmail(v)
+		return nil
+	case recurringcredittask.FieldDeletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDeletedAt(v)
+		return nil
+	case recurringcredittask.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case recurringcredittask.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditTask field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RecurringCreditTaskMutation) AddedFields() []string {
+	var fields []string
+	if m.addday_of_month != nil {
+		fields = append(fields, recurringcredittask.FieldDayOfMonth)
+	}
+	if m.addday_of_week != nil {
+		fields = append(fields, recurringcredittask.FieldDayOfWeek)
+	}
+	if m.addamount != nil {
+		fields = append(fields, recurringcredittask.FieldAmount)
+	}
+	if m.addvalidity_days != nil {
+		fields = append(fields, recurringcredittask.FieldValidityDays)
+	}
+	if m.addremaining_runs != nil {
+		fields = append(fields, recurringcredittask.FieldRemainingRuns)
+	}
+	if m.addskip_count != nil {
+		fields = append(fields, recurringcredittask.FieldSkipCount)
+	}
+	if m.addversion != nil {
+		fields = append(fields, recurringcredittask.FieldVersion)
+	}
+	if m.addcreated_by_admin_id != nil {
+		fields = append(fields, recurringcredittask.FieldCreatedByAdminID)
+	}
+	if m.addupdated_by_admin_id != nil {
+		fields = append(fields, recurringcredittask.FieldUpdatedByAdminID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RecurringCreditTaskMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case recurringcredittask.FieldDayOfMonth:
+		return m.AddedDayOfMonth()
+	case recurringcredittask.FieldDayOfWeek:
+		return m.AddedDayOfWeek()
+	case recurringcredittask.FieldAmount:
+		return m.AddedAmount()
+	case recurringcredittask.FieldValidityDays:
+		return m.AddedValidityDays()
+	case recurringcredittask.FieldRemainingRuns:
+		return m.AddedRemainingRuns()
+	case recurringcredittask.FieldSkipCount:
+		return m.AddedSkipCount()
+	case recurringcredittask.FieldVersion:
+		return m.AddedVersion()
+	case recurringcredittask.FieldCreatedByAdminID:
+		return m.AddedCreatedByAdminID()
+	case recurringcredittask.FieldUpdatedByAdminID:
+		return m.AddedUpdatedByAdminID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RecurringCreditTaskMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case recurringcredittask.FieldDayOfMonth:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDayOfMonth(v)
+		return nil
+	case recurringcredittask.FieldDayOfWeek:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDayOfWeek(v)
+		return nil
+	case recurringcredittask.FieldAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAmount(v)
+		return nil
+	case recurringcredittask.FieldValidityDays:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddValidityDays(v)
+		return nil
+	case recurringcredittask.FieldRemainingRuns:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRemainingRuns(v)
+		return nil
+	case recurringcredittask.FieldSkipCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSkipCount(v)
+		return nil
+	case recurringcredittask.FieldVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddVersion(v)
+		return nil
+	case recurringcredittask.FieldCreatedByAdminID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCreatedByAdminID(v)
+		return nil
+	case recurringcredittask.FieldUpdatedByAdminID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUpdatedByAdminID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditTask numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RecurringCreditTaskMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(recurringcredittask.FieldDayOfMonth) {
+		fields = append(fields, recurringcredittask.FieldDayOfMonth)
+	}
+	if m.FieldCleared(recurringcredittask.FieldDayOfWeek) {
+		fields = append(fields, recurringcredittask.FieldDayOfWeek)
+	}
+	if m.FieldCleared(recurringcredittask.FieldValidityDays) {
+		fields = append(fields, recurringcredittask.FieldValidityDays)
+	}
+	if m.FieldCleared(recurringcredittask.FieldRemainingRuns) {
+		fields = append(fields, recurringcredittask.FieldRemainingRuns)
+	}
+	if m.FieldCleared(recurringcredittask.FieldNextRunAt) {
+		fields = append(fields, recurringcredittask.FieldNextRunAt)
+	}
+	if m.FieldCleared(recurringcredittask.FieldIdempotencyKey) {
+		fields = append(fields, recurringcredittask.FieldIdempotencyKey)
+	}
+	if m.FieldCleared(recurringcredittask.FieldDeletedAt) {
+		fields = append(fields, recurringcredittask.FieldDeletedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RecurringCreditTaskMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RecurringCreditTaskMutation) ClearField(name string) error {
+	switch name {
+	case recurringcredittask.FieldDayOfMonth:
+		m.ClearDayOfMonth()
+		return nil
+	case recurringcredittask.FieldDayOfWeek:
+		m.ClearDayOfWeek()
+		return nil
+	case recurringcredittask.FieldValidityDays:
+		m.ClearValidityDays()
+		return nil
+	case recurringcredittask.FieldRemainingRuns:
+		m.ClearRemainingRuns()
+		return nil
+	case recurringcredittask.FieldNextRunAt:
+		m.ClearNextRunAt()
+		return nil
+	case recurringcredittask.FieldIdempotencyKey:
+		m.ClearIdempotencyKey()
+		return nil
+	case recurringcredittask.FieldDeletedAt:
+		m.ClearDeletedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditTask nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RecurringCreditTaskMutation) ResetField(name string) error {
+	switch name {
+	case recurringcredittask.FieldName:
+		m.ResetName()
+		return nil
+	case recurringcredittask.FieldAdminNotes:
+		m.ResetAdminNotes()
+		return nil
+	case recurringcredittask.FieldScheduleType:
+		m.ResetScheduleType()
+		return nil
+	case recurringcredittask.FieldDayOfMonth:
+		m.ResetDayOfMonth()
+		return nil
+	case recurringcredittask.FieldDayOfWeek:
+		m.ResetDayOfWeek()
+		return nil
+	case recurringcredittask.FieldLocalTime:
+		m.ResetLocalTime()
+		return nil
+	case recurringcredittask.FieldTimezone:
+		m.ResetTimezone()
+		return nil
+	case recurringcredittask.FieldAmount:
+		m.ResetAmount()
+		return nil
+	case recurringcredittask.FieldValidityDays:
+		m.ResetValidityDays()
+		return nil
+	case recurringcredittask.FieldExecutionMode:
+		m.ResetExecutionMode()
+		return nil
+	case recurringcredittask.FieldRemainingRuns:
+		m.ResetRemainingRuns()
+		return nil
+	case recurringcredittask.FieldSkipCount:
+		m.ResetSkipCount()
+		return nil
+	case recurringcredittask.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case recurringcredittask.FieldNextRunAt:
+		m.ResetNextRunAt()
+		return nil
+	case recurringcredittask.FieldVersion:
+		m.ResetVersion()
+		return nil
+	case recurringcredittask.FieldIdempotencyKey:
+		m.ResetIdempotencyKey()
+		return nil
+	case recurringcredittask.FieldCreatedByAdminID:
+		m.ResetCreatedByAdminID()
+		return nil
+	case recurringcredittask.FieldCreatedByAdminEmail:
+		m.ResetCreatedByAdminEmail()
+		return nil
+	case recurringcredittask.FieldUpdatedByAdminID:
+		m.ResetUpdatedByAdminID()
+		return nil
+	case recurringcredittask.FieldUpdatedByAdminEmail:
+		m.ResetUpdatedByAdminEmail()
+		return nil
+	case recurringcredittask.FieldDeletedAt:
+		m.ResetDeletedAt()
+		return nil
+	case recurringcredittask.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case recurringcredittask.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditTask field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RecurringCreditTaskMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RecurringCreditTaskMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RecurringCreditTaskMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RecurringCreditTaskMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RecurringCreditTaskMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RecurringCreditTaskMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RecurringCreditTaskMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown RecurringCreditTask unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RecurringCreditTaskMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown RecurringCreditTask edge %s", name)
+}
+
+// RecurringCreditTaskAuditMutation represents an operation that mutates the RecurringCreditTaskAudit nodes in the graph.
+type RecurringCreditTaskAuditMutation struct {
+	config
+	op              Op
+	typ             string
+	id              *int64
+	task_id         *int64
+	addtask_id      *int64
+	admin_id        *int64
+	addadmin_id     *int64
+	admin_email     *string
+	client_ip       *string
+	action          *string
+	before_snapshot *map[string]interface{}
+	after_snapshot  *map[string]interface{}
+	created_at      *time.Time
+	clearedFields   map[string]struct{}
+	done            bool
+	oldValue        func(context.Context) (*RecurringCreditTaskAudit, error)
+	predicates      []predicate.RecurringCreditTaskAudit
+}
+
+var _ ent.Mutation = (*RecurringCreditTaskAuditMutation)(nil)
+
+// recurringcredittaskauditOption allows management of the mutation configuration using functional options.
+type recurringcredittaskauditOption func(*RecurringCreditTaskAuditMutation)
+
+// newRecurringCreditTaskAuditMutation creates new mutation for the RecurringCreditTaskAudit entity.
+func newRecurringCreditTaskAuditMutation(c config, op Op, opts ...recurringcredittaskauditOption) *RecurringCreditTaskAuditMutation {
+	m := &RecurringCreditTaskAuditMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRecurringCreditTaskAudit,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRecurringCreditTaskAuditID sets the ID field of the mutation.
+func withRecurringCreditTaskAuditID(id int64) recurringcredittaskauditOption {
+	return func(m *RecurringCreditTaskAuditMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RecurringCreditTaskAudit
+		)
+		m.oldValue = func(ctx context.Context) (*RecurringCreditTaskAudit, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RecurringCreditTaskAudit.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRecurringCreditTaskAudit sets the old RecurringCreditTaskAudit of the mutation.
+func withRecurringCreditTaskAudit(node *RecurringCreditTaskAudit) recurringcredittaskauditOption {
+	return func(m *RecurringCreditTaskAuditMutation) {
+		m.oldValue = func(context.Context) (*RecurringCreditTaskAudit, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RecurringCreditTaskAuditMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RecurringCreditTaskAuditMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RecurringCreditTaskAuditMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RecurringCreditTaskAuditMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RecurringCreditTaskAudit.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetTaskID sets the "task_id" field.
+func (m *RecurringCreditTaskAuditMutation) SetTaskID(i int64) {
+	m.task_id = &i
+	m.addtask_id = nil
+}
+
+// TaskID returns the value of the "task_id" field in the mutation.
+func (m *RecurringCreditTaskAuditMutation) TaskID() (r int64, exists bool) {
+	v := m.task_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTaskID returns the old "task_id" field's value of the RecurringCreditTaskAudit entity.
+// If the RecurringCreditTaskAudit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskAuditMutation) OldTaskID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTaskID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTaskID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTaskID: %w", err)
+	}
+	return oldValue.TaskID, nil
+}
+
+// AddTaskID adds i to the "task_id" field.
+func (m *RecurringCreditTaskAuditMutation) AddTaskID(i int64) {
+	if m.addtask_id != nil {
+		*m.addtask_id += i
+	} else {
+		m.addtask_id = &i
+	}
+}
+
+// AddedTaskID returns the value that was added to the "task_id" field in this mutation.
+func (m *RecurringCreditTaskAuditMutation) AddedTaskID() (r int64, exists bool) {
+	v := m.addtask_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTaskID resets all changes to the "task_id" field.
+func (m *RecurringCreditTaskAuditMutation) ResetTaskID() {
+	m.task_id = nil
+	m.addtask_id = nil
+}
+
+// SetAdminID sets the "admin_id" field.
+func (m *RecurringCreditTaskAuditMutation) SetAdminID(i int64) {
+	m.admin_id = &i
+	m.addadmin_id = nil
+}
+
+// AdminID returns the value of the "admin_id" field in the mutation.
+func (m *RecurringCreditTaskAuditMutation) AdminID() (r int64, exists bool) {
+	v := m.admin_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAdminID returns the old "admin_id" field's value of the RecurringCreditTaskAudit entity.
+// If the RecurringCreditTaskAudit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskAuditMutation) OldAdminID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAdminID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAdminID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAdminID: %w", err)
+	}
+	return oldValue.AdminID, nil
+}
+
+// AddAdminID adds i to the "admin_id" field.
+func (m *RecurringCreditTaskAuditMutation) AddAdminID(i int64) {
+	if m.addadmin_id != nil {
+		*m.addadmin_id += i
+	} else {
+		m.addadmin_id = &i
+	}
+}
+
+// AddedAdminID returns the value that was added to the "admin_id" field in this mutation.
+func (m *RecurringCreditTaskAuditMutation) AddedAdminID() (r int64, exists bool) {
+	v := m.addadmin_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAdminID resets all changes to the "admin_id" field.
+func (m *RecurringCreditTaskAuditMutation) ResetAdminID() {
+	m.admin_id = nil
+	m.addadmin_id = nil
+}
+
+// SetAdminEmail sets the "admin_email" field.
+func (m *RecurringCreditTaskAuditMutation) SetAdminEmail(s string) {
+	m.admin_email = &s
+}
+
+// AdminEmail returns the value of the "admin_email" field in the mutation.
+func (m *RecurringCreditTaskAuditMutation) AdminEmail() (r string, exists bool) {
+	v := m.admin_email
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAdminEmail returns the old "admin_email" field's value of the RecurringCreditTaskAudit entity.
+// If the RecurringCreditTaskAudit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskAuditMutation) OldAdminEmail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAdminEmail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAdminEmail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAdminEmail: %w", err)
+	}
+	return oldValue.AdminEmail, nil
+}
+
+// ResetAdminEmail resets all changes to the "admin_email" field.
+func (m *RecurringCreditTaskAuditMutation) ResetAdminEmail() {
+	m.admin_email = nil
+}
+
+// SetClientIP sets the "client_ip" field.
+func (m *RecurringCreditTaskAuditMutation) SetClientIP(s string) {
+	m.client_ip = &s
+}
+
+// ClientIP returns the value of the "client_ip" field in the mutation.
+func (m *RecurringCreditTaskAuditMutation) ClientIP() (r string, exists bool) {
+	v := m.client_ip
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClientIP returns the old "client_ip" field's value of the RecurringCreditTaskAudit entity.
+// If the RecurringCreditTaskAudit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskAuditMutation) OldClientIP(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClientIP is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClientIP requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClientIP: %w", err)
+	}
+	return oldValue.ClientIP, nil
+}
+
+// ResetClientIP resets all changes to the "client_ip" field.
+func (m *RecurringCreditTaskAuditMutation) ResetClientIP() {
+	m.client_ip = nil
+}
+
+// SetAction sets the "action" field.
+func (m *RecurringCreditTaskAuditMutation) SetAction(s string) {
+	m.action = &s
+}
+
+// Action returns the value of the "action" field in the mutation.
+func (m *RecurringCreditTaskAuditMutation) Action() (r string, exists bool) {
+	v := m.action
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAction returns the old "action" field's value of the RecurringCreditTaskAudit entity.
+// If the RecurringCreditTaskAudit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskAuditMutation) OldAction(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAction is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAction requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAction: %w", err)
+	}
+	return oldValue.Action, nil
+}
+
+// ResetAction resets all changes to the "action" field.
+func (m *RecurringCreditTaskAuditMutation) ResetAction() {
+	m.action = nil
+}
+
+// SetBeforeSnapshot sets the "before_snapshot" field.
+func (m *RecurringCreditTaskAuditMutation) SetBeforeSnapshot(value map[string]interface{}) {
+	m.before_snapshot = &value
+}
+
+// BeforeSnapshot returns the value of the "before_snapshot" field in the mutation.
+func (m *RecurringCreditTaskAuditMutation) BeforeSnapshot() (r map[string]interface{}, exists bool) {
+	v := m.before_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBeforeSnapshot returns the old "before_snapshot" field's value of the RecurringCreditTaskAudit entity.
+// If the RecurringCreditTaskAudit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskAuditMutation) OldBeforeSnapshot(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBeforeSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBeforeSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBeforeSnapshot: %w", err)
+	}
+	return oldValue.BeforeSnapshot, nil
+}
+
+// ClearBeforeSnapshot clears the value of the "before_snapshot" field.
+func (m *RecurringCreditTaskAuditMutation) ClearBeforeSnapshot() {
+	m.before_snapshot = nil
+	m.clearedFields[recurringcredittaskaudit.FieldBeforeSnapshot] = struct{}{}
+}
+
+// BeforeSnapshotCleared returns if the "before_snapshot" field was cleared in this mutation.
+func (m *RecurringCreditTaskAuditMutation) BeforeSnapshotCleared() bool {
+	_, ok := m.clearedFields[recurringcredittaskaudit.FieldBeforeSnapshot]
+	return ok
+}
+
+// ResetBeforeSnapshot resets all changes to the "before_snapshot" field.
+func (m *RecurringCreditTaskAuditMutation) ResetBeforeSnapshot() {
+	m.before_snapshot = nil
+	delete(m.clearedFields, recurringcredittaskaudit.FieldBeforeSnapshot)
+}
+
+// SetAfterSnapshot sets the "after_snapshot" field.
+func (m *RecurringCreditTaskAuditMutation) SetAfterSnapshot(value map[string]interface{}) {
+	m.after_snapshot = &value
+}
+
+// AfterSnapshot returns the value of the "after_snapshot" field in the mutation.
+func (m *RecurringCreditTaskAuditMutation) AfterSnapshot() (r map[string]interface{}, exists bool) {
+	v := m.after_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAfterSnapshot returns the old "after_snapshot" field's value of the RecurringCreditTaskAudit entity.
+// If the RecurringCreditTaskAudit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskAuditMutation) OldAfterSnapshot(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAfterSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAfterSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAfterSnapshot: %w", err)
+	}
+	return oldValue.AfterSnapshot, nil
+}
+
+// ClearAfterSnapshot clears the value of the "after_snapshot" field.
+func (m *RecurringCreditTaskAuditMutation) ClearAfterSnapshot() {
+	m.after_snapshot = nil
+	m.clearedFields[recurringcredittaskaudit.FieldAfterSnapshot] = struct{}{}
+}
+
+// AfterSnapshotCleared returns if the "after_snapshot" field was cleared in this mutation.
+func (m *RecurringCreditTaskAuditMutation) AfterSnapshotCleared() bool {
+	_, ok := m.clearedFields[recurringcredittaskaudit.FieldAfterSnapshot]
+	return ok
+}
+
+// ResetAfterSnapshot resets all changes to the "after_snapshot" field.
+func (m *RecurringCreditTaskAuditMutation) ResetAfterSnapshot() {
+	m.after_snapshot = nil
+	delete(m.clearedFields, recurringcredittaskaudit.FieldAfterSnapshot)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *RecurringCreditTaskAuditMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *RecurringCreditTaskAuditMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the RecurringCreditTaskAudit entity.
+// If the RecurringCreditTaskAudit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditTaskAuditMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *RecurringCreditTaskAuditMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the RecurringCreditTaskAuditMutation builder.
+func (m *RecurringCreditTaskAuditMutation) Where(ps ...predicate.RecurringCreditTaskAudit) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RecurringCreditTaskAuditMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RecurringCreditTaskAuditMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RecurringCreditTaskAudit, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RecurringCreditTaskAuditMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RecurringCreditTaskAuditMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RecurringCreditTaskAudit).
+func (m *RecurringCreditTaskAuditMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RecurringCreditTaskAuditMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.task_id != nil {
+		fields = append(fields, recurringcredittaskaudit.FieldTaskID)
+	}
+	if m.admin_id != nil {
+		fields = append(fields, recurringcredittaskaudit.FieldAdminID)
+	}
+	if m.admin_email != nil {
+		fields = append(fields, recurringcredittaskaudit.FieldAdminEmail)
+	}
+	if m.client_ip != nil {
+		fields = append(fields, recurringcredittaskaudit.FieldClientIP)
+	}
+	if m.action != nil {
+		fields = append(fields, recurringcredittaskaudit.FieldAction)
+	}
+	if m.before_snapshot != nil {
+		fields = append(fields, recurringcredittaskaudit.FieldBeforeSnapshot)
+	}
+	if m.after_snapshot != nil {
+		fields = append(fields, recurringcredittaskaudit.FieldAfterSnapshot)
+	}
+	if m.created_at != nil {
+		fields = append(fields, recurringcredittaskaudit.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RecurringCreditTaskAuditMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case recurringcredittaskaudit.FieldTaskID:
+		return m.TaskID()
+	case recurringcredittaskaudit.FieldAdminID:
+		return m.AdminID()
+	case recurringcredittaskaudit.FieldAdminEmail:
+		return m.AdminEmail()
+	case recurringcredittaskaudit.FieldClientIP:
+		return m.ClientIP()
+	case recurringcredittaskaudit.FieldAction:
+		return m.Action()
+	case recurringcredittaskaudit.FieldBeforeSnapshot:
+		return m.BeforeSnapshot()
+	case recurringcredittaskaudit.FieldAfterSnapshot:
+		return m.AfterSnapshot()
+	case recurringcredittaskaudit.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RecurringCreditTaskAuditMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case recurringcredittaskaudit.FieldTaskID:
+		return m.OldTaskID(ctx)
+	case recurringcredittaskaudit.FieldAdminID:
+		return m.OldAdminID(ctx)
+	case recurringcredittaskaudit.FieldAdminEmail:
+		return m.OldAdminEmail(ctx)
+	case recurringcredittaskaudit.FieldClientIP:
+		return m.OldClientIP(ctx)
+	case recurringcredittaskaudit.FieldAction:
+		return m.OldAction(ctx)
+	case recurringcredittaskaudit.FieldBeforeSnapshot:
+		return m.OldBeforeSnapshot(ctx)
+	case recurringcredittaskaudit.FieldAfterSnapshot:
+		return m.OldAfterSnapshot(ctx)
+	case recurringcredittaskaudit.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown RecurringCreditTaskAudit field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RecurringCreditTaskAuditMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case recurringcredittaskaudit.FieldTaskID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTaskID(v)
+		return nil
+	case recurringcredittaskaudit.FieldAdminID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAdminID(v)
+		return nil
+	case recurringcredittaskaudit.FieldAdminEmail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAdminEmail(v)
+		return nil
+	case recurringcredittaskaudit.FieldClientIP:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClientIP(v)
+		return nil
+	case recurringcredittaskaudit.FieldAction:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAction(v)
+		return nil
+	case recurringcredittaskaudit.FieldBeforeSnapshot:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBeforeSnapshot(v)
+		return nil
+	case recurringcredittaskaudit.FieldAfterSnapshot:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAfterSnapshot(v)
+		return nil
+	case recurringcredittaskaudit.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditTaskAudit field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RecurringCreditTaskAuditMutation) AddedFields() []string {
+	var fields []string
+	if m.addtask_id != nil {
+		fields = append(fields, recurringcredittaskaudit.FieldTaskID)
+	}
+	if m.addadmin_id != nil {
+		fields = append(fields, recurringcredittaskaudit.FieldAdminID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RecurringCreditTaskAuditMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case recurringcredittaskaudit.FieldTaskID:
+		return m.AddedTaskID()
+	case recurringcredittaskaudit.FieldAdminID:
+		return m.AddedAdminID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RecurringCreditTaskAuditMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case recurringcredittaskaudit.FieldTaskID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTaskID(v)
+		return nil
+	case recurringcredittaskaudit.FieldAdminID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAdminID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditTaskAudit numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RecurringCreditTaskAuditMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(recurringcredittaskaudit.FieldBeforeSnapshot) {
+		fields = append(fields, recurringcredittaskaudit.FieldBeforeSnapshot)
+	}
+	if m.FieldCleared(recurringcredittaskaudit.FieldAfterSnapshot) {
+		fields = append(fields, recurringcredittaskaudit.FieldAfterSnapshot)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RecurringCreditTaskAuditMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RecurringCreditTaskAuditMutation) ClearField(name string) error {
+	switch name {
+	case recurringcredittaskaudit.FieldBeforeSnapshot:
+		m.ClearBeforeSnapshot()
+		return nil
+	case recurringcredittaskaudit.FieldAfterSnapshot:
+		m.ClearAfterSnapshot()
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditTaskAudit nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RecurringCreditTaskAuditMutation) ResetField(name string) error {
+	switch name {
+	case recurringcredittaskaudit.FieldTaskID:
+		m.ResetTaskID()
+		return nil
+	case recurringcredittaskaudit.FieldAdminID:
+		m.ResetAdminID()
+		return nil
+	case recurringcredittaskaudit.FieldAdminEmail:
+		m.ResetAdminEmail()
+		return nil
+	case recurringcredittaskaudit.FieldClientIP:
+		m.ResetClientIP()
+		return nil
+	case recurringcredittaskaudit.FieldAction:
+		m.ResetAction()
+		return nil
+	case recurringcredittaskaudit.FieldBeforeSnapshot:
+		m.ResetBeforeSnapshot()
+		return nil
+	case recurringcredittaskaudit.FieldAfterSnapshot:
+		m.ResetAfterSnapshot()
+		return nil
+	case recurringcredittaskaudit.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditTaskAudit field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RecurringCreditTaskAuditMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RecurringCreditTaskAuditMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RecurringCreditTaskAuditMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RecurringCreditTaskAuditMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RecurringCreditTaskAuditMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RecurringCreditTaskAuditMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RecurringCreditTaskAuditMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown RecurringCreditTaskAudit unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RecurringCreditTaskAuditMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown RecurringCreditTaskAudit edge %s", name)
+}
+
+// RecurringCreditUserItemMutation represents an operation that mutates the RecurringCreditUserItem nodes in the graph.
+type RecurringCreditUserItemMutation struct {
+	config
+	op                   Op
+	typ                  string
+	id                   *int64
+	batch_id             *int64
+	addbatch_id          *int64
+	user_id              *int64
+	adduser_id           *int64
+	email                *string
+	username             *string
+	user_status          *string
+	user_deleted         *bool
+	actual_cost          *float64
+	addactual_cost       *float64
+	net_recharge         *float64
+	addnet_recharge      *float64
+	api_last_used_at     *time.Time
+	site_last_active_at  *time.Time
+	qualification_reason *string
+	grant_amount         *float64
+	addgrant_amount      *float64
+	grant_id             *int64
+	addgrant_id          *int64
+	result               *string
+	exclusion_reason     *string
+	clearedFields        map[string]struct{}
+	done                 bool
+	oldValue             func(context.Context) (*RecurringCreditUserItem, error)
+	predicates           []predicate.RecurringCreditUserItem
+}
+
+var _ ent.Mutation = (*RecurringCreditUserItemMutation)(nil)
+
+// recurringcredituseritemOption allows management of the mutation configuration using functional options.
+type recurringcredituseritemOption func(*RecurringCreditUserItemMutation)
+
+// newRecurringCreditUserItemMutation creates new mutation for the RecurringCreditUserItem entity.
+func newRecurringCreditUserItemMutation(c config, op Op, opts ...recurringcredituseritemOption) *RecurringCreditUserItemMutation {
+	m := &RecurringCreditUserItemMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRecurringCreditUserItem,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRecurringCreditUserItemID sets the ID field of the mutation.
+func withRecurringCreditUserItemID(id int64) recurringcredituseritemOption {
+	return func(m *RecurringCreditUserItemMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RecurringCreditUserItem
+		)
+		m.oldValue = func(ctx context.Context) (*RecurringCreditUserItem, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RecurringCreditUserItem.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRecurringCreditUserItem sets the old RecurringCreditUserItem of the mutation.
+func withRecurringCreditUserItem(node *RecurringCreditUserItem) recurringcredituseritemOption {
+	return func(m *RecurringCreditUserItemMutation) {
+		m.oldValue = func(context.Context) (*RecurringCreditUserItem, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RecurringCreditUserItemMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RecurringCreditUserItemMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RecurringCreditUserItemMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RecurringCreditUserItemMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RecurringCreditUserItem.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetBatchID sets the "batch_id" field.
+func (m *RecurringCreditUserItemMutation) SetBatchID(i int64) {
+	m.batch_id = &i
+	m.addbatch_id = nil
+}
+
+// BatchID returns the value of the "batch_id" field in the mutation.
+func (m *RecurringCreditUserItemMutation) BatchID() (r int64, exists bool) {
+	v := m.batch_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBatchID returns the old "batch_id" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldBatchID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBatchID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBatchID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBatchID: %w", err)
+	}
+	return oldValue.BatchID, nil
+}
+
+// AddBatchID adds i to the "batch_id" field.
+func (m *RecurringCreditUserItemMutation) AddBatchID(i int64) {
+	if m.addbatch_id != nil {
+		*m.addbatch_id += i
+	} else {
+		m.addbatch_id = &i
+	}
+}
+
+// AddedBatchID returns the value that was added to the "batch_id" field in this mutation.
+func (m *RecurringCreditUserItemMutation) AddedBatchID() (r int64, exists bool) {
+	v := m.addbatch_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBatchID resets all changes to the "batch_id" field.
+func (m *RecurringCreditUserItemMutation) ResetBatchID() {
+	m.batch_id = nil
+	m.addbatch_id = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *RecurringCreditUserItemMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *RecurringCreditUserItemMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *RecurringCreditUserItemMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *RecurringCreditUserItemMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *RecurringCreditUserItemMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetEmail sets the "email" field.
+func (m *RecurringCreditUserItemMutation) SetEmail(s string) {
+	m.email = &s
+}
+
+// Email returns the value of the "email" field in the mutation.
+func (m *RecurringCreditUserItemMutation) Email() (r string, exists bool) {
+	v := m.email
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmail returns the old "email" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldEmail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmail: %w", err)
+	}
+	return oldValue.Email, nil
+}
+
+// ResetEmail resets all changes to the "email" field.
+func (m *RecurringCreditUserItemMutation) ResetEmail() {
+	m.email = nil
+}
+
+// SetUsername sets the "username" field.
+func (m *RecurringCreditUserItemMutation) SetUsername(s string) {
+	m.username = &s
+}
+
+// Username returns the value of the "username" field in the mutation.
+func (m *RecurringCreditUserItemMutation) Username() (r string, exists bool) {
+	v := m.username
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsername returns the old "username" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldUsername(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsername is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsername requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsername: %w", err)
+	}
+	return oldValue.Username, nil
+}
+
+// ResetUsername resets all changes to the "username" field.
+func (m *RecurringCreditUserItemMutation) ResetUsername() {
+	m.username = nil
+}
+
+// SetUserStatus sets the "user_status" field.
+func (m *RecurringCreditUserItemMutation) SetUserStatus(s string) {
+	m.user_status = &s
+}
+
+// UserStatus returns the value of the "user_status" field in the mutation.
+func (m *RecurringCreditUserItemMutation) UserStatus() (r string, exists bool) {
+	v := m.user_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserStatus returns the old "user_status" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldUserStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserStatus: %w", err)
+	}
+	return oldValue.UserStatus, nil
+}
+
+// ResetUserStatus resets all changes to the "user_status" field.
+func (m *RecurringCreditUserItemMutation) ResetUserStatus() {
+	m.user_status = nil
+}
+
+// SetUserDeleted sets the "user_deleted" field.
+func (m *RecurringCreditUserItemMutation) SetUserDeleted(b bool) {
+	m.user_deleted = &b
+}
+
+// UserDeleted returns the value of the "user_deleted" field in the mutation.
+func (m *RecurringCreditUserItemMutation) UserDeleted() (r bool, exists bool) {
+	v := m.user_deleted
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserDeleted returns the old "user_deleted" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldUserDeleted(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserDeleted is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserDeleted requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserDeleted: %w", err)
+	}
+	return oldValue.UserDeleted, nil
+}
+
+// ResetUserDeleted resets all changes to the "user_deleted" field.
+func (m *RecurringCreditUserItemMutation) ResetUserDeleted() {
+	m.user_deleted = nil
+}
+
+// SetActualCost sets the "actual_cost" field.
+func (m *RecurringCreditUserItemMutation) SetActualCost(f float64) {
+	m.actual_cost = &f
+	m.addactual_cost = nil
+}
+
+// ActualCost returns the value of the "actual_cost" field in the mutation.
+func (m *RecurringCreditUserItemMutation) ActualCost() (r float64, exists bool) {
+	v := m.actual_cost
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActualCost returns the old "actual_cost" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldActualCost(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActualCost is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActualCost requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActualCost: %w", err)
+	}
+	return oldValue.ActualCost, nil
+}
+
+// AddActualCost adds f to the "actual_cost" field.
+func (m *RecurringCreditUserItemMutation) AddActualCost(f float64) {
+	if m.addactual_cost != nil {
+		*m.addactual_cost += f
+	} else {
+		m.addactual_cost = &f
+	}
+}
+
+// AddedActualCost returns the value that was added to the "actual_cost" field in this mutation.
+func (m *RecurringCreditUserItemMutation) AddedActualCost() (r float64, exists bool) {
+	v := m.addactual_cost
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetActualCost resets all changes to the "actual_cost" field.
+func (m *RecurringCreditUserItemMutation) ResetActualCost() {
+	m.actual_cost = nil
+	m.addactual_cost = nil
+}
+
+// SetNetRecharge sets the "net_recharge" field.
+func (m *RecurringCreditUserItemMutation) SetNetRecharge(f float64) {
+	m.net_recharge = &f
+	m.addnet_recharge = nil
+}
+
+// NetRecharge returns the value of the "net_recharge" field in the mutation.
+func (m *RecurringCreditUserItemMutation) NetRecharge() (r float64, exists bool) {
+	v := m.net_recharge
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNetRecharge returns the old "net_recharge" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldNetRecharge(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNetRecharge is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNetRecharge requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNetRecharge: %w", err)
+	}
+	return oldValue.NetRecharge, nil
+}
+
+// AddNetRecharge adds f to the "net_recharge" field.
+func (m *RecurringCreditUserItemMutation) AddNetRecharge(f float64) {
+	if m.addnet_recharge != nil {
+		*m.addnet_recharge += f
+	} else {
+		m.addnet_recharge = &f
+	}
+}
+
+// AddedNetRecharge returns the value that was added to the "net_recharge" field in this mutation.
+func (m *RecurringCreditUserItemMutation) AddedNetRecharge() (r float64, exists bool) {
+	v := m.addnet_recharge
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetNetRecharge resets all changes to the "net_recharge" field.
+func (m *RecurringCreditUserItemMutation) ResetNetRecharge() {
+	m.net_recharge = nil
+	m.addnet_recharge = nil
+}
+
+// SetAPILastUsedAt sets the "api_last_used_at" field.
+func (m *RecurringCreditUserItemMutation) SetAPILastUsedAt(t time.Time) {
+	m.api_last_used_at = &t
+}
+
+// APILastUsedAt returns the value of the "api_last_used_at" field in the mutation.
+func (m *RecurringCreditUserItemMutation) APILastUsedAt() (r time.Time, exists bool) {
+	v := m.api_last_used_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPILastUsedAt returns the old "api_last_used_at" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldAPILastUsedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPILastUsedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPILastUsedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPILastUsedAt: %w", err)
+	}
+	return oldValue.APILastUsedAt, nil
+}
+
+// ClearAPILastUsedAt clears the value of the "api_last_used_at" field.
+func (m *RecurringCreditUserItemMutation) ClearAPILastUsedAt() {
+	m.api_last_used_at = nil
+	m.clearedFields[recurringcredituseritem.FieldAPILastUsedAt] = struct{}{}
+}
+
+// APILastUsedAtCleared returns if the "api_last_used_at" field was cleared in this mutation.
+func (m *RecurringCreditUserItemMutation) APILastUsedAtCleared() bool {
+	_, ok := m.clearedFields[recurringcredituseritem.FieldAPILastUsedAt]
+	return ok
+}
+
+// ResetAPILastUsedAt resets all changes to the "api_last_used_at" field.
+func (m *RecurringCreditUserItemMutation) ResetAPILastUsedAt() {
+	m.api_last_used_at = nil
+	delete(m.clearedFields, recurringcredituseritem.FieldAPILastUsedAt)
+}
+
+// SetSiteLastActiveAt sets the "site_last_active_at" field.
+func (m *RecurringCreditUserItemMutation) SetSiteLastActiveAt(t time.Time) {
+	m.site_last_active_at = &t
+}
+
+// SiteLastActiveAt returns the value of the "site_last_active_at" field in the mutation.
+func (m *RecurringCreditUserItemMutation) SiteLastActiveAt() (r time.Time, exists bool) {
+	v := m.site_last_active_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSiteLastActiveAt returns the old "site_last_active_at" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldSiteLastActiveAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSiteLastActiveAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSiteLastActiveAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSiteLastActiveAt: %w", err)
+	}
+	return oldValue.SiteLastActiveAt, nil
+}
+
+// ClearSiteLastActiveAt clears the value of the "site_last_active_at" field.
+func (m *RecurringCreditUserItemMutation) ClearSiteLastActiveAt() {
+	m.site_last_active_at = nil
+	m.clearedFields[recurringcredituseritem.FieldSiteLastActiveAt] = struct{}{}
+}
+
+// SiteLastActiveAtCleared returns if the "site_last_active_at" field was cleared in this mutation.
+func (m *RecurringCreditUserItemMutation) SiteLastActiveAtCleared() bool {
+	_, ok := m.clearedFields[recurringcredituseritem.FieldSiteLastActiveAt]
+	return ok
+}
+
+// ResetSiteLastActiveAt resets all changes to the "site_last_active_at" field.
+func (m *RecurringCreditUserItemMutation) ResetSiteLastActiveAt() {
+	m.site_last_active_at = nil
+	delete(m.clearedFields, recurringcredituseritem.FieldSiteLastActiveAt)
+}
+
+// SetQualificationReason sets the "qualification_reason" field.
+func (m *RecurringCreditUserItemMutation) SetQualificationReason(s string) {
+	m.qualification_reason = &s
+}
+
+// QualificationReason returns the value of the "qualification_reason" field in the mutation.
+func (m *RecurringCreditUserItemMutation) QualificationReason() (r string, exists bool) {
+	v := m.qualification_reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQualificationReason returns the old "qualification_reason" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldQualificationReason(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQualificationReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQualificationReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQualificationReason: %w", err)
+	}
+	return oldValue.QualificationReason, nil
+}
+
+// ResetQualificationReason resets all changes to the "qualification_reason" field.
+func (m *RecurringCreditUserItemMutation) ResetQualificationReason() {
+	m.qualification_reason = nil
+}
+
+// SetGrantAmount sets the "grant_amount" field.
+func (m *RecurringCreditUserItemMutation) SetGrantAmount(f float64) {
+	m.grant_amount = &f
+	m.addgrant_amount = nil
+}
+
+// GrantAmount returns the value of the "grant_amount" field in the mutation.
+func (m *RecurringCreditUserItemMutation) GrantAmount() (r float64, exists bool) {
+	v := m.grant_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGrantAmount returns the old "grant_amount" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldGrantAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGrantAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGrantAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGrantAmount: %w", err)
+	}
+	return oldValue.GrantAmount, nil
+}
+
+// AddGrantAmount adds f to the "grant_amount" field.
+func (m *RecurringCreditUserItemMutation) AddGrantAmount(f float64) {
+	if m.addgrant_amount != nil {
+		*m.addgrant_amount += f
+	} else {
+		m.addgrant_amount = &f
+	}
+}
+
+// AddedGrantAmount returns the value that was added to the "grant_amount" field in this mutation.
+func (m *RecurringCreditUserItemMutation) AddedGrantAmount() (r float64, exists bool) {
+	v := m.addgrant_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGrantAmount resets all changes to the "grant_amount" field.
+func (m *RecurringCreditUserItemMutation) ResetGrantAmount() {
+	m.grant_amount = nil
+	m.addgrant_amount = nil
+}
+
+// SetGrantID sets the "grant_id" field.
+func (m *RecurringCreditUserItemMutation) SetGrantID(i int64) {
+	m.grant_id = &i
+	m.addgrant_id = nil
+}
+
+// GrantID returns the value of the "grant_id" field in the mutation.
+func (m *RecurringCreditUserItemMutation) GrantID() (r int64, exists bool) {
+	v := m.grant_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGrantID returns the old "grant_id" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldGrantID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGrantID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGrantID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGrantID: %w", err)
+	}
+	return oldValue.GrantID, nil
+}
+
+// AddGrantID adds i to the "grant_id" field.
+func (m *RecurringCreditUserItemMutation) AddGrantID(i int64) {
+	if m.addgrant_id != nil {
+		*m.addgrant_id += i
+	} else {
+		m.addgrant_id = &i
+	}
+}
+
+// AddedGrantID returns the value that was added to the "grant_id" field in this mutation.
+func (m *RecurringCreditUserItemMutation) AddedGrantID() (r int64, exists bool) {
+	v := m.addgrant_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearGrantID clears the value of the "grant_id" field.
+func (m *RecurringCreditUserItemMutation) ClearGrantID() {
+	m.grant_id = nil
+	m.addgrant_id = nil
+	m.clearedFields[recurringcredituseritem.FieldGrantID] = struct{}{}
+}
+
+// GrantIDCleared returns if the "grant_id" field was cleared in this mutation.
+func (m *RecurringCreditUserItemMutation) GrantIDCleared() bool {
+	_, ok := m.clearedFields[recurringcredituseritem.FieldGrantID]
+	return ok
+}
+
+// ResetGrantID resets all changes to the "grant_id" field.
+func (m *RecurringCreditUserItemMutation) ResetGrantID() {
+	m.grant_id = nil
+	m.addgrant_id = nil
+	delete(m.clearedFields, recurringcredituseritem.FieldGrantID)
+}
+
+// SetResult sets the "result" field.
+func (m *RecurringCreditUserItemMutation) SetResult(s string) {
+	m.result = &s
+}
+
+// Result returns the value of the "result" field in the mutation.
+func (m *RecurringCreditUserItemMutation) Result() (r string, exists bool) {
+	v := m.result
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResult returns the old "result" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldResult(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResult is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResult requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResult: %w", err)
+	}
+	return oldValue.Result, nil
+}
+
+// ResetResult resets all changes to the "result" field.
+func (m *RecurringCreditUserItemMutation) ResetResult() {
+	m.result = nil
+}
+
+// SetExclusionReason sets the "exclusion_reason" field.
+func (m *RecurringCreditUserItemMutation) SetExclusionReason(s string) {
+	m.exclusion_reason = &s
+}
+
+// ExclusionReason returns the value of the "exclusion_reason" field in the mutation.
+func (m *RecurringCreditUserItemMutation) ExclusionReason() (r string, exists bool) {
+	v := m.exclusion_reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExclusionReason returns the old "exclusion_reason" field's value of the RecurringCreditUserItem entity.
+// If the RecurringCreditUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecurringCreditUserItemMutation) OldExclusionReason(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExclusionReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExclusionReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExclusionReason: %w", err)
+	}
+	return oldValue.ExclusionReason, nil
+}
+
+// ResetExclusionReason resets all changes to the "exclusion_reason" field.
+func (m *RecurringCreditUserItemMutation) ResetExclusionReason() {
+	m.exclusion_reason = nil
+}
+
+// Where appends a list predicates to the RecurringCreditUserItemMutation builder.
+func (m *RecurringCreditUserItemMutation) Where(ps ...predicate.RecurringCreditUserItem) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RecurringCreditUserItemMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RecurringCreditUserItemMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RecurringCreditUserItem, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RecurringCreditUserItemMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RecurringCreditUserItemMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RecurringCreditUserItem).
+func (m *RecurringCreditUserItemMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RecurringCreditUserItemMutation) Fields() []string {
+	fields := make([]string, 0, 15)
+	if m.batch_id != nil {
+		fields = append(fields, recurringcredituseritem.FieldBatchID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, recurringcredituseritem.FieldUserID)
+	}
+	if m.email != nil {
+		fields = append(fields, recurringcredituseritem.FieldEmail)
+	}
+	if m.username != nil {
+		fields = append(fields, recurringcredituseritem.FieldUsername)
+	}
+	if m.user_status != nil {
+		fields = append(fields, recurringcredituseritem.FieldUserStatus)
+	}
+	if m.user_deleted != nil {
+		fields = append(fields, recurringcredituseritem.FieldUserDeleted)
+	}
+	if m.actual_cost != nil {
+		fields = append(fields, recurringcredituseritem.FieldActualCost)
+	}
+	if m.net_recharge != nil {
+		fields = append(fields, recurringcredituseritem.FieldNetRecharge)
+	}
+	if m.api_last_used_at != nil {
+		fields = append(fields, recurringcredituseritem.FieldAPILastUsedAt)
+	}
+	if m.site_last_active_at != nil {
+		fields = append(fields, recurringcredituseritem.FieldSiteLastActiveAt)
+	}
+	if m.qualification_reason != nil {
+		fields = append(fields, recurringcredituseritem.FieldQualificationReason)
+	}
+	if m.grant_amount != nil {
+		fields = append(fields, recurringcredituseritem.FieldGrantAmount)
+	}
+	if m.grant_id != nil {
+		fields = append(fields, recurringcredituseritem.FieldGrantID)
+	}
+	if m.result != nil {
+		fields = append(fields, recurringcredituseritem.FieldResult)
+	}
+	if m.exclusion_reason != nil {
+		fields = append(fields, recurringcredituseritem.FieldExclusionReason)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RecurringCreditUserItemMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case recurringcredituseritem.FieldBatchID:
+		return m.BatchID()
+	case recurringcredituseritem.FieldUserID:
+		return m.UserID()
+	case recurringcredituseritem.FieldEmail:
+		return m.Email()
+	case recurringcredituseritem.FieldUsername:
+		return m.Username()
+	case recurringcredituseritem.FieldUserStatus:
+		return m.UserStatus()
+	case recurringcredituseritem.FieldUserDeleted:
+		return m.UserDeleted()
+	case recurringcredituseritem.FieldActualCost:
+		return m.ActualCost()
+	case recurringcredituseritem.FieldNetRecharge:
+		return m.NetRecharge()
+	case recurringcredituseritem.FieldAPILastUsedAt:
+		return m.APILastUsedAt()
+	case recurringcredituseritem.FieldSiteLastActiveAt:
+		return m.SiteLastActiveAt()
+	case recurringcredituseritem.FieldQualificationReason:
+		return m.QualificationReason()
+	case recurringcredituseritem.FieldGrantAmount:
+		return m.GrantAmount()
+	case recurringcredituseritem.FieldGrantID:
+		return m.GrantID()
+	case recurringcredituseritem.FieldResult:
+		return m.Result()
+	case recurringcredituseritem.FieldExclusionReason:
+		return m.ExclusionReason()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RecurringCreditUserItemMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case recurringcredituseritem.FieldBatchID:
+		return m.OldBatchID(ctx)
+	case recurringcredituseritem.FieldUserID:
+		return m.OldUserID(ctx)
+	case recurringcredituseritem.FieldEmail:
+		return m.OldEmail(ctx)
+	case recurringcredituseritem.FieldUsername:
+		return m.OldUsername(ctx)
+	case recurringcredituseritem.FieldUserStatus:
+		return m.OldUserStatus(ctx)
+	case recurringcredituseritem.FieldUserDeleted:
+		return m.OldUserDeleted(ctx)
+	case recurringcredituseritem.FieldActualCost:
+		return m.OldActualCost(ctx)
+	case recurringcredituseritem.FieldNetRecharge:
+		return m.OldNetRecharge(ctx)
+	case recurringcredituseritem.FieldAPILastUsedAt:
+		return m.OldAPILastUsedAt(ctx)
+	case recurringcredituseritem.FieldSiteLastActiveAt:
+		return m.OldSiteLastActiveAt(ctx)
+	case recurringcredituseritem.FieldQualificationReason:
+		return m.OldQualificationReason(ctx)
+	case recurringcredituseritem.FieldGrantAmount:
+		return m.OldGrantAmount(ctx)
+	case recurringcredituseritem.FieldGrantID:
+		return m.OldGrantID(ctx)
+	case recurringcredituseritem.FieldResult:
+		return m.OldResult(ctx)
+	case recurringcredituseritem.FieldExclusionReason:
+		return m.OldExclusionReason(ctx)
+	}
+	return nil, fmt.Errorf("unknown RecurringCreditUserItem field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RecurringCreditUserItemMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case recurringcredituseritem.FieldBatchID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBatchID(v)
+		return nil
+	case recurringcredituseritem.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case recurringcredituseritem.FieldEmail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmail(v)
+		return nil
+	case recurringcredituseritem.FieldUsername:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsername(v)
+		return nil
+	case recurringcredituseritem.FieldUserStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserStatus(v)
+		return nil
+	case recurringcredituseritem.FieldUserDeleted:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserDeleted(v)
+		return nil
+	case recurringcredituseritem.FieldActualCost:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActualCost(v)
+		return nil
+	case recurringcredituseritem.FieldNetRecharge:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNetRecharge(v)
+		return nil
+	case recurringcredituseritem.FieldAPILastUsedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPILastUsedAt(v)
+		return nil
+	case recurringcredituseritem.FieldSiteLastActiveAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSiteLastActiveAt(v)
+		return nil
+	case recurringcredituseritem.FieldQualificationReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQualificationReason(v)
+		return nil
+	case recurringcredituseritem.FieldGrantAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGrantAmount(v)
+		return nil
+	case recurringcredituseritem.FieldGrantID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGrantID(v)
+		return nil
+	case recurringcredituseritem.FieldResult:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResult(v)
+		return nil
+	case recurringcredituseritem.FieldExclusionReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExclusionReason(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditUserItem field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RecurringCreditUserItemMutation) AddedFields() []string {
+	var fields []string
+	if m.addbatch_id != nil {
+		fields = append(fields, recurringcredituseritem.FieldBatchID)
+	}
+	if m.adduser_id != nil {
+		fields = append(fields, recurringcredituseritem.FieldUserID)
+	}
+	if m.addactual_cost != nil {
+		fields = append(fields, recurringcredituseritem.FieldActualCost)
+	}
+	if m.addnet_recharge != nil {
+		fields = append(fields, recurringcredituseritem.FieldNetRecharge)
+	}
+	if m.addgrant_amount != nil {
+		fields = append(fields, recurringcredituseritem.FieldGrantAmount)
+	}
+	if m.addgrant_id != nil {
+		fields = append(fields, recurringcredituseritem.FieldGrantID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RecurringCreditUserItemMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case recurringcredituseritem.FieldBatchID:
+		return m.AddedBatchID()
+	case recurringcredituseritem.FieldUserID:
+		return m.AddedUserID()
+	case recurringcredituseritem.FieldActualCost:
+		return m.AddedActualCost()
+	case recurringcredituseritem.FieldNetRecharge:
+		return m.AddedNetRecharge()
+	case recurringcredituseritem.FieldGrantAmount:
+		return m.AddedGrantAmount()
+	case recurringcredituseritem.FieldGrantID:
+		return m.AddedGrantID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RecurringCreditUserItemMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case recurringcredituseritem.FieldBatchID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBatchID(v)
+		return nil
+	case recurringcredituseritem.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case recurringcredituseritem.FieldActualCost:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddActualCost(v)
+		return nil
+	case recurringcredituseritem.FieldNetRecharge:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddNetRecharge(v)
+		return nil
+	case recurringcredituseritem.FieldGrantAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGrantAmount(v)
+		return nil
+	case recurringcredituseritem.FieldGrantID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGrantID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditUserItem numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RecurringCreditUserItemMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(recurringcredituseritem.FieldAPILastUsedAt) {
+		fields = append(fields, recurringcredituseritem.FieldAPILastUsedAt)
+	}
+	if m.FieldCleared(recurringcredituseritem.FieldSiteLastActiveAt) {
+		fields = append(fields, recurringcredituseritem.FieldSiteLastActiveAt)
+	}
+	if m.FieldCleared(recurringcredituseritem.FieldGrantID) {
+		fields = append(fields, recurringcredituseritem.FieldGrantID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RecurringCreditUserItemMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RecurringCreditUserItemMutation) ClearField(name string) error {
+	switch name {
+	case recurringcredituseritem.FieldAPILastUsedAt:
+		m.ClearAPILastUsedAt()
+		return nil
+	case recurringcredituseritem.FieldSiteLastActiveAt:
+		m.ClearSiteLastActiveAt()
+		return nil
+	case recurringcredituseritem.FieldGrantID:
+		m.ClearGrantID()
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditUserItem nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RecurringCreditUserItemMutation) ResetField(name string) error {
+	switch name {
+	case recurringcredituseritem.FieldBatchID:
+		m.ResetBatchID()
+		return nil
+	case recurringcredituseritem.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case recurringcredituseritem.FieldEmail:
+		m.ResetEmail()
+		return nil
+	case recurringcredituseritem.FieldUsername:
+		m.ResetUsername()
+		return nil
+	case recurringcredituseritem.FieldUserStatus:
+		m.ResetUserStatus()
+		return nil
+	case recurringcredituseritem.FieldUserDeleted:
+		m.ResetUserDeleted()
+		return nil
+	case recurringcredituseritem.FieldActualCost:
+		m.ResetActualCost()
+		return nil
+	case recurringcredituseritem.FieldNetRecharge:
+		m.ResetNetRecharge()
+		return nil
+	case recurringcredituseritem.FieldAPILastUsedAt:
+		m.ResetAPILastUsedAt()
+		return nil
+	case recurringcredituseritem.FieldSiteLastActiveAt:
+		m.ResetSiteLastActiveAt()
+		return nil
+	case recurringcredituseritem.FieldQualificationReason:
+		m.ResetQualificationReason()
+		return nil
+	case recurringcredituseritem.FieldGrantAmount:
+		m.ResetGrantAmount()
+		return nil
+	case recurringcredituseritem.FieldGrantID:
+		m.ResetGrantID()
+		return nil
+	case recurringcredituseritem.FieldResult:
+		m.ResetResult()
+		return nil
+	case recurringcredituseritem.FieldExclusionReason:
+		m.ResetExclusionReason()
+		return nil
+	}
+	return fmt.Errorf("unknown RecurringCreditUserItem field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RecurringCreditUserItemMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RecurringCreditUserItemMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RecurringCreditUserItemMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RecurringCreditUserItemMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RecurringCreditUserItemMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RecurringCreditUserItemMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RecurringCreditUserItemMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown RecurringCreditUserItem unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RecurringCreditUserItemMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown RecurringCreditUserItem edge %s", name)
 }
 
 // RedeemCodeMutation represents an operation that mutates the RedeemCode nodes in the graph.

@@ -33,6 +33,10 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonuscampaign"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonusparticipation"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcreditbatch"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredittask"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredittaskaudit"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredituseritem"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateaccountitem"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebatebatch"
@@ -1746,6 +1750,242 @@ func init() {
 	rechargebonusparticipation.DefaultUpdatedAt = rechargebonusparticipationDescUpdatedAt.Default.(func() time.Time)
 	// rechargebonusparticipation.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	rechargebonusparticipation.UpdateDefaultUpdatedAt = rechargebonusparticipationDescUpdatedAt.UpdateDefault.(func() time.Time)
+	recurringcreditbatchFields := schema.RecurringCreditBatch{}.Fields()
+	_ = recurringcreditbatchFields
+	// recurringcreditbatchDescTaskName is the schema descriptor for task_name field.
+	recurringcreditbatchDescTaskName := recurringcreditbatchFields[1].Descriptor()
+	// recurringcreditbatch.TaskNameValidator is a validator for the "task_name" field. It is called by the builders before save.
+	recurringcreditbatch.TaskNameValidator = recurringcreditbatchDescTaskName.Validators[0].(func(string) error)
+	// recurringcreditbatchDescEligibilityPolicy is the schema descriptor for eligibility_policy field.
+	recurringcreditbatchDescEligibilityPolicy := recurringcreditbatchFields[8].Descriptor()
+	// recurringcreditbatch.DefaultEligibilityPolicy holds the default value on creation for the eligibility_policy field.
+	recurringcreditbatch.DefaultEligibilityPolicy = recurringcreditbatchDescEligibilityPolicy.Default.(string)
+	// recurringcreditbatch.EligibilityPolicyValidator is a validator for the "eligibility_policy" field. It is called by the builders before save.
+	recurringcreditbatch.EligibilityPolicyValidator = recurringcreditbatchDescEligibilityPolicy.Validators[0].(func(string) error)
+	// recurringcreditbatchDescScheduleType is the schema descriptor for schedule_type field.
+	recurringcreditbatchDescScheduleType := recurringcreditbatchFields[9].Descriptor()
+	// recurringcreditbatch.ScheduleTypeValidator is a validator for the "schedule_type" field. It is called by the builders before save.
+	recurringcreditbatch.ScheduleTypeValidator = recurringcreditbatchDescScheduleType.Validators[0].(func(string) error)
+	// recurringcreditbatchDescLocalTime is the schema descriptor for local_time field.
+	recurringcreditbatchDescLocalTime := recurringcreditbatchFields[12].Descriptor()
+	// recurringcreditbatch.LocalTimeValidator is a validator for the "local_time" field. It is called by the builders before save.
+	recurringcreditbatch.LocalTimeValidator = recurringcreditbatchDescLocalTime.Validators[0].(func(string) error)
+	// recurringcreditbatchDescTimezone is the schema descriptor for timezone field.
+	recurringcreditbatchDescTimezone := recurringcreditbatchFields[13].Descriptor()
+	// recurringcreditbatch.TimezoneValidator is a validator for the "timezone" field. It is called by the builders before save.
+	recurringcreditbatch.TimezoneValidator = recurringcreditbatchDescTimezone.Validators[0].(func(string) error)
+	// recurringcreditbatchDescExecutionMode is the schema descriptor for execution_mode field.
+	recurringcreditbatchDescExecutionMode := recurringcreditbatchFields[16].Descriptor()
+	// recurringcreditbatch.ExecutionModeValidator is a validator for the "execution_mode" field. It is called by the builders before save.
+	recurringcreditbatch.ExecutionModeValidator = recurringcreditbatchDescExecutionMode.Validators[0].(func(string) error)
+	// recurringcreditbatchDescStatus is the schema descriptor for status field.
+	recurringcreditbatchDescStatus := recurringcreditbatchFields[17].Descriptor()
+	// recurringcreditbatch.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	recurringcreditbatch.StatusValidator = recurringcreditbatchDescStatus.Validators[0].(func(string) error)
+	// recurringcreditbatchDescLeaseOwner is the schema descriptor for lease_owner field.
+	recurringcreditbatchDescLeaseOwner := recurringcreditbatchFields[19].Descriptor()
+	// recurringcreditbatch.DefaultLeaseOwner holds the default value on creation for the lease_owner field.
+	recurringcreditbatch.DefaultLeaseOwner = recurringcreditbatchDescLeaseOwner.Default.(string)
+	// recurringcreditbatch.LeaseOwnerValidator is a validator for the "lease_owner" field. It is called by the builders before save.
+	recurringcreditbatch.LeaseOwnerValidator = recurringcreditbatchDescLeaseOwner.Validators[0].(func(string) error)
+	// recurringcreditbatchDescAttemptCount is the schema descriptor for attempt_count field.
+	recurringcreditbatchDescAttemptCount := recurringcreditbatchFields[22].Descriptor()
+	// recurringcreditbatch.DefaultAttemptCount holds the default value on creation for the attempt_count field.
+	recurringcreditbatch.DefaultAttemptCount = recurringcreditbatchDescAttemptCount.Default.(int)
+	// recurringcreditbatchDescEligibleUserCount is the schema descriptor for eligible_user_count field.
+	recurringcreditbatchDescEligibleUserCount := recurringcreditbatchFields[23].Descriptor()
+	// recurringcreditbatch.DefaultEligibleUserCount holds the default value on creation for the eligible_user_count field.
+	recurringcreditbatch.DefaultEligibleUserCount = recurringcreditbatchDescEligibleUserCount.Default.(int)
+	// recurringcreditbatchDescIssuedUserCount is the schema descriptor for issued_user_count field.
+	recurringcreditbatchDescIssuedUserCount := recurringcreditbatchFields[24].Descriptor()
+	// recurringcreditbatch.DefaultIssuedUserCount holds the default value on creation for the issued_user_count field.
+	recurringcreditbatch.DefaultIssuedUserCount = recurringcreditbatchDescIssuedUserCount.Default.(int)
+	// recurringcreditbatchDescExcludedUserCount is the schema descriptor for excluded_user_count field.
+	recurringcreditbatchDescExcludedUserCount := recurringcreditbatchFields[25].Descriptor()
+	// recurringcreditbatch.DefaultExcludedUserCount holds the default value on creation for the excluded_user_count field.
+	recurringcreditbatch.DefaultExcludedUserCount = recurringcreditbatchDescExcludedUserCount.Default.(int)
+	// recurringcreditbatchDescUsageEligibleCount is the schema descriptor for usage_eligible_count field.
+	recurringcreditbatchDescUsageEligibleCount := recurringcreditbatchFields[26].Descriptor()
+	// recurringcreditbatch.DefaultUsageEligibleCount holds the default value on creation for the usage_eligible_count field.
+	recurringcreditbatch.DefaultUsageEligibleCount = recurringcreditbatchDescUsageEligibleCount.Default.(int)
+	// recurringcreditbatchDescRechargeEligibleCount is the schema descriptor for recharge_eligible_count field.
+	recurringcreditbatchDescRechargeEligibleCount := recurringcreditbatchFields[27].Descriptor()
+	// recurringcreditbatch.DefaultRechargeEligibleCount holds the default value on creation for the recharge_eligible_count field.
+	recurringcreditbatch.DefaultRechargeEligibleCount = recurringcreditbatchDescRechargeEligibleCount.Default.(int)
+	// recurringcreditbatchDescAPIActiveCount is the schema descriptor for api_active_count field.
+	recurringcreditbatchDescAPIActiveCount := recurringcreditbatchFields[28].Descriptor()
+	// recurringcreditbatch.DefaultAPIActiveCount holds the default value on creation for the api_active_count field.
+	recurringcreditbatch.DefaultAPIActiveCount = recurringcreditbatchDescAPIActiveCount.Default.(int)
+	// recurringcreditbatchDescSiteActiveCount is the schema descriptor for site_active_count field.
+	recurringcreditbatchDescSiteActiveCount := recurringcreditbatchFields[29].Descriptor()
+	// recurringcreditbatch.DefaultSiteActiveCount holds the default value on creation for the site_active_count field.
+	recurringcreditbatch.DefaultSiteActiveCount = recurringcreditbatchDescSiteActiveCount.Default.(int)
+	// recurringcreditbatchDescBothActiveCount is the schema descriptor for both_active_count field.
+	recurringcreditbatchDescBothActiveCount := recurringcreditbatchFields[30].Descriptor()
+	// recurringcreditbatch.DefaultBothActiveCount holds the default value on creation for the both_active_count field.
+	recurringcreditbatch.DefaultBothActiveCount = recurringcreditbatchDescBothActiveCount.Default.(int)
+	// recurringcreditbatchDescIssuedAmount is the schema descriptor for issued_amount field.
+	recurringcreditbatchDescIssuedAmount := recurringcreditbatchFields[32].Descriptor()
+	// recurringcreditbatch.DefaultIssuedAmount holds the default value on creation for the issued_amount field.
+	recurringcreditbatch.DefaultIssuedAmount = recurringcreditbatchDescIssuedAmount.Default.(float64)
+	// recurringcreditbatchDescFailureCode is the schema descriptor for failure_code field.
+	recurringcreditbatchDescFailureCode := recurringcreditbatchFields[33].Descriptor()
+	// recurringcreditbatch.DefaultFailureCode holds the default value on creation for the failure_code field.
+	recurringcreditbatch.DefaultFailureCode = recurringcreditbatchDescFailureCode.Default.(string)
+	// recurringcreditbatch.FailureCodeValidator is a validator for the "failure_code" field. It is called by the builders before save.
+	recurringcreditbatch.FailureCodeValidator = recurringcreditbatchDescFailureCode.Validators[0].(func(string) error)
+	// recurringcreditbatchDescFailureMessage is the schema descriptor for failure_message field.
+	recurringcreditbatchDescFailureMessage := recurringcreditbatchFields[34].Descriptor()
+	// recurringcreditbatch.DefaultFailureMessage holds the default value on creation for the failure_message field.
+	recurringcreditbatch.DefaultFailureMessage = recurringcreditbatchDescFailureMessage.Default.(string)
+	// recurringcreditbatchDescCreatedAt is the schema descriptor for created_at field.
+	recurringcreditbatchDescCreatedAt := recurringcreditbatchFields[36].Descriptor()
+	// recurringcreditbatch.DefaultCreatedAt holds the default value on creation for the created_at field.
+	recurringcreditbatch.DefaultCreatedAt = recurringcreditbatchDescCreatedAt.Default.(func() time.Time)
+	// recurringcreditbatchDescUpdatedAt is the schema descriptor for updated_at field.
+	recurringcreditbatchDescUpdatedAt := recurringcreditbatchFields[37].Descriptor()
+	// recurringcreditbatch.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	recurringcreditbatch.DefaultUpdatedAt = recurringcreditbatchDescUpdatedAt.Default.(func() time.Time)
+	// recurringcreditbatch.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	recurringcreditbatch.UpdateDefaultUpdatedAt = recurringcreditbatchDescUpdatedAt.UpdateDefault.(func() time.Time)
+	recurringcredittaskFields := schema.RecurringCreditTask{}.Fields()
+	_ = recurringcredittaskFields
+	// recurringcredittaskDescName is the schema descriptor for name field.
+	recurringcredittaskDescName := recurringcredittaskFields[0].Descriptor()
+	// recurringcredittask.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	recurringcredittask.NameValidator = recurringcredittaskDescName.Validators[0].(func(string) error)
+	// recurringcredittaskDescAdminNotes is the schema descriptor for admin_notes field.
+	recurringcredittaskDescAdminNotes := recurringcredittaskFields[1].Descriptor()
+	// recurringcredittask.DefaultAdminNotes holds the default value on creation for the admin_notes field.
+	recurringcredittask.DefaultAdminNotes = recurringcredittaskDescAdminNotes.Default.(string)
+	// recurringcredittaskDescScheduleType is the schema descriptor for schedule_type field.
+	recurringcredittaskDescScheduleType := recurringcredittaskFields[2].Descriptor()
+	// recurringcredittask.ScheduleTypeValidator is a validator for the "schedule_type" field. It is called by the builders before save.
+	recurringcredittask.ScheduleTypeValidator = recurringcredittaskDescScheduleType.Validators[0].(func(string) error)
+	// recurringcredittaskDescLocalTime is the schema descriptor for local_time field.
+	recurringcredittaskDescLocalTime := recurringcredittaskFields[5].Descriptor()
+	// recurringcredittask.LocalTimeValidator is a validator for the "local_time" field. It is called by the builders before save.
+	recurringcredittask.LocalTimeValidator = recurringcredittaskDescLocalTime.Validators[0].(func(string) error)
+	// recurringcredittaskDescTimezone is the schema descriptor for timezone field.
+	recurringcredittaskDescTimezone := recurringcredittaskFields[6].Descriptor()
+	// recurringcredittask.TimezoneValidator is a validator for the "timezone" field. It is called by the builders before save.
+	recurringcredittask.TimezoneValidator = recurringcredittaskDescTimezone.Validators[0].(func(string) error)
+	// recurringcredittaskDescExecutionMode is the schema descriptor for execution_mode field.
+	recurringcredittaskDescExecutionMode := recurringcredittaskFields[9].Descriptor()
+	// recurringcredittask.ExecutionModeValidator is a validator for the "execution_mode" field. It is called by the builders before save.
+	recurringcredittask.ExecutionModeValidator = recurringcredittaskDescExecutionMode.Validators[0].(func(string) error)
+	// recurringcredittaskDescSkipCount is the schema descriptor for skip_count field.
+	recurringcredittaskDescSkipCount := recurringcredittaskFields[11].Descriptor()
+	// recurringcredittask.DefaultSkipCount holds the default value on creation for the skip_count field.
+	recurringcredittask.DefaultSkipCount = recurringcredittaskDescSkipCount.Default.(int)
+	// recurringcredittaskDescStatus is the schema descriptor for status field.
+	recurringcredittaskDescStatus := recurringcredittaskFields[12].Descriptor()
+	// recurringcredittask.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	recurringcredittask.StatusValidator = recurringcredittaskDescStatus.Validators[0].(func(string) error)
+	// recurringcredittaskDescVersion is the schema descriptor for version field.
+	recurringcredittaskDescVersion := recurringcredittaskFields[14].Descriptor()
+	// recurringcredittask.DefaultVersion holds the default value on creation for the version field.
+	recurringcredittask.DefaultVersion = recurringcredittaskDescVersion.Default.(int)
+	// recurringcredittaskDescIdempotencyKey is the schema descriptor for idempotency_key field.
+	recurringcredittaskDescIdempotencyKey := recurringcredittaskFields[15].Descriptor()
+	// recurringcredittask.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
+	recurringcredittask.IdempotencyKeyValidator = recurringcredittaskDescIdempotencyKey.Validators[0].(func(string) error)
+	// recurringcredittaskDescCreatedByAdminEmail is the schema descriptor for created_by_admin_email field.
+	recurringcredittaskDescCreatedByAdminEmail := recurringcredittaskFields[17].Descriptor()
+	// recurringcredittask.DefaultCreatedByAdminEmail holds the default value on creation for the created_by_admin_email field.
+	recurringcredittask.DefaultCreatedByAdminEmail = recurringcredittaskDescCreatedByAdminEmail.Default.(string)
+	// recurringcredittask.CreatedByAdminEmailValidator is a validator for the "created_by_admin_email" field. It is called by the builders before save.
+	recurringcredittask.CreatedByAdminEmailValidator = recurringcredittaskDescCreatedByAdminEmail.Validators[0].(func(string) error)
+	// recurringcredittaskDescUpdatedByAdminEmail is the schema descriptor for updated_by_admin_email field.
+	recurringcredittaskDescUpdatedByAdminEmail := recurringcredittaskFields[19].Descriptor()
+	// recurringcredittask.DefaultUpdatedByAdminEmail holds the default value on creation for the updated_by_admin_email field.
+	recurringcredittask.DefaultUpdatedByAdminEmail = recurringcredittaskDescUpdatedByAdminEmail.Default.(string)
+	// recurringcredittask.UpdatedByAdminEmailValidator is a validator for the "updated_by_admin_email" field. It is called by the builders before save.
+	recurringcredittask.UpdatedByAdminEmailValidator = recurringcredittaskDescUpdatedByAdminEmail.Validators[0].(func(string) error)
+	// recurringcredittaskDescCreatedAt is the schema descriptor for created_at field.
+	recurringcredittaskDescCreatedAt := recurringcredittaskFields[21].Descriptor()
+	// recurringcredittask.DefaultCreatedAt holds the default value on creation for the created_at field.
+	recurringcredittask.DefaultCreatedAt = recurringcredittaskDescCreatedAt.Default.(func() time.Time)
+	// recurringcredittaskDescUpdatedAt is the schema descriptor for updated_at field.
+	recurringcredittaskDescUpdatedAt := recurringcredittaskFields[22].Descriptor()
+	// recurringcredittask.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	recurringcredittask.DefaultUpdatedAt = recurringcredittaskDescUpdatedAt.Default.(func() time.Time)
+	// recurringcredittask.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	recurringcredittask.UpdateDefaultUpdatedAt = recurringcredittaskDescUpdatedAt.UpdateDefault.(func() time.Time)
+	recurringcredittaskauditFields := schema.RecurringCreditTaskAudit{}.Fields()
+	_ = recurringcredittaskauditFields
+	// recurringcredittaskauditDescAdminEmail is the schema descriptor for admin_email field.
+	recurringcredittaskauditDescAdminEmail := recurringcredittaskauditFields[2].Descriptor()
+	// recurringcredittaskaudit.DefaultAdminEmail holds the default value on creation for the admin_email field.
+	recurringcredittaskaudit.DefaultAdminEmail = recurringcredittaskauditDescAdminEmail.Default.(string)
+	// recurringcredittaskaudit.AdminEmailValidator is a validator for the "admin_email" field. It is called by the builders before save.
+	recurringcredittaskaudit.AdminEmailValidator = recurringcredittaskauditDescAdminEmail.Validators[0].(func(string) error)
+	// recurringcredittaskauditDescClientIP is the schema descriptor for client_ip field.
+	recurringcredittaskauditDescClientIP := recurringcredittaskauditFields[3].Descriptor()
+	// recurringcredittaskaudit.DefaultClientIP holds the default value on creation for the client_ip field.
+	recurringcredittaskaudit.DefaultClientIP = recurringcredittaskauditDescClientIP.Default.(string)
+	// recurringcredittaskaudit.ClientIPValidator is a validator for the "client_ip" field. It is called by the builders before save.
+	recurringcredittaskaudit.ClientIPValidator = recurringcredittaskauditDescClientIP.Validators[0].(func(string) error)
+	// recurringcredittaskauditDescAction is the schema descriptor for action field.
+	recurringcredittaskauditDescAction := recurringcredittaskauditFields[4].Descriptor()
+	// recurringcredittaskaudit.ActionValidator is a validator for the "action" field. It is called by the builders before save.
+	recurringcredittaskaudit.ActionValidator = recurringcredittaskauditDescAction.Validators[0].(func(string) error)
+	// recurringcredittaskauditDescCreatedAt is the schema descriptor for created_at field.
+	recurringcredittaskauditDescCreatedAt := recurringcredittaskauditFields[7].Descriptor()
+	// recurringcredittaskaudit.DefaultCreatedAt holds the default value on creation for the created_at field.
+	recurringcredittaskaudit.DefaultCreatedAt = recurringcredittaskauditDescCreatedAt.Default.(func() time.Time)
+	recurringcredituseritemFields := schema.RecurringCreditUserItem{}.Fields()
+	_ = recurringcredituseritemFields
+	// recurringcredituseritemDescEmail is the schema descriptor for email field.
+	recurringcredituseritemDescEmail := recurringcredituseritemFields[2].Descriptor()
+	// recurringcredituseritem.DefaultEmail holds the default value on creation for the email field.
+	recurringcredituseritem.DefaultEmail = recurringcredituseritemDescEmail.Default.(string)
+	// recurringcredituseritem.EmailValidator is a validator for the "email" field. It is called by the builders before save.
+	recurringcredituseritem.EmailValidator = recurringcredituseritemDescEmail.Validators[0].(func(string) error)
+	// recurringcredituseritemDescUsername is the schema descriptor for username field.
+	recurringcredituseritemDescUsername := recurringcredituseritemFields[3].Descriptor()
+	// recurringcredituseritem.DefaultUsername holds the default value on creation for the username field.
+	recurringcredituseritem.DefaultUsername = recurringcredituseritemDescUsername.Default.(string)
+	// recurringcredituseritem.UsernameValidator is a validator for the "username" field. It is called by the builders before save.
+	recurringcredituseritem.UsernameValidator = recurringcredituseritemDescUsername.Validators[0].(func(string) error)
+	// recurringcredituseritemDescUserStatus is the schema descriptor for user_status field.
+	recurringcredituseritemDescUserStatus := recurringcredituseritemFields[4].Descriptor()
+	// recurringcredituseritem.DefaultUserStatus holds the default value on creation for the user_status field.
+	recurringcredituseritem.DefaultUserStatus = recurringcredituseritemDescUserStatus.Default.(string)
+	// recurringcredituseritem.UserStatusValidator is a validator for the "user_status" field. It is called by the builders before save.
+	recurringcredituseritem.UserStatusValidator = recurringcredituseritemDescUserStatus.Validators[0].(func(string) error)
+	// recurringcredituseritemDescUserDeleted is the schema descriptor for user_deleted field.
+	recurringcredituseritemDescUserDeleted := recurringcredituseritemFields[5].Descriptor()
+	// recurringcredituseritem.DefaultUserDeleted holds the default value on creation for the user_deleted field.
+	recurringcredituseritem.DefaultUserDeleted = recurringcredituseritemDescUserDeleted.Default.(bool)
+	// recurringcredituseritemDescActualCost is the schema descriptor for actual_cost field.
+	recurringcredituseritemDescActualCost := recurringcredituseritemFields[6].Descriptor()
+	// recurringcredituseritem.DefaultActualCost holds the default value on creation for the actual_cost field.
+	recurringcredituseritem.DefaultActualCost = recurringcredituseritemDescActualCost.Default.(float64)
+	// recurringcredituseritemDescNetRecharge is the schema descriptor for net_recharge field.
+	recurringcredituseritemDescNetRecharge := recurringcredituseritemFields[7].Descriptor()
+	// recurringcredituseritem.DefaultNetRecharge holds the default value on creation for the net_recharge field.
+	recurringcredituseritem.DefaultNetRecharge = recurringcredituseritemDescNetRecharge.Default.(float64)
+	// recurringcredituseritemDescQualificationReason is the schema descriptor for qualification_reason field.
+	recurringcredituseritemDescQualificationReason := recurringcredituseritemFields[10].Descriptor()
+	// recurringcredituseritem.DefaultQualificationReason holds the default value on creation for the qualification_reason field.
+	recurringcredituseritem.DefaultQualificationReason = recurringcredituseritemDescQualificationReason.Default.(string)
+	// recurringcredituseritem.QualificationReasonValidator is a validator for the "qualification_reason" field. It is called by the builders before save.
+	recurringcredituseritem.QualificationReasonValidator = recurringcredituseritemDescQualificationReason.Validators[0].(func(string) error)
+	// recurringcredituseritemDescGrantAmount is the schema descriptor for grant_amount field.
+	recurringcredituseritemDescGrantAmount := recurringcredituseritemFields[11].Descriptor()
+	// recurringcredituseritem.DefaultGrantAmount holds the default value on creation for the grant_amount field.
+	recurringcredituseritem.DefaultGrantAmount = recurringcredituseritemDescGrantAmount.Default.(float64)
+	// recurringcredituseritemDescResult is the schema descriptor for result field.
+	recurringcredituseritemDescResult := recurringcredituseritemFields[13].Descriptor()
+	// recurringcredituseritem.ResultValidator is a validator for the "result" field. It is called by the builders before save.
+	recurringcredituseritem.ResultValidator = recurringcredituseritemDescResult.Validators[0].(func(string) error)
+	// recurringcredituseritemDescExclusionReason is the schema descriptor for exclusion_reason field.
+	recurringcredituseritemDescExclusionReason := recurringcredituseritemFields[14].Descriptor()
+	// recurringcredituseritem.DefaultExclusionReason holds the default value on creation for the exclusion_reason field.
+	recurringcredituseritem.DefaultExclusionReason = recurringcredituseritemDescExclusionReason.Default.(string)
+	// recurringcredituseritem.ExclusionReasonValidator is a validator for the "exclusion_reason" field. It is called by the builders before save.
+	recurringcredituseritem.ExclusionReasonValidator = recurringcredituseritemDescExclusionReason.Validators[0].(func(string) error)
 	redeemcodeFields := schema.RedeemCode{}.Fields()
 	_ = redeemcodeFields
 	// redeemcodeDescCode is the schema descriptor for code field.

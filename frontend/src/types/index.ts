@@ -1679,8 +1679,10 @@ export interface RedeemCodeRequest {
 
 export interface LimitedCreditGrant {
   id: number
+  source_type: string
   source_id?: number
   source_reason?: string
+  notes?: string
   initial_amount: number
   used_amount: number
   frozen_amount: number

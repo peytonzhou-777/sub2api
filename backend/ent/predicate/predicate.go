@@ -90,6 +90,18 @@ type RechargeBonusCampaign func(*sql.Selector)
 // RechargeBonusParticipation is the predicate function for rechargebonusparticipation builders.
 type RechargeBonusParticipation func(*sql.Selector)
 
+// RecurringCreditBatch is the predicate function for recurringcreditbatch builders.
+type RecurringCreditBatch func(*sql.Selector)
+
+// RecurringCreditTask is the predicate function for recurringcredittask builders.
+type RecurringCreditTask func(*sql.Selector)
+
+// RecurringCreditTaskAudit is the predicate function for recurringcredittaskaudit builders.
+type RecurringCreditTaskAudit func(*sql.Selector)
+
+// RecurringCreditUserItem is the predicate function for recurringcredituseritem builders.
+type RecurringCreditUserItem func(*sql.Selector)
+
 // RedeemCode is the predicate function for redeemcode builders.
 type RedeemCode func(*sql.Selector)
 

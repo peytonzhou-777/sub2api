@@ -1491,6 +1491,203 @@ var (
 			},
 		},
 	}
+	// RecurringCreditBatchesColumns holds the columns for the "recurring_credit_batches" table.
+	RecurringCreditBatchesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "task_id", Type: field.TypeInt64},
+		{Name: "task_name", Type: field.TypeString, Size: 100},
+		{Name: "scheduled_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "expires_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "qualification_start", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "qualification_end", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "qualification_cutoff_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "config_version", Type: field.TypeInt},
+		{Name: "eligibility_policy", Type: field.TypeString, Size: 40, Default: "period_usage_or_recharge"},
+		{Name: "schedule_type", Type: field.TypeString, Size: 16},
+		{Name: "day_of_month", Type: field.TypeInt, Nullable: true},
+		{Name: "day_of_week", Type: field.TypeInt, Nullable: true},
+		{Name: "local_time", Type: field.TypeString, Size: 5},
+		{Name: "timezone", Type: field.TypeString, Size: 64},
+		{Name: "amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "validity_days", Type: field.TypeInt, Nullable: true},
+		{Name: "execution_mode", Type: field.TypeString, Size: 16},
+		{Name: "status", Type: field.TypeString, Size: 16},
+		{Name: "claimed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "lease_owner", Type: field.TypeString, Size: 128, Default: ""},
+		{Name: "lease_expires_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "heartbeat_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "attempt_count", Type: field.TypeInt, Default: 0},
+		{Name: "eligible_user_count", Type: field.TypeInt, Default: 0},
+		{Name: "issued_user_count", Type: field.TypeInt, Default: 0},
+		{Name: "excluded_user_count", Type: field.TypeInt, Default: 0},
+		{Name: "usage_eligible_count", Type: field.TypeInt, Default: 0},
+		{Name: "recharge_eligible_count", Type: field.TypeInt, Default: 0},
+		{Name: "api_active_count", Type: field.TypeInt, Default: 0},
+		{Name: "site_active_count", Type: field.TypeInt, Default: 0},
+		{Name: "both_active_count", Type: field.TypeInt, Default: 0},
+		{Name: "snapshot_completed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "issued_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "failure_code", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "failure_message", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// RecurringCreditBatchesTable holds the schema information for the "recurring_credit_batches" table.
+	RecurringCreditBatchesTable = &schema.Table{
+		Name:       "recurring_credit_batches",
+		Columns:    RecurringCreditBatchesColumns,
+		PrimaryKey: []*schema.Column{RecurringCreditBatchesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "recurringcreditbatch_task_id_scheduled_at",
+				Unique:  true,
+				Columns: []*schema.Column{RecurringCreditBatchesColumns[1], RecurringCreditBatchesColumns[3]},
+			},
+			{
+				Name:    "recurringcreditbatch_task_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RecurringCreditBatchesColumns[1], RecurringCreditBatchesColumns[37]},
+			},
+			{
+				Name:    "recurringcreditbatch_status_lease_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{RecurringCreditBatchesColumns[18], RecurringCreditBatchesColumns[21]},
+			},
+		},
+	}
+	// RecurringCreditTasksColumns holds the columns for the "recurring_credit_tasks" table.
+	RecurringCreditTasksColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "admin_notes", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "schedule_type", Type: field.TypeString, Size: 16},
+		{Name: "day_of_month", Type: field.TypeInt, Nullable: true},
+		{Name: "day_of_week", Type: field.TypeInt, Nullable: true},
+		{Name: "local_time", Type: field.TypeString, Size: 5},
+		{Name: "timezone", Type: field.TypeString, Size: 64},
+		{Name: "amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "validity_days", Type: field.TypeInt, Nullable: true},
+		{Name: "execution_mode", Type: field.TypeString, Size: 16},
+		{Name: "remaining_runs", Type: field.TypeInt, Nullable: true},
+		{Name: "skip_count", Type: field.TypeInt, Default: 0},
+		{Name: "status", Type: field.TypeString, Size: 16},
+		{Name: "next_run_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "version", Type: field.TypeInt, Default: 1},
+		{Name: "idempotency_key", Type: field.TypeString, Nullable: true, Size: 128},
+		{Name: "created_by_admin_id", Type: field.TypeInt64},
+		{Name: "created_by_admin_email", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "updated_by_admin_id", Type: field.TypeInt64},
+		{Name: "updated_by_admin_email", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// RecurringCreditTasksTable holds the schema information for the "recurring_credit_tasks" table.
+	RecurringCreditTasksTable = &schema.Table{
+		Name:       "recurring_credit_tasks",
+		Columns:    RecurringCreditTasksColumns,
+		PrimaryKey: []*schema.Column{RecurringCreditTasksColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "recurringcredittask_status_next_run_at",
+				Unique:  false,
+				Columns: []*schema.Column{RecurringCreditTasksColumns[13], RecurringCreditTasksColumns[14]},
+			},
+			{
+				Name:    "recurringcredittask_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RecurringCreditTasksColumns[22]},
+			},
+			{
+				Name:    "recurringcredittask_name",
+				Unique:  false,
+				Columns: []*schema.Column{RecurringCreditTasksColumns[1]},
+			},
+			{
+				Name:    "recurringcredittask_idempotency_key",
+				Unique:  true,
+				Columns: []*schema.Column{RecurringCreditTasksColumns[16]},
+			},
+		},
+	}
+	// RecurringCreditTaskAuditsColumns holds the columns for the "recurring_credit_task_audits" table.
+	RecurringCreditTaskAuditsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "task_id", Type: field.TypeInt64},
+		{Name: "admin_id", Type: field.TypeInt64},
+		{Name: "admin_email", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "client_ip", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "action", Type: field.TypeString, Size: 32},
+		{Name: "before_snapshot", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "after_snapshot", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// RecurringCreditTaskAuditsTable holds the schema information for the "recurring_credit_task_audits" table.
+	RecurringCreditTaskAuditsTable = &schema.Table{
+		Name:       "recurring_credit_task_audits",
+		Columns:    RecurringCreditTaskAuditsColumns,
+		PrimaryKey: []*schema.Column{RecurringCreditTaskAuditsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "recurringcredittaskaudit_task_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RecurringCreditTaskAuditsColumns[1], RecurringCreditTaskAuditsColumns[8]},
+			},
+			{
+				Name:    "recurringcredittaskaudit_admin_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RecurringCreditTaskAuditsColumns[2], RecurringCreditTaskAuditsColumns[8]},
+			},
+		},
+	}
+	// RecurringCreditUserItemsColumns holds the columns for the "recurring_credit_user_items" table.
+	RecurringCreditUserItemsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "batch_id", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "email", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "username", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "user_status", Type: field.TypeString, Size: 20, Default: ""},
+		{Name: "user_deleted", Type: field.TypeBool, Default: false},
+		{Name: "actual_cost", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "net_recharge", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "api_last_used_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "site_last_active_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "qualification_reason", Type: field.TypeString, Size: 32, Default: ""},
+		{Name: "grant_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "grant_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "result", Type: field.TypeString, Size: 32},
+		{Name: "exclusion_reason", Type: field.TypeString, Size: 100, Default: ""},
+	}
+	// RecurringCreditUserItemsTable holds the schema information for the "recurring_credit_user_items" table.
+	RecurringCreditUserItemsTable = &schema.Table{
+		Name:       "recurring_credit_user_items",
+		Columns:    RecurringCreditUserItemsColumns,
+		PrimaryKey: []*schema.Column{RecurringCreditUserItemsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "recurringcredituseritem_batch_id_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{RecurringCreditUserItemsColumns[1], RecurringCreditUserItemsColumns[2]},
+			},
+			{
+				Name:    "recurringcredituseritem_batch_id_result",
+				Unique:  false,
+				Columns: []*schema.Column{RecurringCreditUserItemsColumns[1], RecurringCreditUserItemsColumns[14]},
+			},
+			{
+				Name:    "recurringcredituseritem_batch_id_email",
+				Unique:  false,
+				Columns: []*schema.Column{RecurringCreditUserItemsColumns[1], RecurringCreditUserItemsColumns[3]},
+			},
+			{
+				Name:    "recurringcredituseritem_batch_id_username",
+				Unique:  false,
+				Columns: []*schema.Column{RecurringCreditUserItemsColumns[1], RecurringCreditUserItemsColumns[4]},
+			},
+		},
+	}
 	// RedeemCodesColumns holds the columns for the "redeem_codes" table.
 	RedeemCodesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -2177,6 +2374,14 @@ var (
 					Where: "source_type = 'recharge_bonus' AND source_id IS NOT NULL",
 				},
 			},
+			{
+				Name:    "idx_user_limited_credit_grants_recurring_user",
+				Unique:  true,
+				Columns: []*schema.Column{UserLimitedCreditGrantsColumns[1], UserLimitedCreditGrantsColumns[2], UserLimitedCreditGrantsColumns[11]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "source_type = 'recurring_grant' AND source_id IS NOT NULL",
+				},
+			},
 		},
 	}
 	// UserLimitedCreditLedgerColumns holds the columns for the "user_limited_credit_ledger" table.
@@ -2401,6 +2606,10 @@ var (
 		ProxiesTable,
 		RechargeBonusCampaignsTable,
 		RechargeBonusParticipationsTable,
+		RecurringCreditBatchesTable,
+		RecurringCreditTasksTable,
+		RecurringCreditTaskAuditsTable,
+		RecurringCreditUserItemsTable,
 		RedeemCodesTable,
 		ResetRebateAccountItemsTable,
 		ResetRebateBatchesTable,
@@ -2527,6 +2736,18 @@ func init() {
 	}
 	RechargeBonusParticipationsTable.Annotation = &entsql.Annotation{
 		Table: "recharge_bonus_participations",
+	}
+	RecurringCreditBatchesTable.Annotation = &entsql.Annotation{
+		Table: "recurring_credit_batches",
+	}
+	RecurringCreditTasksTable.Annotation = &entsql.Annotation{
+		Table: "recurring_credit_tasks",
+	}
+	RecurringCreditTaskAuditsTable.Annotation = &entsql.Annotation{
+		Table: "recurring_credit_task_audits",
+	}
+	RecurringCreditUserItemsTable.Annotation = &entsql.Annotation{
+		Table: "recurring_credit_user_items",
 	}
 	RedeemCodesTable.ForeignKeys[0].RefTable = GroupsTable
 	RedeemCodesTable.ForeignKeys[1].RefTable = UsersTable

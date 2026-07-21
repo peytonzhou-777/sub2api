@@ -116,6 +116,9 @@ func RegisterAdminRoutes(
 		// 重置返利
 		registerResetRebateRoutes(admin, h)
 
+		// 循环赠额
+		registerRecurringCreditRoutes(admin, h)
+
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
 	}
@@ -144,6 +147,29 @@ func registerAuditLogRoutes(admin *gin.RouterGroup, h *handler.Handlers, _ middl
 		auditLogs.GET("/:id", h.Admin.AuditLog.Get)
 		// 清空需现场 TOTP 校验（在 handler 内强制），不复用 step-up sudo 窗口
 		auditLogs.POST("/clear", h.Admin.AuditLog.Clear)
+	}
+}
+
+// registerRecurringCreditRoutes 注册循环赠额任务、动作与历史子资源。
+func registerRecurringCreditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	tasks := admin.Group("/credits/recurring-grants")
+	{
+		tasks.GET("", h.Admin.RecurringCredit.List)
+		tasks.POST("", h.Admin.RecurringCredit.Create)
+		tasks.POST("/preview", h.Admin.RecurringCredit.Preview)
+		tasks.GET("/:id", h.Admin.RecurringCredit.Get)
+		tasks.PUT("/:id", h.Admin.RecurringCredit.Update)
+		tasks.DELETE("/:id", h.Admin.RecurringCredit.Delete)
+		tasks.POST("/:id/stop", h.Admin.RecurringCredit.Action("stop"))
+		tasks.POST("/:id/resume", h.Admin.RecurringCredit.Action("resume"))
+		tasks.POST("/:id/reactivate", h.Admin.RecurringCredit.Action("reactivate"))
+		tasks.POST("/:id/make-permanent", h.Admin.RecurringCredit.Action("make-permanent"))
+		tasks.POST("/:id/make-finite", h.Admin.RecurringCredit.Action("make-finite"))
+		tasks.POST("/:id/skip", h.Admin.RecurringCredit.Action("skip"))
+		tasks.POST("/:id/cancel-skip", h.Admin.RecurringCredit.Action("cancel-skip"))
+		tasks.GET("/:id/batches", h.Admin.RecurringCredit.ListBatches)
+		tasks.GET("/:id/batches/:batch_id/users", h.Admin.RecurringCredit.ListUsers)
+		tasks.GET("/:id/batches/:batch_id/users.csv", h.Admin.RecurringCredit.ExportUsers)
 	}
 }
 

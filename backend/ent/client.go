@@ -43,6 +43,10 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonuscampaign"
 	"github.com/Wei-Shaw/sub2api/ent/rechargebonusparticipation"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcreditbatch"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredittask"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredittaskaudit"
+	"github.com/Wei-Shaw/sub2api/ent/recurringcredituseritem"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateaccountitem"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebatebatch"
@@ -126,6 +130,14 @@ type Client struct {
 	RechargeBonusCampaign *RechargeBonusCampaignClient
 	// RechargeBonusParticipation is the client for interacting with the RechargeBonusParticipation builders.
 	RechargeBonusParticipation *RechargeBonusParticipationClient
+	// RecurringCreditBatch is the client for interacting with the RecurringCreditBatch builders.
+	RecurringCreditBatch *RecurringCreditBatchClient
+	// RecurringCreditTask is the client for interacting with the RecurringCreditTask builders.
+	RecurringCreditTask *RecurringCreditTaskClient
+	// RecurringCreditTaskAudit is the client for interacting with the RecurringCreditTaskAudit builders.
+	RecurringCreditTaskAudit *RecurringCreditTaskAuditClient
+	// RecurringCreditUserItem is the client for interacting with the RecurringCreditUserItem builders.
+	RecurringCreditUserItem *RecurringCreditUserItemClient
 	// RedeemCode is the client for interacting with the RedeemCode builders.
 	RedeemCode *RedeemCodeClient
 	// ResetRebateAccountItem is the client for interacting with the ResetRebateAccountItem builders.
@@ -201,6 +213,10 @@ func (c *Client) init() {
 	c.Proxy = NewProxyClient(c.config)
 	c.RechargeBonusCampaign = NewRechargeBonusCampaignClient(c.config)
 	c.RechargeBonusParticipation = NewRechargeBonusParticipationClient(c.config)
+	c.RecurringCreditBatch = NewRecurringCreditBatchClient(c.config)
+	c.RecurringCreditTask = NewRecurringCreditTaskClient(c.config)
+	c.RecurringCreditTaskAudit = NewRecurringCreditTaskAuditClient(c.config)
+	c.RecurringCreditUserItem = NewRecurringCreditUserItemClient(c.config)
 	c.RedeemCode = NewRedeemCodeClient(c.config)
 	c.ResetRebateAccountItem = NewResetRebateAccountItemClient(c.config)
 	c.ResetRebateBatch = NewResetRebateBatchClient(c.config)
@@ -339,6 +355,10 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Proxy:                         NewProxyClient(cfg),
 		RechargeBonusCampaign:         NewRechargeBonusCampaignClient(cfg),
 		RechargeBonusParticipation:    NewRechargeBonusParticipationClient(cfg),
+		RecurringCreditBatch:          NewRecurringCreditBatchClient(cfg),
+		RecurringCreditTask:           NewRecurringCreditTaskClient(cfg),
+		RecurringCreditTaskAudit:      NewRecurringCreditTaskAuditClient(cfg),
+		RecurringCreditUserItem:       NewRecurringCreditUserItemClient(cfg),
 		RedeemCode:                    NewRedeemCodeClient(cfg),
 		ResetRebateAccountItem:        NewResetRebateAccountItemClient(cfg),
 		ResetRebateBatch:              NewResetRebateBatchClient(cfg),
@@ -404,6 +424,10 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Proxy:                         NewProxyClient(cfg),
 		RechargeBonusCampaign:         NewRechargeBonusCampaignClient(cfg),
 		RechargeBonusParticipation:    NewRechargeBonusParticipationClient(cfg),
+		RecurringCreditBatch:          NewRecurringCreditBatchClient(cfg),
+		RecurringCreditTask:           NewRecurringCreditTaskClient(cfg),
+		RecurringCreditTaskAudit:      NewRecurringCreditTaskAuditClient(cfg),
+		RecurringCreditUserItem:       NewRecurringCreditUserItemClient(cfg),
 		RedeemCode:                    NewRedeemCodeClient(cfg),
 		ResetRebateAccountItem:        NewResetRebateAccountItemClient(cfg),
 		ResetRebateBatch:              NewResetRebateBatchClient(cfg),
@@ -458,12 +482,14 @@ func (c *Client) Use(hooks ...Hook) {
 		c.CompositeModelRoute, c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
 		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
 		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
-		c.Proxy, c.RechargeBonusCampaign, c.RechargeBonusParticipation, c.RedeemCode,
-		c.ResetRebateAccountItem, c.ResetRebateBatch, c.ResetRebateUserItem,
-		c.SecuritySecret, c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile,
-		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
-		c.UserAttributeDefinition, c.UserAttributeValue, c.UserLimitedCreditGrant,
-		c.UserLimitedCreditLedger, c.UserPlatformQuota, c.UserSubscription,
+		c.Proxy, c.RechargeBonusCampaign, c.RechargeBonusParticipation,
+		c.RecurringCreditBatch, c.RecurringCreditTask, c.RecurringCreditTaskAudit,
+		c.RecurringCreditUserItem, c.RedeemCode, c.ResetRebateAccountItem,
+		c.ResetRebateBatch, c.ResetRebateUserItem, c.SecuritySecret, c.Setting,
+		c.SubscriptionPlan, c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog,
+		c.User, c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
+		c.UserLimitedCreditGrant, c.UserLimitedCreditLedger, c.UserPlatformQuota,
+		c.UserSubscription,
 	} {
 		n.Use(hooks...)
 	}
@@ -480,12 +506,14 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.CompositeModelRoute, c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
 		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
 		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
-		c.Proxy, c.RechargeBonusCampaign, c.RechargeBonusParticipation, c.RedeemCode,
-		c.ResetRebateAccountItem, c.ResetRebateBatch, c.ResetRebateUserItem,
-		c.SecuritySecret, c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile,
-		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
-		c.UserAttributeDefinition, c.UserAttributeValue, c.UserLimitedCreditGrant,
-		c.UserLimitedCreditLedger, c.UserPlatformQuota, c.UserSubscription,
+		c.Proxy, c.RechargeBonusCampaign, c.RechargeBonusParticipation,
+		c.RecurringCreditBatch, c.RecurringCreditTask, c.RecurringCreditTaskAudit,
+		c.RecurringCreditUserItem, c.RedeemCode, c.ResetRebateAccountItem,
+		c.ResetRebateBatch, c.ResetRebateUserItem, c.SecuritySecret, c.Setting,
+		c.SubscriptionPlan, c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog,
+		c.User, c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
+		c.UserLimitedCreditGrant, c.UserLimitedCreditLedger, c.UserPlatformQuota,
+		c.UserSubscription,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -550,6 +578,14 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.RechargeBonusCampaign.mutate(ctx, m)
 	case *RechargeBonusParticipationMutation:
 		return c.RechargeBonusParticipation.mutate(ctx, m)
+	case *RecurringCreditBatchMutation:
+		return c.RecurringCreditBatch.mutate(ctx, m)
+	case *RecurringCreditTaskMutation:
+		return c.RecurringCreditTask.mutate(ctx, m)
+	case *RecurringCreditTaskAuditMutation:
+		return c.RecurringCreditTaskAudit.mutate(ctx, m)
+	case *RecurringCreditUserItemMutation:
+		return c.RecurringCreditUserItem.mutate(ctx, m)
 	case *RedeemCodeMutation:
 		return c.RedeemCode.mutate(ctx, m)
 	case *ResetRebateAccountItemMutation:
@@ -4964,6 +5000,538 @@ func (c *RechargeBonusParticipationClient) mutate(ctx context.Context, m *Rechar
 	}
 }
 
+// RecurringCreditBatchClient is a client for the RecurringCreditBatch schema.
+type RecurringCreditBatchClient struct {
+	config
+}
+
+// NewRecurringCreditBatchClient returns a client for the RecurringCreditBatch from the given config.
+func NewRecurringCreditBatchClient(c config) *RecurringCreditBatchClient {
+	return &RecurringCreditBatchClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `recurringcreditbatch.Hooks(f(g(h())))`.
+func (c *RecurringCreditBatchClient) Use(hooks ...Hook) {
+	c.hooks.RecurringCreditBatch = append(c.hooks.RecurringCreditBatch, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `recurringcreditbatch.Intercept(f(g(h())))`.
+func (c *RecurringCreditBatchClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RecurringCreditBatch = append(c.inters.RecurringCreditBatch, interceptors...)
+}
+
+// Create returns a builder for creating a RecurringCreditBatch entity.
+func (c *RecurringCreditBatchClient) Create() *RecurringCreditBatchCreate {
+	mutation := newRecurringCreditBatchMutation(c.config, OpCreate)
+	return &RecurringCreditBatchCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RecurringCreditBatch entities.
+func (c *RecurringCreditBatchClient) CreateBulk(builders ...*RecurringCreditBatchCreate) *RecurringCreditBatchCreateBulk {
+	return &RecurringCreditBatchCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RecurringCreditBatchClient) MapCreateBulk(slice any, setFunc func(*RecurringCreditBatchCreate, int)) *RecurringCreditBatchCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RecurringCreditBatchCreateBulk{err: fmt.Errorf("calling to RecurringCreditBatchClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RecurringCreditBatchCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RecurringCreditBatchCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RecurringCreditBatch.
+func (c *RecurringCreditBatchClient) Update() *RecurringCreditBatchUpdate {
+	mutation := newRecurringCreditBatchMutation(c.config, OpUpdate)
+	return &RecurringCreditBatchUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RecurringCreditBatchClient) UpdateOne(_m *RecurringCreditBatch) *RecurringCreditBatchUpdateOne {
+	mutation := newRecurringCreditBatchMutation(c.config, OpUpdateOne, withRecurringCreditBatch(_m))
+	return &RecurringCreditBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RecurringCreditBatchClient) UpdateOneID(id int64) *RecurringCreditBatchUpdateOne {
+	mutation := newRecurringCreditBatchMutation(c.config, OpUpdateOne, withRecurringCreditBatchID(id))
+	return &RecurringCreditBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RecurringCreditBatch.
+func (c *RecurringCreditBatchClient) Delete() *RecurringCreditBatchDelete {
+	mutation := newRecurringCreditBatchMutation(c.config, OpDelete)
+	return &RecurringCreditBatchDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RecurringCreditBatchClient) DeleteOne(_m *RecurringCreditBatch) *RecurringCreditBatchDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RecurringCreditBatchClient) DeleteOneID(id int64) *RecurringCreditBatchDeleteOne {
+	builder := c.Delete().Where(recurringcreditbatch.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RecurringCreditBatchDeleteOne{builder}
+}
+
+// Query returns a query builder for RecurringCreditBatch.
+func (c *RecurringCreditBatchClient) Query() *RecurringCreditBatchQuery {
+	return &RecurringCreditBatchQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRecurringCreditBatch},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RecurringCreditBatch entity by its id.
+func (c *RecurringCreditBatchClient) Get(ctx context.Context, id int64) (*RecurringCreditBatch, error) {
+	return c.Query().Where(recurringcreditbatch.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RecurringCreditBatchClient) GetX(ctx context.Context, id int64) *RecurringCreditBatch {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RecurringCreditBatchClient) Hooks() []Hook {
+	return c.hooks.RecurringCreditBatch
+}
+
+// Interceptors returns the client interceptors.
+func (c *RecurringCreditBatchClient) Interceptors() []Interceptor {
+	return c.inters.RecurringCreditBatch
+}
+
+func (c *RecurringCreditBatchClient) mutate(ctx context.Context, m *RecurringCreditBatchMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RecurringCreditBatchCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RecurringCreditBatchUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RecurringCreditBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RecurringCreditBatchDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RecurringCreditBatch mutation op: %q", m.Op())
+	}
+}
+
+// RecurringCreditTaskClient is a client for the RecurringCreditTask schema.
+type RecurringCreditTaskClient struct {
+	config
+}
+
+// NewRecurringCreditTaskClient returns a client for the RecurringCreditTask from the given config.
+func NewRecurringCreditTaskClient(c config) *RecurringCreditTaskClient {
+	return &RecurringCreditTaskClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `recurringcredittask.Hooks(f(g(h())))`.
+func (c *RecurringCreditTaskClient) Use(hooks ...Hook) {
+	c.hooks.RecurringCreditTask = append(c.hooks.RecurringCreditTask, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `recurringcredittask.Intercept(f(g(h())))`.
+func (c *RecurringCreditTaskClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RecurringCreditTask = append(c.inters.RecurringCreditTask, interceptors...)
+}
+
+// Create returns a builder for creating a RecurringCreditTask entity.
+func (c *RecurringCreditTaskClient) Create() *RecurringCreditTaskCreate {
+	mutation := newRecurringCreditTaskMutation(c.config, OpCreate)
+	return &RecurringCreditTaskCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RecurringCreditTask entities.
+func (c *RecurringCreditTaskClient) CreateBulk(builders ...*RecurringCreditTaskCreate) *RecurringCreditTaskCreateBulk {
+	return &RecurringCreditTaskCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RecurringCreditTaskClient) MapCreateBulk(slice any, setFunc func(*RecurringCreditTaskCreate, int)) *RecurringCreditTaskCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RecurringCreditTaskCreateBulk{err: fmt.Errorf("calling to RecurringCreditTaskClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RecurringCreditTaskCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RecurringCreditTaskCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RecurringCreditTask.
+func (c *RecurringCreditTaskClient) Update() *RecurringCreditTaskUpdate {
+	mutation := newRecurringCreditTaskMutation(c.config, OpUpdate)
+	return &RecurringCreditTaskUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RecurringCreditTaskClient) UpdateOne(_m *RecurringCreditTask) *RecurringCreditTaskUpdateOne {
+	mutation := newRecurringCreditTaskMutation(c.config, OpUpdateOne, withRecurringCreditTask(_m))
+	return &RecurringCreditTaskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RecurringCreditTaskClient) UpdateOneID(id int64) *RecurringCreditTaskUpdateOne {
+	mutation := newRecurringCreditTaskMutation(c.config, OpUpdateOne, withRecurringCreditTaskID(id))
+	return &RecurringCreditTaskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RecurringCreditTask.
+func (c *RecurringCreditTaskClient) Delete() *RecurringCreditTaskDelete {
+	mutation := newRecurringCreditTaskMutation(c.config, OpDelete)
+	return &RecurringCreditTaskDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RecurringCreditTaskClient) DeleteOne(_m *RecurringCreditTask) *RecurringCreditTaskDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RecurringCreditTaskClient) DeleteOneID(id int64) *RecurringCreditTaskDeleteOne {
+	builder := c.Delete().Where(recurringcredittask.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RecurringCreditTaskDeleteOne{builder}
+}
+
+// Query returns a query builder for RecurringCreditTask.
+func (c *RecurringCreditTaskClient) Query() *RecurringCreditTaskQuery {
+	return &RecurringCreditTaskQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRecurringCreditTask},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RecurringCreditTask entity by its id.
+func (c *RecurringCreditTaskClient) Get(ctx context.Context, id int64) (*RecurringCreditTask, error) {
+	return c.Query().Where(recurringcredittask.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RecurringCreditTaskClient) GetX(ctx context.Context, id int64) *RecurringCreditTask {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RecurringCreditTaskClient) Hooks() []Hook {
+	return c.hooks.RecurringCreditTask
+}
+
+// Interceptors returns the client interceptors.
+func (c *RecurringCreditTaskClient) Interceptors() []Interceptor {
+	return c.inters.RecurringCreditTask
+}
+
+func (c *RecurringCreditTaskClient) mutate(ctx context.Context, m *RecurringCreditTaskMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RecurringCreditTaskCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RecurringCreditTaskUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RecurringCreditTaskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RecurringCreditTaskDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RecurringCreditTask mutation op: %q", m.Op())
+	}
+}
+
+// RecurringCreditTaskAuditClient is a client for the RecurringCreditTaskAudit schema.
+type RecurringCreditTaskAuditClient struct {
+	config
+}
+
+// NewRecurringCreditTaskAuditClient returns a client for the RecurringCreditTaskAudit from the given config.
+func NewRecurringCreditTaskAuditClient(c config) *RecurringCreditTaskAuditClient {
+	return &RecurringCreditTaskAuditClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `recurringcredittaskaudit.Hooks(f(g(h())))`.
+func (c *RecurringCreditTaskAuditClient) Use(hooks ...Hook) {
+	c.hooks.RecurringCreditTaskAudit = append(c.hooks.RecurringCreditTaskAudit, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `recurringcredittaskaudit.Intercept(f(g(h())))`.
+func (c *RecurringCreditTaskAuditClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RecurringCreditTaskAudit = append(c.inters.RecurringCreditTaskAudit, interceptors...)
+}
+
+// Create returns a builder for creating a RecurringCreditTaskAudit entity.
+func (c *RecurringCreditTaskAuditClient) Create() *RecurringCreditTaskAuditCreate {
+	mutation := newRecurringCreditTaskAuditMutation(c.config, OpCreate)
+	return &RecurringCreditTaskAuditCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RecurringCreditTaskAudit entities.
+func (c *RecurringCreditTaskAuditClient) CreateBulk(builders ...*RecurringCreditTaskAuditCreate) *RecurringCreditTaskAuditCreateBulk {
+	return &RecurringCreditTaskAuditCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RecurringCreditTaskAuditClient) MapCreateBulk(slice any, setFunc func(*RecurringCreditTaskAuditCreate, int)) *RecurringCreditTaskAuditCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RecurringCreditTaskAuditCreateBulk{err: fmt.Errorf("calling to RecurringCreditTaskAuditClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RecurringCreditTaskAuditCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RecurringCreditTaskAuditCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RecurringCreditTaskAudit.
+func (c *RecurringCreditTaskAuditClient) Update() *RecurringCreditTaskAuditUpdate {
+	mutation := newRecurringCreditTaskAuditMutation(c.config, OpUpdate)
+	return &RecurringCreditTaskAuditUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RecurringCreditTaskAuditClient) UpdateOne(_m *RecurringCreditTaskAudit) *RecurringCreditTaskAuditUpdateOne {
+	mutation := newRecurringCreditTaskAuditMutation(c.config, OpUpdateOne, withRecurringCreditTaskAudit(_m))
+	return &RecurringCreditTaskAuditUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RecurringCreditTaskAuditClient) UpdateOneID(id int64) *RecurringCreditTaskAuditUpdateOne {
+	mutation := newRecurringCreditTaskAuditMutation(c.config, OpUpdateOne, withRecurringCreditTaskAuditID(id))
+	return &RecurringCreditTaskAuditUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RecurringCreditTaskAudit.
+func (c *RecurringCreditTaskAuditClient) Delete() *RecurringCreditTaskAuditDelete {
+	mutation := newRecurringCreditTaskAuditMutation(c.config, OpDelete)
+	return &RecurringCreditTaskAuditDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RecurringCreditTaskAuditClient) DeleteOne(_m *RecurringCreditTaskAudit) *RecurringCreditTaskAuditDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RecurringCreditTaskAuditClient) DeleteOneID(id int64) *RecurringCreditTaskAuditDeleteOne {
+	builder := c.Delete().Where(recurringcredittaskaudit.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RecurringCreditTaskAuditDeleteOne{builder}
+}
+
+// Query returns a query builder for RecurringCreditTaskAudit.
+func (c *RecurringCreditTaskAuditClient) Query() *RecurringCreditTaskAuditQuery {
+	return &RecurringCreditTaskAuditQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRecurringCreditTaskAudit},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RecurringCreditTaskAudit entity by its id.
+func (c *RecurringCreditTaskAuditClient) Get(ctx context.Context, id int64) (*RecurringCreditTaskAudit, error) {
+	return c.Query().Where(recurringcredittaskaudit.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RecurringCreditTaskAuditClient) GetX(ctx context.Context, id int64) *RecurringCreditTaskAudit {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RecurringCreditTaskAuditClient) Hooks() []Hook {
+	return c.hooks.RecurringCreditTaskAudit
+}
+
+// Interceptors returns the client interceptors.
+func (c *RecurringCreditTaskAuditClient) Interceptors() []Interceptor {
+	return c.inters.RecurringCreditTaskAudit
+}
+
+func (c *RecurringCreditTaskAuditClient) mutate(ctx context.Context, m *RecurringCreditTaskAuditMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RecurringCreditTaskAuditCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RecurringCreditTaskAuditUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RecurringCreditTaskAuditUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RecurringCreditTaskAuditDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RecurringCreditTaskAudit mutation op: %q", m.Op())
+	}
+}
+
+// RecurringCreditUserItemClient is a client for the RecurringCreditUserItem schema.
+type RecurringCreditUserItemClient struct {
+	config
+}
+
+// NewRecurringCreditUserItemClient returns a client for the RecurringCreditUserItem from the given config.
+func NewRecurringCreditUserItemClient(c config) *RecurringCreditUserItemClient {
+	return &RecurringCreditUserItemClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `recurringcredituseritem.Hooks(f(g(h())))`.
+func (c *RecurringCreditUserItemClient) Use(hooks ...Hook) {
+	c.hooks.RecurringCreditUserItem = append(c.hooks.RecurringCreditUserItem, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `recurringcredituseritem.Intercept(f(g(h())))`.
+func (c *RecurringCreditUserItemClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RecurringCreditUserItem = append(c.inters.RecurringCreditUserItem, interceptors...)
+}
+
+// Create returns a builder for creating a RecurringCreditUserItem entity.
+func (c *RecurringCreditUserItemClient) Create() *RecurringCreditUserItemCreate {
+	mutation := newRecurringCreditUserItemMutation(c.config, OpCreate)
+	return &RecurringCreditUserItemCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RecurringCreditUserItem entities.
+func (c *RecurringCreditUserItemClient) CreateBulk(builders ...*RecurringCreditUserItemCreate) *RecurringCreditUserItemCreateBulk {
+	return &RecurringCreditUserItemCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RecurringCreditUserItemClient) MapCreateBulk(slice any, setFunc func(*RecurringCreditUserItemCreate, int)) *RecurringCreditUserItemCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RecurringCreditUserItemCreateBulk{err: fmt.Errorf("calling to RecurringCreditUserItemClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RecurringCreditUserItemCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RecurringCreditUserItemCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RecurringCreditUserItem.
+func (c *RecurringCreditUserItemClient) Update() *RecurringCreditUserItemUpdate {
+	mutation := newRecurringCreditUserItemMutation(c.config, OpUpdate)
+	return &RecurringCreditUserItemUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RecurringCreditUserItemClient) UpdateOne(_m *RecurringCreditUserItem) *RecurringCreditUserItemUpdateOne {
+	mutation := newRecurringCreditUserItemMutation(c.config, OpUpdateOne, withRecurringCreditUserItem(_m))
+	return &RecurringCreditUserItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RecurringCreditUserItemClient) UpdateOneID(id int64) *RecurringCreditUserItemUpdateOne {
+	mutation := newRecurringCreditUserItemMutation(c.config, OpUpdateOne, withRecurringCreditUserItemID(id))
+	return &RecurringCreditUserItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RecurringCreditUserItem.
+func (c *RecurringCreditUserItemClient) Delete() *RecurringCreditUserItemDelete {
+	mutation := newRecurringCreditUserItemMutation(c.config, OpDelete)
+	return &RecurringCreditUserItemDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RecurringCreditUserItemClient) DeleteOne(_m *RecurringCreditUserItem) *RecurringCreditUserItemDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RecurringCreditUserItemClient) DeleteOneID(id int64) *RecurringCreditUserItemDeleteOne {
+	builder := c.Delete().Where(recurringcredituseritem.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RecurringCreditUserItemDeleteOne{builder}
+}
+
+// Query returns a query builder for RecurringCreditUserItem.
+func (c *RecurringCreditUserItemClient) Query() *RecurringCreditUserItemQuery {
+	return &RecurringCreditUserItemQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRecurringCreditUserItem},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RecurringCreditUserItem entity by its id.
+func (c *RecurringCreditUserItemClient) Get(ctx context.Context, id int64) (*RecurringCreditUserItem, error) {
+	return c.Query().Where(recurringcredituseritem.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RecurringCreditUserItemClient) GetX(ctx context.Context, id int64) *RecurringCreditUserItem {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RecurringCreditUserItemClient) Hooks() []Hook {
+	return c.hooks.RecurringCreditUserItem
+}
+
+// Interceptors returns the client interceptors.
+func (c *RecurringCreditUserItemClient) Interceptors() []Interceptor {
+	return c.inters.RecurringCreditUserItem
+}
+
+func (c *RecurringCreditUserItemClient) mutate(ctx context.Context, m *RecurringCreditUserItemMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RecurringCreditUserItemCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RecurringCreditUserItemUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RecurringCreditUserItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RecurringCreditUserItemDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RecurringCreditUserItem mutation op: %q", m.Op())
+	}
+}
+
 // RedeemCodeClient is a client for the RedeemCode schema.
 type RedeemCodeClient struct {
 	config
@@ -7919,11 +8487,12 @@ type (
 		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
 		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
 		PromoCodeUsage, Proxy, RechargeBonusCampaign, RechargeBonusParticipation,
-		RedeemCode, ResetRebateAccountItem, ResetRebateBatch, ResetRebateUserItem,
-		SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
-		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
-		UserAttributeValue, UserLimitedCreditGrant, UserLimitedCreditLedger,
-		UserPlatformQuota, UserSubscription []ent.Hook
+		RecurringCreditBatch, RecurringCreditTask, RecurringCreditTaskAudit,
+		RecurringCreditUserItem, RedeemCode, ResetRebateAccountItem, ResetRebateBatch,
+		ResetRebateUserItem, SecuritySecret, Setting, SubscriptionPlan,
+		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
+		UserAttributeDefinition, UserAttributeValue, UserLimitedCreditGrant,
+		UserLimitedCreditLedger, UserPlatformQuota, UserSubscription []ent.Hook
 	}
 	inters struct {
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
@@ -7933,11 +8502,12 @@ type (
 		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
 		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
 		PromoCodeUsage, Proxy, RechargeBonusCampaign, RechargeBonusParticipation,
-		RedeemCode, ResetRebateAccountItem, ResetRebateBatch, ResetRebateUserItem,
-		SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
-		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
-		UserAttributeValue, UserLimitedCreditGrant, UserLimitedCreditLedger,
-		UserPlatformQuota, UserSubscription []ent.Interceptor
+		RecurringCreditBatch, RecurringCreditTask, RecurringCreditTaskAudit,
+		RecurringCreditUserItem, RedeemCode, ResetRebateAccountItem, ResetRebateBatch,
+		ResetRebateUserItem, SecuritySecret, Setting, SubscriptionPlan,
+		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
+		UserAttributeDefinition, UserAttributeValue, UserLimitedCreditGrant,
+		UserLimitedCreditLedger, UserPlatformQuota, UserSubscription []ent.Interceptor
 	}
 )
 
