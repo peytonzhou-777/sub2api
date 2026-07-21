@@ -116,6 +116,11 @@ type AffiliateRepository interface {
 	GetAffiliateUserOverview(ctx context.Context, userID int64) (*AffiliateUserOverview, error)
 }
 
+// AffiliateLimitedCreditTransferRepository 定义返利转入限时额度的原子持久化能力。
+type AffiliateLimitedCreditTransferRepository interface {
+	TransferQuotaToLimitedCredit(ctx context.Context, userID int64, validityDays int) (float64, float64, error)
+}
+
 // AffiliateAdminFilter 列表筛选条件
 type AffiliateAdminFilter struct {
 	Search   string
@@ -413,7 +418,22 @@ func (s *AffiliateService) TransferAffiliateQuota(ctx context.Context, userID in
 		return 0, 0, infraerrors.ServiceUnavailable("SERVICE_UNAVAILABLE", "affiliate service unavailable")
 	}
 
-	transferred, balance, err := s.repo.TransferQuotaToBalance(ctx, userID)
+	var transferred float64
+	var balance float64
+	var err error
+	if s.settingService != nil && s.settingService.GetAffiliateRebateCreditType(ctx) == AffiliateRebateCreditTypeLimited {
+		limitedRepo, ok := s.repo.(AffiliateLimitedCreditTransferRepository)
+		if !ok {
+			return 0, 0, infraerrors.ServiceUnavailable("SERVICE_UNAVAILABLE", "affiliate limited credit transfer unavailable")
+		}
+		transferred, balance, err = limitedRepo.TransferQuotaToLimitedCredit(
+			ctx,
+			userID,
+			s.settingService.GetAffiliateRebateCreditValidityDays(ctx),
+		)
+	} else {
+		transferred, balance, err = s.repo.TransferQuotaToBalance(ctx, userID)
+	}
 	if err != nil {
 		return 0, 0, err
 	}

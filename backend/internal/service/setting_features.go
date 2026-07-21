@@ -161,6 +161,24 @@ func (s *SettingService) GetAffiliateRebatePerInviteeCap(ctx context.Context) fl
 	return cap
 }
 
+// GetAffiliateRebateCreditType 返回返利转入的额度类型。
+func (s *SettingService) GetAffiliateRebateCreditType(ctx context.Context) string {
+	raw, err := s.settingRepo.GetValue(ctx, SettingKeyAffiliateRebateCreditType)
+	if err != nil {
+		return AffiliateRebateCreditTypeDefault
+	}
+	return normalizeAffiliateRebateCreditType(raw)
+}
+
+// GetAffiliateRebateCreditValidityDays 返回限时返利额度的有效天数。
+func (s *SettingService) GetAffiliateRebateCreditValidityDays(ctx context.Context) int {
+	raw, err := s.settingRepo.GetValue(ctx, SettingKeyAffiliateRebateCreditValidityDays)
+	if err != nil {
+		return AffiliateRebateCreditValidityDefault
+	}
+	return normalizeAffiliateRebateCreditValidityDays(raw)
+}
+
 // IsPasswordResetEnabled 检查是否启用密码重置功能
 // 要求：必须同时开启邮件验证
 func (s *SettingService) IsPasswordResetEnabled(ctx context.Context) bool {
@@ -341,41 +359,57 @@ func (s *SettingService) GetDefaultSubscriptions(ctx context.Context) []DefaultS
 	return parseDefaultSubscriptions(value)
 }
 
+// GetDefaultLimitedCredits 获取新用户默认限时额度配置列表。
+func (s *SettingService) GetDefaultLimitedCredits(ctx context.Context) []DefaultLimitedCreditSetting {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyDefaultLimitedCredits)
+	if err != nil {
+		return nil
+	}
+	return parseDefaultLimitedCredits(value)
+}
+
 func (s *SettingService) GetAuthSourceDefaultSettings(ctx context.Context) (*AuthSourceDefaultSettings, error) {
 	keys := []string{
 		SettingKeyAuthSourceDefaultEmailBalance,
 		SettingKeyAuthSourceDefaultEmailConcurrency,
 		SettingKeyAuthSourceDefaultEmailSubscriptions,
+		SettingKeyAuthSourceLimitedCredits("email"),
 		SettingKeyAuthSourceDefaultEmailGrantOnSignup,
 		SettingKeyAuthSourceDefaultEmailGrantOnFirstBind,
 		SettingKeyAuthSourceDefaultLinuxDoBalance,
 		SettingKeyAuthSourceDefaultLinuxDoConcurrency,
 		SettingKeyAuthSourceDefaultLinuxDoSubscriptions,
+		SettingKeyAuthSourceLimitedCredits("linuxdo"),
 		SettingKeyAuthSourceDefaultLinuxDoGrantOnSignup,
 		SettingKeyAuthSourceDefaultLinuxDoGrantOnFirstBind,
 		SettingKeyAuthSourceDefaultOIDCBalance,
 		SettingKeyAuthSourceDefaultOIDCConcurrency,
 		SettingKeyAuthSourceDefaultOIDCSubscriptions,
+		SettingKeyAuthSourceLimitedCredits("oidc"),
 		SettingKeyAuthSourceDefaultOIDCGrantOnSignup,
 		SettingKeyAuthSourceDefaultOIDCGrantOnFirstBind,
 		SettingKeyAuthSourceDefaultWeChatBalance,
 		SettingKeyAuthSourceDefaultWeChatConcurrency,
 		SettingKeyAuthSourceDefaultWeChatSubscriptions,
+		SettingKeyAuthSourceLimitedCredits("wechat"),
 		SettingKeyAuthSourceDefaultWeChatGrantOnSignup,
 		SettingKeyAuthSourceDefaultWeChatGrantOnFirstBind,
 		SettingKeyAuthSourceDefaultGitHubBalance,
 		SettingKeyAuthSourceDefaultGitHubConcurrency,
 		SettingKeyAuthSourceDefaultGitHubSubscriptions,
+		SettingKeyAuthSourceLimitedCredits("github"),
 		SettingKeyAuthSourceDefaultGitHubGrantOnSignup,
 		SettingKeyAuthSourceDefaultGitHubGrantOnFirstBind,
 		SettingKeyAuthSourceDefaultGoogleBalance,
 		SettingKeyAuthSourceDefaultGoogleConcurrency,
 		SettingKeyAuthSourceDefaultGoogleSubscriptions,
+		SettingKeyAuthSourceLimitedCredits("google"),
 		SettingKeyAuthSourceDefaultGoogleGrantOnSignup,
 		SettingKeyAuthSourceDefaultGoogleGrantOnFirstBind,
 		SettingKeyAuthSourceDefaultDingTalkBalance,
 		SettingKeyAuthSourceDefaultDingTalkConcurrency,
 		SettingKeyAuthSourceDefaultDingTalkSubscriptions,
+		SettingKeyAuthSourceLimitedCredits("dingtalk"),
 		SettingKeyAuthSourceDefaultDingTalkGrantOnSignup,
 		SettingKeyAuthSourceDefaultDingTalkGrantOnFirstBind,
 		SettingKeyAuthSourcePlatformQuotas("email"),
@@ -407,9 +441,10 @@ func (s *SettingService) GetAuthSourceDefaultSettings(ctx context.Context) (*Aut
 
 func (s *SettingService) ResolveAuthSourceGrantSettings(ctx context.Context, signupSource string, firstBind bool) (ProviderDefaultGrantSettings, bool, error) {
 	result := ProviderDefaultGrantSettings{
-		Balance:       s.GetDefaultBalance(ctx),
-		Concurrency:   s.GetDefaultConcurrency(ctx),
-		Subscriptions: s.GetDefaultSubscriptions(ctx),
+		Balance:        s.GetDefaultBalance(ctx),
+		Concurrency:    s.GetDefaultConcurrency(ctx),
+		Subscriptions:  s.GetDefaultSubscriptions(ctx),
+		LimitedCredits: s.GetDefaultLimitedCredits(ctx),
 	}
 
 	defaults, err := s.GetAuthSourceDefaultSettings(ctx)

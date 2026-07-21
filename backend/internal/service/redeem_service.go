@@ -142,6 +142,7 @@ type RedeemService struct {
 	entClient            *dbent.Client
 	authCacheInvalidator APIKeyAuthCacheInvalidator
 	affiliateService     *AffiliateService
+	limitedCreditService *LimitedCreditService
 }
 
 // NewRedeemService 创建兑换码服务实例
@@ -154,8 +155,14 @@ func NewRedeemService(
 	entClient *dbent.Client,
 	authCacheInvalidator APIKeyAuthCacheInvalidator,
 	affiliateService *AffiliateService,
+	limitedCreditService ...*LimitedCreditService,
 ) *RedeemService {
 	redeemUserRepo, _ := userRepo.(RedeemUserAdjustmentRepository)
+
+	var limitedCreditSvc *LimitedCreditService
+	if len(limitedCreditService) > 0 {
+		limitedCreditSvc = limitedCreditService[0]
+	}
 	return &RedeemService{
 		redeemRepo:           redeemRepo,
 		userRepo:             userRepo,
@@ -166,6 +173,7 @@ func NewRedeemService(
 		entClient:            entClient,
 		authCacheInvalidator: authCacheInvalidator,
 		affiliateService:     affiliateService,
+		limitedCreditService: limitedCreditSvc,
 	}
 }
 
@@ -197,9 +205,12 @@ func (s *RedeemService) GenerateCodes(ctx context.Context, req GenerateCodesRequ
 		return nil, errors.New("count must be greater than 0")
 	}
 
-	// 邀请码类型不需要数值，其他类型需要非零值（支持负数用于退款）
+	// 邀请码类型不需要数值，其他类型需要非零值；限时额度只允许正数发放。
 	if req.Type != RedeemTypeInvitation && req.Value == 0 {
 		return nil, errors.New("value must not be zero")
+	}
+	if req.Type == RedeemTypeLimitedCredit && req.Value <= 0 {
+		return nil, errors.New("limited credit value must be greater than zero")
 	}
 
 	if req.Count > 1000 {
@@ -256,6 +267,9 @@ func (s *RedeemService) CreateCode(ctx context.Context, code *RedeemCode) error 
 	}
 	if code.Type != RedeemTypeInvitation && code.Value == 0 {
 		return errors.New("value must not be zero")
+	}
+	if code.Type == RedeemTypeLimitedCredit && code.Value <= 0 {
+		return errors.New("limited credit value must be greater than zero")
 	}
 	if code.Status == "" {
 		code.Status = StatusUnused
@@ -420,6 +434,10 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 	// 验证兑换码类型的前置条件。邀请码属于注册流程，不能通过普通兑换接口使用。
 	switch redeemCode.Type {
 	case RedeemTypeBalance, RedeemTypeConcurrency:
+	case RedeemTypeLimitedCredit:
+		if redeemCode.Value <= 0 {
+			return nil, infraerrors.BadRequest("REDEEM_CODE_INVALID", "limited credit value must be greater than zero")
+		}
 	case RedeemTypeSubscription:
 		if redeemCode.GroupID == nil {
 			return nil, infraerrors.BadRequest("REDEEM_CODE_INVALID", "invalid subscription redeem code: missing group_id")
@@ -481,6 +499,14 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 			return nil, fmt.Errorf("update user concurrency: %w", err)
 		}
 
+	case RedeemTypeLimitedCredit:
+		if s.limitedCreditService == nil {
+			return nil, infraerrors.ServiceUnavailable("LIMITED_CREDIT_SERVICE_UNAVAILABLE", "limited credit service is not configured")
+		}
+		if _, err := s.limitedCreditService.GrantFromRedeemCode(txCtx, userID, redeemCode); err != nil {
+			return nil, fmt.Errorf("grant limited credit: %w", err)
+		}
+
 	case RedeemTypeSubscription:
 		validityDays := redeemCode.ValidityDays
 		if validityDays < 0 {
@@ -533,7 +559,7 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 // invalidateRedeemCaches 失效兑换相关的缓存
 func (s *RedeemService) invalidateRedeemCaches(ctx context.Context, userID int64, redeemCode *RedeemCode) {
 	switch redeemCode.Type {
-	case RedeemTypeBalance:
+	case RedeemTypeBalance, RedeemTypeLimitedCredit:
 		if s.authCacheInvalidator != nil {
 			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
 		}

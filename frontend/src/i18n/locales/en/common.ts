@@ -51,6 +51,8 @@ export default {
     disabled: 'Disabled',
 	    total: 'Total',
 	    balance: 'Balance',
+	    ordinaryBalance: 'Ordinary balance',
+	    limitedCredit: 'Limited credit',
 	    availableBalance: 'Available balance',
 	    frozenBalance: 'Frozen balance',
 	    totalBalance: 'Total balance',

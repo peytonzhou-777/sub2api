@@ -1684,6 +1684,52 @@ func HasPlatformQuotasWith(preds ...predicate.UserPlatformQuota) predicate.User 
 	})
 }
 
+// HasLimitedCreditGrants applies the HasEdge predicate on the "limited_credit_grants" edge.
+func HasLimitedCreditGrants() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, LimitedCreditGrantsTable, LimitedCreditGrantsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasLimitedCreditGrantsWith applies the HasEdge predicate on the "limited_credit_grants" edge with a given conditions (other predicates).
+func HasLimitedCreditGrantsWith(preds ...predicate.UserLimitedCreditGrant) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newLimitedCreditGrantsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasLimitedCreditLedgerEntries applies the HasEdge predicate on the "limited_credit_ledger_entries" edge.
+func HasLimitedCreditLedgerEntries() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, LimitedCreditLedgerEntriesTable, LimitedCreditLedgerEntriesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasLimitedCreditLedgerEntriesWith applies the HasEdge predicate on the "limited_credit_ledger_entries" edge with a given conditions (other predicates).
+func HasLimitedCreditLedgerEntriesWith(preds ...predicate.UserLimitedCreditLedger) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newLimitedCreditLedgerEntriesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasUserAllowedGroups applies the HasEdge predicate on the "user_allowed_groups" edge.
 func HasUserAllowedGroups() predicate.User {
 	return predicate.User(func(s *sql.Selector) {

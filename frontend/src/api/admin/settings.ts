@@ -16,6 +16,11 @@ export interface DefaultSubscriptionSetting {
   validity_days: number;
 }
 
+export interface DefaultLimitedCreditSetting {
+  amount: number;
+  validity_days: number;
+}
+
 // ── 平台限额类型 ──────────────────────────────────────────────────
 export type PlatformType = "anthropic" | "openai" | "gemini" | "antigravity" | "grok"
 export type QuotaWindowType = "daily" | "weekly" | "monthly"
@@ -102,6 +107,7 @@ export interface AuthSourceDefaultsValue {
   balance: number;
   concurrency: number;
   subscriptions: DefaultSubscriptionSetting[];
+  limited_credits: DefaultLimitedCreditSetting[];
   grant_on_signup: boolean;
   grant_on_first_bind: boolean;
   // ★ 新增：平台限额覆盖（key = PlatformType）
@@ -240,6 +246,31 @@ export function normalizeDefaultSubscriptionSettings(
     }));
 }
 
+export function isValidDefaultLimitedCreditSetting(
+  item: DefaultLimitedCreditSetting,
+): boolean {
+  return (
+    Number.isFinite(item.amount) &&
+    item.amount > 0 &&
+    Number.isFinite(item.validity_days) &&
+    item.validity_days > 0 &&
+    item.validity_days <= 36500
+  );
+}
+
+export function normalizeDefaultLimitedCreditSettings(
+  items: DefaultLimitedCreditSetting[] | null | undefined,
+): DefaultLimitedCreditSetting[] {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .filter(isValidDefaultLimitedCreditSetting)
+    .map((item) => ({
+      amount: Number(item.amount),
+      validity_days: Math.floor(item.validity_days),
+    }));
+}
+
 export function buildAuthSourceDefaultsState(
   settings: Partial<SystemSettings>,
 ): AuthSourceDefaultsState {
@@ -247,6 +278,7 @@ export function buildAuthSourceDefaultsState(
 
   return AUTH_SOURCE_TYPES.reduce((acc, source) => {
     const subscriptions = raw[`auth_source_default_${source}_subscriptions`];
+    const limitedCredits = raw[`auth_source_default_${source}_limited_credits`];
     acc[source] = {
       balance: Number(
         raw[`auth_source_default_${source}_balance`] ??
@@ -262,6 +294,11 @@ export function buildAuthSourceDefaultsState(
       subscriptions: normalizeDefaultSubscriptionSettings(
         Array.isArray(subscriptions)
           ? (subscriptions as DefaultSubscriptionSetting[])
+          : [],
+      ),
+      limited_credits: normalizeDefaultLimitedCreditSettings(
+        Array.isArray(limitedCredits)
+          ? (limitedCredits as DefaultLimitedCreditSetting[])
           : [],
       ),
       grant_on_signup:
@@ -292,6 +329,8 @@ export function appendAuthSourceDefaultsToUpdateRequest(
     );
     target[`auth_source_default_${source}_subscriptions`] =
       normalizeDefaultSubscriptionSettings(current.subscriptions);
+    target[`auth_source_default_${source}_limited_credits`] =
+      normalizeDefaultLimitedCreditSettings(current.limited_credits);
     target[`auth_source_default_${source}_grant_on_signup`] =
       current.grant_on_signup;
     target[`auth_source_default_${source}_grant_on_first_bind`] =
@@ -417,42 +456,52 @@ export interface SystemSettings {
   affiliate_rebate_duration_days: number;
   affiliate_rebate_per_invitee_cap: number;
   affiliate_admin_recharge_enabled: boolean;
+  affiliate_rebate_credit_type: "permanent" | "limited";
+  affiliate_rebate_credit_validity_days: number;
   default_concurrency: number;
   default_user_rpm_limit: number;
   default_subscriptions: DefaultSubscriptionSetting[];
+  default_limited_credits: DefaultLimitedCreditSetting[];
   auth_source_default_email_balance?: number;
   auth_source_default_email_concurrency?: number;
   auth_source_default_email_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_email_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_email_grant_on_signup?: boolean;
   auth_source_default_email_grant_on_first_bind?: boolean;
   auth_source_default_linuxdo_balance?: number;
   auth_source_default_linuxdo_concurrency?: number;
   auth_source_default_linuxdo_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_linuxdo_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_linuxdo_grant_on_signup?: boolean;
   auth_source_default_linuxdo_grant_on_first_bind?: boolean;
   auth_source_default_oidc_balance?: number;
   auth_source_default_oidc_concurrency?: number;
   auth_source_default_oidc_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_oidc_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_oidc_grant_on_signup?: boolean;
   auth_source_default_oidc_grant_on_first_bind?: boolean;
   auth_source_default_wechat_balance?: number;
   auth_source_default_wechat_concurrency?: number;
   auth_source_default_wechat_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_wechat_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_wechat_grant_on_signup?: boolean;
   auth_source_default_wechat_grant_on_first_bind?: boolean;
   auth_source_default_dingtalk_balance?: number;
   auth_source_default_dingtalk_concurrency?: number;
   auth_source_default_dingtalk_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_dingtalk_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_dingtalk_grant_on_signup?: boolean;
   auth_source_default_dingtalk_grant_on_first_bind?: boolean;
   auth_source_default_github_balance?: number;
   auth_source_default_github_concurrency?: number;
   auth_source_default_github_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_github_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_github_grant_on_signup?: boolean;
   auth_source_default_github_grant_on_first_bind?: boolean;
   auth_source_default_google_balance?: number;
   auth_source_default_google_concurrency?: number;
   auth_source_default_google_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_google_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_google_grant_on_signup?: boolean;
   auth_source_default_google_grant_on_first_bind?: boolean;
   force_email_on_third_party_signup?: boolean;
@@ -755,42 +804,52 @@ export interface UpdateSettingsRequest {
   affiliate_rebate_duration_days?: number;
   affiliate_rebate_per_invitee_cap?: number;
   affiliate_admin_recharge_enabled?: boolean;
+  affiliate_rebate_credit_type?: "permanent" | "limited";
+  affiliate_rebate_credit_validity_days?: number;
   default_concurrency?: number;
   default_user_rpm_limit?: number;
   default_subscriptions?: DefaultSubscriptionSetting[];
+  default_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_email_balance?: number;
   auth_source_default_email_concurrency?: number;
   auth_source_default_email_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_email_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_email_grant_on_signup?: boolean;
   auth_source_default_email_grant_on_first_bind?: boolean;
   auth_source_default_linuxdo_balance?: number;
   auth_source_default_linuxdo_concurrency?: number;
   auth_source_default_linuxdo_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_linuxdo_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_linuxdo_grant_on_signup?: boolean;
   auth_source_default_linuxdo_grant_on_first_bind?: boolean;
   auth_source_default_oidc_balance?: number;
   auth_source_default_oidc_concurrency?: number;
   auth_source_default_oidc_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_oidc_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_oidc_grant_on_signup?: boolean;
   auth_source_default_oidc_grant_on_first_bind?: boolean;
   auth_source_default_wechat_balance?: number;
   auth_source_default_wechat_concurrency?: number;
   auth_source_default_wechat_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_wechat_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_wechat_grant_on_signup?: boolean;
   auth_source_default_wechat_grant_on_first_bind?: boolean;
   auth_source_default_dingtalk_balance?: number;
   auth_source_default_dingtalk_concurrency?: number;
   auth_source_default_dingtalk_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_dingtalk_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_dingtalk_grant_on_signup?: boolean;
   auth_source_default_dingtalk_grant_on_first_bind?: boolean;
   auth_source_default_github_balance?: number;
   auth_source_default_github_concurrency?: number;
   auth_source_default_github_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_github_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_github_grant_on_signup?: boolean;
   auth_source_default_github_grant_on_first_bind?: boolean;
   auth_source_default_google_balance?: number;
   auth_source_default_google_concurrency?: number;
   auth_source_default_google_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_google_limited_credits?: DefaultLimitedCreditSetting[];
   auth_source_default_google_grant_on_signup?: boolean;
   auth_source_default_google_grant_on_first_bind?: boolean;
   force_email_on_third_party_signup?: boolean;

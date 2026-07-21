@@ -1,6 +1,5 @@
 /**
- * Redeem code API endpoints
- * Handles redeem code redemption for users
+ * 用户兑换码 API
  */
 
 import { apiClient } from './client'
@@ -14,9 +13,9 @@ export interface RedeemHistoryItem {
   status: string
   used_at: string
   created_at: string
-  // Notes from admin for admin_balance/admin_concurrency types
+  // 管理员调整备注，仅 admin_balance/admin_concurrency 类型返回。
   notes?: string
-  // Subscription-specific fields
+  // 订阅和限时额度相关字段。
   group_id?: number
   validity_days?: number
   group?: {
@@ -25,35 +24,24 @@ export interface RedeemHistoryItem {
   }
 }
 
-/**
- * Redeem a code
- * @param code - Redeem code string
- * @returns Redemption result with updated balance or concurrency
- */
-export async function redeem(code: string): Promise<{
+export interface RedeemResult {
   message: string
   type: string
   value: number
   new_balance?: number
   new_concurrency?: number
-}> {
+  group_name?: string
+  validity_days?: number
+}
+
+// 兑换卡密并返回兑换结果。
+export async function redeem(code: string): Promise<RedeemResult> {
   const payload: RedeemCodeRequest = { code }
-
-  const { data } = await apiClient.post<{
-    message: string
-    type: string
-    value: number
-    new_balance?: number
-    new_concurrency?: number
-  }>('/redeem', payload)
-
+  const { data } = await apiClient.post<RedeemResult>('/redeem', payload)
   return data
 }
 
-/**
- * Get user's redemption history
- * @returns List of redeemed codes
- */
+// 获取当前用户兑换历史。
 export async function getHistory(): Promise<RedeemHistoryItem[]> {
   const { data } = await apiClient.get<RedeemHistoryItem[]>('/redeem/history')
   return data

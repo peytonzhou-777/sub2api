@@ -3982,6 +3982,86 @@
                 </div>
               </div>
 
+              <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+                <div class="mb-3 flex items-center justify-between gap-4">
+                  <div>
+                    <label class="font-medium text-gray-900 dark:text-white">
+                      {{ t("admin.settings.defaults.defaultLimitedCredits") }}
+                    </label>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                      {{
+                        t(
+                          "admin.settings.defaults.defaultLimitedCreditsHint",
+                        )
+                      }}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm default-limited-credit-add-btn shrink-0"
+                    @click="addDefaultLimitedCredit"
+                  >
+                    {{ t("admin.settings.defaults.addDefaultLimitedCredit") }}
+                  </button>
+                </div>
+
+                <div
+                  v-if="form.default_limited_credits.length === 0"
+                  class="default-limited-credit-empty rounded border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-500 dark:border-dark-600 dark:text-gray-400"
+                >
+                  {{
+                    t("admin.settings.defaults.defaultLimitedCreditsEmpty")
+                  }}
+                </div>
+
+                <div v-else class="space-y-3">
+                  <div
+                    v-for="(item, index) in form.default_limited_credits"
+                    :key="`default-limited-credit-${index}`"
+                    class="default-limited-credit-row grid grid-cols-1 gap-3 rounded border border-gray-200 p-3 md:grid-cols-[1fr_160px_auto] dark:border-dark-600"
+                  >
+                    <div>
+                      <label
+                        class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
+                      >
+                        {{ t("admin.settings.defaults.limitedCreditAmount") }}
+                      </label>
+                      <input
+                        v-model.number="item.amount"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        class="input h-[42px] default-limited-credit-amount"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
+                      >
+                        {{ t("admin.settings.defaults.limitedCreditValidityDays") }}
+                      </label>
+                      <input
+                        v-model.number="item.validity_days"
+                        type="number"
+                        min="1"
+                        max="36500"
+                        step="1"
+                        class="input h-[42px] default-limited-credit-validity"
+                      />
+                    </div>
+                    <div class="flex items-end">
+                      <button
+                        type="button"
+                        class="btn btn-secondary default-limited-credit-delete-btn w-full text-red-600 hover:text-red-700 dark:text-red-400"
+                        @click="removeDefaultLimitedCredit(index)"
+                      >
+                        {{ t("common.delete") }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <!-- ★ 新增：系统全局默认平台限额矩阵 -->
               <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
                 <div class="mb-3">
@@ -4316,6 +4396,64 @@
                           >
                             {{ t("common.delete") }}
                           </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+                      <div class="mb-3 flex items-center justify-between gap-4">
+                        <div>
+                          <label class="font-medium text-gray-900 dark:text-white">
+                            {{ t("admin.settings.authSourceDefaults.defaultLimitedCreditsLabel") }}
+                          </label>
+                          <p class="text-sm text-gray-500 dark:text-gray-400">
+                            {{ t("admin.settings.authSourceDefaults.defaultLimitedCreditsHint") }}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          class="btn btn-secondary btn-sm"
+                          :data-testid="`auth-source-${authSource.source}-limited-credit-add`"
+                          @click="addAuthSourceDefaultLimitedCredit(authSource.source)"
+                        >
+                          {{ t("admin.settings.defaults.addDefaultLimitedCredit") }}
+                        </button>
+                      </div>
+
+                      <div
+                        v-if="authSourceDefaults[authSource.source].limited_credits.length === 0"
+                        class="rounded border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-500 dark:border-dark-600 dark:text-gray-400"
+                      >
+                        {{ t("admin.settings.authSourceDefaults.noSourceLimitedCredits") }}
+                      </div>
+
+                      <div v-else class="space-y-3">
+                        <div
+                          v-for="(item, index) in authSourceDefaults[authSource.source].limited_credits"
+                          :key="`${authSource.source}-limited-${index}`"
+                          class="auth-source-limited-credit-row grid grid-cols-1 gap-3 rounded border border-gray-200 p-3 md:grid-cols-[1fr_1fr_auto] dark:border-dark-600"
+                        >
+                          <div>
+                            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                              {{ t("admin.settings.defaults.defaultLimitedCreditAmount") }}
+                            </label>
+                            <input v-model.number="item.amount" type="number" min="0.00000001" step="0.01" class="input" />
+                          </div>
+                          <div>
+                            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                              {{ t("admin.settings.defaults.defaultLimitedCreditValidityDays") }}
+                            </label>
+                            <input v-model.number="item.validity_days" type="number" min="1" max="36500" step="1" class="input" />
+                          </div>
+                          <div class="flex items-end">
+                            <button
+                              type="button"
+                              class="btn btn-secondary w-full text-red-600 hover:text-red-700 dark:text-red-400"
+                              @click="removeAuthSourceDefaultLimitedCredit(authSource.source, index)"
+                            >
+                              {{ t("common.delete") }}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -7245,6 +7383,53 @@
 
               <div>
                 <label class="input-label">
+                  {{ t('admin.settings.features.affiliate.creditType') }}
+                </label>
+                <div class="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-dark-600">
+                  <button
+                    type="button"
+                    data-testid="affiliate-credit-type-permanent"
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="form.affiliate_rebate_credit_type === 'permanent' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50 dark:bg-dark-800 dark:text-gray-300 dark:hover:bg-dark-700'"
+                    @click="form.affiliate_rebate_credit_type = 'permanent'"
+                  >
+                    {{ t('admin.settings.features.affiliate.creditTypePermanent') }}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="affiliate-credit-type-limited"
+                    class="border-l border-gray-200 px-4 py-2 text-sm font-medium transition-colors dark:border-dark-600"
+                    :class="form.affiliate_rebate_credit_type === 'limited' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50 dark:bg-dark-800 dark:text-gray-300 dark:hover:bg-dark-700'"
+                    @click="form.affiliate_rebate_credit_type = 'limited'"
+                  >
+                    {{ t('admin.settings.features.affiliate.creditTypeLimited') }}
+                  </button>
+                </div>
+                <p class="mt-1 text-xs text-gray-400">
+                  {{ t('admin.settings.features.affiliate.creditTypeHint') }}
+                </p>
+              </div>
+
+              <div v-if="form.affiliate_rebate_credit_type === 'limited'">
+                <label class="input-label">
+                  {{ t('admin.settings.features.affiliate.creditValidityDays') }}
+                </label>
+                <input
+                  v-model.number="form.affiliate_rebate_credit_validity_days"
+                  data-testid="affiliate-credit-validity-days"
+                  type="number"
+                  step="1"
+                  min="1"
+                  max="36500"
+                  class="input"
+                />
+                <p class="mt-1 text-xs text-gray-400">
+                  {{ t('admin.settings.features.affiliate.creditValidityDaysHint') }}
+                </p>
+              </div>
+
+              <div>
+                <label class="input-label">
                   {{ t('admin.settings.features.affiliate.freezeHours') }}
                 </label>
                 <input
@@ -8666,7 +8851,9 @@ import {
   SCHEDULING_THRESHOLD_PLATFORMS,
   defaultWeChatConnectScopesForMode,
   deriveWeChatConnectStoredMode,
+  isValidDefaultLimitedCreditSetting,
   normalizeDefaultSubscriptionSettings,
+  normalizeDefaultLimitedCreditSettings,
   resolveWeChatConnectModeCapabilities,
 } from "@/api/admin/settings";
 import type {
@@ -8675,6 +8862,7 @@ import type {
   SystemSettings,
   UpdateSettingsRequest,
   DefaultSubscriptionSetting,
+  DefaultLimitedCreditSetting,
   DefaultPlatformQuotasMap,
   OpenAIFastPolicyRule,
   WeChatConnectMode,
@@ -9443,8 +9631,11 @@ const form = reactive<SettingsForm>({
   affiliate_rebate_duration_days: 0,
   affiliate_rebate_per_invitee_cap: 0,
   affiliate_admin_recharge_enabled: false,
+  affiliate_rebate_credit_type: "permanent" as "permanent" | "limited",
+  affiliate_rebate_credit_validity_days: 30,
   default_concurrency: 1,
   default_subscriptions: [],
+  default_limited_credits: [],
   force_email_on_third_party_signup: false,
   default_user_rpm_limit: 0,
   site_name: "Sub2API",
@@ -10705,6 +10896,9 @@ async function loadSettings() {
     form.default_subscriptions = normalizeDefaultSubscriptionSettings(
       settings.default_subscriptions,
     );
+    form.default_limited_credits = normalizeDefaultLimitedCreditSettings(
+      settings.default_limited_credits,
+    );
     registrationEmailSuffixWhitelistTags.value =
       normalizeRegistrationEmailSuffixDomains(
         settings.registration_email_suffix_whitelist,
@@ -10852,6 +11046,17 @@ function removeDefaultSubscription(index: number) {
   form.default_subscriptions.splice(index, 1);
 }
 
+function addDefaultLimitedCredit() {
+  form.default_limited_credits.push({
+    amount: 1,
+    validity_days: 30,
+  });
+}
+
+function removeDefaultLimitedCredit(index: number) {
+  form.default_limited_credits.splice(index, 1);
+}
+
 function addAuthSourceDefaultSubscription(source: AuthSourceType) {
   if (subscriptionGroups.value.length === 0) return;
   const candidate = findNextAvailableSubscriptionGroup(
@@ -10869,6 +11074,14 @@ function removeAuthSourceDefaultSubscription(
   index: number,
 ) {
   authSourceDefaults[source].subscriptions.splice(index, 1);
+}
+
+function addAuthSourceDefaultLimitedCredit(source: AuthSourceType) {
+  authSourceDefaults[source].limited_credits.push({ amount: 1, validity_days: 30 });
+}
+
+function removeAuthSourceDefaultLimitedCredit(source: AuthSourceType, index: number) {
+  authSourceDefaults[source].limited_credits.splice(index, 1);
 }
 
 function findDuplicateDefaultSubscription(
@@ -10977,6 +11190,19 @@ async function saveSettings() {
       return;
     }
 
+    const invalidDefaultLimitedCredit = form.default_limited_credits.some(
+      (item: DefaultLimitedCreditSetting) =>
+        !isValidDefaultLimitedCreditSetting(item),
+    );
+    if (invalidDefaultLimitedCredit) {
+      appStore.showError(
+        t("admin.settings.defaults.defaultLimitedCreditsInvalid"),
+      );
+      return;
+    }
+    const normalizedDefaultLimitedCredits =
+      normalizeDefaultLimitedCreditSettings(form.default_limited_credits);
+
     for (const authSource of authSourceDefaultsMeta.value) {
       authSourceDefaults[authSource.source].subscriptions =
         normalizeDefaultSubscriptionSettings(
@@ -10996,6 +11222,20 @@ async function saveSettings() {
         );
         return;
       }
+      if (
+        authSourceDefaults[authSource.source].limited_credits.some(
+          (item: DefaultLimitedCreditSetting) => !isValidDefaultLimitedCreditSetting(item),
+        )
+      ) {
+        appStore.showError(
+          `${authSource.title}: ${t("admin.settings.defaults.defaultLimitedCreditsInvalid")}`,
+        );
+        return;
+      }
+      authSourceDefaults[authSource.source].limited_credits =
+        normalizeDefaultLimitedCreditSettings(
+          authSourceDefaults[authSource.source].limited_credits,
+        );
     }
 
     if (form.wechat_connect_mp_enabled && form.wechat_connect_mobile_enabled) {
@@ -11068,8 +11308,14 @@ async function saveSettings() {
       affiliate_rebate_duration_days: Math.max(0, Math.min(3650, Math.floor(Number(form.affiliate_rebate_duration_days) || 0))),
       affiliate_rebate_per_invitee_cap: Math.max(0, Number(form.affiliate_rebate_per_invitee_cap) || 0),
       affiliate_admin_recharge_enabled: form.affiliate_admin_recharge_enabled,
+      affiliate_rebate_credit_type: form.affiliate_rebate_credit_type,
+      affiliate_rebate_credit_validity_days: Math.max(
+        1,
+        Math.min(36500, Math.floor(Number(form.affiliate_rebate_credit_validity_days) || 30)),
+      ),
       default_concurrency: form.default_concurrency,
       default_subscriptions: normalizedDefaultSubscriptions,
+      default_limited_credits: normalizedDefaultLimitedCredits,
       force_email_on_third_party_signup: form.force_email_on_third_party_signup,
       default_user_rpm_limit: form.default_user_rpm_limit,
       site_name: form.site_name,

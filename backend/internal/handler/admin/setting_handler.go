@@ -98,6 +98,18 @@ func (h *SettingHandler) SetStepUpDeps(totpService *service.TotpService, userSer
 	h.userService = userService
 }
 
+// defaultLimitedCreditsToDTO 将服务层默认限时额度配置转换为管理员 API DTO。
+func defaultLimitedCreditsToDTO(items []service.DefaultLimitedCreditSetting) []dto.DefaultLimitedCreditSetting {
+	result := make([]dto.DefaultLimitedCreditSetting, 0, len(items))
+	for _, item := range items {
+		result = append(result, dto.DefaultLimitedCreditSetting{
+			Amount:       item.Amount,
+			ValidityDays: item.ValidityDays,
+		})
+	}
+	return result
+}
+
 // GetSettings 获取所有系统设置
 // GET /api/v1/admin/settings
 func (h *SettingHandler) GetSettings(c *gin.Context) {
@@ -121,6 +133,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 			ValidityDays: sub.ValidityDays,
 		})
 	}
+	defaultLimitedCredits := defaultLimitedCreditsToDTO(settings.DefaultLimitedCredits)
 
 	// Load payment config
 	var paymentCfg *service.PaymentConfig
@@ -271,8 +284,11 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		AffiliateRebateDurationDays:                            settings.AffiliateRebateDurationDays,
 		AffiliateRebatePerInviteeCap:                           settings.AffiliateRebatePerInviteeCap,
 		AdminRechargeRebateEnabled:                             settings.AdminRechargeRebateEnabled,
+		AffiliateRebateCreditType:                              settings.AffiliateRebateCreditType,
+		AffiliateRebateCreditValidityDays:                      settings.AffiliateRebateCreditValidityDays,
 		DefaultUserRPMLimit:                                    settings.DefaultUserRPMLimit,
 		DefaultSubscriptions:                                   defaultSubscriptions,
+		DefaultLimitedCredits:                                  defaultLimitedCredits,
 		EnableModelFallback:                                    settings.EnableModelFallback,
 		FallbackModelAnthropic:                                 settings.FallbackModelAnthropic,
 		FallbackModelOpenAI:                                    settings.FallbackModelOpenAI,
@@ -484,36 +500,43 @@ func systemSettingsResponseData(settings dto.SystemSettings, authSourceDefaults 
 	data["auth_source_default_email_balance"] = authSourceDefaults.Email.Balance
 	data["auth_source_default_email_concurrency"] = authSourceDefaults.Email.Concurrency
 	data["auth_source_default_email_subscriptions"] = authSourceDefaults.Email.Subscriptions
+	data["auth_source_default_email_limited_credits"] = authSourceDefaults.Email.LimitedCredits
 	data["auth_source_default_email_grant_on_signup"] = authSourceDefaults.Email.GrantOnSignup
 	data["auth_source_default_email_grant_on_first_bind"] = authSourceDefaults.Email.GrantOnFirstBind
 	data["auth_source_default_linuxdo_balance"] = authSourceDefaults.LinuxDo.Balance
 	data["auth_source_default_linuxdo_concurrency"] = authSourceDefaults.LinuxDo.Concurrency
 	data["auth_source_default_linuxdo_subscriptions"] = authSourceDefaults.LinuxDo.Subscriptions
+	data["auth_source_default_linuxdo_limited_credits"] = authSourceDefaults.LinuxDo.LimitedCredits
 	data["auth_source_default_linuxdo_grant_on_signup"] = authSourceDefaults.LinuxDo.GrantOnSignup
 	data["auth_source_default_linuxdo_grant_on_first_bind"] = authSourceDefaults.LinuxDo.GrantOnFirstBind
 	data["auth_source_default_dingtalk_balance"] = authSourceDefaults.DingTalk.Balance
 	data["auth_source_default_dingtalk_concurrency"] = authSourceDefaults.DingTalk.Concurrency
 	data["auth_source_default_dingtalk_subscriptions"] = authSourceDefaults.DingTalk.Subscriptions
+	data["auth_source_default_dingtalk_limited_credits"] = authSourceDefaults.DingTalk.LimitedCredits
 	data["auth_source_default_dingtalk_grant_on_signup"] = authSourceDefaults.DingTalk.GrantOnSignup
 	data["auth_source_default_dingtalk_grant_on_first_bind"] = authSourceDefaults.DingTalk.GrantOnFirstBind
 	data["auth_source_default_oidc_balance"] = authSourceDefaults.OIDC.Balance
 	data["auth_source_default_oidc_concurrency"] = authSourceDefaults.OIDC.Concurrency
 	data["auth_source_default_oidc_subscriptions"] = authSourceDefaults.OIDC.Subscriptions
+	data["auth_source_default_oidc_limited_credits"] = authSourceDefaults.OIDC.LimitedCredits
 	data["auth_source_default_oidc_grant_on_signup"] = authSourceDefaults.OIDC.GrantOnSignup
 	data["auth_source_default_oidc_grant_on_first_bind"] = authSourceDefaults.OIDC.GrantOnFirstBind
 	data["auth_source_default_wechat_balance"] = authSourceDefaults.WeChat.Balance
 	data["auth_source_default_wechat_concurrency"] = authSourceDefaults.WeChat.Concurrency
 	data["auth_source_default_wechat_subscriptions"] = authSourceDefaults.WeChat.Subscriptions
+	data["auth_source_default_wechat_limited_credits"] = authSourceDefaults.WeChat.LimitedCredits
 	data["auth_source_default_wechat_grant_on_signup"] = authSourceDefaults.WeChat.GrantOnSignup
 	data["auth_source_default_wechat_grant_on_first_bind"] = authSourceDefaults.WeChat.GrantOnFirstBind
 	data["auth_source_default_github_balance"] = authSourceDefaults.GitHub.Balance
 	data["auth_source_default_github_concurrency"] = authSourceDefaults.GitHub.Concurrency
 	data["auth_source_default_github_subscriptions"] = authSourceDefaults.GitHub.Subscriptions
+	data["auth_source_default_github_limited_credits"] = authSourceDefaults.GitHub.LimitedCredits
 	data["auth_source_default_github_grant_on_signup"] = authSourceDefaults.GitHub.GrantOnSignup
 	data["auth_source_default_github_grant_on_first_bind"] = authSourceDefaults.GitHub.GrantOnFirstBind
 	data["auth_source_default_google_balance"] = authSourceDefaults.Google.Balance
 	data["auth_source_default_google_concurrency"] = authSourceDefaults.Google.Concurrency
 	data["auth_source_default_google_subscriptions"] = authSourceDefaults.Google.Subscriptions
+	data["auth_source_default_google_limited_credits"] = authSourceDefaults.Google.LimitedCredits
 	data["auth_source_default_google_grant_on_signup"] = authSourceDefaults.Google.GrantOnSignup
 	data["auth_source_default_google_grant_on_first_bind"] = authSourceDefaults.Google.GrantOnFirstBind
 	data["auth_source_default_email_platform_quotas"] = authSourceDefaults.Email.PlatformQuotas

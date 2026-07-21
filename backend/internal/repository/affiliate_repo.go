@@ -233,6 +233,20 @@ WHERE user_id = $2`, thawed, userID)
 }
 
 func (r *affiliateRepository) TransferQuotaToBalance(ctx context.Context, userID int64) (float64, float64, error) {
+	return r.transferAffiliateQuota(ctx, userID, 0)
+}
+
+// TransferQuotaToLimitedCredit 将可用返利原子转入一份新限时额度。
+func (r *affiliateRepository) TransferQuotaToLimitedCredit(ctx context.Context, userID int64, validityDays int) (float64, float64, error) {
+	if validityDays <= 0 || validityDays > service.MaxValidityDays {
+		return 0, 0, fmt.Errorf("affiliate limited credit validity days must be between 1 and %d", service.MaxValidityDays)
+	}
+	return r.transferAffiliateQuota(ctx, userID, validityDays)
+}
+
+// transferAffiliateQuota 在同一事务中认领返利、写入目标额度并记录快照流水。
+// validityDays 为 0 时转入永久余额，大于 0 时转入限时额度。
+func (r *affiliateRepository) transferAffiliateQuota(ctx context.Context, userID int64, validityDays int) (float64, float64, error) {
 	var transferred float64
 	var newBalance float64
 
@@ -286,16 +300,29 @@ FROM cleared`, userID)
 			return service.ErrAffiliateQuotaEmpty
 		}
 
-		affected, err := txClient.User.Update().
-			Where(user.IDEQ(userID)).
-			AddBalance(transferred).
-			AddTotalRecharged(transferred).
-			Save(txCtx)
-		if err != nil {
-			return fmt.Errorf("credit user balance by affiliate quota: %w", err)
-		}
-		if affected == 0 {
-			return service.ErrUserNotFound
+		if validityDays > 0 {
+			if _, err := createLimitedCreditGrant(txCtx, txClient, &service.LimitedCreditGrant{
+				UserID:        userID,
+				SourceType:    service.LimitedCreditSourceAffiliateRebate,
+				InitialAmount: transferred,
+				ExpiresAt:     time.Now().UTC().AddDate(0, 0, validityDays),
+				Status:        service.LimitedCreditStatusActive,
+				Notes:         "邀请返利转入限时额度",
+			}); err != nil {
+				return fmt.Errorf("credit user limited credit by affiliate quota: %w", err)
+			}
+		} else {
+			affected, err := txClient.User.Update().
+				Where(user.IDEQ(userID)).
+				AddBalance(transferred).
+				AddTotalRecharged(transferred).
+				Save(txCtx)
+			if err != nil {
+				return fmt.Errorf("credit user balance by affiliate quota: %w", err)
+			}
+			if affected == 0 {
+				return service.ErrUserNotFound
+			}
 		}
 
 		newBalance, err = queryUserBalance(txCtx, txClient, userID)

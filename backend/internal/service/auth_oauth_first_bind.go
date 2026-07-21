@@ -99,6 +99,15 @@ ON CONFLICT (user_id, provider_type, grant_reason) DO NOTHING`,
 			}
 		}
 	}
+	if s.defaultLimitedCreditGranter != nil && len(providerDefaults.LimitedCredits) > 0 {
+		granter, ok := s.defaultLimitedCreditGranter.(AuthSourceLimitedCreditGranter)
+		if !ok {
+			return fmt.Errorf("auth source limited credit granter is not configured")
+		}
+		if _, err := granter.GrantFromAuthSourceSettings(ctx, userID, providerType, providerDefaults.LimitedCredits); err != nil {
+			return fmt.Errorf("apply first bind limited credit defaults: %w", err)
+		}
+	}
 
 	return nil
 }

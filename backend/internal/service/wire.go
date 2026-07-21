@@ -52,8 +52,7 @@ func ProvideEmailQueueService(emailService *EmailService) *EmailQueueService {
 	return NewEmailQueueService(emailService, 3)
 }
 
-// ProvideAuthService wires the optional captcha providers into AuthService while
-// keeping NewAuthService's public constructor compatible with existing tests.
+// ProvideAuthService 注入可选验证码服务和新用户默认限时额度发放器。
 func ProvideAuthService(
 	entClient *dbent.Client,
 	userRepo UserRepository,
@@ -70,6 +69,7 @@ func ProvideAuthService(
 	defaultSubAssigner DefaultSubscriptionAssigner,
 	affiliateService *AffiliateService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	limitedCreditService *LimitedCreditService,
 ) *AuthService {
 	svc := NewAuthService(
 		entClient,
@@ -85,6 +85,7 @@ func ProvideAuthService(
 		defaultSubAssigner,
 		affiliateService,
 		userPlatformQuotaRepo,
+		WithDefaultLimitedCreditGranter(limitedCreditService),
 	)
 	svc.SetTencentCaptchaService(tencentCaptchaService)
 	svc.SetAliyunCaptchaService(aliyunCaptchaService)
@@ -722,8 +723,24 @@ func ProvideBillingCacheService(
 	rateRepo UserGroupRateRepository,
 	cfg *config.Config,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	limitedCreditRepo LimitedCreditRepository,
 ) *BillingCacheService {
-	return NewBillingCacheService(cache, userRepo, subRepo, apiKeyRepo, rpmCache, rateRepo, cfg, userPlatformQuotaRepo)
+	return NewBillingCacheService(cache, userRepo, subRepo, apiKeyRepo, rpmCache, rateRepo, cfg, userPlatformQuotaRepo, limitedCreditRepo)
+}
+
+// ProvideRedeemService wires redeem service with optional limited credit support.
+func ProvideRedeemService(
+	redeemRepo RedeemCodeRepository,
+	userRepo UserRepository,
+	subscriptionService *SubscriptionService,
+	cache RedeemCache,
+	billingCacheService *BillingCacheService,
+	entClient *dbent.Client,
+	authCacheInvalidator APIKeyAuthCacheInvalidator,
+	affiliateService *AffiliateService,
+	limitedCreditService *LimitedCreditService,
+) *RedeemService {
+	return NewRedeemService(redeemRepo, userRepo, subscriptionService, cache, billingCacheService, entClient, authCacheInvalidator, affiliateService, limitedCreditService)
 }
 
 // ProvideAPIKeyService wires APIKeyService and connects rate-limit cache invalidation.
@@ -757,7 +774,8 @@ var ProviderSet = wire.NewSet(
 	NewCompositeRouteResolver,
 	NewAccountService,
 	NewProxyService,
-	NewRedeemService,
+	ProvideRedeemService,
+	NewLimitedCreditService,
 	NewPromoService,
 	NewUsageService,
 	NewDashboardService,

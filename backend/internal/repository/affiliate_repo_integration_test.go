@@ -100,6 +100,70 @@ LIMIT 1`, u.ID)
 	require.InDelta(t, 12.34, historyAfter, 1e-9)
 }
 
+func TestAffiliateRepository_TransferQuotaToLimitedCredit_CreatesExpiringGrant(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	txCtx := dbent.NewTxContext(ctx, tx)
+	client := tx.Client()
+	repo := NewAffiliateRepository(client, integrationDB)
+	limitedRepo, ok := repo.(service.AffiliateLimitedCreditTransferRepository)
+	require.True(t, ok, "affiliate repository must support limited credit transfers")
+
+	u := mustCreateUser(t, client, &service.User{
+		Email:        fmt.Sprintf("affiliate-limited-%d@example.com", time.Now().UnixNano()),
+		PasswordHash: "hash",
+		Role:         service.RoleUser,
+		Status:       service.StatusActive,
+		Balance:      5.5,
+		Concurrency:  5,
+	})
+	affCode := fmt.Sprintf("AFF%09d", time.Now().UnixNano()%1_000_000_000)
+	_, err := client.ExecContext(txCtx, `
+INSERT INTO user_affiliates (user_id, aff_code, aff_quota, aff_history_quota, created_at, updated_at)
+VALUES ($1, $2, $3, $3, NOW(), NOW())`, u.ID, affCode, 12.34)
+	require.NoError(t, err)
+
+	totalRechargedBefore := querySingleFloat(t, txCtx, client,
+		"SELECT total_recharged::double precision FROM users WHERE id = $1", u.ID)
+	startedAt := time.Now().UTC()
+	transferred, balance, err := limitedRepo.TransferQuotaToLimitedCredit(txCtx, u.ID, 45)
+	require.NoError(t, err)
+	require.InDelta(t, 12.34, transferred, 1e-9)
+	require.InDelta(t, 5.5, balance, 1e-9)
+
+	require.InDelta(t, 0, querySingleFloat(t, txCtx, client,
+		"SELECT aff_quota::double precision FROM user_affiliates WHERE user_id = $1", u.ID), 1e-9)
+	require.InDelta(t, 5.5, querySingleFloat(t, txCtx, client,
+		"SELECT balance::double precision FROM users WHERE id = $1", u.ID), 1e-9)
+	require.InDelta(t, totalRechargedBefore, querySingleFloat(t, txCtx, client,
+		"SELECT total_recharged::double precision FROM users WHERE id = $1", u.ID), 1e-9)
+
+	rows, err := client.QueryContext(txCtx, `
+SELECT initial_amount::double precision, expires_at
+FROM user_limited_credit_grants
+WHERE user_id = $1 AND source_type = $2`, u.ID, service.LimitedCreditSourceAffiliateRebate)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	require.True(t, rows.Next(), "expected affiliate limited credit grant")
+	var amount float64
+	var expiresAt time.Time
+	require.NoError(t, rows.Scan(&amount, &expiresAt))
+	require.False(t, rows.Next(), "expected one affiliate limited credit grant")
+	require.InDelta(t, 12.34, amount, 1e-9)
+	require.WithinDuration(t, startedAt.AddDate(0, 0, 45), expiresAt, 5*time.Second)
+
+	limitedLedgerCount := querySingleInt(t, txCtx, client, `
+SELECT COUNT(*)
+FROM user_limited_credit_ledger ledger
+JOIN user_limited_credit_grants grant_row ON grant_row.id = ledger.grant_id
+WHERE ledger.user_id = $1 AND ledger.event_type = 'grant' AND grant_row.source_type = $2`,
+		u.ID, service.LimitedCreditSourceAffiliateRebate)
+	require.Equal(t, 1, limitedLedgerCount)
+	affiliateLedgerCount := querySingleInt(t, txCtx, client,
+		"SELECT COUNT(*) FROM user_affiliate_ledger WHERE user_id = $1 AND action = 'transfer'", u.ID)
+	require.Equal(t, 1, affiliateLedgerCount)
+}
+
 // TestAffiliateRepository_AccrueQuota_ReusesOuterTransaction guards the
 // cross-layer tx propagation invariant: when AccrueQuota is called with a ctx
 // that already carries a transaction (via dbent.NewTxContext), repo.withTx

@@ -102,6 +102,9 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	if err := s.validateDefaultSubscriptionGroups(ctx, settings.DefaultSubscriptions); err != nil {
 		return nil, err
 	}
+	if err := validateDefaultLimitedCredits(settings.DefaultLimitedCredits); err != nil {
+		return nil, err
+	}
 	normalizedWhitelist, err := NormalizeRegistrationEmailSuffixWhitelist(settings.RegistrationEmailSuffixWhitelist)
 	if err != nil {
 		return nil, infraerrors.BadRequest("INVALID_REGISTRATION_EMAIL_SUFFIX_WHITELIST", err.Error())
@@ -384,12 +387,26 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 	updates[SettingKeyAffiliateRebatePerInviteeCap] = strconv.FormatFloat(settings.AffiliateRebatePerInviteeCap, 'f', 8, 64)
 	updates[SettingKeyAffiliateAdminRechargeEnabled] = strconv.FormatBool(settings.AdminRechargeRebateEnabled)
+	settings.AffiliateRebateCreditType = normalizeAffiliateRebateCreditType(settings.AffiliateRebateCreditType)
+	updates[SettingKeyAffiliateRebateCreditType] = settings.AffiliateRebateCreditType
+	if settings.AffiliateRebateCreditValidityDays <= 0 {
+		settings.AffiliateRebateCreditValidityDays = AffiliateRebateCreditValidityDefault
+	}
+	if settings.AffiliateRebateCreditValidityDays > MaxValidityDays {
+		settings.AffiliateRebateCreditValidityDays = MaxValidityDays
+	}
+	updates[SettingKeyAffiliateRebateCreditValidityDays] = strconv.Itoa(settings.AffiliateRebateCreditValidityDays)
 	updates[SettingKeyDefaultUserRPMLimit] = strconv.Itoa(settings.DefaultUserRPMLimit)
 	defaultSubsJSON, err := json.Marshal(settings.DefaultSubscriptions)
 	if err != nil {
 		return nil, fmt.Errorf("marshal default subscriptions: %w", err)
 	}
 	updates[SettingKeyDefaultSubscriptions] = string(defaultSubsJSON)
+	defaultLimitedCreditsJSON, err := json.Marshal(settings.DefaultLimitedCredits)
+	if err != nil {
+		return nil, fmt.Errorf("marshal default limited credits: %w", err)
+	}
+	updates[SettingKeyDefaultLimitedCredits] = string(defaultLimitedCreditsJSON)
 
 	// Model fallback configuration
 	updates[SettingKeyEnableModelFallback] = strconv.FormatBool(settings.EnableModelFallback)
@@ -643,6 +660,19 @@ func (s *SettingService) buildAuthSourceDefaultUpdates(ctx context.Context, sett
 			return nil, err
 		}
 	}
+	for _, limitedCredits := range [][]DefaultLimitedCreditSetting{
+		settings.Email.LimitedCredits,
+		settings.LinuxDo.LimitedCredits,
+		settings.OIDC.LimitedCredits,
+		settings.WeChat.LimitedCredits,
+		settings.GitHub.LimitedCredits,
+		settings.Google.LimitedCredits,
+		settings.DingTalk.LimitedCredits,
+	} {
+		if err := validateDefaultLimitedCredits(limitedCredits); err != nil {
+			return nil, err
+		}
+	}
 
 	// 校验各 auth source 的 platform quota map（改动 C：对等系统层校验）
 	for _, pgs := range []struct {
@@ -788,6 +818,18 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 
 func (s *SettingService) defaultRewriteMessageCacheControl() bool {
 	return false
+}
+
+func validateDefaultLimitedCredits(items []DefaultLimitedCreditSetting) error {
+	for _, item := range items {
+		if item.Amount <= 0 || math.IsNaN(item.Amount) || math.IsInf(item.Amount, 0) {
+			return infraerrors.BadRequest("INVALID_DEFAULT_LIMITED_CREDIT", "default limited credit amount must be a finite positive number")
+		}
+		if item.ValidityDays <= 0 || item.ValidityDays > MaxValidityDays {
+			return infraerrors.BadRequest("INVALID_DEFAULT_LIMITED_CREDIT", fmt.Sprintf("default limited credit validity_days must be between 1 and %d", MaxValidityDays))
+		}
+	}
+	return nil
 }
 
 func (s *SettingService) validateDefaultSubscriptionGroups(ctx context.Context, items []DefaultSubscriptionSetting) error {

@@ -172,7 +172,7 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.wechatConnect.frontendRedirectUrlPlaceholder": "/auth/wechat/callback",
     "admin.settings.wechatConnect.frontendRedirectUrlHint": "通常用于前端路由回调地址，需与后端配置保持一致。",
     "admin.settings.authSourceDefaults.title": "认证来源默认值",
-    "admin.settings.authSourceDefaults.description": "按注册来源配置新用户默认余额、并发、订阅与授权策略。",
+    "admin.settings.authSourceDefaults.description": "按注册来源配置新用户默认余额、并发、订阅、限时额度与授权策略。",
     "admin.settings.authSourceDefaults.requireEmailLabel": "第三方注册强制补充邮箱",
     "admin.settings.authSourceDefaults.requireEmailHint": "启用后，Linux DO、OIDC、微信注册缺少邮箱时必须先补充邮箱地址。",
     "admin.settings.authSourceDefaults.enabledHint": "以下默认值会在该来源注册新用户时发放；首次绑定时授权仅作用于已有账号绑定该来源。",
@@ -189,6 +189,9 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.authSourceDefaults.defaultSubscriptionsLabel": "默认订阅",
     "admin.settings.authSourceDefaults.defaultSubscriptionsHint": "仅对当前认证来源生效，未配置时不追加来源专属订阅。",
     "admin.settings.authSourceDefaults.noSourceSubscriptions": "当前来源未配置专属默认订阅。",
+    "admin.settings.authSourceDefaults.defaultLimitedCreditsLabel": "默认限时额度",
+    "admin.settings.authSourceDefaults.defaultLimitedCreditsHint": "仅对当前认证来源生效；每份额度在发放后独立开始计算有效期。",
+    "admin.settings.authSourceDefaults.noSourceLimitedCredits": "当前来源未配置专属默认限时额度。",
     "admin.settings.paymentVisibleMethods.methodLabel": "{title} 可见方式",
     "admin.settings.paymentVisibleMethods.methodHint": "控制前台结算页是否展示该方式，以及展示时使用的来源键。",
     "admin.settings.paymentVisibleMethods.sourceLabel": "支付来源",
@@ -375,6 +378,9 @@ const baseSettingsResponse = {
   default_balance: 0,
   default_concurrency: 1,
   default_subscriptions: [],
+  default_limited_credits: [],
+  affiliate_rebate_credit_type: "permanent",
+  affiliate_rebate_credit_validity_days: 30,
   site_name: "Sub2API",
   site_logo: "",
   site_subtitle: "",
@@ -1074,11 +1080,17 @@ describe("admin SettingsView payment visible method controls", () => {
       ...baseSettingsResponse,
       affiliate_enabled: true,
       affiliate_admin_recharge_enabled: true,
+      affiliate_rebate_credit_type: "limited",
+      affiliate_rebate_credit_validity_days: 45,
     });
 
     const wrapper = mountView();
 
     await flushPromises();
+
+    expect(
+      (wrapper.get('[data-testid="affiliate-credit-validity-days"]').element as HTMLInputElement).value,
+    ).toBe("45");
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
 
@@ -1086,6 +1098,8 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({
         affiliate_admin_recharge_enabled: true,
+        affiliate_rebate_credit_type: "limited",
+        affiliate_rebate_credit_validity_days: 45,
       }),
     );
   });
@@ -1710,6 +1724,11 @@ describe("admin SettingsView wechat connect controls", () => {
       wrapper.find('[data-testid="auth-source-email-panel"]').exists(),
     ).toBe(true);
     expect(wrapper.text()).toContain("首次绑定时授权");
+
+    await wrapper
+      .get('[data-testid="auth-source-email-limited-credit-add"]')
+      .trigger("click");
+    expect(wrapper.findAll(".auth-source-limited-credit-row")).toHaveLength(1);
   });
 
   it("preserves optional OIDC compatibility flags instead of forcing them on save", async () => {
@@ -1794,6 +1813,58 @@ describe("admin SettingsView platform quota matrix", () => {
     expect(html).toContain("openai");
     expect(html).toContain("gemini");
     expect(html).toContain("antigravity");
+  });
+
+  it("默认限时额度为空时展示空状态", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openUsersTab(wrapper);
+
+    expect(wrapper.findAll(".default-limited-credit-row")).toHaveLength(0);
+    expect(wrapper.find(".default-limited-credit-empty").exists()).toBe(true);
+  });
+
+  it("加载、添加、删除并保存默认限时额度", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      default_limited_credits: [{ amount: 2.5, validity_days: 14 }],
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openUsersTab(wrapper);
+
+    let rows = wrapper.findAll(".default-limited-credit-row");
+    expect(rows).toHaveLength(1);
+    expect(
+      (rows[0]?.find(".default-limited-credit-amount").element as HTMLInputElement)
+        .value,
+    ).toBe("2.5");
+    expect(
+      (
+        rows[0]?.find(".default-limited-credit-validity")
+          .element as HTMLInputElement
+      ).value,
+    ).toBe("14");
+
+    await wrapper.find(".default-limited-credit-add-btn").trigger("click");
+    rows = wrapper.findAll(".default-limited-credit-row");
+    expect(rows).toHaveLength(2);
+    expect(
+      (rows[1]?.find(".default-limited-credit-amount").element as HTMLInputElement)
+        .value,
+    ).toBe("1");
+
+    await rows[0]?.find(".default-limited-credit-delete-btn").trigger("click");
+    expect(wrapper.findAll(".default-limited-credit-row")).toHaveLength(1);
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        default_limited_credits: [{ amount: 1, validity_days: 30 }],
+      }),
+    );
   });
 
   it("保存时 updateSettings payload 应包含嵌套 default_platform_quotas 对象（含全 5 平台）", async () => {

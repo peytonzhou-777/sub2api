@@ -129,41 +129,51 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyAffiliateRebateFreezeHours:                strconv.Itoa(AffiliateRebateFreezeHoursDefault),
 		SettingKeyAffiliateRebateDurationDays:               strconv.Itoa(AffiliateRebateDurationDaysDefault),
 		SettingKeyAffiliateRebatePerInviteeCap:              strconv.FormatFloat(AffiliateRebatePerInviteeCapDefault, 'f', 2, 64),
+		SettingKeyAffiliateRebateCreditType:                 AffiliateRebateCreditTypeDefault,
+		SettingKeyAffiliateRebateCreditValidityDays:         strconv.Itoa(AffiliateRebateCreditValidityDefault),
 		SettingKeyDefaultUserRPMLimit:                       "0",
 		SettingKeyDefaultSubscriptions:                      "[]",
+		SettingKeyDefaultLimitedCredits:                     "[]",
 		SettingKeyAuthSourceDefaultEmailBalance:             "0",
 		SettingKeyAuthSourceDefaultEmailConcurrency:         "5",
 		SettingKeyAuthSourceDefaultEmailSubscriptions:       "[]",
+		SettingKeyAuthSourceLimitedCredits("email"):         "[]",
 		SettingKeyAuthSourceDefaultEmailGrantOnSignup:       "false",
 		SettingKeyAuthSourceDefaultEmailGrantOnFirstBind:    "false",
 		SettingKeyAuthSourceDefaultLinuxDoBalance:           "0",
 		SettingKeyAuthSourceDefaultLinuxDoConcurrency:       "5",
 		SettingKeyAuthSourceDefaultLinuxDoSubscriptions:     "[]",
+		SettingKeyAuthSourceLimitedCredits("linuxdo"):       "[]",
 		SettingKeyAuthSourceDefaultLinuxDoGrantOnSignup:     "false",
 		SettingKeyAuthSourceDefaultLinuxDoGrantOnFirstBind:  "false",
 		SettingKeyAuthSourceDefaultOIDCBalance:              "0",
 		SettingKeyAuthSourceDefaultOIDCConcurrency:          "5",
 		SettingKeyAuthSourceDefaultOIDCSubscriptions:        "[]",
+		SettingKeyAuthSourceLimitedCredits("oidc"):          "[]",
 		SettingKeyAuthSourceDefaultOIDCGrantOnSignup:        "false",
 		SettingKeyAuthSourceDefaultOIDCGrantOnFirstBind:     "false",
 		SettingKeyAuthSourceDefaultWeChatBalance:            "0",
 		SettingKeyAuthSourceDefaultWeChatConcurrency:        "5",
 		SettingKeyAuthSourceDefaultWeChatSubscriptions:      "[]",
+		SettingKeyAuthSourceLimitedCredits("wechat"):        "[]",
 		SettingKeyAuthSourceDefaultWeChatGrantOnSignup:      "false",
 		SettingKeyAuthSourceDefaultWeChatGrantOnFirstBind:   "false",
 		SettingKeyAuthSourceDefaultGitHubBalance:            "0",
 		SettingKeyAuthSourceDefaultGitHubConcurrency:        "5",
 		SettingKeyAuthSourceDefaultGitHubSubscriptions:      "[]",
+		SettingKeyAuthSourceLimitedCredits("github"):        "[]",
 		SettingKeyAuthSourceDefaultGitHubGrantOnSignup:      "false",
 		SettingKeyAuthSourceDefaultGitHubGrantOnFirstBind:   "false",
 		SettingKeyAuthSourceDefaultGoogleBalance:            "0",
 		SettingKeyAuthSourceDefaultGoogleConcurrency:        "5",
 		SettingKeyAuthSourceDefaultGoogleSubscriptions:      "[]",
+		SettingKeyAuthSourceLimitedCredits("google"):        "[]",
 		SettingKeyAuthSourceDefaultGoogleGrantOnSignup:      "false",
 		SettingKeyAuthSourceDefaultGoogleGrantOnFirstBind:   "false",
 		SettingKeyAuthSourceDefaultDingTalkBalance:          "0",
 		SettingKeyAuthSourceDefaultDingTalkConcurrency:      "5",
 		SettingKeyAuthSourceDefaultDingTalkSubscriptions:    "[]",
+		SettingKeyAuthSourceLimitedCredits("dingtalk"):      "[]",
 		SettingKeyAuthSourceDefaultDingTalkGrantOnSignup:    "false",
 		SettingKeyAuthSourceDefaultDingTalkGrantOnFirstBind: "false",
 		SettingKeyForceEmailOnThirdPartySignup:              "false",
@@ -412,7 +422,10 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		result.AffiliateRebatePerInviteeCap = perInviteeCap
 	}
 	result.AdminRechargeRebateEnabled = settings[SettingKeyAffiliateAdminRechargeEnabled] == "true"
+	result.AffiliateRebateCreditType = normalizeAffiliateRebateCreditType(settings[SettingKeyAffiliateRebateCreditType])
+	result.AffiliateRebateCreditValidityDays = normalizeAffiliateRebateCreditValidityDays(settings[SettingKeyAffiliateRebateCreditValidityDays])
 	result.DefaultSubscriptions = parseDefaultSubscriptions(settings[SettingKeyDefaultSubscriptions])
+	result.DefaultLimitedCredits = parseDefaultLimitedCredits(settings[SettingKeyDefaultLimitedCredits])
 
 	// 敏感信息直接返回，方便测试连接时使用
 	result.SMTPPassword = settings[SettingKeySMTPPassword]
@@ -973,6 +986,26 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	return result
 }
 
+func normalizeAffiliateRebateCreditType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case AffiliateRebateCreditTypeLimited:
+		return AffiliateRebateCreditTypeLimited
+	default:
+		return AffiliateRebateCreditTypePermanent
+	}
+}
+
+func normalizeAffiliateRebateCreditValidityDays(value string) int {
+	days, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || days <= 0 {
+		return AffiliateRebateCreditValidityDefault
+	}
+	if days > MaxValidityDays {
+		return MaxValidityDays
+	}
+	return days
+}
+
 func clampAffiliateRebateRate(value float64) float64 {
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		return AffiliateRebateRateDefault
@@ -1169,11 +1202,34 @@ func parseDefaultSubscriptions(raw string) []DefaultSubscriptionSetting {
 	return normalized
 }
 
+func parseDefaultLimitedCredits(raw string) []DefaultLimitedCreditSetting {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	var items []DefaultLimitedCreditSetting
+	if err := json.Unmarshal([]byte(raw), &items); err != nil {
+		return nil
+	}
+
+	normalized := make([]DefaultLimitedCreditSetting, 0, len(items))
+	for _, item := range items {
+		if item.Amount <= 0 || math.IsNaN(item.Amount) || math.IsInf(item.Amount, 0) ||
+			item.ValidityDays <= 0 || item.ValidityDays > MaxValidityDays {
+			continue
+		}
+		normalized = append(normalized, item)
+	}
+	return normalized
+}
+
 func parseProviderDefaultGrantSettings(settings map[string]string, keys authSourceDefaultKeySet) ProviderDefaultGrantSettings {
 	result := ProviderDefaultGrantSettings{
 		Balance:          defaultAuthSourceBalance,
 		Concurrency:      defaultAuthSourceConcurrency,
 		Subscriptions:    []DefaultSubscriptionSetting{},
+		LimitedCredits:   []DefaultLimitedCreditSetting{},
 		GrantOnSignup:    false,
 		GrantOnFirstBind: false,
 	}
@@ -1186,6 +1242,9 @@ func parseProviderDefaultGrantSettings(settings map[string]string, keys authSour
 	}
 	if items := parseDefaultSubscriptions(settings[keys.subscriptions]); items != nil {
 		result.Subscriptions = items
+	}
+	if items := parseDefaultLimitedCredits(settings[keys.limitedCredits]); items != nil {
+		result.LimitedCredits = items
 	}
 	if raw, ok := settings[keys.grantOnSignup]; ok {
 		result.GrantOnSignup = raw == "true"
@@ -1219,6 +1278,15 @@ func writeProviderDefaultGrantUpdates(updates map[string]string, keys authSource
 		raw = []byte("[]")
 	}
 	updates[keys.subscriptions] = string(raw)
+	limitedCredits := settings.LimitedCredits
+	if limitedCredits == nil {
+		limitedCredits = []DefaultLimitedCreditSetting{}
+	}
+	limitedRaw, err := json.Marshal(limitedCredits)
+	if err != nil {
+		limitedRaw = []byte("[]")
+	}
+	updates[keys.limitedCredits] = string(limitedRaw)
 	updates[keys.grantOnSignup] = strconv.FormatBool(settings.GrantOnSignup)
 	updates[keys.grantOnFirstBind] = strconv.FormatBool(settings.GrantOnFirstBind)
 
@@ -1239,6 +1307,7 @@ func mergeProviderDefaultGrantSettings(globalDefaults ProviderDefaultGrantSettin
 		Balance:          globalDefaults.Balance,
 		Concurrency:      globalDefaults.Concurrency,
 		Subscriptions:    append([]DefaultSubscriptionSetting(nil), globalDefaults.Subscriptions...),
+		LimitedCredits:   append([]DefaultLimitedCreditSetting(nil), globalDefaults.LimitedCredits...),
 		GrantOnSignup:    providerDefaults.GrantOnSignup,
 		GrantOnFirstBind: providerDefaults.GrantOnFirstBind,
 	}
@@ -1255,6 +1324,9 @@ func mergeProviderDefaultGrantSettings(globalDefaults ProviderDefaultGrantSettin
 	}
 	if len(providerDefaults.Subscriptions) > 0 {
 		result.Subscriptions = append([]DefaultSubscriptionSetting(nil), providerDefaults.Subscriptions...)
+	}
+	if len(providerDefaults.LimitedCredits) > 0 {
+		result.LimitedCredits = append([]DefaultLimitedCreditSetting(nil), providerDefaults.LimitedCredits...)
 	}
 
 	return result

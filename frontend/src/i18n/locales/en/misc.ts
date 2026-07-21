@@ -2,12 +2,18 @@ export default {
 
   // Subscription Progress (Header component)
   subscriptionProgress: {
-    title: 'My Subscriptions',
-    viewDetails: 'View subscription details',
-    activeCount: '{count} active subscription(s)',
+    title: 'My Benefits',
+    viewDetails: 'View benefit details',
+    activeCount: '{count} active benefit(s)',
+    subscriptions: 'Subscriptions',
+    limitedCredits: 'Limited Credits',
+    limitedCreditTitle: 'Limited Credit #{id}',
     daily: 'Daily',
     weekly: 'Weekly',
     monthly: 'Monthly',
+    used: 'Used',
+    remaining: 'Remaining',
+    frozen: 'Frozen',
     daysRemaining: '{days} days left',
     expired: 'Expired',
     expiresToday: 'Expires today',

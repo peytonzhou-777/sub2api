@@ -46,6 +46,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
+	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditledger"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 )
@@ -1105,6 +1107,60 @@ func (f TraverseUserAttributeValue) Traverse(ctx context.Context, q ent.Query) e
 	return fmt.Errorf("unexpected query type %T. expect *ent.UserAttributeValueQuery", q)
 }
 
+// The UserLimitedCreditGrantFunc type is an adapter to allow the use of ordinary function as a Querier.
+type UserLimitedCreditGrantFunc func(context.Context, *ent.UserLimitedCreditGrantQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f UserLimitedCreditGrantFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.UserLimitedCreditGrantQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.UserLimitedCreditGrantQuery", q)
+}
+
+// The TraverseUserLimitedCreditGrant type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseUserLimitedCreditGrant func(context.Context, *ent.UserLimitedCreditGrantQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseUserLimitedCreditGrant) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseUserLimitedCreditGrant) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.UserLimitedCreditGrantQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.UserLimitedCreditGrantQuery", q)
+}
+
+// The UserLimitedCreditLedgerFunc type is an adapter to allow the use of ordinary function as a Querier.
+type UserLimitedCreditLedgerFunc func(context.Context, *ent.UserLimitedCreditLedgerQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f UserLimitedCreditLedgerFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.UserLimitedCreditLedgerQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.UserLimitedCreditLedgerQuery", q)
+}
+
+// The TraverseUserLimitedCreditLedger type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseUserLimitedCreditLedger func(context.Context, *ent.UserLimitedCreditLedgerQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseUserLimitedCreditLedger) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseUserLimitedCreditLedger) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.UserLimitedCreditLedgerQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.UserLimitedCreditLedgerQuery", q)
+}
+
 // The UserPlatformQuotaFunc type is an adapter to allow the use of ordinary function as a Querier.
 type UserPlatformQuotaFunc func(context.Context, *ent.UserPlatformQuotaQuery) (ent.Value, error)
 
@@ -1236,6 +1292,10 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.UserAttributeDefinitionQuery, predicate.UserAttributeDefinition, userattributedefinition.OrderOption]{typ: ent.TypeUserAttributeDefinition, tq: q}, nil
 	case *ent.UserAttributeValueQuery:
 		return &query[*ent.UserAttributeValueQuery, predicate.UserAttributeValue, userattributevalue.OrderOption]{typ: ent.TypeUserAttributeValue, tq: q}, nil
+	case *ent.UserLimitedCreditGrantQuery:
+		return &query[*ent.UserLimitedCreditGrantQuery, predicate.UserLimitedCreditGrant, userlimitedcreditgrant.OrderOption]{typ: ent.TypeUserLimitedCreditGrant, tq: q}, nil
+	case *ent.UserLimitedCreditLedgerQuery:
+		return &query[*ent.UserLimitedCreditLedgerQuery, predicate.UserLimitedCreditLedger, userlimitedcreditledger.OrderOption]{typ: ent.TypeUserLimitedCreditLedger, tq: q}, nil
 	case *ent.UserPlatformQuotaQuery:
 		return &query[*ent.UserPlatformQuotaQuery, predicate.UserPlatformQuota, userplatformquota.OrderOption]{typ: ent.TypeUserPlatformQuota, tq: q}, nil
 	case *ent.UserSubscriptionQuery:

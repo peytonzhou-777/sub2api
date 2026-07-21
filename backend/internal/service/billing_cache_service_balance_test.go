@@ -63,6 +63,29 @@ func TestCheckBillingEligibility_AllowsBalanceAtMinimumReserve(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestGetUserTotalAvailableBalance_IncludesOnlyConsumableLimitedCredit(t *testing.T) {
+	cache := &balanceEligibilityCacheStub{balance: 100}
+	limitedCreditRepo := &limitedCreditRepoStub{availableAmount: 7.5}
+	svc := NewBillingCacheService(cache, nil, nil, nil, nil, nil, &config.Config{}, nil, limitedCreditRepo)
+	t.Cleanup(svc.Stop)
+
+	total, err := svc.GetUserTotalAvailableBalance(context.Background(), 42)
+
+	require.NoError(t, err)
+	require.Equal(t, 107.5, total)
+}
+
+func TestGetUserTotalAvailableBalance_ReturnsLimitedCreditQueryError(t *testing.T) {
+	cache := &balanceEligibilityCacheStub{balance: 100}
+	limitedCreditRepo := &limitedCreditRepoStub{availableErr: errors.New("limited credit query failed")}
+	svc := NewBillingCacheService(cache, nil, nil, nil, nil, nil, &config.Config{}, nil, limitedCreditRepo)
+	t.Cleanup(svc.Stop)
+
+	_, err := svc.GetUserTotalAvailableBalance(context.Background(), 42)
+
+	require.ErrorContains(t, err, "get limited credit available amount")
+}
+
 func TestSyncBalanceCacheAfterDeduction_InvalidatesExhaustedBalance(t *testing.T) {
 	cache := &balanceEligibilityCacheStub{
 		balance:                  0.50,
@@ -119,7 +142,10 @@ func TestSyncBalanceCacheAfterDeduction_QueuesDeductWhenBalanceStillEligible(t *
 	syncBalanceCacheAfterDeduction(context.Background(), &postUsageBillingParams{
 		Cost: &CostBreakdown{ActualCost: 0.25},
 		User: &User{ID: 1},
-	}, &billingDeps{billingCacheService: svc}, &UsageBillingApplyResult{NewBalance: &newBalance})
+	}, &billingDeps{billingCacheService: svc}, &UsageBillingApplyResult{
+		NewBalance:          &newBalance,
+		OrdinaryBalanceCost: 0.25,
+	})
 
 	require.Equal(t, int64(0), cache.invalidateCalls.Load())
 	require.Eventually(t, func() bool {

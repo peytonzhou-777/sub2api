@@ -391,7 +391,7 @@ export default {
     affiliates: {
       invitesDescription: 'View site-wide inviter and invitee relationships',
       rebatesDescription: 'View recharge orders that generated affiliate rebates',
-      transfersDescription: 'View affiliate quota transfers into account balance',
+      transfersDescription: 'View affiliate quota conversions into usable credit',
       errors: {
         loadFailed: 'Failed to load affiliate records'
       },

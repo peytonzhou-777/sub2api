@@ -130,10 +130,14 @@ func TestSettingHandler_GetSettings_InjectsAuthSourceDefaults(t *testing.T) {
 		values: map[string]string{
 			service.SettingKeyRegistrationEnabled:                 "true",
 			service.SettingKeyPromoCodeEnabled:                    "true",
+			service.SettingKeyAffiliateRebateCreditType:           service.AffiliateRebateCreditTypeLimited,
+			service.SettingKeyAffiliateRebateCreditValidityDays:   "45",
 			service.SettingKeyAuthSourceDefaultEmailBalance:       "9.5",
 			service.SettingKeyAuthSourceDefaultEmailConcurrency:   "8",
 			service.SettingKeyAuthSourceDefaultEmailSubscriptions: `[{"group_id":31,"validity_days":15}]`,
+			service.SettingKeyAuthSourceLimitedCredits("email"):   `[{"amount":4.5,"validity_days":20}]`,
 			service.SettingKeyForceEmailOnThirdPartySignup:        "true",
+			service.SettingKeyDefaultLimitedCredits:               `[{"amount":2.5,"validity_days":14}]`,
 		},
 	}
 	svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
@@ -153,10 +157,78 @@ func TestSettingHandler_GetSettings_InjectsAuthSourceDefaults(t *testing.T) {
 	require.Equal(t, 9.5, data["auth_source_default_email_balance"])
 	require.Equal(t, float64(8), data["auth_source_default_email_concurrency"])
 	require.Equal(t, true, data["force_email_on_third_party_signup"])
+	require.Equal(t, service.AffiliateRebateCreditTypeLimited, data["affiliate_rebate_credit_type"])
+	require.Equal(t, float64(45), data["affiliate_rebate_credit_validity_days"])
 
 	subscriptions, ok := data["auth_source_default_email_subscriptions"].([]any)
 	require.True(t, ok)
 	require.Len(t, subscriptions, 1)
+	sourceLimitedCredits, ok := data["auth_source_default_email_limited_credits"].([]any)
+	require.True(t, ok)
+	require.Len(t, sourceLimitedCredits, 1)
+	limitedCredits, ok := data["default_limited_credits"].([]any)
+	require.True(t, ok)
+	require.Len(t, limitedCredits, 1)
+}
+
+func TestSettingHandler_UpdateSettings_PersistsAffiliateRebateCreditSettings(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &settingHandlerRepoStub{values: map[string]string{
+		service.SettingKeyPromoCodeEnabled:                  "true",
+		service.SettingKeyAffiliateRebateCreditType:         service.AffiliateRebateCreditTypePermanent,
+		service.SettingKeyAffiliateRebateCreditValidityDays: "30",
+	}}
+	svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
+	handler := NewSettingHandler(svc, nil, nil, nil, nil, nil, nil)
+	body := []byte(`{"promo_code_enabled":true,"affiliate_rebate_credit_type":"limited","affiliate_rebate_credit_validity_days":45}`)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.UpdateSettings(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, service.AffiliateRebateCreditTypeLimited, repo.values[service.SettingKeyAffiliateRebateCreditType])
+	require.Equal(t, "45", repo.values[service.SettingKeyAffiliateRebateCreditValidityDays])
+	var resp response.Response
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	data, ok := resp.Data.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, service.AffiliateRebateCreditTypeLimited, data["affiliate_rebate_credit_type"])
+	require.Equal(t, float64(45), data["affiliate_rebate_credit_validity_days"])
+}
+
+func TestSettingHandler_UpdateSettings_RejectsInvalidAffiliateRebateCreditSettings(t *testing.T) {
+	tests := []string{
+		`{"promo_code_enabled":true,"affiliate_rebate_credit_type":"invalid","affiliate_rebate_credit_validity_days":30}`,
+		`{"promo_code_enabled":true,"affiliate_rebate_credit_type":"limited","affiliate_rebate_credit_validity_days":0}`,
+		`{"promo_code_enabled":true,"affiliate_rebate_credit_type":"limited","affiliate_rebate_credit_validity_days":36501}`,
+	}
+	for _, body := range tests {
+		t.Run(body, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			repo := &settingHandlerRepoStub{values: map[string]string{
+				service.SettingKeyPromoCodeEnabled:                  "true",
+				service.SettingKeyAffiliateRebateCreditType:         service.AffiliateRebateCreditTypePermanent,
+				service.SettingKeyAffiliateRebateCreditValidityDays: "30",
+			}}
+			svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
+			handler := NewSettingHandler(svc, nil, nil, nil, nil, nil, nil)
+
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewBufferString(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			handler.UpdateSettings(c)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Equal(t, service.AffiliateRebateCreditTypePermanent, repo.values[service.SettingKeyAffiliateRebateCreditType])
+			require.Equal(t, "30", repo.values[service.SettingKeyAffiliateRebateCreditValidityDays])
+		})
+	}
 }
 
 func TestSettingHandler_UpdateSettings_PreservesOmittedAuthSourceDefaults(t *testing.T) {
@@ -168,9 +240,11 @@ func TestSettingHandler_UpdateSettings_PreservesOmittedAuthSourceDefaults(t *tes
 			service.SettingKeyAuthSourceDefaultEmailBalance:          "9.5",
 			service.SettingKeyAuthSourceDefaultEmailConcurrency:      "8",
 			service.SettingKeyAuthSourceDefaultEmailSubscriptions:    `[{"group_id":31,"validity_days":15}]`,
+			service.SettingKeyAuthSourceLimitedCredits("email"):      `[{"amount":4.5,"validity_days":20}]`,
 			service.SettingKeyAuthSourceDefaultEmailGrantOnSignup:    "true",
 			service.SettingKeyAuthSourceDefaultEmailGrantOnFirstBind: "false",
 			service.SettingKeyForceEmailOnThirdPartySignup:           "true",
+			service.SettingKeyDefaultLimitedCredits:                  `[{"amount":2.5,"validity_days":14}]`,
 		},
 	}
 	svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
@@ -195,7 +269,9 @@ func TestSettingHandler_UpdateSettings_PreservesOmittedAuthSourceDefaults(t *tes
 	require.Equal(t, "12.75000000", repo.values[service.SettingKeyAuthSourceDefaultEmailBalance])
 	require.Equal(t, "8", repo.values[service.SettingKeyAuthSourceDefaultEmailConcurrency])
 	require.Equal(t, `[{"group_id":31,"validity_days":15}]`, repo.values[service.SettingKeyAuthSourceDefaultEmailSubscriptions])
+	require.Equal(t, `[{"amount":4.5,"validity_days":20}]`, repo.values[service.SettingKeyAuthSourceLimitedCredits("email")])
 	require.Equal(t, "true", repo.values[service.SettingKeyForceEmailOnThirdPartySignup])
+	require.Equal(t, `[{"amount":2.5,"validity_days":14}]`, repo.values[service.SettingKeyDefaultLimitedCredits])
 
 	var resp response.Response
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
@@ -204,6 +280,81 @@ func TestSettingHandler_UpdateSettings_PreservesOmittedAuthSourceDefaults(t *tes
 	require.Equal(t, 12.75, data["auth_source_default_email_balance"])
 	require.Equal(t, float64(8), data["auth_source_default_email_concurrency"])
 	require.Equal(t, true, data["force_email_on_third_party_signup"])
+}
+
+func TestSettingHandler_UpdateSettings_PersistsAuthSourceLimitedCredits(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &settingHandlerRepoStub{values: map[string]string{
+		service.SettingKeyPromoCodeEnabled:                 "true",
+		service.SettingKeyAuthSourceLimitedCredits("oidc"): `[]`,
+	}}
+	svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
+	handler := NewSettingHandler(svc, nil, nil, nil, nil, nil, nil)
+	body := []byte(`{"promo_code_enabled":true,"auth_source_default_oidc_limited_credits":[{"amount":6.5,"validity_days":45}]}`)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.UpdateSettings(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, `[{"amount":6.5,"validity_days":45}]`, repo.values[service.SettingKeyAuthSourceLimitedCredits("oidc")])
+}
+
+func TestSettingHandler_UpdateSettings_ClearsDefaultLimitedCreditsWithEmptyArray(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &settingHandlerRepoStub{values: map[string]string{
+		service.SettingKeyPromoCodeEnabled:      "true",
+		service.SettingKeyDefaultLimitedCredits: `[{"amount":2.5,"validity_days":14}]`,
+	}}
+	svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
+	handler := NewSettingHandler(svc, nil, nil, nil, nil, nil, nil)
+	body := []byte(`{"promo_code_enabled":true,"default_limited_credits":[]}`)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.UpdateSettings(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "[]", repo.values[service.SettingKeyDefaultLimitedCredits])
+	var resp response.Response
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	data := resp.Data.(map[string]any)
+	require.Empty(t, data["default_limited_credits"])
+}
+
+func TestSettingHandler_UpdateSettings_RejectsInvalidDefaultLimitedCredits(t *testing.T) {
+	tests := []string{
+		`[{"amount":0,"validity_days":30}]`,
+		`[{"amount":1,"validity_days":36501}]`,
+	}
+	for _, limitedCredits := range tests {
+		t.Run(limitedCredits, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			repo := &settingHandlerRepoStub{values: map[string]string{
+				service.SettingKeyPromoCodeEnabled:      "true",
+				service.SettingKeyDefaultLimitedCredits: `[{"amount":2.5,"validity_days":14}]`,
+			}}
+			svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
+			handler := NewSettingHandler(svc, nil, nil, nil, nil, nil, nil)
+			body := []byte(`{"promo_code_enabled":true,"default_limited_credits":` + limitedCredits + `}`)
+
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			handler.UpdateSettings(c)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Equal(t, `[{"amount":2.5,"validity_days":14}]`, repo.values[service.SettingKeyDefaultLimitedCredits])
+		})
+	}
 }
 
 func TestSettingHandler_UpdateSettings_PersistsPaymentVisibleMethodsAndAdvancedScheduler(t *testing.T) {
@@ -487,6 +638,7 @@ func TestDiffSettings_IncludesAuthSourceDefaultsAndForceEmail(t *testing.T) {
 				Balance:          0,
 				Concurrency:      5,
 				Subscriptions:    nil,
+				LimitedCredits:   nil,
 				GrantOnSignup:    true,
 				GrantOnFirstBind: false,
 			},
@@ -497,6 +649,7 @@ func TestDiffSettings_IncludesAuthSourceDefaultsAndForceEmail(t *testing.T) {
 				Balance:          12.5,
 				Concurrency:      7,
 				Subscriptions:    []service.DefaultSubscriptionSetting{{GroupID: 21, ValidityDays: 30}},
+				LimitedCredits:   []service.DefaultLimitedCreditSetting{{Amount: 4.5, ValidityDays: 20}},
 				GrantOnSignup:    false,
 				GrantOnFirstBind: true,
 			},
@@ -508,6 +661,7 @@ func TestDiffSettings_IncludesAuthSourceDefaultsAndForceEmail(t *testing.T) {
 	require.Contains(t, changed, "auth_source_default_email_balance")
 	require.Contains(t, changed, "auth_source_default_email_concurrency")
 	require.Contains(t, changed, "auth_source_default_email_subscriptions")
+	require.Contains(t, changed, service.SettingKeyAuthSourceLimitedCredits("email"))
 	require.Contains(t, changed, "auth_source_default_email_grant_on_signup")
 	require.Contains(t, changed, "auth_source_default_email_grant_on_first_bind")
 	require.Contains(t, changed, "force_email_on_third_party_signup")

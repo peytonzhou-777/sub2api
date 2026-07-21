@@ -75,6 +75,16 @@ type defaultSubscriptionAssignerStub struct {
 	err   error
 }
 
+type defaultLimitedCreditGrantCall struct {
+	userID int64
+	items  []DefaultLimitedCreditSetting
+}
+
+type defaultLimitedCreditGranterStub struct {
+	calls []defaultLimitedCreditGrantCall
+	err   error
+}
+
 type refreshTokenCacheStub struct{}
 
 type userPlatformQuotaRepoStub struct {
@@ -121,6 +131,19 @@ func (s *defaultSubscriptionAssignerStub) AssignOrExtendSubscription(_ context.C
 		return nil, false, s.err
 	}
 	return &UserSubscription{UserID: input.UserID, GroupID: input.GroupID}, false, nil
+}
+
+func (s *defaultLimitedCreditGranterStub) GrantFromDefaultSettings(_ context.Context, userID int64, items []DefaultLimitedCreditSetting) ([]LimitedCreditGrant, error) {
+	cloned := append([]DefaultLimitedCreditSetting(nil), items...)
+	s.calls = append(s.calls, defaultLimitedCreditGrantCall{userID: userID, items: cloned})
+	if s.err != nil {
+		return nil, s.err
+	}
+	return []LimitedCreditGrant{}, nil
+}
+
+func (s *defaultLimitedCreditGranterStub) GrantFromAuthSourceSettings(ctx context.Context, userID int64, _ string, items []DefaultLimitedCreditSetting) ([]LimitedCreditGrant, error) {
+	return s.GrantFromDefaultSettings(ctx, userID, items)
 }
 
 func (s *refreshTokenCacheStub) StoreRefreshToken(context.Context, string, *RefreshTokenData, time.Duration) error {
@@ -770,6 +793,46 @@ func TestAuthService_Register_AssignsDefaultSubscriptions(t *testing.T) {
 	require.Equal(t, 7, assigner.calls[1].ValidityDays)
 }
 
+func TestAuthService_Register_GrantsDefaultLimitedCredits(t *testing.T) {
+	repo := &userRepoStub{nextID: 43}
+	granter := &defaultLimitedCreditGranterStub{}
+	svc := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:                 "true",
+		SettingKeyDefaultLimitedCredits:               `[{"amount":1.25,"validity_days":7},{"amount":1.25,"validity_days":7}]`,
+		SettingKeyAuthSourceDefaultEmailGrantOnSignup: "false",
+	}, nil, nil)
+	svc.defaultLimitedCreditGranter = granter
+
+	_, user, err := svc.Register(context.Background(), "default-credit@test.com", "password")
+
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Equal(t, []defaultLimitedCreditGrantCall{{
+		userID: 43,
+		items: []DefaultLimitedCreditSetting{
+			{Amount: 1.25, ValidityDays: 7},
+			{Amount: 1.25, ValidityDays: 7},
+		},
+	}}, granter.calls)
+}
+
+func TestAuthService_Register_DefaultLimitedCreditFailureDoesNotFailRegistration(t *testing.T) {
+	repo := &userRepoStub{nextID: 44}
+	granter := &defaultLimitedCreditGranterStub{err: errors.New("grant failed")}
+	svc := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:                 "true",
+		SettingKeyDefaultLimitedCredits:               `[{"amount":5,"validity_days":30}]`,
+		SettingKeyAuthSourceDefaultEmailGrantOnSignup: "false",
+	}, nil, nil)
+	svc.defaultLimitedCreditGranter = granter
+
+	_, user, err := svc.Register(context.Background(), "credit-failure@test.com", "password")
+
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Len(t, granter.calls, 1)
+}
+
 func TestAuthService_Register_UsesEmailAuthSourceDefaultsWhenGrantEnabled(t *testing.T) {
 	repo := &userRepoStub{nextID: 52}
 	assigner := &defaultSubscriptionAssignerStub{}
@@ -845,12 +908,16 @@ func TestAuthService_LoginOrRegisterOAuthWithTokenPair_UsesLinuxDoAuthSourceDefa
 	service := newAuthService(repo, map[string]string{
 		SettingKeyRegistrationEnabled:                   "true",
 		SettingKeyDefaultSubscriptions:                  `[{"group_id":81,"validity_days":1}]`,
+		SettingKeyDefaultLimitedCredits:                 `[{"amount":6,"validity_days":21}]`,
 		SettingKeyAuthSourceDefaultLinuxDoBalance:       "21.75",
 		SettingKeyAuthSourceDefaultLinuxDoConcurrency:   "9",
 		SettingKeyAuthSourceDefaultLinuxDoSubscriptions: `[{"group_id":22,"validity_days":14}]`,
+		SettingKeyAuthSourceLimitedCredits("linuxdo"):   `[{"amount":8.5,"validity_days":30}]`,
 		SettingKeyAuthSourceDefaultLinuxDoGrantOnSignup: "true",
 	}, nil, nil)
 	service.defaultSubAssigner = assigner
+	granter := &defaultLimitedCreditGranterStub{}
+	service.defaultLimitedCreditGranter = granter
 	service.refreshTokenCache = &refreshTokenCacheStub{}
 
 	tokenPair, user, err := service.LoginOrRegisterOAuthWithTokenPair(context.Background(), "linuxdo-123@linuxdo-connect.invalid", "linuxdo_user", "", "", "linuxdo")
@@ -864,6 +931,10 @@ func TestAuthService_LoginOrRegisterOAuthWithTokenPair_UsesLinuxDoAuthSourceDefa
 	require.Len(t, assigner.calls, 1)
 	require.Equal(t, int64(22), assigner.calls[0].GroupID)
 	require.Equal(t, 14, assigner.calls[0].ValidityDays)
+	require.Equal(t, []defaultLimitedCreditGrantCall{{
+		userID: 61,
+		items:  []DefaultLimitedCreditSetting{{Amount: 8.5, ValidityDays: 30}},
+	}}, granter.calls)
 }
 
 func TestAuthService_LoginOrRegisterOAuthWithTokenPair_ExistingUserDoesNotGrantAgain(t *testing.T) {
@@ -881,12 +952,15 @@ func TestAuthService_LoginOrRegisterOAuthWithTokenPair_ExistingUserDoesNotGrantA
 	assigner := &defaultSubscriptionAssignerStub{}
 	service := newAuthService(repo, map[string]string{
 		SettingKeyRegistrationEnabled:                   "true",
+		SettingKeyDefaultLimitedCredits:                 `[{"amount":5,"validity_days":10}]`,
 		SettingKeyAuthSourceDefaultLinuxDoBalance:       "21.75",
 		SettingKeyAuthSourceDefaultLinuxDoConcurrency:   "9",
 		SettingKeyAuthSourceDefaultLinuxDoSubscriptions: `[{"group_id":22,"validity_days":14}]`,
 		SettingKeyAuthSourceDefaultLinuxDoGrantOnSignup: "true",
 	}, nil, nil)
 	service.defaultSubAssigner = assigner
+	granter := &defaultLimitedCreditGranterStub{}
+	service.defaultLimitedCreditGranter = granter
 	service.refreshTokenCache = &refreshTokenCacheStub{}
 
 	tokenPair, user, err := service.LoginOrRegisterOAuthWithTokenPair(context.Background(), existing.Email, "linuxdo_user", "", "", "linuxdo")
@@ -897,6 +971,7 @@ func TestAuthService_LoginOrRegisterOAuthWithTokenPair_ExistingUserDoesNotGrantA
 	require.Equal(t, 1, user.Concurrency)
 	require.Empty(t, repo.created)
 	require.Empty(t, assigner.calls)
+	require.Empty(t, granter.calls)
 }
 
 // newAuthServiceWithDingTalkCfg 构建一个含完整 DingTalk config 的 AuthService，

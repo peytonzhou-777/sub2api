@@ -117,6 +117,12 @@ type UserAttributeDefinition func(*sql.Selector)
 // UserAttributeValue is the predicate function for userattributevalue builders.
 type UserAttributeValue func(*sql.Selector)
 
+// UserLimitedCreditGrant is the predicate function for userlimitedcreditgrant builders.
+type UserLimitedCreditGrant func(*sql.Selector)
+
+// UserLimitedCreditLedger is the predicate function for userlimitedcreditledger builders.
+type UserLimitedCreditLedger func(*sql.Selector)
+
 // UserPlatformQuota is the predicate function for userplatformquota builders.
 type UserPlatformQuota func(*sql.Selector)
 

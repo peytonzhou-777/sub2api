@@ -11,7 +11,7 @@
           </div>
           <p class="text-sm font-medium text-primary-100">{{ t('redeem.currentBalance') }}</p>
           <p class="mt-2 text-4xl font-bold text-white">
-            ${{ user?.balance?.toFixed(2) || '0.00' }}
+            ${{ currentBalance.toFixed(2) }}
           </p>
           <p class="mt-2 text-sm text-primary-100">
             {{ t('redeem.concurrency') }}: {{ user?.concurrency || 0 }} {{ t('redeem.requests') }}
@@ -109,9 +109,13 @@
                       {{ t('redeem.subscriptionAssigned') }}
                       <span v-if="redeemResult.group_name"> - {{ redeemResult.group_name }}</span>
                       <span v-if="redeemResult.validity_days">
-                        ({{
-                          t('redeem.subscriptionDays', { days: redeemResult.validity_days })
-                        }})</span
+                        ({{ t('redeem.subscriptionDays', { days: redeemResult.validity_days }) }})</span
+                      >
+                    </p>
+                    <p v-else-if="redeemResult.type === 'limited_credit'" class="font-medium">
+                      {{ t('redeem.limitedCreditAssigned') }}: ${{ redeemResult.value.toFixed(2) }}
+                      <span v-if="redeemResult.validity_days">
+                        ({{ t('redeem.validityDays', { days: redeemResult.validity_days }) }})</span
                       >
                     </p>
                     <p v-if="redeemResult.new_balance !== undefined">
@@ -242,7 +246,9 @@
                         : 'bg-red-100 dark:bg-red-900/30'
                       : isSubscriptionType(item.type)
                         ? 'bg-purple-100 dark:bg-purple-900/30'
-                        : item.value >= 0
+                        : isLimitedCreditType(item.type)
+                          ? 'bg-emerald-100 dark:bg-emerald-900/30'
+                          : item.value >= 0
                           ? 'bg-blue-100 dark:bg-blue-900/30'
                           : 'bg-orange-100 dark:bg-orange-900/30'
                   ]"
@@ -264,6 +270,13 @@
                     name="badge"
                     size="md"
                     class="text-purple-600 dark:text-purple-400"
+                  />
+                  <!-- 限时额度图标 -->
+                  <Icon
+                    v-else-if="isLimitedCreditType(item.type)"
+                    name="clock"
+                    size="md"
+                    class="text-emerald-600 dark:text-emerald-400"
                   />
                   <!-- 并发类型图标 -->
                   <Icon
@@ -296,7 +309,9 @@
                         : 'text-red-600 dark:text-red-400'
                       : isSubscriptionType(item.type)
                         ? 'text-purple-600 dark:text-purple-400'
-                        : item.value >= 0
+                        : isLimitedCreditType(item.type)
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : item.value >= 0
                           ? 'text-blue-600 dark:text-blue-400'
                           : 'text-orange-600 dark:text-orange-400'
                   ]"
@@ -347,6 +362,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useSubscriptionStore } from '@/stores/subscriptions'
+import { useLimitedCreditStore } from '@/stores/limitedCredits'
 import { redeemAPI, authAPI, type RedeemHistoryItem } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -356,8 +372,10 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 const appStore = useAppStore()
 const subscriptionStore = useSubscriptionStore()
+const limitedCreditStore = useLimitedCreditStore()
 
 const user = computed(() => authStore.user)
+const currentBalance = computed(() => Number(user.value?.balance || 0) + limitedCreditStore.remainingAmount)
 
 const redeemCode = ref('')
 const submitting = ref(false)
@@ -386,6 +404,10 @@ const isSubscriptionType = (type: string) => {
   return type === 'subscription'
 }
 
+const isLimitedCreditType = (type: string) => {
+  return type === 'limited_credit'
+}
+
 const isAdminAdjustment = (type: string) => {
   return type === 'admin_balance' || type === 'admin_concurrency'
 }
@@ -401,6 +423,8 @@ const getHistoryItemTitle = (item: RedeemHistoryItem) => {
     return item.value >= 0 ? t('redeem.concurrencyAddedAdmin') : t('redeem.concurrencyReducedAdmin')
   } else if (item.type === 'subscription') {
     return t('redeem.subscriptionAssigned')
+  } else if (item.type === 'limited_credit') {
+    return t('redeem.limitedCreditAssigned')
   }
   return t('common.unknown')
 }
@@ -414,6 +438,9 @@ const formatHistoryValue = (item: RedeemHistoryItem) => {
     const days = item.validity_days || Math.round(item.value)
     const groupName = item.group?.name || ''
     return groupName ? `${days}${t('redeem.days')} - ${groupName}` : `${days}${t('redeem.days')}`
+  } else if (isLimitedCreditType(item.type)) {
+    const days = item.validity_days || 0
+    return days > 0 ? `+$${item.value.toFixed(2)} / ${days}${t('redeem.days')}` : `+$${item.value.toFixed(2)}`
   } else {
     const sign = item.value >= 0 ? '+' : ''
     return `${sign}${item.value} ${t('redeem.requests')}`
@@ -449,13 +476,20 @@ const handleRedeem = async () => {
     // Refresh user data to get updated balance/concurrency
     await authStore.refreshUser()
 
-    // If subscription type, immediately refresh subscription status
+    // 兑换后立即刷新对应权益状态，避免头部余额和红绿灯延迟更新。
     if (result.type === 'subscription') {
       try {
-        await subscriptionStore.fetchActiveSubscriptions(true) // force refresh
+        await subscriptionStore.fetchActiveSubscriptions(true)
       } catch (error) {
         console.error('Failed to refresh subscriptions after redeem:', error)
         appStore.showWarning(t('redeem.subscriptionRefreshFailed'))
+      }
+    } else if (result.type === 'limited_credit') {
+      try {
+        await limitedCreditStore.fetchActiveLimitedCredits(true)
+      } catch (error) {
+        console.error('Failed to refresh limited credits after redeem:', error)
+        appStore.showWarning(t('redeem.limitedCreditRefreshFailed'))
       }
     }
 

@@ -165,6 +165,7 @@ type ProviderDefaultGrantSettings struct {
 	Balance          float64
 	Concurrency      int
 	Subscriptions    []DefaultSubscriptionSetting
+	LimitedCredits   []DefaultLimitedCreditSetting
 	GrantOnSignup    bool
 	GrantOnFirstBind bool
 	PlatformQuotas   map[string]*DefaultPlatformQuotaSetting // key = platform name
@@ -188,6 +189,7 @@ type authSourceDefaultKeySet struct {
 	balance          string
 	concurrency      string
 	subscriptions    string
+	limitedCredits   string
 	grantOnSignup    string
 	grantOnFirstBind string
 	platformQuotas   string // SettingKeyAuthSourcePlatformQuotas(source)
@@ -199,6 +201,7 @@ var (
 		balance:          SettingKeyAuthSourceDefaultEmailBalance,
 		concurrency:      SettingKeyAuthSourceDefaultEmailConcurrency,
 		subscriptions:    SettingKeyAuthSourceDefaultEmailSubscriptions,
+		limitedCredits:   SettingKeyAuthSourceLimitedCredits("email"),
 		grantOnSignup:    SettingKeyAuthSourceDefaultEmailGrantOnSignup,
 		grantOnFirstBind: SettingKeyAuthSourceDefaultEmailGrantOnFirstBind,
 		platformQuotas:   SettingKeyAuthSourcePlatformQuotas("email"),
@@ -208,6 +211,7 @@ var (
 		balance:          SettingKeyAuthSourceDefaultLinuxDoBalance,
 		concurrency:      SettingKeyAuthSourceDefaultLinuxDoConcurrency,
 		subscriptions:    SettingKeyAuthSourceDefaultLinuxDoSubscriptions,
+		limitedCredits:   SettingKeyAuthSourceLimitedCredits("linuxdo"),
 		grantOnSignup:    SettingKeyAuthSourceDefaultLinuxDoGrantOnSignup,
 		grantOnFirstBind: SettingKeyAuthSourceDefaultLinuxDoGrantOnFirstBind,
 		platformQuotas:   SettingKeyAuthSourcePlatformQuotas("linuxdo"),
@@ -217,6 +221,7 @@ var (
 		balance:          SettingKeyAuthSourceDefaultOIDCBalance,
 		concurrency:      SettingKeyAuthSourceDefaultOIDCConcurrency,
 		subscriptions:    SettingKeyAuthSourceDefaultOIDCSubscriptions,
+		limitedCredits:   SettingKeyAuthSourceLimitedCredits("oidc"),
 		grantOnSignup:    SettingKeyAuthSourceDefaultOIDCGrantOnSignup,
 		grantOnFirstBind: SettingKeyAuthSourceDefaultOIDCGrantOnFirstBind,
 		platformQuotas:   SettingKeyAuthSourcePlatformQuotas("oidc"),
@@ -226,6 +231,7 @@ var (
 		balance:          SettingKeyAuthSourceDefaultWeChatBalance,
 		concurrency:      SettingKeyAuthSourceDefaultWeChatConcurrency,
 		subscriptions:    SettingKeyAuthSourceDefaultWeChatSubscriptions,
+		limitedCredits:   SettingKeyAuthSourceLimitedCredits("wechat"),
 		grantOnSignup:    SettingKeyAuthSourceDefaultWeChatGrantOnSignup,
 		grantOnFirstBind: SettingKeyAuthSourceDefaultWeChatGrantOnFirstBind,
 		platformQuotas:   SettingKeyAuthSourcePlatformQuotas("wechat"),
@@ -235,6 +241,7 @@ var (
 		balance:          SettingKeyAuthSourceDefaultGitHubBalance,
 		concurrency:      SettingKeyAuthSourceDefaultGitHubConcurrency,
 		subscriptions:    SettingKeyAuthSourceDefaultGitHubSubscriptions,
+		limitedCredits:   SettingKeyAuthSourceLimitedCredits("github"),
 		grantOnSignup:    SettingKeyAuthSourceDefaultGitHubGrantOnSignup,
 		grantOnFirstBind: SettingKeyAuthSourceDefaultGitHubGrantOnFirstBind,
 		platformQuotas:   SettingKeyAuthSourcePlatformQuotas("github"),
@@ -244,6 +251,7 @@ var (
 		balance:          SettingKeyAuthSourceDefaultGoogleBalance,
 		concurrency:      SettingKeyAuthSourceDefaultGoogleConcurrency,
 		subscriptions:    SettingKeyAuthSourceDefaultGoogleSubscriptions,
+		limitedCredits:   SettingKeyAuthSourceLimitedCredits("google"),
 		grantOnSignup:    SettingKeyAuthSourceDefaultGoogleGrantOnSignup,
 		grantOnFirstBind: SettingKeyAuthSourceDefaultGoogleGrantOnFirstBind,
 		platformQuotas:   SettingKeyAuthSourcePlatformQuotas("google"),
@@ -253,6 +261,7 @@ var (
 		balance:          SettingKeyAuthSourceDefaultDingTalkBalance,
 		concurrency:      SettingKeyAuthSourceDefaultDingTalkConcurrency,
 		subscriptions:    SettingKeyAuthSourceDefaultDingTalkSubscriptions,
+		limitedCredits:   SettingKeyAuthSourceLimitedCredits("dingtalk"),
 		grantOnSignup:    SettingKeyAuthSourceDefaultDingTalkGrantOnSignup,
 		grantOnFirstBind: SettingKeyAuthSourceDefaultDingTalkGrantOnFirstBind,
 		platformQuotas:   SettingKeyAuthSourcePlatformQuotas("dingtalk"),

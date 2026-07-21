@@ -10,6 +10,60 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type affiliateTransferRepoStub struct {
+	AffiliateRepository
+	balanceCalls       int
+	limitedCalls       int
+	limitedValidityDay int
+}
+
+func (s *affiliateTransferRepoStub) TransferQuotaToBalance(context.Context, int64) (float64, float64, error) {
+	s.balanceCalls++
+	return 4.5, 12.5, nil
+}
+
+func (s *affiliateTransferRepoStub) TransferQuotaToLimitedCredit(_ context.Context, _ int64, validityDays int) (float64, float64, error) {
+	s.limitedCalls++
+	s.limitedValidityDay = validityDays
+	return 4.5, 8, nil
+}
+
+func TestAffiliateService_TransferAffiliateQuota_SelectsConfiguredCreditType(t *testing.T) {
+	t.Run("限时额度使用配置的有效期", func(t *testing.T) {
+		repo := &affiliateTransferRepoStub{}
+		settings := NewSettingService(&settingRepoStub{values: map[string]string{
+			SettingKeyAffiliateRebateCreditType:         AffiliateRebateCreditTypeLimited,
+			SettingKeyAffiliateRebateCreditValidityDays: "45",
+		}}, nil)
+		svc := NewAffiliateService(repo, settings, nil, nil)
+
+		transferred, balance, err := svc.TransferAffiliateQuota(context.Background(), 42)
+
+		require.NoError(t, err)
+		require.InDelta(t, 4.5, transferred, 1e-9)
+		require.InDelta(t, 8, balance, 1e-9)
+		require.Equal(t, 0, repo.balanceCalls)
+		require.Equal(t, 1, repo.limitedCalls)
+		require.Equal(t, 45, repo.limitedValidityDay)
+	})
+
+	t.Run("永久额度沿用余额转入", func(t *testing.T) {
+		repo := &affiliateTransferRepoStub{}
+		settings := NewSettingService(&settingRepoStub{values: map[string]string{
+			SettingKeyAffiliateRebateCreditType: AffiliateRebateCreditTypePermanent,
+		}}, nil)
+		svc := NewAffiliateService(repo, settings, nil, nil)
+
+		transferred, balance, err := svc.TransferAffiliateQuota(context.Background(), 42)
+
+		require.NoError(t, err)
+		require.InDelta(t, 4.5, transferred, 1e-9)
+		require.InDelta(t, 12.5, balance, 1e-9)
+		require.Equal(t, 1, repo.balanceCalls)
+		require.Equal(t, 0, repo.limitedCalls)
+	})
+}
+
 // TestResolveRebateRatePercent_PerUserOverride verifies that per-inviter
 // AffRebateRatePercent overrides the global rate, that NULL falls back to the
 // global rate, and that out-of-range exclusive rates are clamped silently.

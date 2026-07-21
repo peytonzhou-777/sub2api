@@ -588,7 +588,7 @@ export default {
 
   affiliate: {
     title: '邀请返利',
-    description: '邀请新用户注册，并将返利额度转入账户余额',
+    description: '邀请新用户注册，并将返利额度转为可用额度',
     yourCode: '我的邀请码',
     inviteLink: '邀请链接',
     copyCode: '复制邀请码',
@@ -596,7 +596,7 @@ export default {
     codeCopied: '邀请码已复制',
     linkCopied: '邀请链接已复制',
     loadFailed: '加载邀请返利数据失败',
-    transferFailed: '转入余额失败',
+    transferFailed: '转为可用额度失败',
     stats: {
       rebateRate: '我的返利比例',
       rebateRateHint: '被邀请用户每次充值后你可获得的返利比例',
@@ -607,12 +607,12 @@ export default {
       totalQuota: '历史返利额度'
     },
     transfer: {
-      title: '返利额度转余额',
-      description: '将当前可用返利额度一键转入账户余额',
-      button: '转入余额',
+      title: '返利额度转为可用额度',
+      description: '将当前返利额度一键转为可用额度',
+      button: '转为可用额度',
       transferring: '转入中...',
       empty: '当前没有可转入额度',
-      success: '已转入余额：{amount}'
+      success: '已转为可用额度：{amount}'
     },
     invitees: {
       title: '已邀请用户',
@@ -667,12 +667,15 @@ export default {
     concurrencyReducedAdmin: '并发减少（管理员）',
     adminAdjustment: '管理员调整',
     subscriptionAssigned: '订阅已分配',
+    limitedCreditAssigned: '限时额度已发放',
     subscriptionAssignedDesc: '您已获得 {groupName} 的访问权限',
     subscriptionDays: '{days} 天',
+    validityDays: '有效 {days} 天',
     days: '天',
     codeRedeemSuccess: '兑换成功！',
     failedToRedeem: '兑换失败，请检查兑换码后重试。',
     subscriptionRefreshFailed: '兑换成功，但订阅状态刷新失败。',
+    limitedCreditRefreshFailed: '兑换成功，但限时额度状态刷新失败。',
     pleaseEnterCode: '请输入兑换码'
   },
 

@@ -583,7 +583,7 @@ export default {
 
   affiliate: {
     title: 'Affiliate Rebates',
-    description: 'Invite new users and convert your rebate quota into account balance',
+    description: 'Invite new users and convert your rebate quota into usable credit',
     yourCode: 'Your Affiliate Code',
     inviteLink: 'Invite Link',
     copyCode: 'Copy Code',
@@ -603,11 +603,11 @@ export default {
     },
     transfer: {
       title: 'Transfer Rebate Quota',
-      description: 'Move available rebate quota into your account balance',
-      button: 'Transfer to Balance',
+      description: 'Convert available rebate quota into usable credit',
+      button: 'Convert to Credit',
       transferring: 'Transferring...',
       empty: 'No available rebate quota',
-      success: '{amount} has been transferred to your balance'
+      success: '{amount} has been converted to usable credit'
     },
     invitees: {
       title: 'Invited Users',
@@ -662,12 +662,15 @@ export default {
     concurrencyReducedAdmin: 'Concurrency Reduced (Admin)',
     adminAdjustment: 'Admin Adjustment',
     subscriptionAssigned: 'Subscription Assigned',
+    limitedCreditAssigned: 'Limited Credit Granted',
     subscriptionAssignedDesc: 'You have been granted access to {groupName}',
     subscriptionDays: '{days} days',
+    validityDays: 'valid for {days} days',
     days: ' days',
     codeRedeemSuccess: 'Code redeemed successfully!',
     failedToRedeem: 'Failed to redeem code. Please check the code and try again.',
     subscriptionRefreshFailed: 'Redeemed successfully, but failed to refresh subscription status.',
+    limitedCreditRefreshFailed: 'Redeemed successfully, but failed to refresh limited credit status.',
     pleaseEnterCode: 'Please enter a redeem code'
   },
 

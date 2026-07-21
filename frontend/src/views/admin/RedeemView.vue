@@ -117,7 +117,7 @@
             <span
               :class="[
                 'badge',
-                value === 'balance'
+                value === 'balance' || value === 'limited_credit'
                   ? 'badge-success'
                   : value === 'subscription'
                     ? 'badge-warning'
@@ -131,6 +131,12 @@
           <template #cell-value="{ value, row }">
             <span class="text-sm font-medium text-gray-900 dark:text-white">
               <template v-if="row.type === 'balance'">${{ value.toFixed(2) }}</template>
+              <template v-else-if="row.type === 'limited_credit'">
+                ${{ value.toFixed(2) }}
+                <span class="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                  / {{ row.validity_days || 30 }} {{ t('admin.redeem.days') }}
+                </span>
+              </template>
               <template v-else-if="row.type === 'subscription'">
                 {{ row.validity_days || 30 }} {{ t('admin.redeem.days') }}
                 <span v-if="row.group" class="ml-1 text-xs text-gray-500 dark:text-gray-400"
@@ -291,7 +297,7 @@
             <div v-if="generateForm.type !== 'subscription' && generateForm.type !== 'invitation'">
               <label class="input-label">
                 {{
-                  generateForm.type === 'balance'
+                  isMoneyRedeemType(generateForm.type)
                     ? t('admin.redeem.amount')
                     : t('admin.redeem.columns.value')
                 }}
@@ -299,8 +305,8 @@
               <input
                 v-model.number="generateForm.value"
                 type="number"
-                :step="generateForm.type === 'balance' ? '0.01' : '1'"
-                :min="generateForm.type === 'balance' ? '0.01' : '1'"
+                :step="isMoneyRedeemType(generateForm.type) ? '0.01' : '1'"
+                :min="isMoneyRedeemType(generateForm.type) ? '0.01' : '1'"
                 required
                 class="input"
               />
@@ -311,7 +317,7 @@
                 {{ t('admin.redeem.invitationHint') }}
               </p>
             </div>
-            <!-- 订阅类型：显示分组选择和有效天数 -->
+            <!-- 订阅类型：显示分组选择 -->
             <template v-if="generateForm.type === 'subscription'">
               <div>
                 <label class="input-label">{{ t('admin.redeem.selectGroup') }}</label>
@@ -344,18 +350,18 @@
                   </template>
                 </Select>
               </div>
-              <div>
-                <label class="input-label">{{ t('admin.redeem.validityDays') }}</label>
-                <input
-                  v-model.number="generateForm.validity_days"
-                  type="number"
-                  min="1"
-                  max="365"
-                  required
-                  class="input"
-                />
-              </div>
             </template>
+            <div v-if="generateForm.type === 'subscription' || generateForm.type === 'limited_credit'">
+              <label class="input-label">{{ t('admin.redeem.validityDays') }}</label>
+              <input
+                v-model.number="generateForm.validity_days"
+                type="number"
+                min="1"
+                max="365"
+                required
+                class="input"
+              />
+            </div>
             <div>
               <label class="input-label">{{ t('admin.redeem.codeExpiry') }}</label>
               <div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -690,6 +696,7 @@ const textareaHeight = computed(() => {
 })
 
 const copiedAll = ref(false)
+const isMoneyRedeemType = (type: string) => type === 'balance' || type === 'limited_credit'
 
 const closeResultDialog = () => {
   showResultDialog.value = false
@@ -735,6 +742,7 @@ const typeOptions = computed(() => [
   { value: 'balance', label: t('admin.redeem.balance') },
   { value: 'concurrency', label: t('admin.redeem.concurrency') },
   { value: 'subscription', label: t('admin.redeem.subscription') },
+  { value: 'limited_credit', label: t('admin.redeem.limitedCredit') },
   { value: 'invitation', label: t('admin.redeem.invitation') }
 ])
 
@@ -743,6 +751,7 @@ const filterTypeOptions = computed(() => [
   { value: 'balance', label: t('admin.redeem.balance') },
   { value: 'concurrency', label: t('admin.redeem.concurrency') },
   { value: 'subscription', label: t('admin.redeem.subscription') },
+  { value: 'limited_credit', label: t('admin.redeem.limitedCredit') },
   { value: 'invitation', label: t('admin.redeem.invitation') }
 ])
 
@@ -845,6 +854,9 @@ watch(
       generateForm.value = 0
     } else if (generateForm.value === 0) {
       generateForm.value = 10
+    }
+    if (newType !== 'subscription') {
+      generateForm.group_id = null
     }
   }
 )
@@ -1018,9 +1030,13 @@ const buildBatchUpdateFields = (): BatchUpdateRedeemCodeFields | null => {
 }
 
 const handleGenerateCodes = async () => {
-  // 订阅类型必须选择分组
+  // 订阅类型必须选择分组；限时额度必须配置有效金额。
   if (generateForm.type === 'subscription' && !generateForm.group_id) {
     appStore.showError(t('admin.redeem.groupRequired'))
+    return
+  }
+  if (generateForm.type === 'limited_credit' && generateForm.value <= 0) {
+    appStore.showError(t('admin.redeem.amountRequired'))
     return
   }
 
@@ -1037,7 +1053,7 @@ const handleGenerateCodes = async () => {
       generateForm.type,
       generateForm.value,
       generateForm.type === 'subscription' ? generateForm.group_id : undefined,
-      generateForm.type === 'subscription' ? generateForm.validity_days : undefined,
+      generateForm.type === 'subscription' || generateForm.type === 'limited_credit' ? generateForm.validity_days : undefined,
       expiresInDays
     )
     showGenerateDialog.value = false
