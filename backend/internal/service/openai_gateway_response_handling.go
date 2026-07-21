@@ -431,21 +431,23 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 					})
 				}
 				if !openAIStreamClientOutputStarted(c, clientOutputStarted) {
-					if status, errType, errMsg, matched := applyOpenAIStreamFailedErrorPassthroughRule(c, account.Platform, dataBytes, failedMessage); matched {
-						sawFailedEvent = true
-						// 命中透传规则也要记录 ops 上游错误事件（对齐 CC/Messages 与
-						// antigravity 先例），否则透传命中的 failed 在监控中不可见。
-						s.recordOpenAIStreamUpstreamError(c, account, false, upstreamRequestID, "http_error", dataBytes, failedMessage)
-						MarkResponseCommitted(c)
-						c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-						c.JSON(status, gin.H{
-							"error": gin.H{
-								"type":    errType,
-								"message": errMsg,
-							},
-						})
-						streamEarlyErr = fmt.Errorf("upstream response failed: passthrough rule matched message=%s", errMsg)
-						return
+					if !account.IsOpenAIUpstreamErrorMaskEnabled() {
+						if status, errType, errMsg, matched := applyOpenAIStreamFailedErrorPassthroughRule(c, account.Platform, dataBytes, failedMessage); matched {
+							sawFailedEvent = true
+							// 命中透传规则也要记录 ops 上游错误事件（对齐 CC/Messages 与
+							// antigravity 先例），否则透传命中的 failed 在监控中不可见。
+							s.recordOpenAIStreamUpstreamError(c, account, false, upstreamRequestID, "http_error", dataBytes, failedMessage)
+							MarkResponseCommitted(c)
+							c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+							c.JSON(status, gin.H{
+								"error": gin.H{
+									"type":    errType,
+									"message": errMsg,
+								},
+							})
+							streamEarlyErr = fmt.Errorf("upstream response failed: passthrough rule matched message=%s", errMsg)
+							return
+						}
 					}
 					if openAIStreamFailedEventShouldFailover(dataBytes, failedMessage) {
 						sawFailedEvent = true
@@ -505,6 +507,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				dataBytes,
 				eventType,
 				openAIStreamClientOutputStarted(c, clientOutputStarted),
+				account.IsOpenAIUpstreamErrorMaskEnabled(),
 			); sanitized {
 				dataBytes = sanitizedData
 				data = string(sanitizedData)
@@ -1115,7 +1118,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	// Some OpenAI-compatible upstreams (including other sub2api instances)
 	// may return SSE even when stream=false was requested.
 	if isEventStreamResponse(resp.Header) {
-		return s.handleSSEToJSON(resp, c, body, originalModel, mappedModel)
+		return s.handleSSEToJSON(resp, c, body, originalModel, mappedModel, account)
 	}
 	// bodyLooksLikeSSE is a line-level heuristic: real SSE framing requires
 	// "data:"/"event:" field names at the very start of a physical line. A
@@ -1131,7 +1134,11 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	// positives on JSON responses that coincidentally contain "data:" or
 	// "event:" in their text content.
 	if account.Type == AccountTypeOAuth && bodyLooksLikeSSE {
-		return s.handleSSEToJSON(resp, c, body, originalModel, mappedModel)
+		return s.handleSSEToJSON(resp, c, body, originalModel, mappedModel, account)
+	}
+	if account.IsOpenAIUpstreamErrorMaskEnabled() && isOpenAIResponseFailedJSON(body) {
+		masked := mapOpenAIMaskedProtocolError(body)
+		return nil, s.writeOpenAINonStreamingProtocolError(resp, c, masked.Message)
 	}
 	if account != nil && account.IsGrok() && isOpenAIResponsesCompactPath(c) {
 		body, err = convertGrokResponseToOpenAICompact(body)
@@ -1143,7 +1150,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	usageValue, usageOK := extractOpenAIUsageFromJSONBytes(body)
 	if !usageOK {
 		if bodyLooksLikeSSE {
-			return s.handleSSEToJSON(resp, c, body, originalModel, mappedModel)
+			return s.handleSSEToJSON(resp, c, body, originalModel, mappedModel, account)
 		}
 		return nil, fmt.Errorf("parse response: invalid json response")
 	}
@@ -1204,7 +1211,7 @@ func bodyHasSSEFraming(body []byte) bool {
 	return false
 }
 
-func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Context, body []byte, originalModel, mappedModel string) (*openaiNonStreamingResult, error) {
+func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Context, body []byte, originalModel, mappedModel string, accountOptions ...*Account) (*openaiNonStreamingResult, error) {
 	bodyText := string(body)
 	finalResponse, ok := extractCodexFinalResponse(bodyText)
 
@@ -1243,6 +1250,9 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		terminalType, terminalPayload, terminalOK := extractOpenAISSETerminalEvent(bodyText)
 		if terminalOK && terminalType == "response.failed" {
 			msg := extractOpenAISSEErrorMessage(terminalPayload)
+			if len(accountOptions) > 0 && accountOptions[0].IsOpenAIUpstreamErrorMaskEnabled() {
+				msg = mapOpenAIMaskedProtocolError(terminalPayload).Message
+			}
 			if msg == "" {
 				msg = "Upstream compact response failed"
 			}
@@ -1277,6 +1287,13 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 	}, nil
 }
 
+// isOpenAIResponseFailedJSON 判断非流式 JSON 是否携带协议级失败状态。
+func isOpenAIResponseFailedJSON(body []byte) bool {
+	return strings.EqualFold(strings.TrimSpace(gjson.GetBytes(body, "status").String()), "failed") ||
+		strings.EqualFold(strings.TrimSpace(gjson.GetBytes(body, "response.status").String()), "failed") ||
+		strings.EqualFold(strings.TrimSpace(gjson.GetBytes(body, "type").String()), "response.failed")
+}
+
 func extractOpenAISSETerminalEvent(body string) (string, []byte, bool) {
 	var terminalType string
 	var terminalPayload []byte
@@ -1309,11 +1326,28 @@ func extractOpenAISSEErrorMessage(payload []byte) string {
 	return sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(payload)))
 }
 
-func sanitizeOpenAIResponseFailedEventForClient(payload []byte, eventType string, clientOutputStarted bool) ([]byte, bool) {
+func sanitizeOpenAIResponseFailedEventForClient(payload []byte, eventType string, clientOutputStarted bool, maskOptions ...bool) ([]byte, bool) {
 	if eventType != "response.failed" || len(payload) == 0 || !gjson.ValidBytes(payload) {
 		return payload, false
 	}
 	updated := payload
+	maskClientError := len(maskOptions) > 0 && maskOptions[0]
+	if maskClientError {
+		masked := mapOpenAIMaskedProtocolError(payload)
+		genericError := map[string]any{"code": "upstream_error", "message": masked.Message}
+		var err error
+		switch {
+		case gjson.GetBytes(updated, "response.error").Exists():
+			updated, err = sjson.SetBytes(updated, "response.error", genericError)
+		case gjson.GetBytes(updated, "error").Exists():
+			updated, err = sjson.SetBytes(updated, "error", genericError)
+		default:
+			updated, err = sjson.SetBytes(updated, "error", genericError)
+		}
+		if err != nil {
+			return payload, false
+		}
+	}
 	if clientOutputStarted && isOpenAIContextWindowError(extractOpenAISSEErrorMessage(payload), payload) {
 		errorPath := ""
 		switch {
@@ -1359,6 +1393,31 @@ func sanitizeOpenAIResponseFailedEventForClient(payload []byte, eventType string
 		updated = next
 	}
 	return updated, !bytes.Equal(updated, payload)
+}
+
+// maskOpenAIWSEventForClient 脱敏 OpenAI WebSocket 错误事件，同时保留协议事件结构。
+func maskOpenAIWSEventForClient(payload []byte) []byte {
+	eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
+	if eventType == "response.failed" {
+		if updated, changed := sanitizeOpenAIResponseFailedEventForClient(payload, eventType, false, true); changed {
+			return updated
+		}
+		return payload
+	}
+	if (eventType != "error" && !gjson.GetBytes(payload, "error").Exists()) || !gjson.ValidBytes(payload) {
+		return payload
+	}
+	errCodeRaw, errTypeRaw, _ := parseOpenAIWSErrorEventFields(payload)
+	masked := MapOpenAIMaskedUpstreamError(openAIWSErrorHTTPStatusFromRaw(errCodeRaw, errTypeRaw))
+	updated, err := sjson.SetBytes(payload, "error", map[string]any{
+		"type":    masked.ErrType,
+		"code":    "upstream_error",
+		"message": masked.Message,
+	})
+	if err != nil {
+		return payload
+	}
+	return updated
 }
 
 func (s *OpenAIGatewayService) writeOpenAINonStreamingProtocolError(resp *http.Response, c *gin.Context, message string) error {

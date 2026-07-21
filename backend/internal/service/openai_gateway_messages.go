@@ -549,6 +549,11 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 				UpstreamInTok:  usage.InputTokens,
 				UpstreamOutTok: usage.OutputTokens,
 			})
+			if account.IsOpenAIUpstreamErrorMaskEnabled() {
+				masked := MapOpenAIMaskedUpstreamError(http.StatusBadGateway)
+				writeAnthropicError(c, masked.Status, masked.ErrType, masked.Message)
+				return nil, fmt.Errorf("openai cyber_policy: masked for client")
+			}
 			clientMsg := msg
 			if clientMsg == "" {
 				clientMsg = "Request blocked by upstream cyber-security policy"
@@ -561,6 +566,11 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 			return nil, s.newOpenAIStreamFailoverError(c, account, false, requestID, payload, message)
 		}
 		message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", payload, message)
+		if account.IsOpenAIUpstreamErrorMaskEnabled() {
+			masked := mapOpenAIMaskedProtocolError(payload)
+			writeAnthropicError(c, masked.Status, masked.ErrType, masked.Message)
+			return nil, fmt.Errorf("upstream response failed (masked for client)")
+		}
 		// 统一走语义状态推断 + body 归一化（与 /v1/responses 路径一致），
 		// 使按错误码配置的透传规则可命中。
 		if status, errType, errMsg, matched := applyOpenAIStreamFailedErrorPassthroughRule(
@@ -899,6 +909,10 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 					if !clientDisconnected {
 						writeStreamHeaders()
 						clientMsg := msg
+						if account.IsOpenAIUpstreamErrorMaskEnabled() {
+							masked := MapOpenAIMaskedUpstreamError(http.StatusBadGateway)
+							clientMsg = masked.Message
+						}
 						if clientMsg == "" {
 							clientMsg = "Request blocked by upstream cyber-security policy"
 						}
@@ -919,16 +933,22 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 				}
 				message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", payloadBytes, message)
 				errStatus, errType, errMsg := http.StatusBadGateway, "api_error", message
+				if account.IsOpenAIUpstreamErrorMaskEnabled() {
+					masked := mapOpenAIMaskedProtocolError(payloadBytes)
+					errStatus, errType, errMsg = masked.Status, masked.ErrType, masked.Message
+				}
 				// 统一走语义状态推断 + body 归一化（与 /v1/responses 路径一致），
 				// 使按错误码配置的透传规则可命中。
-				if status, et, em, matched := applyOpenAIStreamFailedErrorPassthroughRule(
-					c, account.Platform, payloadBytes, message,
-				); matched {
-					if em == "" {
-						em = errMsg
+				if !account.IsOpenAIUpstreamErrorMaskEnabled() {
+					if status, et, em, matched := applyOpenAIStreamFailedErrorPassthroughRule(
+						c, account.Platform, payloadBytes, message,
+					); matched {
+						if em == "" {
+							em = errMsg
+						}
+						errStatus, errType, errMsg = status, et, em
+						MarkResponseCommitted(c)
 					}
-					errStatus, errType, errMsg = status, et, em
-					MarkResponseCommitted(c)
 				}
 				if !clientDisconnected {
 					if !clientOutputStarted {

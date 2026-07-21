@@ -334,6 +334,12 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 			UpstreamStatus: resp.StatusCode,
 		})
 		setOpsUpstreamError(c, resp.StatusCode, cyberMsg, truncateString(string(body), 2048))
+		if account.IsOpenAIUpstreamErrorMaskEnabled() {
+			masked := MapOpenAIMaskedUpstreamError(resp.StatusCode)
+			MarkResponseCommitted(c)
+			c.JSON(masked.Status, gin.H{"error": gin.H{"type": masked.ErrType, "message": masked.Message}})
+			return nil, fmt.Errorf("openai cyber_policy: masked for client")
+		}
 		writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 		contentType := resp.Header.Get("Content-Type")
 		if contentType == "" {
@@ -402,6 +408,36 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 			upstreamMsg,
 			false,
 		)
+	}
+	// 账号级隐藏策略优先于全局错误透传规则，但不跳过账号状态与 failover 处理。
+	if account.IsOpenAIUpstreamErrorMaskEnabled() {
+		var reqModel string
+		if len(requestedModel) > 0 {
+			reqModel = strings.TrimSpace(requestedModel[0])
+		}
+		if reqModel == "" {
+			reqModel, _, _ = extractOpenAIRequestMetaFromBody(requestBody)
+		}
+		shouldDisable := s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, reqModel)
+		kind := "http_error"
+		if shouldDisable {
+			kind = "failover"
+		}
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			Platform: account.Platform, AccountID: account.ID, AccountName: account.Name,
+			UpstreamStatusCode: resp.StatusCode, UpstreamRequestID: resp.Header.Get("x-request-id"),
+			Kind: kind, Message: upstreamMsg, Detail: upstreamDetail,
+		})
+		if shouldDisable {
+			return nil, &UpstreamFailoverError{
+				StatusCode: resp.StatusCode, ResponseBody: body, MaskClientError: true,
+				RetryableOnSameAccount: false,
+			}
+		}
+		masked := MapOpenAIMaskedUpstreamError(resp.StatusCode)
+		MarkResponseCommitted(c)
+		c.JSON(masked.Status, gin.H{"error": gin.H{"type": masked.ErrType, "message": masked.Message}})
+		return nil, fmt.Errorf("upstream error: %d (masked for client)", resp.StatusCode)
 	}
 
 	if status, errType, errMsg, matched := applyErrorPassthroughRule(
@@ -482,6 +518,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		return nil, &UpstreamFailoverError{
 			StatusCode:             resp.StatusCode,
 			ResponseBody:           body,
+			MaskClientError:        account.IsOpenAIUpstreamErrorMaskEnabled(),
 			RetryableOnSameAccount: false,
 		}
 	}
@@ -563,6 +600,11 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 		})
 		setOpsUpstreamError(c, resp.StatusCode, cyberMsg, truncateString(string(body), 2048))
 		clientMsg := cyberMsg
+		if account.IsOpenAIUpstreamErrorMaskEnabled() {
+			masked := MapOpenAIMaskedUpstreamError(resp.StatusCode)
+			writeError(c, masked.Status, masked.ErrType, masked.Message)
+			return nil, fmt.Errorf("openai cyber_policy: masked for client")
+		}
 		if clientMsg == "" {
 			clientMsg = "Request blocked by upstream cyber-security policy"
 		}
@@ -595,6 +637,36 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 		upstreamDetail = truncateString(string(body), maxBytes)
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
+
+	// 兼容协议同样先执行调度副作用，再以对应协议格式返回本站错误。
+	if account.IsOpenAIUpstreamErrorMaskEnabled() {
+		var modelForCooldown string
+		if len(requestedModel) > 0 {
+			modelForCooldown = requestedModel[0]
+		}
+		shouldDisable := s.handleOpenAIAccountUpstreamError(
+			c.Request.Context(), account, resp.StatusCode, resp.Header, body, modelForCooldown,
+		)
+		kind := "http_error"
+		if shouldDisable {
+			kind = "failover"
+		}
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			Platform: account.Platform, AccountID: account.ID, AccountName: account.Name,
+			UpstreamStatusCode: resp.StatusCode, UpstreamRequestID: resp.Header.Get("x-request-id"),
+			Kind: kind, Message: upstreamMsg, Detail: upstreamDetail,
+		})
+		if shouldDisable {
+			return nil, &UpstreamFailoverError{
+				StatusCode: resp.StatusCode, ResponseBody: body, MaskClientError: true,
+				RetryableOnSameAccount: false,
+			}
+		}
+		masked := MapOpenAIMaskedUpstreamError(resp.StatusCode)
+		MarkResponseCommitted(c)
+		writeError(c, masked.Status, masked.ErrType, masked.Message)
+		return nil, fmt.Errorf("upstream error: %d (masked for client)", resp.StatusCode)
+	}
 
 	// Apply error passthrough rules
 	if status, errType, errMsg, matched := applyErrorPassthroughRule(
@@ -659,6 +731,7 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 		return nil, &UpstreamFailoverError{
 			StatusCode:             resp.StatusCode,
 			ResponseBody:           body,
+			MaskClientError:        account.IsOpenAIUpstreamErrorMaskEnabled(),
 			RetryableOnSameAccount: false,
 		}
 	}

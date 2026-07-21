@@ -1231,6 +1231,11 @@ func (h *OpenAIGatewayHandler) handleAnthropicFailoverExhausted(c *gin.Context, 
 		h.anthropicStreamingAwareError(c, status, "api_error", message, streamStarted)
 		return
 	}
+	if failoverErr != nil && failoverErr.MaskClientError {
+		masked := service.MapOpenAIMaskedUpstreamError(failoverErr.StatusCode)
+		h.anthropicStreamingAwareError(c, masked.Status, masked.ErrType, masked.Message, streamStarted)
+		return
+	}
 	status, errType, errMsg := h.mapUpstreamError(failoverErr.StatusCode)
 	h.anthropicStreamingAwareError(c, status, errType, errMsg, streamStarted)
 }
@@ -2181,6 +2186,12 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 	}
 	statusCode := failoverErr.StatusCode
 	responseBody := failoverErr.ResponseBody
+	// 账号级隐藏策略优先于静默拒绝与全局错误透传规则。
+	if failoverErr.MaskClientError {
+		masked := service.MapOpenAIMaskedUpstreamError(statusCode)
+		h.handleStreamingAwareError(c, masked.Status, masked.ErrType, masked.Message, streamStarted)
+		return
+	}
 	if service.IsOpenAISilentRefusalErrorBody(responseBody) {
 		service.SetOpsUpstreamError(c, statusCode, service.OpenAISilentRefusalClientMessage(), "")
 		h.handleStreamingAwareError(c, http.StatusBadGateway, "upstream_error", service.OpenAISilentRefusalClientMessage(), streamStarted)

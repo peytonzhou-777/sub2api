@@ -852,6 +852,33 @@ func (s *OpenAIGatewayService) handleOpenAIImagesErrorResponse(
 		)
 	}
 
+	// 账号级隐藏策略优先于全局透传规则，但仍保留账号冷却与 failover 副作用。
+	if account.IsOpenAIUpstreamErrorMaskEnabled() {
+		var modelForCooldown string
+		if len(requestedModel) > 0 {
+			modelForCooldown = strings.TrimSpace(requestedModel[0])
+		}
+		shouldDisable := s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, modelForCooldown)
+		kind := "http_error"
+		if shouldDisable {
+			kind = "failover"
+		}
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			Platform: account.Platform, AccountID: account.ID, AccountName: account.Name,
+			UpstreamStatusCode: resp.StatusCode, UpstreamRequestID: resp.Header.Get("x-request-id"),
+			Kind: kind, Message: upstreamMsg, Detail: upstreamDetail,
+		})
+		if shouldDisable {
+			return nil, &UpstreamFailoverError{
+				StatusCode: resp.StatusCode, ResponseBody: body, MaskClientError: true,
+				RetryableOnSameAccount: false,
+			}
+		}
+		upErr := maskOpenAIImagesErrorForClient(openAIImagesUpstreamErrorFromHTTP(resp.StatusCode, resp.Header, body))
+		writeOpenAIImagesUpstreamErrorResponse(c, upErr)
+		return nil, upErr
+	}
+
 	// Honor admin-configured error passthrough rules first.
 	if status, errType, errMsg, matched := applyErrorPassthroughRule(
 		c,
@@ -920,6 +947,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesErrorResponse(
 		return nil, &UpstreamFailoverError{
 			StatusCode:             resp.StatusCode,
 			ResponseBody:           body,
+			MaskClientError:        account.IsOpenAIUpstreamErrorMaskEnabled(),
 			RetryableOnSameAccount: false,
 		}
 	}
@@ -1236,6 +1264,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 	c *gin.Context,
 	responseFormat string,
 	fallbackModel string,
+	accountOptions ...*Account,
 ) (OpenAIUsage, int, []string, error) {
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
@@ -1254,7 +1283,11 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 		if upstreamErr := extractOpenAIImagesUpstreamError(body); upstreamErr != nil {
 			setOpsUpstreamError(c, upstreamErr.clientStatusCode(), upstreamErr.clientMessage(), "")
 			if !IsOpenAIImagesRetryableUpstreamError(upstreamErr) {
-				writeOpenAIImagesUpstreamErrorResponse(c, upstreamErr)
+				clientErr := upstreamErr
+				if len(accountOptions) > 0 && accountOptions[0].IsOpenAIUpstreamErrorMaskEnabled() {
+					clientErr = maskOpenAIImagesErrorForClient(upstreamErr)
+				}
+				writeOpenAIImagesUpstreamErrorResponse(c, clientErr)
 			}
 			return OpenAIUsage{}, 0, nil, upstreamErr
 		}
@@ -1275,7 +1308,11 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 				Message:    sanitizeUpstreamErrorMessage(refusal),
 			}
 			setOpsUpstreamError(c, http.StatusBadRequest, refusalErr.clientMessage(), summarizeOpenAIImagesNoOutputBody(body))
-			writeOpenAIImagesUpstreamErrorResponse(c, refusalErr)
+			clientErr := refusalErr
+			if len(accountOptions) > 0 && accountOptions[0].IsOpenAIUpstreamErrorMaskEnabled() {
+				clientErr = maskOpenAIImagesErrorForClient(refusalErr)
+			}
+			writeOpenAIImagesUpstreamErrorResponse(c, clientErr)
 			return OpenAIUsage{}, 0, nil, refusalErr
 		}
 		// (B) 真空响应：记录上游诊断摘要到 ops（last_event/status/model/body 片段）便于
@@ -1287,6 +1324,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 		return OpenAIUsage{}, 0, nil, &UpstreamFailoverError{
 			StatusCode:             http.StatusBadGateway,
 			ResponseBody:           body,
+			MaskClientError:        len(accountOptions) > 0 && accountOptions[0].IsOpenAIUpstreamErrorMaskEnabled(),
 			RetryableOnSameAccount: true,
 		}
 	}
@@ -1310,6 +1348,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthStreamingResponse(
 	responseFormat string,
 	streamPrefix string,
 	fallbackModel string,
+	accountOptions ...*Account,
 ) (OpenAIUsage, int, []string, *int, error) {
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	c.Header("Content-Type", "text/event-stream")
@@ -1451,7 +1490,11 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthStreamingResponse(
 			if upstreamErr := openAIImagesUpstreamErrorFromSSEPayload(dataBytes); upstreamErr != nil {
 				retryable := IsOpenAIImagesRetryableUpstreamError(upstreamErr)
 				if !clientDisconnected && (!retryable || c.Writer.Size() != writerSizeBeforeResponse) {
-					s.tryWriteOpenAIImagesStreamEvent(c, flusher, &clientDisconnected, &lastDownstreamWriteAt, "error", buildOpenAIImagesStreamErrorBodyFromUpstream(upstreamErr))
+					clientErr := upstreamErr
+					if len(accountOptions) > 0 && accountOptions[0].IsOpenAIUpstreamErrorMaskEnabled() {
+						clientErr = maskOpenAIImagesErrorForClient(upstreamErr)
+					}
+					s.tryWriteOpenAIImagesStreamEvent(c, flusher, &clientDisconnected, &lastDownstreamWriteAt, "error", buildOpenAIImagesStreamErrorBodyFromUpstream(clientErr))
 				}
 				setOpsUpstreamError(c, upstreamErr.clientStatusCode(), upstreamErr.clientMessage(), "")
 				processDataErr = upstreamErr
@@ -1756,6 +1799,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 			return nil, &UpstreamFailoverError{
 				StatusCode:             resp.StatusCode,
 				ResponseBody:           respBody,
+				MaskClientError:        account.IsOpenAIUpstreamErrorMaskEnabled(),
 				RetryableOnSameAccount: !shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
 			}
 		}
@@ -1773,7 +1817,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 	// keepalive 心跳字节，避免 failover 第 2 轮起把上一轮心跳残留误判为已写响应。
 	writerSizeBeforeResponse := OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c)
 	if parsed.Stream {
-		usage, imageCount, imageOutputSizes, firstTokenMs, err = s.handleOpenAIImagesOAuthStreamingResponse(resp, c, startTime, parsed.ResponseFormat, openAIImagesStreamPrefix(parsed), requestModel)
+		usage, imageCount, imageOutputSizes, firstTokenMs, err = s.handleOpenAIImagesOAuthStreamingResponse(resp, c, startTime, parsed.ResponseFormat, openAIImagesStreamPrefix(parsed), requestModel, account)
 		if err != nil {
 			if imageCount > 0 {
 				return &OpenAIForwardResult{
@@ -1803,7 +1847,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 			)
 		}
 	} else {
-		usage, imageCount, imageOutputSizes, err = s.handleOpenAIImagesOAuthNonStreamingResponse(resp, c, parsed.ResponseFormat, requestModel)
+		usage, imageCount, imageOutputSizes, err = s.handleOpenAIImagesOAuthNonStreamingResponse(resp, c, parsed.ResponseFormat, requestModel, account)
 		if err != nil {
 			return nil, s.handleOpenAIImagesOAuthResponseError(
 				upstreamCtx,
@@ -1890,6 +1934,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthResponseError(
 		StatusCode:             upstreamErr.StatusCode,
 		ResponseBody:           responseBody,
 		ResponseHeaders:        headers,
+		MaskClientError:        account.IsOpenAIUpstreamErrorMaskEnabled(),
 		RetryableOnSameAccount: !shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(upstreamErr.StatusCode),
 	}
 }

@@ -37,9 +37,10 @@ type openAIWSClientFrameConn struct {
 //     stops reading from the client.
 //   - _, _, err: a transport error other than block.
 type openAIWSPolicyEnforcingFrameConn struct {
-	inner   openaiwsv2.FrameConn
-	filter  func(msgType coderws.MessageType, payload []byte) ([]byte, *OpenAIFastBlockedError, error)
-	onBlock func(blocked *OpenAIFastBlockedError)
+	inner            openaiwsv2.FrameConn
+	filter           func(msgType coderws.MessageType, payload []byte) ([]byte, *OpenAIFastBlockedError, error)
+	downstreamFilter func(msgType coderws.MessageType, payload []byte) []byte
+	onBlock          func(blocked *OpenAIFastBlockedError)
 }
 
 var _ openaiwsv2.FrameConn = (*openAIWSPolicyEnforcingFrameConn)(nil)
@@ -71,6 +72,9 @@ func (c *openAIWSPolicyEnforcingFrameConn) ReadFrame(ctx context.Context) (coder
 func (c *openAIWSPolicyEnforcingFrameConn) WriteFrame(ctx context.Context, msgType coderws.MessageType, payload []byte) error {
 	if c == nil || c.inner == nil {
 		return errOpenAIWSConnClosed
+	}
+	if c.downstreamFilter != nil {
+		payload = c.downstreamFilter(msgType, payload)
 	}
 	return c.inner.WriteFrame(ctx, msgType, payload)
 }
@@ -947,6 +951,14 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			cancel()
 		},
 	}
+	if account.IsOpenAIUpstreamErrorMaskEnabled() {
+		policyClientConn.downstreamFilter = func(msgType coderws.MessageType, payload []byte) []byte {
+			if msgType != coderws.MessageText {
+				return payload
+			}
+			return maskOpenAIWSEventForClient(payload)
+		}
+	}
 	upstreamFirstMessageSent := false
 	firstWriteCtx, cancelFirstWrite := context.WithTimeout(ctx, s.openAIWSWriteTimeout())
 	firstWriteErr := relayUpstreamFrameConn.WriteFrame(firstWriteCtx, coderws.MessageText, firstClientMessage)
@@ -1085,6 +1097,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					StatusCode:      http.StatusTooManyRequests,
 					ResponseBody:    append([]byte(nil), payload...),
 					ResponseHeaders: cloneHeader(handshakeHeaders),
+					MaskClientError: account.IsOpenAIUpstreamErrorMaskEnabled(),
 				}
 			},
 			OnTrace: func(event openaiwsv2.RelayTraceEvent) {

@@ -1660,6 +1660,16 @@ func (a *Account) IsOpenAIPassthroughEnabled() bool {
 	return false
 }
 
+// IsOpenAIUpstreamErrorMaskEnabled 返回 OpenAI 账号是否隐藏客户端可见的上游错误详情。
+// 该开关仅改变失败响应，池模式、failover、计费和成功响应均保持原有行为。
+func (a *Account) IsOpenAIUpstreamErrorMaskEnabled() bool {
+	if a == nil || !a.IsOpenAI() || a.Extra == nil {
+		return false
+	}
+	enabled, ok := a.Extra["openai_mask_upstream_errors"].(bool)
+	return ok && enabled
+}
+
 // IsOpenAIResponsesWebSocketV2Enabled 返回 OpenAI 账号是否开启 Responses WebSocket v2。
 //
 // 分类型新字段：

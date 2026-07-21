@@ -574,6 +574,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 					UpstreamOutTok: usage.OutputTokens,
 				})
 			}
+			if account.IsOpenAIUpstreamErrorMaskEnabled() {
+				message = maskOpenAIWSEventForClient(message)
+				_, _, responseField = parseOpenAIWSEventEnvelope(message)
+			}
 		}
 
 		if eventType == "error" {
@@ -630,15 +634,24 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			}
 			statusCode := openAIWSErrorHTTPStatusFromRaw(errCodeRaw, errTypeRaw)
 			setOpsUpstreamError(c, statusCode, errMsg, "")
+			clientMessage := message
+			clientErrMsg := errMsg
+			clientStatusCode := statusCode
+			if account.IsOpenAIUpstreamErrorMaskEnabled() {
+				masked := MapOpenAIMaskedUpstreamError(statusCode)
+				clientMessage = maskOpenAIWSEventForClient(message)
+				clientErrMsg = masked.Message
+				clientStatusCode = masked.Status
+			}
 			if reqStream && !clientDisconnected {
 				flushBufferedStreamEvents("error_event")
-				emitStreamMessage(message, true)
+				emitStreamMessage(clientMessage, true)
 			}
 			if !reqStream {
-				c.JSON(statusCode, gin.H{
+				c.JSON(clientStatusCode, gin.H{
 					"error": gin.H{
 						"type":    "upstream_error",
-						"message": errMsg,
+						"message": clientErrMsg,
 					},
 				})
 			}

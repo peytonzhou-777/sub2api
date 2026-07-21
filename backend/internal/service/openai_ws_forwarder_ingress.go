@@ -891,6 +891,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 						StatusCode:      http.StatusTooManyRequests,
 						ResponseBody:    append([]byte(nil), upstreamMessage...),
 						ResponseHeaders: cloneHeader(lease.HandshakeHeaders()),
+						MaskClientError: account.IsOpenAIUpstreamErrorMaskEnabled(),
 					}
 				}
 			}
@@ -922,6 +923,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 						UpstreamOutTok: usage.OutputTokens,
 					})
 				}
+				if account.IsOpenAIUpstreamErrorMaskEnabled() {
+					upstreamMessage = maskOpenAIWSEventForClient(upstreamMessage)
+				}
+			}
+			if eventType == "error" && account.IsOpenAIUpstreamErrorMaskEnabled() {
+				upstreamMessage = maskOpenAIWSEventForClient(upstreamMessage)
 			}
 
 			if !clientDisconnected {

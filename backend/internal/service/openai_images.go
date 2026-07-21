@@ -656,6 +656,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			return nil, &UpstreamFailoverError{
 				StatusCode:             resp.StatusCode,
 				ResponseBody:           respBody,
+				MaskClientError:        account.IsOpenAIUpstreamErrorMaskEnabled(),
 				RetryableOnSameAccount: !shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
 			}
 		}
@@ -667,7 +668,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 	imageCount := parsed.N
 	var firstTokenMs *int
 	if parsed.Stream && isEventStreamResponse(resp.Header) {
-		streamUsage, streamCount, streamSizes, ttft, err := s.handleOpenAIImagesStreamingResponse(resp, c, startTime)
+		streamUsage, streamCount, streamSizes, ttft, err := s.handleOpenAIImagesStreamingResponse(resp, c, startTime, account)
 		if err != nil {
 			if streamCount > 0 {
 				return &OpenAIForwardResult{
@@ -706,7 +707,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			ImageOutputSizes: imageOutputSizes,
 		}, nil
 	} else {
-		nonStreamUsage, nonStreamCount, nonStreamSizes, err := s.handleOpenAIImagesNonStreamingResponse(resp, c)
+		nonStreamUsage, nonStreamCount, nonStreamSizes, err := s.handleOpenAIImagesNonStreamingResponse(resp, c, account)
 		if err != nil {
 			return nil, err
 		}
@@ -877,10 +878,17 @@ func cloneMultipartHeader(src textproto.MIMEHeader) textproto.MIMEHeader {
 	return dst
 }
 
-func (s *OpenAIGatewayService) handleOpenAIImagesNonStreamingResponse(resp *http.Response, c *gin.Context) (OpenAIUsage, int, []string, error) {
+func (s *OpenAIGatewayService) handleOpenAIImagesNonStreamingResponse(resp *http.Response, c *gin.Context, accountOptions ...*Account) (OpenAIUsage, int, []string, error) {
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return OpenAIUsage{}, 0, nil, err
+	}
+	if len(accountOptions) > 0 && accountOptions[0].IsOpenAIUpstreamErrorMaskEnabled() &&
+		(isOpenAIResponseFailedJSON(body) || gjson.GetBytes(body, "error").Exists()) {
+		upstreamErr := openAIImagesUpstreamErrorFromHTTP(http.StatusBadGateway, resp.Header, body)
+		clientErr := maskOpenAIImagesErrorForClient(upstreamErr)
+		writeOpenAIImagesUpstreamErrorResponse(c, clientErr)
+		return OpenAIUsage{}, 0, nil, upstreamErr
 	}
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	contentType := "application/json"
@@ -899,6 +907,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 	resp *http.Response,
 	c *gin.Context,
 	startTime time.Time,
+	accountOptions ...*Account,
 ) (OpenAIUsage, int, []string, *int, error) {
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
@@ -945,8 +954,26 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 			ms := int(time.Since(startTime).Milliseconds())
 			firstTokenMs = &ms
 		}
+		clientLine := line
+		trimmedLine := strings.TrimRight(string(line), "\r\n")
+		if len(accountOptions) > 0 && accountOptions[0].IsOpenAIUpstreamErrorMaskEnabled() {
+			if data, ok := extractOpenAISSEDataLine(trimmedLine); ok {
+				payload := []byte(data)
+				eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
+				if eventType == "error" || eventType == "response.failed" || gjson.GetBytes(payload, "error").Exists() {
+					masked := maskOpenAIWSEventForClient(payload)
+					lineEnding := "\n"
+					if bytes.HasSuffix(line, []byte("\r\n")) {
+						lineEnding = "\r\n"
+					} else if !bytes.HasSuffix(line, []byte("\n")) {
+						lineEnding = ""
+					}
+					clientLine = []byte("data: " + string(masked) + lineEnding)
+				}
+			}
+		}
 		if !clientDisconnected {
-			if _, writeErr := c.Writer.Write(line); writeErr != nil {
+			if _, writeErr := c.Writer.Write(clientLine); writeErr != nil {
 				clientDisconnected = true
 				logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Images stream client disconnected, continue draining upstream for billing")
 			} else {
@@ -955,7 +982,6 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 			}
 		}
 
-		trimmedLine := strings.TrimRight(string(line), "\r\n")
 		if _, ok := extractOpenAISSEDataLine(trimmedLine); ok || strings.TrimSpace(trimmedLine) == "" {
 			sseData.AddLine(trimmedLine, processSSEData)
 			return

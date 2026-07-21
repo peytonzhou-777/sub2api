@@ -492,6 +492,9 @@ export default {
         longContextBilling: 'API long-context pricing',
         longContextBillingDesc:
           'Disabled by default. Enable only when this account\'s upstream charges OpenAI API long-context rates above the model threshold.',
+        maskUpstreamErrors: 'Hide upstream error details',
+        maskUpstreamErrorsDesc:
+          'When enabled, clients receive only gateway-defined errors after pool retries or account failover are exhausted. Raw upstream errors remain available in administrator logs, and successful responses are unchanged.',
         responsesWebsocketsV2: 'Responses WebSocket v2',
         responsesWebsocketsV2Desc:
           'Disabled by default. Enable to allow responses_websockets_v2 capability (still gated by global and account-type switches).',
