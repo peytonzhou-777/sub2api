@@ -5,6 +5,7 @@
 
 import dashboardAPI from './dashboard'
 import usersAPI from './users'
+import * as creditsAPI from './credits'
 import groupsAPI from './groups'
 import accountsAPI from './accounts'
 import proxiesAPI from './proxies'
@@ -41,6 +42,7 @@ import auditAPI from './audit'
 export const adminAPI = {
   dashboard: dashboardAPI,
   users: usersAPI,
+  credits: creditsAPI,
   groups: groupsAPI,
   accounts: accountsAPI,
   proxies: proxiesAPI,
@@ -75,6 +77,7 @@ export const adminAPI = {
 export {
   dashboardAPI,
   usersAPI,
+  creditsAPI,
   groupsAPI,
   accountsAPI,
   proxiesAPI,

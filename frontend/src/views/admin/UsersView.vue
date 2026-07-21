@@ -774,6 +774,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { useTableSelection } from '@/composables/useTableSelection'
@@ -781,6 +782,7 @@ import { formatDateTime } from '@/utils/format'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
+const router = useRouter()
 import { adminAPI } from '@/api/admin'
 import type { AdminUser, AdminGroup, UserAttributeDefinition } from '@/types'
 import type { BatchUserUsageStats } from '@/api/admin/dashboard'
@@ -1786,15 +1788,11 @@ const confirmDelete = async () => {
 }
 
 const handleDeposit = (user: AdminUser) => {
-  balanceUser.value = user
-  balanceOperation.value = 'add'
-  showBalanceModal.value = true
+	void router.push({ path: '/admin/credits', query: { user: String(user.id), action: 'balance-add' } })
 }
 
 const handleWithdraw = (user: AdminUser) => {
-  balanceUser.value = user
-  balanceOperation.value = 'subtract'
-  showBalanceModal.value = true
+	void router.push({ path: '/admin/credits', query: { user: String(user.id), action: 'balance-subtract' } })
 }
 
 const closeBalanceModal = () => {
@@ -1803,8 +1801,7 @@ const closeBalanceModal = () => {
 }
 
 const handleBalanceHistory = (user: AdminUser) => {
-  balanceHistoryUser.value = user
-  showBalanceHistoryModal.value = true
+	void router.push({ path: '/admin/credits', query: { user: String(user.id) } })
 }
 
 const closeBalanceHistoryModal = () => {
