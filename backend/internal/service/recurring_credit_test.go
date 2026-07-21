@@ -131,3 +131,38 @@ func TestRecurringCreditActivityCandidateQueryKeepsDeletedAPIKeyHistory(t *testi
 	require.True(t, strings.HasPrefix(rollingActivityStatsSQL, rollingActivityCandidatesSQL))
 	require.True(t, strings.HasPrefix(rollingActivitySnapshotSQL, rollingActivityCandidatesSQL))
 }
+
+// TestRecurringCreditBatchInsertUsesIndependentStatusParameter 回归批次插入参数类型冲突。
+func TestRecurringCreditBatchInsertUsesIndependentStatusParameter(t *testing.T) {
+	query := strings.ToLower(recurringCreditBatchInsertSQL)
+	require.Contains(t, query, "case when $23 in ('skipped','missed')")
+	require.NotContains(t, strings.ReplaceAll(query, " ", ""), "casewhen$18in('skipped','missed')")
+	require.Contains(t, query, "on conflict(task_id,scheduled_at) do nothing")
+}
+
+// TestRecurringCreditBatchStatusesPreserveCompletionSemantics 覆盖运行中、跳过和错过批次的完成语义。
+func TestRecurringCreditBatchStatusesPreserveCompletionSemantics(t *testing.T) {
+	query := strings.ToLower(recurringCreditBatchInsertSQL)
+	for _, status := range []string{"running", "skipped", "missed"} {
+		require.Equal(t, 1, strings.Count(query, "$18"), "status 列应只绑定一个显式参数: %s", status)
+		require.Contains(t, query, "case when $23 in ('skipped','missed')")
+	}
+	require.Contains(t, query, "claimed_at")
+	require.Contains(t, query, "lease_owner")
+	require.Contains(t, query, "lease_expires_at")
+	require.Contains(t, query, "heartbeat_at")
+	require.Contains(t, query, "attempt_count")
+}
+
+// TestRecurringCreditDueScheduleAdvancesAfterBatchCreation 保证周/月任务始终计算下一个未来运行时间。
+func TestRecurringCreditDueScheduleAdvancesAfterBatchCreation(t *testing.T) {
+	for _, input := range []RecurringCreditTaskInput{
+		{ScheduleType: RecurringCreditWeekly, DayOfWeek: intPointer(1), LocalTime: "00:00", Timezone: "Asia/Shanghai"},
+		{ScheduleType: RecurringCreditMonthly, DayOfMonth: intPointer(20), LocalTime: "00:00", Timezone: "Asia/Shanghai"},
+	} {
+		scheduled := time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC)
+		next, err := nextRecurringOccurrence(input, scheduled)
+		require.NoError(t, err)
+		require.True(t, next.After(scheduled))
+	}
+}
