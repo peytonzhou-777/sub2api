@@ -3,6 +3,7 @@
 package paymentorder
 
 import (
+	"fmt"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -56,6 +57,18 @@ const (
 	FieldProviderKey = "provider_key"
 	// FieldProviderSnapshot holds the string denoting the provider_snapshot field in the database.
 	FieldProviderSnapshot = "provider_snapshot"
+	// FieldRechargeBonusCampaignID holds the string denoting the recharge_bonus_campaign_id field in the database.
+	FieldRechargeBonusCampaignID = "recharge_bonus_campaign_id"
+	// FieldRechargeBonusCampaignName holds the string denoting the recharge_bonus_campaign_name field in the database.
+	FieldRechargeBonusCampaignName = "recharge_bonus_campaign_name"
+	// FieldRechargeBonusRate holds the string denoting the recharge_bonus_rate field in the database.
+	FieldRechargeBonusRate = "recharge_bonus_rate"
+	// FieldRechargeBonusAmount holds the string denoting the recharge_bonus_amount field in the database.
+	FieldRechargeBonusAmount = "recharge_bonus_amount"
+	// FieldRechargeBonusStatus holds the string denoting the recharge_bonus_status field in the database.
+	FieldRechargeBonusStatus = "recharge_bonus_status"
+	// FieldRechargeBonusExpiresAt holds the string denoting the recharge_bonus_expires_at field in the database.
+	FieldRechargeBonusExpiresAt = "recharge_bonus_expires_at"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldRefundAmount holds the string denoting the refund_amount field in the database.
@@ -129,6 +142,12 @@ var Columns = []string{
 	FieldProviderInstanceID,
 	FieldProviderKey,
 	FieldProviderSnapshot,
+	FieldRechargeBonusCampaignID,
+	FieldRechargeBonusCampaignName,
+	FieldRechargeBonusRate,
+	FieldRechargeBonusAmount,
+	FieldRechargeBonusStatus,
+	FieldRechargeBonusExpiresAt,
 	FieldStatus,
 	FieldRefundAmount,
 	FieldRefundReason,
@@ -184,6 +203,12 @@ var (
 	ProviderInstanceIDValidator func(string) error
 	// ProviderKeyValidator is a validator for the "provider_key" field. It is called by the builders before save.
 	ProviderKeyValidator func(string) error
+	// RechargeBonusCampaignNameValidator is a validator for the "recharge_bonus_campaign_name" field. It is called by the builders before save.
+	RechargeBonusCampaignNameValidator func(string) error
+	// DefaultRechargeBonusRate holds the default value on creation for the "recharge_bonus_rate" field.
+	DefaultRechargeBonusRate float64
+	// DefaultRechargeBonusAmount holds the default value on creation for the "recharge_bonus_amount" field.
+	DefaultRechargeBonusAmount float64
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -205,6 +230,34 @@ var (
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
 )
+
+// RechargeBonusStatus defines the type for the "recharge_bonus_status" enum field.
+type RechargeBonusStatus string
+
+// RechargeBonusStatusNone is the default value of the RechargeBonusStatus enum.
+const DefaultRechargeBonusStatus = RechargeBonusStatusNone
+
+// RechargeBonusStatus values.
+const (
+	RechargeBonusStatusNone         RechargeBonusStatus = "none"
+	RechargeBonusStatusEligible     RechargeBonusStatus = "eligible"
+	RechargeBonusStatusGranted      RechargeBonusStatus = "granted"
+	RechargeBonusStatusLimitReached RechargeBonusStatus = "limit_reached"
+)
+
+func (rbs RechargeBonusStatus) String() string {
+	return string(rbs)
+}
+
+// RechargeBonusStatusValidator is a validator for the "recharge_bonus_status" field enum values. It is called by the builders before save.
+func RechargeBonusStatusValidator(rbs RechargeBonusStatus) error {
+	switch rbs {
+	case RechargeBonusStatusNone, RechargeBonusStatusEligible, RechargeBonusStatusGranted, RechargeBonusStatusLimitReached:
+		return nil
+	default:
+		return fmt.Errorf("paymentorder: invalid enum value for recharge_bonus_status field: %q", rbs)
+	}
+}
 
 // OrderOption defines the ordering options for the PaymentOrder queries.
 type OrderOption func(*sql.Selector)
@@ -312,6 +365,36 @@ func ByProviderInstanceID(opts ...sql.OrderTermOption) OrderOption {
 // ByProviderKey orders the results by the provider_key field.
 func ByProviderKey(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProviderKey, opts...).ToFunc()
+}
+
+// ByRechargeBonusCampaignID orders the results by the recharge_bonus_campaign_id field.
+func ByRechargeBonusCampaignID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRechargeBonusCampaignID, opts...).ToFunc()
+}
+
+// ByRechargeBonusCampaignName orders the results by the recharge_bonus_campaign_name field.
+func ByRechargeBonusCampaignName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRechargeBonusCampaignName, opts...).ToFunc()
+}
+
+// ByRechargeBonusRate orders the results by the recharge_bonus_rate field.
+func ByRechargeBonusRate(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRechargeBonusRate, opts...).ToFunc()
+}
+
+// ByRechargeBonusAmount orders the results by the recharge_bonus_amount field.
+func ByRechargeBonusAmount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRechargeBonusAmount, opts...).ToFunc()
+}
+
+// ByRechargeBonusStatus orders the results by the recharge_bonus_status field.
+func ByRechargeBonusStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRechargeBonusStatus, opts...).ToFunc()
+}
+
+// ByRechargeBonusExpiresAt orders the results by the recharge_bonus_expires_at field.
+func ByRechargeBonusExpiresAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRechargeBonusExpiresAt, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

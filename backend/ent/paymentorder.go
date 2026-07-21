@@ -61,6 +61,18 @@ type PaymentOrder struct {
 	ProviderKey *string `json:"provider_key,omitempty"`
 	// ProviderSnapshot holds the value of the "provider_snapshot" field.
 	ProviderSnapshot map[string]interface{} `json:"provider_snapshot,omitempty"`
+	// RechargeBonusCampaignID holds the value of the "recharge_bonus_campaign_id" field.
+	RechargeBonusCampaignID *int64 `json:"recharge_bonus_campaign_id,omitempty"`
+	// RechargeBonusCampaignName holds the value of the "recharge_bonus_campaign_name" field.
+	RechargeBonusCampaignName *string `json:"recharge_bonus_campaign_name,omitempty"`
+	// RechargeBonusRate holds the value of the "recharge_bonus_rate" field.
+	RechargeBonusRate float64 `json:"recharge_bonus_rate,omitempty"`
+	// RechargeBonusAmount holds the value of the "recharge_bonus_amount" field.
+	RechargeBonusAmount float64 `json:"recharge_bonus_amount,omitempty"`
+	// RechargeBonusStatus holds the value of the "recharge_bonus_status" field.
+	RechargeBonusStatus paymentorder.RechargeBonusStatus `json:"recharge_bonus_status,omitempty"`
+	// RechargeBonusExpiresAt holds the value of the "recharge_bonus_expires_at" field.
+	RechargeBonusExpiresAt *time.Time `json:"recharge_bonus_expires_at,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
 	// RefundAmount holds the value of the "refund_amount" field.
@@ -132,13 +144,13 @@ func (*PaymentOrder) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case paymentorder.FieldForceRefund:
 			values[i] = new(sql.NullBool)
-		case paymentorder.FieldAmount, paymentorder.FieldPayAmount, paymentorder.FieldFeeRate, paymentorder.FieldRefundAmount:
+		case paymentorder.FieldAmount, paymentorder.FieldPayAmount, paymentorder.FieldFeeRate, paymentorder.FieldRechargeBonusRate, paymentorder.FieldRechargeBonusAmount, paymentorder.FieldRefundAmount:
 			values[i] = new(sql.NullFloat64)
-		case paymentorder.FieldID, paymentorder.FieldUserID, paymentorder.FieldPlanID, paymentorder.FieldSubscriptionGroupID, paymentorder.FieldSubscriptionDays:
+		case paymentorder.FieldID, paymentorder.FieldUserID, paymentorder.FieldPlanID, paymentorder.FieldSubscriptionGroupID, paymentorder.FieldSubscriptionDays, paymentorder.FieldRechargeBonusCampaignID:
 			values[i] = new(sql.NullInt64)
-		case paymentorder.FieldUserEmail, paymentorder.FieldUserName, paymentorder.FieldUserNotes, paymentorder.FieldRechargeCode, paymentorder.FieldOutTradeNo, paymentorder.FieldPaymentType, paymentorder.FieldPaymentTradeNo, paymentorder.FieldPayURL, paymentorder.FieldQrCode, paymentorder.FieldQrCodeImg, paymentorder.FieldOrderType, paymentorder.FieldProviderInstanceID, paymentorder.FieldProviderKey, paymentorder.FieldStatus, paymentorder.FieldRefundReason, paymentorder.FieldRefundRequestReason, paymentorder.FieldRefundRequestedBy, paymentorder.FieldFailedReason, paymentorder.FieldClientIP, paymentorder.FieldSrcHost, paymentorder.FieldSrcURL:
+		case paymentorder.FieldUserEmail, paymentorder.FieldUserName, paymentorder.FieldUserNotes, paymentorder.FieldRechargeCode, paymentorder.FieldOutTradeNo, paymentorder.FieldPaymentType, paymentorder.FieldPaymentTradeNo, paymentorder.FieldPayURL, paymentorder.FieldQrCode, paymentorder.FieldQrCodeImg, paymentorder.FieldOrderType, paymentorder.FieldProviderInstanceID, paymentorder.FieldProviderKey, paymentorder.FieldRechargeBonusCampaignName, paymentorder.FieldRechargeBonusStatus, paymentorder.FieldStatus, paymentorder.FieldRefundReason, paymentorder.FieldRefundRequestReason, paymentorder.FieldRefundRequestedBy, paymentorder.FieldFailedReason, paymentorder.FieldClientIP, paymentorder.FieldSrcHost, paymentorder.FieldSrcURL:
 			values[i] = new(sql.NullString)
-		case paymentorder.FieldRefundAt, paymentorder.FieldRefundRequestedAt, paymentorder.FieldExpiresAt, paymentorder.FieldPaidAt, paymentorder.FieldCompletedAt, paymentorder.FieldFailedAt, paymentorder.FieldCreatedAt, paymentorder.FieldUpdatedAt:
+		case paymentorder.FieldRechargeBonusExpiresAt, paymentorder.FieldRefundAt, paymentorder.FieldRefundRequestedAt, paymentorder.FieldExpiresAt, paymentorder.FieldPaidAt, paymentorder.FieldCompletedAt, paymentorder.FieldFailedAt, paymentorder.FieldCreatedAt, paymentorder.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -297,6 +309,45 @@ func (_m *PaymentOrder) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.ProviderSnapshot); err != nil {
 					return fmt.Errorf("unmarshal field provider_snapshot: %w", err)
 				}
+			}
+		case paymentorder.FieldRechargeBonusCampaignID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field recharge_bonus_campaign_id", values[i])
+			} else if value.Valid {
+				_m.RechargeBonusCampaignID = new(int64)
+				*_m.RechargeBonusCampaignID = value.Int64
+			}
+		case paymentorder.FieldRechargeBonusCampaignName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field recharge_bonus_campaign_name", values[i])
+			} else if value.Valid {
+				_m.RechargeBonusCampaignName = new(string)
+				*_m.RechargeBonusCampaignName = value.String
+			}
+		case paymentorder.FieldRechargeBonusRate:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field recharge_bonus_rate", values[i])
+			} else if value.Valid {
+				_m.RechargeBonusRate = value.Float64
+			}
+		case paymentorder.FieldRechargeBonusAmount:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field recharge_bonus_amount", values[i])
+			} else if value.Valid {
+				_m.RechargeBonusAmount = value.Float64
+			}
+		case paymentorder.FieldRechargeBonusStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field recharge_bonus_status", values[i])
+			} else if value.Valid {
+				_m.RechargeBonusStatus = paymentorder.RechargeBonusStatus(value.String)
+			}
+		case paymentorder.FieldRechargeBonusExpiresAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field recharge_bonus_expires_at", values[i])
+			} else if value.Valid {
+				_m.RechargeBonusExpiresAt = new(time.Time)
+				*_m.RechargeBonusExpiresAt = value.Time
 			}
 		case paymentorder.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -537,6 +588,30 @@ func (_m *PaymentOrder) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("provider_snapshot=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ProviderSnapshot))
+	builder.WriteString(", ")
+	if v := _m.RechargeBonusCampaignID; v != nil {
+		builder.WriteString("recharge_bonus_campaign_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.RechargeBonusCampaignName; v != nil {
+		builder.WriteString("recharge_bonus_campaign_name=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	builder.WriteString("recharge_bonus_rate=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RechargeBonusRate))
+	builder.WriteString(", ")
+	builder.WriteString("recharge_bonus_amount=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RechargeBonusAmount))
+	builder.WriteString(", ")
+	builder.WriteString("recharge_bonus_status=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RechargeBonusStatus))
+	builder.WriteString(", ")
+	if v := _m.RechargeBonusExpiresAt; v != nil {
+		builder.WriteString("recharge_bonus_expires_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)

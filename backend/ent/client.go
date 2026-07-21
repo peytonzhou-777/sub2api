@@ -41,6 +41,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
+	"github.com/Wei-Shaw/sub2api/ent/rechargebonuscampaign"
+	"github.com/Wei-Shaw/sub2api/ent/rechargebonusparticipation"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
@@ -117,6 +119,10 @@ type Client struct {
 	PromoCodeUsage *PromoCodeUsageClient
 	// Proxy is the client for interacting with the Proxy builders.
 	Proxy *ProxyClient
+	// RechargeBonusCampaign is the client for interacting with the RechargeBonusCampaign builders.
+	RechargeBonusCampaign *RechargeBonusCampaignClient
+	// RechargeBonusParticipation is the client for interacting with the RechargeBonusParticipation builders.
+	RechargeBonusParticipation *RechargeBonusParticipationClient
 	// RedeemCode is the client for interacting with the RedeemCode builders.
 	RedeemCode *RedeemCodeClient
 	// SecuritySecret is the client for interacting with the SecuritySecret builders.
@@ -184,6 +190,8 @@ func (c *Client) init() {
 	c.PromoCode = NewPromoCodeClient(c.config)
 	c.PromoCodeUsage = NewPromoCodeUsageClient(c.config)
 	c.Proxy = NewProxyClient(c.config)
+	c.RechargeBonusCampaign = NewRechargeBonusCampaignClient(c.config)
+	c.RechargeBonusParticipation = NewRechargeBonusParticipationClient(c.config)
 	c.RedeemCode = NewRedeemCodeClient(c.config)
 	c.SecuritySecret = NewSecuritySecretClient(c.config)
 	c.Setting = NewSettingClient(c.config)
@@ -317,6 +325,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		PromoCode:                     NewPromoCodeClient(cfg),
 		PromoCodeUsage:                NewPromoCodeUsageClient(cfg),
 		Proxy:                         NewProxyClient(cfg),
+		RechargeBonusCampaign:         NewRechargeBonusCampaignClient(cfg),
+		RechargeBonusParticipation:    NewRechargeBonusParticipationClient(cfg),
 		RedeemCode:                    NewRedeemCodeClient(cfg),
 		SecuritySecret:                NewSecuritySecretClient(cfg),
 		Setting:                       NewSettingClient(cfg),
@@ -377,6 +387,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		PromoCode:                     NewPromoCodeClient(cfg),
 		PromoCodeUsage:                NewPromoCodeUsageClient(cfg),
 		Proxy:                         NewProxyClient(cfg),
+		RechargeBonusCampaign:         NewRechargeBonusCampaignClient(cfg),
+		RechargeBonusParticipation:    NewRechargeBonusParticipationClient(cfg),
 		RedeemCode:                    NewRedeemCodeClient(cfg),
 		SecuritySecret:                NewSecuritySecretClient(cfg),
 		Setting:                       NewSettingClient(cfg),
@@ -428,11 +440,11 @@ func (c *Client) Use(hooks ...Hook) {
 		c.CompositeModelRoute, c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
 		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
 		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
-		c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
-		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
-		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
-		c.UserLimitedCreditGrant, c.UserLimitedCreditLedger, c.UserPlatformQuota,
-		c.UserSubscription,
+		c.Proxy, c.RechargeBonusCampaign, c.RechargeBonusParticipation, c.RedeemCode,
+		c.SecuritySecret, c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile,
+		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
+		c.UserAttributeDefinition, c.UserAttributeValue, c.UserLimitedCreditGrant,
+		c.UserLimitedCreditLedger, c.UserPlatformQuota, c.UserSubscription,
 	} {
 		n.Use(hooks...)
 	}
@@ -449,11 +461,11 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.CompositeModelRoute, c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
 		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
 		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
-		c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
-		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
-		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
-		c.UserLimitedCreditGrant, c.UserLimitedCreditLedger, c.UserPlatformQuota,
-		c.UserSubscription,
+		c.Proxy, c.RechargeBonusCampaign, c.RechargeBonusParticipation, c.RedeemCode,
+		c.SecuritySecret, c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile,
+		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
+		c.UserAttributeDefinition, c.UserAttributeValue, c.UserLimitedCreditGrant,
+		c.UserLimitedCreditLedger, c.UserPlatformQuota, c.UserSubscription,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -514,6 +526,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.PromoCodeUsage.mutate(ctx, m)
 	case *ProxyMutation:
 		return c.Proxy.mutate(ctx, m)
+	case *RechargeBonusCampaignMutation:
+		return c.RechargeBonusCampaign.mutate(ctx, m)
+	case *RechargeBonusParticipationMutation:
+		return c.RechargeBonusParticipation.mutate(ctx, m)
 	case *RedeemCodeMutation:
 		return c.RedeemCode.mutate(ctx, m)
 	case *SecuritySecretMutation:
@@ -4656,6 +4672,272 @@ func (c *ProxyClient) mutate(ctx context.Context, m *ProxyMutation) (Value, erro
 	}
 }
 
+// RechargeBonusCampaignClient is a client for the RechargeBonusCampaign schema.
+type RechargeBonusCampaignClient struct {
+	config
+}
+
+// NewRechargeBonusCampaignClient returns a client for the RechargeBonusCampaign from the given config.
+func NewRechargeBonusCampaignClient(c config) *RechargeBonusCampaignClient {
+	return &RechargeBonusCampaignClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `rechargebonuscampaign.Hooks(f(g(h())))`.
+func (c *RechargeBonusCampaignClient) Use(hooks ...Hook) {
+	c.hooks.RechargeBonusCampaign = append(c.hooks.RechargeBonusCampaign, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `rechargebonuscampaign.Intercept(f(g(h())))`.
+func (c *RechargeBonusCampaignClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RechargeBonusCampaign = append(c.inters.RechargeBonusCampaign, interceptors...)
+}
+
+// Create returns a builder for creating a RechargeBonusCampaign entity.
+func (c *RechargeBonusCampaignClient) Create() *RechargeBonusCampaignCreate {
+	mutation := newRechargeBonusCampaignMutation(c.config, OpCreate)
+	return &RechargeBonusCampaignCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RechargeBonusCampaign entities.
+func (c *RechargeBonusCampaignClient) CreateBulk(builders ...*RechargeBonusCampaignCreate) *RechargeBonusCampaignCreateBulk {
+	return &RechargeBonusCampaignCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RechargeBonusCampaignClient) MapCreateBulk(slice any, setFunc func(*RechargeBonusCampaignCreate, int)) *RechargeBonusCampaignCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RechargeBonusCampaignCreateBulk{err: fmt.Errorf("calling to RechargeBonusCampaignClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RechargeBonusCampaignCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RechargeBonusCampaignCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RechargeBonusCampaign.
+func (c *RechargeBonusCampaignClient) Update() *RechargeBonusCampaignUpdate {
+	mutation := newRechargeBonusCampaignMutation(c.config, OpUpdate)
+	return &RechargeBonusCampaignUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RechargeBonusCampaignClient) UpdateOne(_m *RechargeBonusCampaign) *RechargeBonusCampaignUpdateOne {
+	mutation := newRechargeBonusCampaignMutation(c.config, OpUpdateOne, withRechargeBonusCampaign(_m))
+	return &RechargeBonusCampaignUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RechargeBonusCampaignClient) UpdateOneID(id int64) *RechargeBonusCampaignUpdateOne {
+	mutation := newRechargeBonusCampaignMutation(c.config, OpUpdateOne, withRechargeBonusCampaignID(id))
+	return &RechargeBonusCampaignUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RechargeBonusCampaign.
+func (c *RechargeBonusCampaignClient) Delete() *RechargeBonusCampaignDelete {
+	mutation := newRechargeBonusCampaignMutation(c.config, OpDelete)
+	return &RechargeBonusCampaignDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RechargeBonusCampaignClient) DeleteOne(_m *RechargeBonusCampaign) *RechargeBonusCampaignDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RechargeBonusCampaignClient) DeleteOneID(id int64) *RechargeBonusCampaignDeleteOne {
+	builder := c.Delete().Where(rechargebonuscampaign.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RechargeBonusCampaignDeleteOne{builder}
+}
+
+// Query returns a query builder for RechargeBonusCampaign.
+func (c *RechargeBonusCampaignClient) Query() *RechargeBonusCampaignQuery {
+	return &RechargeBonusCampaignQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRechargeBonusCampaign},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RechargeBonusCampaign entity by its id.
+func (c *RechargeBonusCampaignClient) Get(ctx context.Context, id int64) (*RechargeBonusCampaign, error) {
+	return c.Query().Where(rechargebonuscampaign.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RechargeBonusCampaignClient) GetX(ctx context.Context, id int64) *RechargeBonusCampaign {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RechargeBonusCampaignClient) Hooks() []Hook {
+	return c.hooks.RechargeBonusCampaign
+}
+
+// Interceptors returns the client interceptors.
+func (c *RechargeBonusCampaignClient) Interceptors() []Interceptor {
+	return c.inters.RechargeBonusCampaign
+}
+
+func (c *RechargeBonusCampaignClient) mutate(ctx context.Context, m *RechargeBonusCampaignMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RechargeBonusCampaignCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RechargeBonusCampaignUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RechargeBonusCampaignUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RechargeBonusCampaignDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RechargeBonusCampaign mutation op: %q", m.Op())
+	}
+}
+
+// RechargeBonusParticipationClient is a client for the RechargeBonusParticipation schema.
+type RechargeBonusParticipationClient struct {
+	config
+}
+
+// NewRechargeBonusParticipationClient returns a client for the RechargeBonusParticipation from the given config.
+func NewRechargeBonusParticipationClient(c config) *RechargeBonusParticipationClient {
+	return &RechargeBonusParticipationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `rechargebonusparticipation.Hooks(f(g(h())))`.
+func (c *RechargeBonusParticipationClient) Use(hooks ...Hook) {
+	c.hooks.RechargeBonusParticipation = append(c.hooks.RechargeBonusParticipation, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `rechargebonusparticipation.Intercept(f(g(h())))`.
+func (c *RechargeBonusParticipationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RechargeBonusParticipation = append(c.inters.RechargeBonusParticipation, interceptors...)
+}
+
+// Create returns a builder for creating a RechargeBonusParticipation entity.
+func (c *RechargeBonusParticipationClient) Create() *RechargeBonusParticipationCreate {
+	mutation := newRechargeBonusParticipationMutation(c.config, OpCreate)
+	return &RechargeBonusParticipationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RechargeBonusParticipation entities.
+func (c *RechargeBonusParticipationClient) CreateBulk(builders ...*RechargeBonusParticipationCreate) *RechargeBonusParticipationCreateBulk {
+	return &RechargeBonusParticipationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RechargeBonusParticipationClient) MapCreateBulk(slice any, setFunc func(*RechargeBonusParticipationCreate, int)) *RechargeBonusParticipationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RechargeBonusParticipationCreateBulk{err: fmt.Errorf("calling to RechargeBonusParticipationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RechargeBonusParticipationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RechargeBonusParticipationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RechargeBonusParticipation.
+func (c *RechargeBonusParticipationClient) Update() *RechargeBonusParticipationUpdate {
+	mutation := newRechargeBonusParticipationMutation(c.config, OpUpdate)
+	return &RechargeBonusParticipationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RechargeBonusParticipationClient) UpdateOne(_m *RechargeBonusParticipation) *RechargeBonusParticipationUpdateOne {
+	mutation := newRechargeBonusParticipationMutation(c.config, OpUpdateOne, withRechargeBonusParticipation(_m))
+	return &RechargeBonusParticipationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RechargeBonusParticipationClient) UpdateOneID(id int64) *RechargeBonusParticipationUpdateOne {
+	mutation := newRechargeBonusParticipationMutation(c.config, OpUpdateOne, withRechargeBonusParticipationID(id))
+	return &RechargeBonusParticipationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RechargeBonusParticipation.
+func (c *RechargeBonusParticipationClient) Delete() *RechargeBonusParticipationDelete {
+	mutation := newRechargeBonusParticipationMutation(c.config, OpDelete)
+	return &RechargeBonusParticipationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RechargeBonusParticipationClient) DeleteOne(_m *RechargeBonusParticipation) *RechargeBonusParticipationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RechargeBonusParticipationClient) DeleteOneID(id int64) *RechargeBonusParticipationDeleteOne {
+	builder := c.Delete().Where(rechargebonusparticipation.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RechargeBonusParticipationDeleteOne{builder}
+}
+
+// Query returns a query builder for RechargeBonusParticipation.
+func (c *RechargeBonusParticipationClient) Query() *RechargeBonusParticipationQuery {
+	return &RechargeBonusParticipationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRechargeBonusParticipation},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RechargeBonusParticipation entity by its id.
+func (c *RechargeBonusParticipationClient) Get(ctx context.Context, id int64) (*RechargeBonusParticipation, error) {
+	return c.Query().Where(rechargebonusparticipation.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RechargeBonusParticipationClient) GetX(ctx context.Context, id int64) *RechargeBonusParticipation {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RechargeBonusParticipationClient) Hooks() []Hook {
+	return c.hooks.RechargeBonusParticipation
+}
+
+// Interceptors returns the client interceptors.
+func (c *RechargeBonusParticipationClient) Interceptors() []Interceptor {
+	return c.inters.RechargeBonusParticipation
+}
+
+func (c *RechargeBonusParticipationClient) mutate(ctx context.Context, m *RechargeBonusParticipationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RechargeBonusParticipationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RechargeBonusParticipationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RechargeBonusParticipationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RechargeBonusParticipationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RechargeBonusParticipation mutation op: %q", m.Op())
+	}
+}
+
 // RedeemCodeClient is a client for the RedeemCode schema.
 type RedeemCodeClient struct {
 	config
@@ -7211,10 +7493,11 @@ type (
 		ChannelMonitorRequestTemplate, CompositeModelRoute, ErrorPassthroughRule,
 		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
 		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
-		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
-		UserAttributeDefinition, UserAttributeValue, UserLimitedCreditGrant,
-		UserLimitedCreditLedger, UserPlatformQuota, UserSubscription []ent.Hook
+		PromoCodeUsage, Proxy, RechargeBonusCampaign, RechargeBonusParticipation,
+		RedeemCode, SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
+		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
+		UserAttributeValue, UserLimitedCreditGrant, UserLimitedCreditLedger,
+		UserPlatformQuota, UserSubscription []ent.Hook
 	}
 	inters struct {
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
@@ -7223,10 +7506,11 @@ type (
 		ChannelMonitorRequestTemplate, CompositeModelRoute, ErrorPassthroughRule,
 		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
 		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
-		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
-		UserAttributeDefinition, UserAttributeValue, UserLimitedCreditGrant,
-		UserLimitedCreditLedger, UserPlatformQuota, UserSubscription []ent.Interceptor
+		PromoCodeUsage, Proxy, RechargeBonusCampaign, RechargeBonusParticipation,
+		RedeemCode, SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
+		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
+		UserAttributeValue, UserLimitedCreditGrant, UserLimitedCreditLedger,
+		UserPlatformQuota, UserSubscription []ent.Interceptor
 	}
 )
 

@@ -9,7 +9,9 @@ import type {
   PaymentOrder,
   PaymentChannel,
   SubscriptionPlan,
-  ProviderInstance
+  ProviderInstance,
+  RechargeBonusCampaign,
+  RechargeBonusCampaignInput,
 } from '@/types/payment'
 import type { BasePaginationResponse } from '@/types'
 
@@ -123,6 +125,28 @@ export const adminPaymentAPI = {
   /** Query and finalize a pending refund */
   queryRefund(id: number) {
     return apiClient.post<RefundResult>(`/admin/payment/orders/${id}/refund/query`)
+  },
+
+  // ==================== 充值赠送活动 ====================
+
+  /** 获取全部充值赠送活动 */
+  getRechargeBonusCampaigns() {
+    return apiClient.get<RechargeBonusCampaign[]>('/admin/payment/recharge-bonus-campaigns')
+  },
+
+  /** 创建充值赠送活动 */
+  createRechargeBonusCampaign(data: RechargeBonusCampaignInput) {
+    return apiClient.post<RechargeBonusCampaign>('/admin/payment/recharge-bonus-campaigns', data)
+  },
+
+  /** 更新预约活动或提前结束进行中的活动 */
+  updateRechargeBonusCampaign(id: number, data: RechargeBonusCampaignInput) {
+    return apiClient.put<RechargeBonusCampaign>(`/admin/payment/recharge-bonus-campaigns/${id}`, data)
+  },
+
+  /** 删除尚未开始的充值赠送活动 */
+  deleteRechargeBonusCampaign(id: number) {
+    return apiClient.delete(`/admin/payment/recharge-bonus-campaigns/${id}`)
   },
 
   // ==================== Channels ====================

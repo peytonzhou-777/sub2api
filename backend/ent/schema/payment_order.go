@@ -98,6 +98,18 @@ func (PaymentOrder) Fields() []ent.Field {
 		field.JSON("provider_snapshot", map[string]any{}).
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
+		field.Int64("recharge_bonus_campaign_id").Optional().Nillable(),
+		field.String("recharge_bonus_campaign_name").Optional().Nillable().MaxLen(100),
+		field.Float("recharge_bonus_rate").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).Default(0),
+		field.Float("recharge_bonus_amount").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).Default(0),
+		field.Enum("recharge_bonus_status").
+			Values("none", "eligible", "granted", "limit_reached").
+			Default("none"),
+		field.Time("recharge_bonus_expires_at").
+			Optional().Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
 
 		// 状态
 		field.String("status").
@@ -195,5 +207,6 @@ func (PaymentOrder) Indexes() []ent.Index {
 		index.Fields("paid_at"),
 		index.Fields("payment_type", "paid_at"),
 		index.Fields("order_type"),
+		index.Fields("recharge_bonus_campaign_id", "user_id"),
 	}
 }

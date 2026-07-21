@@ -328,27 +328,30 @@ func resolveRedeemAction(existing *RedeemCode, lookupErr error) redeemAction {
 }
 
 func (s *PaymentService) doBalance(ctx context.Context, o *dbent.PaymentOrder, lease *paymentFulfillmentLease) error {
-	// Idempotency: check if redeem code already exists (from a previous partial run)
+	// 永久额度仍沿用充值码幂等路径，活动赠送在其后独立补齐。
 	existing, lookupErr := s.redeemService.GetByCode(ctx, o.RechargeCode)
 	action := resolveRedeemAction(existing, lookupErr)
-
 	switch action {
-	case redeemActionSkipCompleted:
-		if err := s.applyAffiliateRebateForOrder(ctx, o); err != nil {
-			return err
-		}
-		// Code already created and redeemed — just mark completed
-		return s.markCompleted(ctx, o, lease, "RECHARGE_SUCCESS")
 	case redeemActionCreate:
 		rc := &RedeemCode{Code: o.RechargeCode, Type: RedeemTypeBalance, Value: o.Amount, Status: StatusUnused}
 		if err := s.redeemService.CreateCode(ctx, rc); err != nil {
 			return fmt.Errorf("create redeem code: %w", err)
 		}
-	case redeemActionRedeem:
-		// Code exists but unused — skip creation, proceed to redeem
+	case redeemActionRedeem, redeemActionSkipCompleted:
 	}
-	if _, err := s.redeemService.Redeem(ContextSkipRedeemAffiliate(ctx), o.UserID, o.RechargeCode); err != nil {
-		return fmt.Errorf("redeem balance: %w", err)
+	if action != redeemActionSkipCompleted {
+		if _, err := s.redeemService.Redeem(ContextSkipRedeemAffiliate(ctx), o.UserID, o.RechargeCode); err != nil {
+			return fmt.Errorf("redeem balance: %w", err)
+		}
+	}
+	if s.rechargeBonusService != nil {
+		_, err := s.rechargeBonusService.FulfillOrderBonus(ctx, o)
+		if err != nil {
+			if !s.hasAuditLog(ctx, o.ID, "RECHARGE_BONUS_FAILED") {
+				s.writeAuditLog(ctx, o.ID, "RECHARGE_BONUS_FAILED", "system", map[string]any{"reason": err.Error()})
+			}
+			return fmt.Errorf("fulfill recharge bonus: %w", err)
+		}
 	}
 	if err := s.applyAffiliateRebateForOrder(ctx, o); err != nil {
 		return err

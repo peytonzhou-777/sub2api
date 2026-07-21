@@ -245,6 +245,90 @@ func (_c *PaymentOrderCreate) SetProviderSnapshot(v map[string]interface{}) *Pay
 	return _c
 }
 
+// SetRechargeBonusCampaignID sets the "recharge_bonus_campaign_id" field.
+func (_c *PaymentOrderCreate) SetRechargeBonusCampaignID(v int64) *PaymentOrderCreate {
+	_c.mutation.SetRechargeBonusCampaignID(v)
+	return _c
+}
+
+// SetNillableRechargeBonusCampaignID sets the "recharge_bonus_campaign_id" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableRechargeBonusCampaignID(v *int64) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetRechargeBonusCampaignID(*v)
+	}
+	return _c
+}
+
+// SetRechargeBonusCampaignName sets the "recharge_bonus_campaign_name" field.
+func (_c *PaymentOrderCreate) SetRechargeBonusCampaignName(v string) *PaymentOrderCreate {
+	_c.mutation.SetRechargeBonusCampaignName(v)
+	return _c
+}
+
+// SetNillableRechargeBonusCampaignName sets the "recharge_bonus_campaign_name" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableRechargeBonusCampaignName(v *string) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetRechargeBonusCampaignName(*v)
+	}
+	return _c
+}
+
+// SetRechargeBonusRate sets the "recharge_bonus_rate" field.
+func (_c *PaymentOrderCreate) SetRechargeBonusRate(v float64) *PaymentOrderCreate {
+	_c.mutation.SetRechargeBonusRate(v)
+	return _c
+}
+
+// SetNillableRechargeBonusRate sets the "recharge_bonus_rate" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableRechargeBonusRate(v *float64) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetRechargeBonusRate(*v)
+	}
+	return _c
+}
+
+// SetRechargeBonusAmount sets the "recharge_bonus_amount" field.
+func (_c *PaymentOrderCreate) SetRechargeBonusAmount(v float64) *PaymentOrderCreate {
+	_c.mutation.SetRechargeBonusAmount(v)
+	return _c
+}
+
+// SetNillableRechargeBonusAmount sets the "recharge_bonus_amount" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableRechargeBonusAmount(v *float64) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetRechargeBonusAmount(*v)
+	}
+	return _c
+}
+
+// SetRechargeBonusStatus sets the "recharge_bonus_status" field.
+func (_c *PaymentOrderCreate) SetRechargeBonusStatus(v paymentorder.RechargeBonusStatus) *PaymentOrderCreate {
+	_c.mutation.SetRechargeBonusStatus(v)
+	return _c
+}
+
+// SetNillableRechargeBonusStatus sets the "recharge_bonus_status" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableRechargeBonusStatus(v *paymentorder.RechargeBonusStatus) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetRechargeBonusStatus(*v)
+	}
+	return _c
+}
+
+// SetRechargeBonusExpiresAt sets the "recharge_bonus_expires_at" field.
+func (_c *PaymentOrderCreate) SetRechargeBonusExpiresAt(v time.Time) *PaymentOrderCreate {
+	_c.mutation.SetRechargeBonusExpiresAt(v)
+	return _c
+}
+
+// SetNillableRechargeBonusExpiresAt sets the "recharge_bonus_expires_at" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableRechargeBonusExpiresAt(v *time.Time) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetRechargeBonusExpiresAt(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *PaymentOrderCreate) SetStatus(v string) *PaymentOrderCreate {
 	_c.mutation.SetStatus(v)
@@ -525,6 +609,18 @@ func (_c *PaymentOrderCreate) defaults() {
 		v := paymentorder.DefaultOrderType
 		_c.mutation.SetOrderType(v)
 	}
+	if _, ok := _c.mutation.RechargeBonusRate(); !ok {
+		v := paymentorder.DefaultRechargeBonusRate
+		_c.mutation.SetRechargeBonusRate(v)
+	}
+	if _, ok := _c.mutation.RechargeBonusAmount(); !ok {
+		v := paymentorder.DefaultRechargeBonusAmount
+		_c.mutation.SetRechargeBonusAmount(v)
+	}
+	if _, ok := _c.mutation.RechargeBonusStatus(); !ok {
+		v := paymentorder.DefaultRechargeBonusStatus
+		_c.mutation.SetRechargeBonusStatus(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := paymentorder.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -625,6 +721,25 @@ func (_c *PaymentOrderCreate) check() error {
 	if v, ok := _c.mutation.ProviderKey(); ok {
 		if err := paymentorder.ProviderKeyValidator(v); err != nil {
 			return &ValidationError{Name: "provider_key", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.provider_key": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.RechargeBonusCampaignName(); ok {
+		if err := paymentorder.RechargeBonusCampaignNameValidator(v); err != nil {
+			return &ValidationError{Name: "recharge_bonus_campaign_name", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.recharge_bonus_campaign_name": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.RechargeBonusRate(); !ok {
+		return &ValidationError{Name: "recharge_bonus_rate", err: errors.New(`ent: missing required field "PaymentOrder.recharge_bonus_rate"`)}
+	}
+	if _, ok := _c.mutation.RechargeBonusAmount(); !ok {
+		return &ValidationError{Name: "recharge_bonus_amount", err: errors.New(`ent: missing required field "PaymentOrder.recharge_bonus_amount"`)}
+	}
+	if _, ok := _c.mutation.RechargeBonusStatus(); !ok {
+		return &ValidationError{Name: "recharge_bonus_status", err: errors.New(`ent: missing required field "PaymentOrder.recharge_bonus_status"`)}
+	}
+	if v, ok := _c.mutation.RechargeBonusStatus(); ok {
+		if err := paymentorder.RechargeBonusStatusValidator(v); err != nil {
+			return &ValidationError{Name: "recharge_bonus_status", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.recharge_bonus_status": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
@@ -780,6 +895,30 @@ func (_c *PaymentOrderCreate) createSpec() (*PaymentOrder, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.ProviderSnapshot(); ok {
 		_spec.SetField(paymentorder.FieldProviderSnapshot, field.TypeJSON, value)
 		_node.ProviderSnapshot = value
+	}
+	if value, ok := _c.mutation.RechargeBonusCampaignID(); ok {
+		_spec.SetField(paymentorder.FieldRechargeBonusCampaignID, field.TypeInt64, value)
+		_node.RechargeBonusCampaignID = &value
+	}
+	if value, ok := _c.mutation.RechargeBonusCampaignName(); ok {
+		_spec.SetField(paymentorder.FieldRechargeBonusCampaignName, field.TypeString, value)
+		_node.RechargeBonusCampaignName = &value
+	}
+	if value, ok := _c.mutation.RechargeBonusRate(); ok {
+		_spec.SetField(paymentorder.FieldRechargeBonusRate, field.TypeFloat64, value)
+		_node.RechargeBonusRate = value
+	}
+	if value, ok := _c.mutation.RechargeBonusAmount(); ok {
+		_spec.SetField(paymentorder.FieldRechargeBonusAmount, field.TypeFloat64, value)
+		_node.RechargeBonusAmount = value
+	}
+	if value, ok := _c.mutation.RechargeBonusStatus(); ok {
+		_spec.SetField(paymentorder.FieldRechargeBonusStatus, field.TypeEnum, value)
+		_node.RechargeBonusStatus = value
+	}
+	if value, ok := _c.mutation.RechargeBonusExpiresAt(); ok {
+		_spec.SetField(paymentorder.FieldRechargeBonusExpiresAt, field.TypeTime, value)
+		_node.RechargeBonusExpiresAt = &value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(paymentorder.FieldStatus, field.TypeString, value)
@@ -1267,6 +1406,114 @@ func (u *PaymentOrderUpsert) UpdateProviderSnapshot() *PaymentOrderUpsert {
 // ClearProviderSnapshot clears the value of the "provider_snapshot" field.
 func (u *PaymentOrderUpsert) ClearProviderSnapshot() *PaymentOrderUpsert {
 	u.SetNull(paymentorder.FieldProviderSnapshot)
+	return u
+}
+
+// SetRechargeBonusCampaignID sets the "recharge_bonus_campaign_id" field.
+func (u *PaymentOrderUpsert) SetRechargeBonusCampaignID(v int64) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldRechargeBonusCampaignID, v)
+	return u
+}
+
+// UpdateRechargeBonusCampaignID sets the "recharge_bonus_campaign_id" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateRechargeBonusCampaignID() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldRechargeBonusCampaignID)
+	return u
+}
+
+// AddRechargeBonusCampaignID adds v to the "recharge_bonus_campaign_id" field.
+func (u *PaymentOrderUpsert) AddRechargeBonusCampaignID(v int64) *PaymentOrderUpsert {
+	u.Add(paymentorder.FieldRechargeBonusCampaignID, v)
+	return u
+}
+
+// ClearRechargeBonusCampaignID clears the value of the "recharge_bonus_campaign_id" field.
+func (u *PaymentOrderUpsert) ClearRechargeBonusCampaignID() *PaymentOrderUpsert {
+	u.SetNull(paymentorder.FieldRechargeBonusCampaignID)
+	return u
+}
+
+// SetRechargeBonusCampaignName sets the "recharge_bonus_campaign_name" field.
+func (u *PaymentOrderUpsert) SetRechargeBonusCampaignName(v string) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldRechargeBonusCampaignName, v)
+	return u
+}
+
+// UpdateRechargeBonusCampaignName sets the "recharge_bonus_campaign_name" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateRechargeBonusCampaignName() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldRechargeBonusCampaignName)
+	return u
+}
+
+// ClearRechargeBonusCampaignName clears the value of the "recharge_bonus_campaign_name" field.
+func (u *PaymentOrderUpsert) ClearRechargeBonusCampaignName() *PaymentOrderUpsert {
+	u.SetNull(paymentorder.FieldRechargeBonusCampaignName)
+	return u
+}
+
+// SetRechargeBonusRate sets the "recharge_bonus_rate" field.
+func (u *PaymentOrderUpsert) SetRechargeBonusRate(v float64) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldRechargeBonusRate, v)
+	return u
+}
+
+// UpdateRechargeBonusRate sets the "recharge_bonus_rate" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateRechargeBonusRate() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldRechargeBonusRate)
+	return u
+}
+
+// AddRechargeBonusRate adds v to the "recharge_bonus_rate" field.
+func (u *PaymentOrderUpsert) AddRechargeBonusRate(v float64) *PaymentOrderUpsert {
+	u.Add(paymentorder.FieldRechargeBonusRate, v)
+	return u
+}
+
+// SetRechargeBonusAmount sets the "recharge_bonus_amount" field.
+func (u *PaymentOrderUpsert) SetRechargeBonusAmount(v float64) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldRechargeBonusAmount, v)
+	return u
+}
+
+// UpdateRechargeBonusAmount sets the "recharge_bonus_amount" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateRechargeBonusAmount() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldRechargeBonusAmount)
+	return u
+}
+
+// AddRechargeBonusAmount adds v to the "recharge_bonus_amount" field.
+func (u *PaymentOrderUpsert) AddRechargeBonusAmount(v float64) *PaymentOrderUpsert {
+	u.Add(paymentorder.FieldRechargeBonusAmount, v)
+	return u
+}
+
+// SetRechargeBonusStatus sets the "recharge_bonus_status" field.
+func (u *PaymentOrderUpsert) SetRechargeBonusStatus(v paymentorder.RechargeBonusStatus) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldRechargeBonusStatus, v)
+	return u
+}
+
+// UpdateRechargeBonusStatus sets the "recharge_bonus_status" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateRechargeBonusStatus() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldRechargeBonusStatus)
+	return u
+}
+
+// SetRechargeBonusExpiresAt sets the "recharge_bonus_expires_at" field.
+func (u *PaymentOrderUpsert) SetRechargeBonusExpiresAt(v time.Time) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldRechargeBonusExpiresAt, v)
+	return u
+}
+
+// UpdateRechargeBonusExpiresAt sets the "recharge_bonus_expires_at" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateRechargeBonusExpiresAt() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldRechargeBonusExpiresAt)
+	return u
+}
+
+// ClearRechargeBonusExpiresAt clears the value of the "recharge_bonus_expires_at" field.
+func (u *PaymentOrderUpsert) ClearRechargeBonusExpiresAt() *PaymentOrderUpsert {
+	u.SetNull(paymentorder.FieldRechargeBonusExpiresAt)
 	return u
 }
 
@@ -1988,6 +2235,132 @@ func (u *PaymentOrderUpsertOne) UpdateProviderSnapshot() *PaymentOrderUpsertOne 
 func (u *PaymentOrderUpsertOne) ClearProviderSnapshot() *PaymentOrderUpsertOne {
 	return u.Update(func(s *PaymentOrderUpsert) {
 		s.ClearProviderSnapshot()
+	})
+}
+
+// SetRechargeBonusCampaignID sets the "recharge_bonus_campaign_id" field.
+func (u *PaymentOrderUpsertOne) SetRechargeBonusCampaignID(v int64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRechargeBonusCampaignID(v)
+	})
+}
+
+// AddRechargeBonusCampaignID adds v to the "recharge_bonus_campaign_id" field.
+func (u *PaymentOrderUpsertOne) AddRechargeBonusCampaignID(v int64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddRechargeBonusCampaignID(v)
+	})
+}
+
+// UpdateRechargeBonusCampaignID sets the "recharge_bonus_campaign_id" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateRechargeBonusCampaignID() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRechargeBonusCampaignID()
+	})
+}
+
+// ClearRechargeBonusCampaignID clears the value of the "recharge_bonus_campaign_id" field.
+func (u *PaymentOrderUpsertOne) ClearRechargeBonusCampaignID() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearRechargeBonusCampaignID()
+	})
+}
+
+// SetRechargeBonusCampaignName sets the "recharge_bonus_campaign_name" field.
+func (u *PaymentOrderUpsertOne) SetRechargeBonusCampaignName(v string) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRechargeBonusCampaignName(v)
+	})
+}
+
+// UpdateRechargeBonusCampaignName sets the "recharge_bonus_campaign_name" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateRechargeBonusCampaignName() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRechargeBonusCampaignName()
+	})
+}
+
+// ClearRechargeBonusCampaignName clears the value of the "recharge_bonus_campaign_name" field.
+func (u *PaymentOrderUpsertOne) ClearRechargeBonusCampaignName() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearRechargeBonusCampaignName()
+	})
+}
+
+// SetRechargeBonusRate sets the "recharge_bonus_rate" field.
+func (u *PaymentOrderUpsertOne) SetRechargeBonusRate(v float64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRechargeBonusRate(v)
+	})
+}
+
+// AddRechargeBonusRate adds v to the "recharge_bonus_rate" field.
+func (u *PaymentOrderUpsertOne) AddRechargeBonusRate(v float64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddRechargeBonusRate(v)
+	})
+}
+
+// UpdateRechargeBonusRate sets the "recharge_bonus_rate" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateRechargeBonusRate() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRechargeBonusRate()
+	})
+}
+
+// SetRechargeBonusAmount sets the "recharge_bonus_amount" field.
+func (u *PaymentOrderUpsertOne) SetRechargeBonusAmount(v float64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRechargeBonusAmount(v)
+	})
+}
+
+// AddRechargeBonusAmount adds v to the "recharge_bonus_amount" field.
+func (u *PaymentOrderUpsertOne) AddRechargeBonusAmount(v float64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddRechargeBonusAmount(v)
+	})
+}
+
+// UpdateRechargeBonusAmount sets the "recharge_bonus_amount" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateRechargeBonusAmount() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRechargeBonusAmount()
+	})
+}
+
+// SetRechargeBonusStatus sets the "recharge_bonus_status" field.
+func (u *PaymentOrderUpsertOne) SetRechargeBonusStatus(v paymentorder.RechargeBonusStatus) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRechargeBonusStatus(v)
+	})
+}
+
+// UpdateRechargeBonusStatus sets the "recharge_bonus_status" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateRechargeBonusStatus() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRechargeBonusStatus()
+	})
+}
+
+// SetRechargeBonusExpiresAt sets the "recharge_bonus_expires_at" field.
+func (u *PaymentOrderUpsertOne) SetRechargeBonusExpiresAt(v time.Time) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRechargeBonusExpiresAt(v)
+	})
+}
+
+// UpdateRechargeBonusExpiresAt sets the "recharge_bonus_expires_at" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateRechargeBonusExpiresAt() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRechargeBonusExpiresAt()
+	})
+}
+
+// ClearRechargeBonusExpiresAt clears the value of the "recharge_bonus_expires_at" field.
+func (u *PaymentOrderUpsertOne) ClearRechargeBonusExpiresAt() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearRechargeBonusExpiresAt()
 	})
 }
 
@@ -2920,6 +3293,132 @@ func (u *PaymentOrderUpsertBulk) UpdateProviderSnapshot() *PaymentOrderUpsertBul
 func (u *PaymentOrderUpsertBulk) ClearProviderSnapshot() *PaymentOrderUpsertBulk {
 	return u.Update(func(s *PaymentOrderUpsert) {
 		s.ClearProviderSnapshot()
+	})
+}
+
+// SetRechargeBonusCampaignID sets the "recharge_bonus_campaign_id" field.
+func (u *PaymentOrderUpsertBulk) SetRechargeBonusCampaignID(v int64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRechargeBonusCampaignID(v)
+	})
+}
+
+// AddRechargeBonusCampaignID adds v to the "recharge_bonus_campaign_id" field.
+func (u *PaymentOrderUpsertBulk) AddRechargeBonusCampaignID(v int64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddRechargeBonusCampaignID(v)
+	})
+}
+
+// UpdateRechargeBonusCampaignID sets the "recharge_bonus_campaign_id" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateRechargeBonusCampaignID() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRechargeBonusCampaignID()
+	})
+}
+
+// ClearRechargeBonusCampaignID clears the value of the "recharge_bonus_campaign_id" field.
+func (u *PaymentOrderUpsertBulk) ClearRechargeBonusCampaignID() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearRechargeBonusCampaignID()
+	})
+}
+
+// SetRechargeBonusCampaignName sets the "recharge_bonus_campaign_name" field.
+func (u *PaymentOrderUpsertBulk) SetRechargeBonusCampaignName(v string) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRechargeBonusCampaignName(v)
+	})
+}
+
+// UpdateRechargeBonusCampaignName sets the "recharge_bonus_campaign_name" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateRechargeBonusCampaignName() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRechargeBonusCampaignName()
+	})
+}
+
+// ClearRechargeBonusCampaignName clears the value of the "recharge_bonus_campaign_name" field.
+func (u *PaymentOrderUpsertBulk) ClearRechargeBonusCampaignName() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearRechargeBonusCampaignName()
+	})
+}
+
+// SetRechargeBonusRate sets the "recharge_bonus_rate" field.
+func (u *PaymentOrderUpsertBulk) SetRechargeBonusRate(v float64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRechargeBonusRate(v)
+	})
+}
+
+// AddRechargeBonusRate adds v to the "recharge_bonus_rate" field.
+func (u *PaymentOrderUpsertBulk) AddRechargeBonusRate(v float64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddRechargeBonusRate(v)
+	})
+}
+
+// UpdateRechargeBonusRate sets the "recharge_bonus_rate" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateRechargeBonusRate() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRechargeBonusRate()
+	})
+}
+
+// SetRechargeBonusAmount sets the "recharge_bonus_amount" field.
+func (u *PaymentOrderUpsertBulk) SetRechargeBonusAmount(v float64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRechargeBonusAmount(v)
+	})
+}
+
+// AddRechargeBonusAmount adds v to the "recharge_bonus_amount" field.
+func (u *PaymentOrderUpsertBulk) AddRechargeBonusAmount(v float64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddRechargeBonusAmount(v)
+	})
+}
+
+// UpdateRechargeBonusAmount sets the "recharge_bonus_amount" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateRechargeBonusAmount() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRechargeBonusAmount()
+	})
+}
+
+// SetRechargeBonusStatus sets the "recharge_bonus_status" field.
+func (u *PaymentOrderUpsertBulk) SetRechargeBonusStatus(v paymentorder.RechargeBonusStatus) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRechargeBonusStatus(v)
+	})
+}
+
+// UpdateRechargeBonusStatus sets the "recharge_bonus_status" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateRechargeBonusStatus() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRechargeBonusStatus()
+	})
+}
+
+// SetRechargeBonusExpiresAt sets the "recharge_bonus_expires_at" field.
+func (u *PaymentOrderUpsertBulk) SetRechargeBonusExpiresAt(v time.Time) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRechargeBonusExpiresAt(v)
+	})
+}
+
+// UpdateRechargeBonusExpiresAt sets the "recharge_bonus_expires_at" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateRechargeBonusExpiresAt() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRechargeBonusExpiresAt()
+	})
+}
+
+// ClearRechargeBonusExpiresAt clears the value of the "recharge_bonus_expires_at" field.
+func (u *PaymentOrderUpsertBulk) ClearRechargeBonusExpiresAt() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearRechargeBonusExpiresAt()
 	})
 }
 
