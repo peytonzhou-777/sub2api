@@ -1,0 +1,16 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - gosec
+  settings:
+    gosec:
+      includes:
+        - G701
+        - G702
+        - G703
+        - G704
+        - G707
+      severity: high
+      confidence: high
