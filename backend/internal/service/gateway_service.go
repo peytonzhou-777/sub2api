@@ -1315,6 +1315,12 @@ func (s *GatewayService) initDebugGatewayBodyFile(path string) {
 	if parseDebugEnvBool(path) {
 		path = debugGatewayBodyDefaultFilename
 	}
+	normalizedPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		slog.Error("failed to normalize gateway debug log path", "path", path, "error", err)
+		return
+	}
+	path = normalizedPath
 
 	// 如果 path 指向一个已存在的目录，自动追加默认文件名
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
