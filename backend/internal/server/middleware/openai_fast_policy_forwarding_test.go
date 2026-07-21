@@ -61,7 +61,7 @@ func TestAPIKeyAuthForwardsUserScopedOpenAIFastPolicyToUpstream(t *testing.T) {
 	}, cfg)
 	gatewayService := service.NewOpenAIGatewayService(
 		nil, nil, nil, nil, nil, nil, nil, cfg,
-		nil, nil, nil, nil, nil, &openAIFastPolicyForwardingHTTPUpstream{client: upstreamServer.Client()},
+		nil, nil, nil, nil, nil, &openAIFastPolicyForwardingHTTPUpstream{transport: upstreamServer.Client().Transport},
 		nil, nil, nil, nil, nil, nil, settingService, nil,
 	)
 
@@ -177,11 +177,11 @@ func (r *openAIFastPolicyForwardingSettingRepo) GetValue(context.Context, string
 }
 
 type openAIFastPolicyForwardingHTTPUpstream struct {
-	client *http.Client
+	transport http.RoundTripper
 }
 
 func (u *openAIFastPolicyForwardingHTTPUpstream) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
-	return u.client.Do(req)
+	return u.transport.RoundTrip(req)
 }
 
 func (u *openAIFastPolicyForwardingHTTPUpstream) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
