@@ -1,20 +1,19 @@
 <template>
   <AppLayout>
+    <template v-if="!loading && tabs.length > 1 && paymentPhase === 'select'" #header-tabs>
+      <PageHeaderTabs
+        :tabs="tabs"
+        :active-key="activeTab"
+        :tablist-label="t('payment.title')"
+        test-prefix="payment-tab"
+        @select="selectPaymentTab"
+      />
+    </template>
     <div class="mx-auto max-w-4xl space-y-6">
       <div v-if="loading" class="flex items-center justify-center py-20">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
       </div>
       <template v-else>
-        <!-- Tab Switcher (hide during payment) -->
-        <div v-if="tabs.length > 1 && paymentPhase === 'select' && !selectedPlan" class="flex gap-1 rounded-xl border border-white/[0.06] bg-[#151515] p-1">
-          <button v-for="tab in tabs" :key="tab.key"
-            :data-test="`payment-tab-${tab.key}`"
-            class="flex-1 cursor-pointer rounded-lg border px-4 py-2.5 text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 active:scale-[0.995]"
-            :class="activeTab === tab.key
-              ? 'border-white/[0.12] bg-[#303030] text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_1px_3px_rgb(0_0_0/0.28)]'
-              : 'border-transparent text-[#a1a1a1] hover:border-white/[0.07] hover:bg-[#222222] hover:text-[#f1f1f1]'"
-            @click="activeTab = tab.key">{{ tab.label }}</button>
-        </div>
         <!-- Payment in progress (shared by recharge and subscription) -->
         <template v-if="paymentPhase === 'paying'">
           <PaymentStatusPanel
@@ -396,6 +395,7 @@ import { getLimitedCreditAggregateSignalLevel } from '@/utils/limitedCreditStatu
 import type { SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType } from '@/types/payment'
 import type { LimitedCreditGrant } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import PageHeaderTabs from '@/components/layout/PageHeaderTabs.vue'
 import AmountInput from '@/components/payment/AmountInput.vue'
 import PaymentMethodSelector from '@/components/payment/PaymentMethodSelector.vue'
 import { METHOD_ORDER, getPaymentPopupFeatures, isBuiltInAlipayMethod, isBuiltInWxpayMethod } from '@/components/payment/providerConfig'
@@ -691,6 +691,24 @@ const tabs = computed(() => {
   result.push({ key: 'subscription', label: t('payment.tabSubscribe') })
   result.push({ key: 'account', label: t('payment.tabAccount') })
   return result
+})
+
+// selectPaymentTab 将钱包标签切换收口到标题栏组件。
+function selectPaymentTab(key: string): void {
+  if (key === 'recharge' || key === 'subscription' || key === 'account') activeTab.value = key
+}
+
+// 路由查询参数变化时同步钱包标签，支持在钱包页内再次点击余额详情链接。
+watch(() => route.query.tab, (tab) => {
+  if (tab === 'account') {
+    activeTab.value = 'account'
+    return
+  }
+  if (tab === 'subscription') {
+    activeTab.value = 'subscription'
+    return
+  }
+  if (!checkout.value.balance_disabled) activeTab.value = 'recharge'
 })
 
 const visibleMethods = computed(() => getVisibleMethods(checkout.value.methods))

@@ -7,6 +7,10 @@ import type { CheckoutInfoResponse, MethodLimit, RechargeBonusTier, Subscription
 const routeState = vi.hoisted(() => ({
   path: '/purchase',
   query: {} as Record<string, unknown>,
+  reactiveRoute: null as null | {
+    path: string
+    query: Record<string, unknown>
+  },
 }))
 
 const routerReplace = vi.hoisted(() => vi.fn())
@@ -34,9 +38,12 @@ const bridgeInvoke = vi.hoisted(() => vi.fn())
 
 vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')
+  const { reactive } = await vi.importActual<typeof import('vue')>('vue')
+  const reactiveRoute = reactive(routeState)
+  routeState.reactiveRoute = reactiveRoute
   return {
     ...actual,
-    useRoute: () => routeState,
+    useRoute: () => reactiveRoute,
     useRouter: () => ({
       replace: routerReplace,
       push: routerPush,
@@ -265,8 +272,9 @@ async function mountRechargeWithCampaign(
     global: {
       stubs: {
         AppLayout: {
-          template: '<div><slot /></div>',
+          template: '<div><slot name="header-tabs" /><slot /></div>',
         },
+        PageHeaderTabs: false,
         AmountInput: {
           name: 'AmountInput',
           props: ['modelValue', 'min', 'max'],
@@ -381,7 +389,8 @@ describe('PaymentView account tab', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
-          AppLayout: { template: '<div><slot /></div>' },
+          AppLayout: { template: '<div><slot name="header-tabs" /><slot /></div>' },
+          PageHeaderTabs: false,
           PaymentMethodSelector: true,
           Teleport: true,
           Transition: false,
@@ -428,8 +437,8 @@ describe('PaymentView account tab', () => {
     expect(items[1].text()).toContain('$2.00 / $10.00')
     expect(items[0].findAll('[data-test="limited-credit-expiration"]')).toHaveLength(1)
     expect((items[0].text().match(/payment.account.daysRemaining/g) || [])).toHaveLength(1)
-    expect(wrapper.get('[data-test="payment-tab-account"]').classes()).toContain('bg-[#303030]')
-    expect(wrapper.get('[data-test="payment-tab-recharge"]').classes()).toContain('hover:bg-[#222222]')
+    expect(wrapper.get('[data-test="payment-tab-account"]').classes()).toContain('page-header-tab-active')
+    expect(wrapper.get('[data-test="payment-tab-recharge"]').classes()).toContain('page-header-tab')
     expect(wrapper.get('[data-test="limited-credit-progress-track"]').classes()).toContain('bg-[#444444]')
     expect(wrapper.get('[data-test="limited-credit-progress-fill"]').classes()).toContain('bg-[#f4f4f4]')
   })
@@ -447,7 +456,8 @@ describe('PaymentView account tab', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
-          AppLayout: { template: '<div><slot /></div>' },
+          AppLayout: { template: '<div><slot name="header-tabs" /><slot /></div>' },
+          PageHeaderTabs: false,
           AmountInput: true,
           PaymentMethodSelector: true,
           Teleport: true,
@@ -473,6 +483,34 @@ describe('PaymentView account tab', () => {
     expect(wrapper.text()).not.toContain('payment.tabTopUp')
   })
 
+  it('switches to the account tab when the current wallet route receives tab=account', async () => {
+    routeState.path = '/purchase'
+    routeState.query = {}
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture())
+
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot name="header-tabs" /><slot /></div>' },
+          PageHeaderTabs: false,
+          AmountInput: true,
+          PaymentMethodSelector: true,
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-test="account-balance-panel"]').exists()).toBe(false)
+
+    if (!routeState.reactiveRoute) throw new Error('reactive route is unavailable')
+    routeState.reactiveRoute.query = { tab: 'account' }
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="account-balance-panel"]').exists()).toBe(true)
+    expect(wrapper.get('[data-test="payment-tab-account"]').attributes('aria-selected')).toBe('true')
+  })
+
   it('refreshes the user and limited credits after a balance order succeeds', async () => {
     routeState.query = {}
     getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture())
@@ -488,7 +526,8 @@ describe('PaymentView account tab', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
-          AppLayout: { template: '<div><slot /></div>' },
+          AppLayout: { template: '<div><slot name="header-tabs" /><slot /></div>' },
+          PageHeaderTabs: false,
           PaymentStatusPanel: {
             template: '<button data-test="payment-success" @click="$emit(\'success\')" />',
           },
@@ -563,8 +602,9 @@ describe('PaymentView payment recovery', () => {
       global: {
         stubs: {
           AppLayout: {
-            template: '<div><slot /></div>',
+            template: '<div><slot name="header-tabs" /><slot /></div>',
           },
+          PageHeaderTabs: false,
           PaymentStatusPanel: {
             template: '<button data-test="payment-done" @click="$emit(\'done\')" />',
           },

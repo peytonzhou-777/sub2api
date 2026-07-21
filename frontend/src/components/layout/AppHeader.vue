@@ -256,11 +256,15 @@
     </div>
 
     <!-- 页面标题收入嵌入式内容面板，业务页内容从此处向下连续。 -->
-    <div class="codex-panel-titlebar flex items-center px-4 md:px-6">
-      <div class="min-w-0">
+    <div class="codex-panel-titlebar flex items-center gap-3 px-4 md:gap-4 md:px-6">
+      <div class="min-w-0 shrink-0" :class="$slots.tabs ? 'max-w-[38%]' : 'max-w-full'">
         <h1 class="truncate text-lg font-semibold text-gray-900 dark:text-white">
           {{ pageTitle }}
         </h1>
+      </div>
+      <div v-if="$slots.tabs" class="codex-titlebar-divider" aria-hidden="true" />
+      <div v-if="$slots.tabs" class="min-w-0 flex-1 self-stretch">
+        <slot name="tabs" />
       </div>
     </div>
   </header>

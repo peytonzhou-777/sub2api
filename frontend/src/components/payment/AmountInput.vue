@@ -3,6 +3,21 @@
     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
       {{ t('payment.customAmount') }}
     </label>
+    <div class="grid grid-cols-4 gap-2 sm:grid-cols-8">
+      <button
+        v-for="amount in quickAmounts"
+        :key="amount"
+        :data-test="`quick-amount-${amount}`"
+        type="button"
+        class="quick-amount-button"
+        :class="{ 'quick-amount-button--active': modelValue === amount }"
+        :disabled="!isQuickAmountAvailable(amount)"
+        :aria-pressed="modelValue === amount"
+        @click="selectQuickAmount(amount)"
+      >
+        ${{ amount }}
+      </button>
+    </div>
     <input
       data-test="amount-slider"
       class="amount-slider"
@@ -78,6 +93,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const customText = ref('')
+const quickAmounts = [10, 20, 50, 100, 200, 500, 800, 1000] as const
 
 const sliderMin = computed(() => Math.max(1, Math.ceil(props.min || 1)))
 const sliderMax = computed(() => {
@@ -119,6 +135,16 @@ function updateAmount(value: number) {
   const next = clampAmount(value)
   customText.value = String(next)
   emit('update:modelValue', next)
+}
+
+function isQuickAmountAvailable(amount: number): boolean {
+  return amount >= sliderMin.value && amount <= sliderMax.value
+}
+
+// 快捷金额与滑杆、输入框复用同一金额更新流程。
+function selectQuickAmount(amount: number) {
+  if (!isQuickAmountAvailable(amount)) return
+  updateAmount(amount)
 }
 
 function handleSliderInput(event: Event) {
@@ -209,6 +235,41 @@ watch(() => props.modelValue, (value) => {
   border-radius: 50%;
   background: #2f9cff;
   box-shadow: 0 1px 5px rgb(0 0 0 / 0.4);
+}
+
+.quick-amount-button {
+  min-height: 34px;
+  border: 1px solid #343434;
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #202020;
+  color: #b7b7b7;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease, opacity 150ms ease;
+}
+
+.quick-amount-button:hover:not(:disabled) {
+  border-color: #505050;
+  background: #2a2a2a;
+  color: #fff;
+}
+
+.quick-amount-button--active {
+  border-color: rgb(47 156 255 / 0.7);
+  background: rgb(47 156 255 / 0.14);
+  color: #78baff;
+}
+
+.quick-amount-button:focus-visible {
+  outline: 2px solid rgb(47 156 255 / 0.75);
+  outline-offset: 2px;
+}
+
+.quick-amount-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.32;
 }
 
 .amount-adjustment-button {

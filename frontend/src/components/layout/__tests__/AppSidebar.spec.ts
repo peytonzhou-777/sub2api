@@ -131,4 +131,9 @@ describe('AppSidebar user account navigation', () => {
     expect(headerSource).not.toContain('pageDescription')
     expect(headerSource).not.toContain('route.meta.descriptionKey')
   })
+
+  it('lets pages render shared tabs inside the sticky title bar', () => {
+    expect(headerSource).toContain('<slot name="tabs" />')
+    expect(headerSource).toContain('codex-titlebar-divider')
+  })
 })

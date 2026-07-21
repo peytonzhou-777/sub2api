@@ -98,6 +98,13 @@
   backdrop-filter: blur(18px);
 }
 
+.codex-titlebar-divider {
+  width: 1px;
+  height: 20px;
+  flex: 0 0 auto;
+  background: #2d2d2d;
+}
+
 .codex-workbench .page-title { font-size: 22px; font-weight: 500; letter-spacing: -.02em; }
 .codex-workbench .page-description { color: var(--codex-text-muted); }
 

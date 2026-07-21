@@ -10,7 +10,11 @@
       :class="[sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-64']"
     >
       <!-- Header -->
-      <AppHeader />
+      <AppHeader>
+        <template v-if="$slots['header-tabs']" #tabs>
+          <slot name="header-tabs" />
+        </template>
+      </AppHeader>
 
       <!-- Main Content -->
       <main class="codex-workbench-content codex-panel-surface">

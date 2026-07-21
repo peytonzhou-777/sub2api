@@ -8,7 +8,7 @@ vi.mock('vue-i18n', () => ({
 }))
 
 describe('AmountInput slider and input synchronization', () => {
-  it('renders one slider and one number input without quick amount buttons', () => {
+  it('renders the requested quick amounts above one slider and one number input', () => {
     const wrapper = mount(AmountInput, { props: { modelValue: 10, min: 5, max: 100 } })
 
     expect(wrapper.get('[data-test="amount-slider"]').attributes()).toMatchObject({
@@ -17,8 +17,44 @@ describe('AmountInput slider and input synchronization', () => {
       step: '1',
     })
     expect(wrapper.get('[data-test="amount-number-input"]').attributes('value')).toBe('10')
-    expect(wrapper.find('[data-test="quick-amount-bonus"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-test^="quick-amount-"]').map(button => button.text())).toEqual([
+      '$10',
+      '$20',
+      '$50',
+      '$100',
+      '$200',
+      '$500',
+      '$800',
+      '$1000',
+    ])
     expect(wrapper.findAll('.amount-adjustment-button')).toHaveLength(6)
+  })
+
+  it('synchronizes a quick amount with the number input and slider', async () => {
+    const wrapper = mount(AmountInput, { props: { modelValue: 10, min: 1, max: 1000 } })
+
+    await wrapper.get('[data-test="quick-amount-200"]').trigger('click')
+
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([200])
+    expect(wrapper.get('[data-test="amount-number-input"]').attributes('value')).toBe('200')
+
+    await wrapper.setProps({ modelValue: 200 })
+
+    expect(wrapper.get('[data-test="amount-slider"]').attributes('value')).toBe('119')
+    expect(wrapper.get('[data-test="quick-amount-200"]').attributes('aria-pressed')).toBe('true')
+  })
+
+  it('disables quick amounts outside the configured range', async () => {
+    const wrapper = mount(AmountInput, { props: { modelValue: 20, min: 20, max: 500 } })
+
+    expect(wrapper.get('[data-test="quick-amount-10"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-test="quick-amount-20"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('[data-test="quick-amount-500"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('[data-test="quick-amount-800"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-test="quick-amount-1000"]').attributes('disabled')).toBeDefined()
+
+    await wrapper.get('[data-test="quick-amount-800"]').trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
   })
 
   it('uses gradient slider steps across the three amount segments', async () => {

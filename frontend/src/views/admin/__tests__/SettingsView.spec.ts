@@ -235,7 +235,9 @@ vi.mock("vue-i18n", async () => {
   };
 });
 
-const AppLayoutStub = { template: "<div><slot /></div>" };
+const AppLayoutStub = {
+  template: '<div><slot name="header-tabs" /><slot /></div>',
+};
 const ToggleStub = defineComponent({
   props: {
     modelValue: {
