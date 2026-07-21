@@ -37,6 +37,11 @@ const gatewayCompatibilityMetricsLogInterval = 1024
 
 var gatewayCompatibilityMetricsLogCounter atomic.Uint64
 
+// totalAvailableBalanceProvider 提供用户当前可消费的普通余额与限时额度总和。
+type totalAvailableBalanceProvider interface {
+	GetUserTotalAvailableBalance(ctx context.Context, userID int64) (float64, error)
+}
+
 // GatewayHandler handles API gateway requests
 type GatewayHandler struct {
 	gatewayService            *service.GatewayService
@@ -45,6 +50,7 @@ type GatewayHandler struct {
 	antigravityGatewayService *service.AntigravityGatewayService
 	userService               *service.UserService
 	billingCacheService       *service.BillingCacheService
+	totalBalanceProvider      totalAvailableBalanceProvider
 	usageService              *service.UsageService
 	apiKeyService             *service.APIKeyService
 	usageRecordWorkerPool     *service.UsageRecordWorkerPool
@@ -103,6 +109,7 @@ func NewGatewayHandler(
 		antigravityGatewayService: antigravityGatewayService,
 		userService:               userService,
 		billingCacheService:       billingCacheService,
+		totalBalanceProvider:      billingCacheService,
 		usageService:              usageService,
 		apiKeyService:             apiKeyService,
 		usageRecordWorkerPool:     usageRecordWorkerPool,
@@ -1622,10 +1629,14 @@ func (h *GatewayHandler) usageUnrestricted(c *gin.Context, ctx context.Context, 
 		return
 	}
 
-	// 余额模式
-	latestUser, err := h.userService.GetByID(ctx, subject.UserID)
+	// 余额模式返回普通余额与当前可消费限时额度的总和。
+	if h.totalBalanceProvider == nil {
+		h.errorResponse(c, http.StatusInternalServerError, "api_error", "Failed to get user balance")
+		return
+	}
+	totalBalance, err := h.totalBalanceProvider.GetUserTotalAvailableBalance(ctx, subject.UserID)
 	if err != nil {
-		h.errorResponse(c, http.StatusInternalServerError, "api_error", "Failed to get user info")
+		h.errorResponse(c, http.StatusInternalServerError, "api_error", "Failed to get user balance")
 		return
 	}
 
@@ -1633,9 +1644,9 @@ func (h *GatewayHandler) usageUnrestricted(c *gin.Context, ctx context.Context, 
 		"mode":      "unrestricted",
 		"isValid":   true,
 		"planName":  "钱包余额",
-		"remaining": latestUser.Balance,
+		"remaining": totalBalance,
 		"unit":      "USD",
-		"balance":   latestUser.Balance,
+		"balance":   totalBalance,
 	}
 	if usageData != nil {
 		resp["usage"] = usageData

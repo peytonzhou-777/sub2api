@@ -12,8 +12,10 @@ import (
 )
 
 type limitedCreditRepoStub struct {
-	grants []*LimitedCreditGrant
-	err    error
+	grants          []*LimitedCreditGrant
+	err             error
+	availableAmount float64
+	availableErr    error
 }
 
 func (s *limitedCreditRepoStub) CreateGrant(_ context.Context, grant *LimitedCreditGrant) (*LimitedCreditGrant, error) {
@@ -46,7 +48,7 @@ func (s *limitedCreditRepoStub) ListActiveByUser(context.Context, int64) ([]Limi
 }
 
 func (s *limitedCreditRepoStub) GetAvailableAmount(context.Context, int64) (float64, error) {
-	return 0, nil
+	return s.availableAmount, s.availableErr
 }
 
 func TestLimitedCreditService_GrantFromDefaultSettings_CreatesIndependentGrants(t *testing.T) {
