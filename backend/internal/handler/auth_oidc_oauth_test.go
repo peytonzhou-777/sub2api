@@ -3,6 +3,8 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
@@ -132,6 +134,26 @@ func buildRSAJWK(kid string, pub *rsa.PublicKey) oidcJWK {
 		N:   n,
 		E:   e,
 	}
+}
+
+func TestOIDCJWKPublicKeyValidatesECPoint(t *testing.T) {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	jwk := oidcJWK{
+		Kty: "EC",
+		Crv: "P-256",
+		X:   base64.RawURLEncoding.EncodeToString(privateKey.X.Bytes()),
+		Y:   base64.RawURLEncoding.EncodeToString(privateKey.Y.Bytes()),
+	}
+	publicKey, err := jwk.publicKey()
+	require.NoError(t, err)
+	require.Equal(t, &privateKey.PublicKey, publicKey)
+
+	jwk.X = base64.RawURLEncoding.EncodeToString([]byte{1})
+	jwk.Y = base64.RawURLEncoding.EncodeToString([]byte{1})
+	_, err = jwk.publicKey()
+	require.ErrorContains(t, err, "ec point is not on curve")
 }
 
 func TestOIDCOAuthBindStartRedirectsAndSetsBindCookies(t *testing.T) {
