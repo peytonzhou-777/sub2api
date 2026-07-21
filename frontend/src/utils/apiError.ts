@@ -6,13 +6,14 @@
  */
 
 interface ApiErrorLike {
-  status?: number
+  status?: number | string
   code?: number | string
   message?: string
   error?: string
   reason?: string
   metadata?: Record<string, unknown>
   response?: {
+    status?: number | string
     data?: {
       detail?: string
       message?: string
@@ -33,6 +34,28 @@ export function extractApiErrorCode(err: unknown): string | undefined {
   const e = err as ApiErrorLike
   const code = e.reason ?? e.code ?? e.response?.data?.code
   return code != null ? String(code) : undefined
+}
+
+/**
+ * 读取 HTTP 状态码，兼容拦截器扁平错误与 Axios 原始错误。
+ */
+export function extractApiErrorStatus(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined
+
+  const e = err as ApiErrorLike
+  const candidates = [e.status, e.response?.status, e.code]
+
+  for (const candidate of candidates) {
+    const value = typeof candidate === 'number'
+      ? candidate
+      : typeof candidate === 'string' && /^\d+$/.test(candidate.trim())
+        ? Number(candidate)
+        : undefined
+
+    if (value !== undefined && Number.isInteger(value)) return value
+  }
+
+  return undefined
 }
 
 /**
@@ -136,12 +159,11 @@ export function extractApiErrorMessage(
   // Plain object from API client interceptor (most common case)
   if (typeof err === 'object' && err !== null) {
     const e = err as ApiErrorLike
-    // Interceptor shape: { message, error }
+    // 原始 Axios 错误优先采用后端响应消息，避免通用 Error.message 覆盖具体原因。
+    if (e.response?.data?.message) return e.response.data.message
+    if (e.response?.data?.detail) return e.response.data.detail
     if (e.message) return e.message
     if (e.error) return e.error
-    // Legacy axios shape: { response.data.detail }
-    if (e.response?.data?.detail) return e.response.data.detail
-    if (e.response?.data?.message) return e.response.data.message
   }
 
   // Standard Error
