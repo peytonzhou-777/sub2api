@@ -723,7 +723,7 @@ func getLimitedCreditBatchAllocations(ctx context.Context, tx *sql.Tx, userID in
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	allocations := make([]limitedCreditBatchAllocation, 0)
 	totalReserved := 0.0
