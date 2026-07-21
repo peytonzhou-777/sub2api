@@ -60,6 +60,54 @@ export interface MethodLimitsResponse {
   global_max: number  // widest max across all methods; 0 = no maximum
 }
 
+export interface RechargeBonusTier {
+  min_amount: number
+  max_amount: number
+  min_rate: number
+  max_rate: number
+}
+
+export type RechargeBonusCampaignStatus = 'scheduled' | 'active' | 'ended'
+export type RechargeBonusOrderStatus = 'none' | 'eligible' | 'granted' | 'limit_reached'
+
+export interface RechargeBonusCampaign {
+  id: number
+  name: string
+  description: string
+  start_at: string
+  end_at: string
+  participation_limit: number
+  tiers: RechargeBonusTier[]
+  status: RechargeBonusCampaignStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface RechargeBonusCampaignOffer extends RechargeBonusCampaign {
+  completed_count: number
+  remaining_count: number | null
+  validity_days: number
+}
+
+export interface RechargeBonusCampaignInput {
+  name: string
+  description: string
+  start_at: string
+  end_at: string
+  participation_limit: number
+  tiers: RechargeBonusTier[]
+}
+
+export interface RechargeBonusOrderSnapshot {
+  campaign_id: number
+  campaign_name: string
+  rate: number
+  amount: number
+  status: RechargeBonusOrderStatus
+  validity_days: number
+  expires_at?: string
+}
+
 /** Response from /payment/checkout-info API — single call for the payment page */
 export interface CheckoutInfoResponse {
   methods: Record<string, MethodLimit>
@@ -78,6 +126,7 @@ export interface CheckoutInfoResponse {
   alipay_force_qrcode?: boolean
   /** When true, official Alipay mobile orders use precreate plus an Alipay app deep link */
   alipay_mobile_precreate_deep_link?: boolean
+  recharge_bonus_activity: RechargeBonusCampaignOffer | null
 }
 
 // ==================== Orders ====================
@@ -104,6 +153,7 @@ export interface PaymentOrder {
   refund_request_reason?: string
   plan_id?: number
   provider_instance_id?: string
+  recharge_bonus?: RechargeBonusOrderSnapshot
 }
 
 // ==================== Plans & Channels ====================
@@ -220,6 +270,7 @@ export interface CreateOrderResult {
   oauth?: WechatOAuthInfo
   jsapi?: WechatJSAPIPayload
   jsapi_payload?: WechatJSAPIPayload
+  recharge_bonus?: RechargeBonusOrderSnapshot
 }
 
 export interface DashboardStats {

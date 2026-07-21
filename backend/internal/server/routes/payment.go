@@ -98,6 +98,15 @@ func RegisterPaymentRoutes(
 			plans.DELETE("/:id", adminPaymentHandler.DeletePlan)
 		}
 
+		// 充值赠送活动
+		rechargeBonusCampaigns := adminGroup.Group("/recharge-bonus-campaigns")
+		{
+			rechargeBonusCampaigns.GET("", adminPaymentHandler.ListRechargeBonusCampaigns)
+			rechargeBonusCampaigns.POST("", adminPaymentHandler.CreateRechargeBonusCampaign)
+			rechargeBonusCampaigns.PUT("/:id", adminPaymentHandler.UpdateRechargeBonusCampaign)
+			rechargeBonusCampaigns.DELETE("/:id", adminPaymentHandler.DeleteRechargeBonusCampaign)
+		}
+
 		// Provider Instances
 		providers := adminGroup.Group("/providers")
 		{

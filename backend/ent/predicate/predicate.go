@@ -84,6 +84,12 @@ type PromoCodeUsage func(*sql.Selector)
 // Proxy is the predicate function for proxy builders.
 type Proxy func(*sql.Selector)
 
+// RechargeBonusCampaign is the predicate function for rechargebonuscampaign builders.
+type RechargeBonusCampaign func(*sql.Selector)
+
+// RechargeBonusParticipation is the predicate function for rechargebonusparticipation builders.
+type RechargeBonusParticipation func(*sql.Selector)
+
 // RedeemCode is the predicate function for redeemcode builders.
 type RedeemCode func(*sql.Selector)
 

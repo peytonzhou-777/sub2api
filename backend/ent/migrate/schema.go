@@ -1119,6 +1119,12 @@ var (
 		{Name: "provider_instance_id", Type: field.TypeString, Nullable: true, Size: 64},
 		{Name: "provider_key", Type: field.TypeString, Nullable: true, Size: 30},
 		{Name: "provider_snapshot", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "recharge_bonus_campaign_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "recharge_bonus_campaign_name", Type: field.TypeString, Nullable: true, Size: 100},
+		{Name: "recharge_bonus_rate", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "recharge_bonus_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "recharge_bonus_status", Type: field.TypeEnum, Enums: []string{"none", "eligible", "granted", "limit_reached"}, Default: "none"},
+		{Name: "recharge_bonus_expires_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "status", Type: field.TypeString, Size: 30, Default: "PENDING"},
 		{Name: "refund_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,2)"}},
 		{Name: "refund_reason", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
@@ -1147,7 +1153,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "payment_orders_users_payment_orders",
-				Columns:    []*schema.Column{PaymentOrdersColumns[39]},
+				Columns:    []*schema.Column{PaymentOrdersColumns[45]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1164,37 +1170,42 @@ var (
 			{
 				Name:    "paymentorder_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[39]},
+				Columns: []*schema.Column{PaymentOrdersColumns[45]},
 			},
 			{
 				Name:    "paymentorder_status",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[21]},
+				Columns: []*schema.Column{PaymentOrdersColumns[27]},
 			},
 			{
 				Name:    "paymentorder_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[29]},
+				Columns: []*schema.Column{PaymentOrdersColumns[35]},
 			},
 			{
 				Name:    "paymentorder_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[37]},
+				Columns: []*schema.Column{PaymentOrdersColumns[43]},
 			},
 			{
 				Name:    "paymentorder_paid_at",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[30]},
+				Columns: []*schema.Column{PaymentOrdersColumns[36]},
 			},
 			{
 				Name:    "paymentorder_payment_type_paid_at",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[9], PaymentOrdersColumns[30]},
+				Columns: []*schema.Column{PaymentOrdersColumns[9], PaymentOrdersColumns[36]},
 			},
 			{
 				Name:    "paymentorder_order_type",
 				Unique:  false,
 				Columns: []*schema.Column{PaymentOrdersColumns[14]},
+			},
+			{
+				Name:    "paymentorder_recharge_bonus_campaign_id_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{PaymentOrdersColumns[21], PaymentOrdersColumns[45]},
 			},
 		},
 	}
@@ -1425,6 +1436,58 @@ var (
 				Name:    "proxy_backup_proxy_id",
 				Unique:  false,
 				Columns: []*schema.Column{ProxiesColumns[14]},
+			},
+		},
+	}
+	// RechargeBonusCampaignsColumns holds the columns for the "recharge_bonus_campaigns" table.
+	RechargeBonusCampaignsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "description", Type: field.TypeString, Size: 1000, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "start_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "end_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "participation_limit", Type: field.TypeInt, Default: 0},
+		{Name: "tiers", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// RechargeBonusCampaignsTable holds the schema information for the "recharge_bonus_campaigns" table.
+	RechargeBonusCampaignsTable = &schema.Table{
+		Name:       "recharge_bonus_campaigns",
+		Columns:    RechargeBonusCampaignsColumns,
+		PrimaryKey: []*schema.Column{RechargeBonusCampaignsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "rechargebonuscampaign_start_at_end_at",
+				Unique:  false,
+				Columns: []*schema.Column{RechargeBonusCampaignsColumns[3], RechargeBonusCampaignsColumns[4]},
+			},
+		},
+	}
+	// RechargeBonusParticipationsColumns holds the columns for the "recharge_bonus_participations" table.
+	RechargeBonusParticipationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "campaign_id", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "completed_count", Type: field.TypeInt, Default: 0},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// RechargeBonusParticipationsTable holds the schema information for the "recharge_bonus_participations" table.
+	RechargeBonusParticipationsTable = &schema.Table{
+		Name:       "recharge_bonus_participations",
+		Columns:    RechargeBonusParticipationsColumns,
+		PrimaryKey: []*schema.Column{RechargeBonusParticipationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "rechargebonusparticipation_campaign_id_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{RechargeBonusParticipationsColumns[1], RechargeBonusParticipationsColumns[2]},
+			},
+			{
+				Name:    "rechargebonusparticipation_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{RechargeBonusParticipationsColumns[2]},
 			},
 		},
 	}
@@ -1959,9 +2022,17 @@ var (
 				Columns: []*schema.Column{UserLimitedCreditGrantsColumns[11], UserLimitedCreditGrantsColumns[7], UserLimitedCreditGrantsColumns[6]},
 			},
 			{
-				Name:    "userlimitedcreditgrant_source_type_source_id",
+				Name:    "idx_user_limited_credit_grants_source",
 				Unique:  false,
 				Columns: []*schema.Column{UserLimitedCreditGrantsColumns[1], UserLimitedCreditGrantsColumns[2]},
+			},
+			{
+				Name:    "idx_user_limited_credit_grants_recharge_bonus_order",
+				Unique:  true,
+				Columns: []*schema.Column{UserLimitedCreditGrantsColumns[1], UserLimitedCreditGrantsColumns[2]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "source_type = 'recharge_bonus' AND source_id IS NOT NULL",
+				},
 			},
 		},
 	}
@@ -2185,6 +2256,8 @@ var (
 		PromoCodesTable,
 		PromoCodeUsagesTable,
 		ProxiesTable,
+		RechargeBonusCampaignsTable,
+		RechargeBonusParticipationsTable,
 		RedeemCodesTable,
 		SecuritySecretsTable,
 		SettingsTable,
@@ -2302,6 +2375,12 @@ func init() {
 	ProxiesTable.ForeignKeys[0].RefTable = ProxiesTable
 	ProxiesTable.Annotation = &entsql.Annotation{
 		Table: "proxies",
+	}
+	RechargeBonusCampaignsTable.Annotation = &entsql.Annotation{
+		Table: "recharge_bonus_campaigns",
+	}
+	RechargeBonusParticipationsTable.Annotation = &entsql.Annotation{
+		Table: "recharge_bonus_participations",
 	}
 	RedeemCodesTable.ForeignKeys[0].RefTable = GroupsTable
 	RedeemCodesTable.ForeignKeys[1].RefTable = UsersTable

@@ -95,6 +95,10 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 // GET /api/v1/payment/checkout-info
 func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 	ctx := c.Request.Context()
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
 
 	// Fetch limits (methods + global range)
 	limitsResp, err := h.configService.GetAvailableMethodLimits(ctx)
@@ -140,6 +144,12 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 		})
 	}
 
+	offer, err := h.paymentService.GetRechargeBonusOffer(ctx, subject.UserID, time.Now().UTC())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
 	response.Success(c, checkoutInfoResponse{
 		Methods:                       limitsResp.Methods,
 		GlobalMin:                     limitsResp.GlobalMin,
@@ -154,23 +164,25 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 		StripePublishableKey:          cfg.StripePublishableKey,
 		AlipayForceQRCode:             cfg.AlipayForceQRCode,
 		AlipayMobilePrecreateDeepLink: alipayMobilePrecreateDeepLink,
+		RechargeBonusActivity:         offer,
 	})
 }
 
 type checkoutInfoResponse struct {
-	Methods                       map[string]service.MethodLimits `json:"methods"`
-	GlobalMin                     float64                         `json:"global_min"`
-	GlobalMax                     float64                         `json:"global_max"`
-	Plans                         []checkoutPlan                  `json:"plans"`
-	BalanceDisabled               bool                            `json:"balance_disabled"`
-	BalanceRechargeMultiplier     float64                         `json:"balance_recharge_multiplier"`
-	SubscriptionUSDToCNYRate      float64                         `json:"subscription_usd_to_cny_rate"`
-	RechargeFeeRate               float64                         `json:"recharge_fee_rate"`
-	HelpText                      string                          `json:"help_text"`
-	HelpImageURL                  string                          `json:"help_image_url"`
-	StripePublishableKey          string                          `json:"stripe_publishable_key"`
-	AlipayForceQRCode             bool                            `json:"alipay_force_qrcode"`
-	AlipayMobilePrecreateDeepLink bool                            `json:"alipay_mobile_precreate_deep_link"`
+	Methods                       map[string]service.MethodLimits     `json:"methods"`
+	GlobalMin                     float64                             `json:"global_min"`
+	GlobalMax                     float64                             `json:"global_max"`
+	Plans                         []checkoutPlan                      `json:"plans"`
+	BalanceDisabled               bool                                `json:"balance_disabled"`
+	BalanceRechargeMultiplier     float64                             `json:"balance_recharge_multiplier"`
+	SubscriptionUSDToCNYRate      float64                             `json:"subscription_usd_to_cny_rate"`
+	RechargeFeeRate               float64                             `json:"recharge_fee_rate"`
+	HelpText                      string                              `json:"help_text"`
+	HelpImageURL                  string                              `json:"help_image_url"`
+	StripePublishableKey          string                              `json:"stripe_publishable_key"`
+	AlipayForceQRCode             bool                                `json:"alipay_force_qrcode"`
+	AlipayMobilePrecreateDeepLink bool                                `json:"alipay_mobile_precreate_deep_link"`
+	RechargeBonusActivity         *service.RechargeBonusCampaignOffer `json:"recharge_bonus_activity"`
 }
 
 type checkoutPlan struct {
@@ -620,27 +632,28 @@ func isMobile(c *gin.Context) bool {
 }
 
 type PaymentOrderResult struct {
-	ID                  int64      `json:"id"`
-	UserID              int64      `json:"user_id"`
-	Amount              float64    `json:"amount"`
-	PayAmount           float64    `json:"pay_amount"`
-	FeeRate             float64    `json:"fee_rate"`
-	Currency            string     `json:"currency"`
-	PaymentType         string     `json:"payment_type"`
-	OutTradeNo          string     `json:"out_trade_no"`
-	Status              string     `json:"status"`
-	OrderType           string     `json:"order_type"`
-	CreatedAt           time.Time  `json:"created_at"`
-	ExpiresAt           time.Time  `json:"expires_at"`
-	PaidAt              *time.Time `json:"paid_at,omitempty"`
-	CompletedAt         *time.Time `json:"completed_at,omitempty"`
-	RefundAmount        float64    `json:"refund_amount"`
-	RefundReason        *string    `json:"refund_reason,omitempty"`
-	RefundRequestedAt   *time.Time `json:"refund_requested_at,omitempty"`
-	RefundRequestedBy   *string    `json:"refund_requested_by,omitempty"`
-	RefundRequestReason *string    `json:"refund_request_reason,omitempty"`
-	PlanID              *int64     `json:"plan_id,omitempty"`
-	ProviderInstanceID  *string    `json:"provider_instance_id,omitempty"`
+	ID                  int64                               `json:"id"`
+	UserID              int64                               `json:"user_id"`
+	Amount              float64                             `json:"amount"`
+	PayAmount           float64                             `json:"pay_amount"`
+	FeeRate             float64                             `json:"fee_rate"`
+	Currency            string                              `json:"currency"`
+	PaymentType         string                              `json:"payment_type"`
+	OutTradeNo          string                              `json:"out_trade_no"`
+	Status              string                              `json:"status"`
+	OrderType           string                              `json:"order_type"`
+	CreatedAt           time.Time                           `json:"created_at"`
+	ExpiresAt           time.Time                           `json:"expires_at"`
+	PaidAt              *time.Time                          `json:"paid_at,omitempty"`
+	CompletedAt         *time.Time                          `json:"completed_at,omitempty"`
+	RefundAmount        float64                             `json:"refund_amount"`
+	RefundReason        *string                             `json:"refund_reason,omitempty"`
+	RefundRequestedAt   *time.Time                          `json:"refund_requested_at,omitempty"`
+	RefundRequestedBy   *string                             `json:"refund_requested_by,omitempty"`
+	RefundRequestReason *string                             `json:"refund_request_reason,omitempty"`
+	PlanID              *int64                              `json:"plan_id,omitempty"`
+	ProviderInstanceID  *string                             `json:"provider_instance_id,omitempty"`
+	RechargeBonus       *service.RechargeBonusOrderSnapshot `json:"recharge_bonus,omitempty"`
 }
 
 func sanitizePaymentOrdersForResponse(orders []*dbent.PaymentOrder) []PaymentOrderResult {
@@ -679,6 +692,7 @@ func sanitizePaymentOrderForResponse(order *dbent.PaymentOrder) *PaymentOrderRes
 		RefundRequestReason: order.RefundRequestReason,
 		PlanID:              order.PlanID,
 		ProviderInstanceID:  order.ProviderInstanceID,
+		RechargeBonus:       service.RechargeBonusSnapshotFromOrder(order),
 	}
 }
 

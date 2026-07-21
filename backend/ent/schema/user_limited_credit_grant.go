@@ -75,6 +75,11 @@ func (UserLimitedCreditGrant) Edges() []ent.Edge {
 func (UserLimitedCreditGrant) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("user_id", "status", "expires_at"),
-		index.Fields("source_type", "source_id"),
+		index.Fields("source_type", "source_id").
+			StorageKey("idx_user_limited_credit_grants_source"),
+		index.Fields("source_type", "source_id").
+			Unique().
+			StorageKey("idx_user_limited_credit_grants_recharge_bonus_order").
+			Annotations(entsql.IndexWhere("source_type = 'recharge_bonus' AND source_id IS NOT NULL")),
 	}
 }

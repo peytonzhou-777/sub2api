@@ -31,6 +31,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
+	"github.com/Wei-Shaw/sub2api/ent/rechargebonuscampaign"
+	"github.com/Wei-Shaw/sub2api/ent/rechargebonusparticipation"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/schema"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
@@ -1311,38 +1313,50 @@ func init() {
 	paymentorderDescProviderKey := paymentorderFields[19].Descriptor()
 	// paymentorder.ProviderKeyValidator is a validator for the "provider_key" field. It is called by the builders before save.
 	paymentorder.ProviderKeyValidator = paymentorderDescProviderKey.Validators[0].(func(string) error)
+	// paymentorderDescRechargeBonusCampaignName is the schema descriptor for recharge_bonus_campaign_name field.
+	paymentorderDescRechargeBonusCampaignName := paymentorderFields[22].Descriptor()
+	// paymentorder.RechargeBonusCampaignNameValidator is a validator for the "recharge_bonus_campaign_name" field. It is called by the builders before save.
+	paymentorder.RechargeBonusCampaignNameValidator = paymentorderDescRechargeBonusCampaignName.Validators[0].(func(string) error)
+	// paymentorderDescRechargeBonusRate is the schema descriptor for recharge_bonus_rate field.
+	paymentorderDescRechargeBonusRate := paymentorderFields[23].Descriptor()
+	// paymentorder.DefaultRechargeBonusRate holds the default value on creation for the recharge_bonus_rate field.
+	paymentorder.DefaultRechargeBonusRate = paymentorderDescRechargeBonusRate.Default.(float64)
+	// paymentorderDescRechargeBonusAmount is the schema descriptor for recharge_bonus_amount field.
+	paymentorderDescRechargeBonusAmount := paymentorderFields[24].Descriptor()
+	// paymentorder.DefaultRechargeBonusAmount holds the default value on creation for the recharge_bonus_amount field.
+	paymentorder.DefaultRechargeBonusAmount = paymentorderDescRechargeBonusAmount.Default.(float64)
 	// paymentorderDescStatus is the schema descriptor for status field.
-	paymentorderDescStatus := paymentorderFields[21].Descriptor()
+	paymentorderDescStatus := paymentorderFields[27].Descriptor()
 	// paymentorder.DefaultStatus holds the default value on creation for the status field.
 	paymentorder.DefaultStatus = paymentorderDescStatus.Default.(string)
 	// paymentorder.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	paymentorder.StatusValidator = paymentorderDescStatus.Validators[0].(func(string) error)
 	// paymentorderDescRefundAmount is the schema descriptor for refund_amount field.
-	paymentorderDescRefundAmount := paymentorderFields[22].Descriptor()
+	paymentorderDescRefundAmount := paymentorderFields[28].Descriptor()
 	// paymentorder.DefaultRefundAmount holds the default value on creation for the refund_amount field.
 	paymentorder.DefaultRefundAmount = paymentorderDescRefundAmount.Default.(float64)
 	// paymentorderDescForceRefund is the schema descriptor for force_refund field.
-	paymentorderDescForceRefund := paymentorderFields[25].Descriptor()
+	paymentorderDescForceRefund := paymentorderFields[31].Descriptor()
 	// paymentorder.DefaultForceRefund holds the default value on creation for the force_refund field.
 	paymentorder.DefaultForceRefund = paymentorderDescForceRefund.Default.(bool)
 	// paymentorderDescRefundRequestedBy is the schema descriptor for refund_requested_by field.
-	paymentorderDescRefundRequestedBy := paymentorderFields[28].Descriptor()
+	paymentorderDescRefundRequestedBy := paymentorderFields[34].Descriptor()
 	// paymentorder.RefundRequestedByValidator is a validator for the "refund_requested_by" field. It is called by the builders before save.
 	paymentorder.RefundRequestedByValidator = paymentorderDescRefundRequestedBy.Validators[0].(func(string) error)
 	// paymentorderDescClientIP is the schema descriptor for client_ip field.
-	paymentorderDescClientIP := paymentorderFields[34].Descriptor()
+	paymentorderDescClientIP := paymentorderFields[40].Descriptor()
 	// paymentorder.ClientIPValidator is a validator for the "client_ip" field. It is called by the builders before save.
 	paymentorder.ClientIPValidator = paymentorderDescClientIP.Validators[0].(func(string) error)
 	// paymentorderDescSrcHost is the schema descriptor for src_host field.
-	paymentorderDescSrcHost := paymentorderFields[35].Descriptor()
+	paymentorderDescSrcHost := paymentorderFields[41].Descriptor()
 	// paymentorder.SrcHostValidator is a validator for the "src_host" field. It is called by the builders before save.
 	paymentorder.SrcHostValidator = paymentorderDescSrcHost.Validators[0].(func(string) error)
 	// paymentorderDescCreatedAt is the schema descriptor for created_at field.
-	paymentorderDescCreatedAt := paymentorderFields[37].Descriptor()
+	paymentorderDescCreatedAt := paymentorderFields[43].Descriptor()
 	// paymentorder.DefaultCreatedAt holds the default value on creation for the created_at field.
 	paymentorder.DefaultCreatedAt = paymentorderDescCreatedAt.Default.(func() time.Time)
 	// paymentorderDescUpdatedAt is the schema descriptor for updated_at field.
-	paymentorderDescUpdatedAt := paymentorderFields[38].Descriptor()
+	paymentorderDescUpdatedAt := paymentorderFields[44].Descriptor()
 	// paymentorder.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	paymentorder.DefaultUpdatedAt = paymentorderDescUpdatedAt.Default.(func() time.Time)
 	// paymentorder.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -1673,6 +1687,62 @@ func init() {
 	proxyDescExpiryWarnDays := proxyFields[10].Descriptor()
 	// proxy.DefaultExpiryWarnDays holds the default value on creation for the expiry_warn_days field.
 	proxy.DefaultExpiryWarnDays = proxyDescExpiryWarnDays.Default.(int)
+	rechargebonuscampaignFields := schema.RechargeBonusCampaign{}.Fields()
+	_ = rechargebonuscampaignFields
+	// rechargebonuscampaignDescName is the schema descriptor for name field.
+	rechargebonuscampaignDescName := rechargebonuscampaignFields[0].Descriptor()
+	// rechargebonuscampaign.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	rechargebonuscampaign.NameValidator = func() func(string) error {
+		validators := rechargebonuscampaignDescName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(name string) error {
+			for _, fn := range fns {
+				if err := fn(name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// rechargebonuscampaignDescDescription is the schema descriptor for description field.
+	rechargebonuscampaignDescDescription := rechargebonuscampaignFields[1].Descriptor()
+	// rechargebonuscampaign.DefaultDescription holds the default value on creation for the description field.
+	rechargebonuscampaign.DefaultDescription = rechargebonuscampaignDescDescription.Default.(string)
+	// rechargebonuscampaign.DescriptionValidator is a validator for the "description" field. It is called by the builders before save.
+	rechargebonuscampaign.DescriptionValidator = rechargebonuscampaignDescDescription.Validators[0].(func(string) error)
+	// rechargebonuscampaignDescParticipationLimit is the schema descriptor for participation_limit field.
+	rechargebonuscampaignDescParticipationLimit := rechargebonuscampaignFields[4].Descriptor()
+	// rechargebonuscampaign.DefaultParticipationLimit holds the default value on creation for the participation_limit field.
+	rechargebonuscampaign.DefaultParticipationLimit = rechargebonuscampaignDescParticipationLimit.Default.(int)
+	// rechargebonuscampaignDescCreatedAt is the schema descriptor for created_at field.
+	rechargebonuscampaignDescCreatedAt := rechargebonuscampaignFields[6].Descriptor()
+	// rechargebonuscampaign.DefaultCreatedAt holds the default value on creation for the created_at field.
+	rechargebonuscampaign.DefaultCreatedAt = rechargebonuscampaignDescCreatedAt.Default.(func() time.Time)
+	// rechargebonuscampaignDescUpdatedAt is the schema descriptor for updated_at field.
+	rechargebonuscampaignDescUpdatedAt := rechargebonuscampaignFields[7].Descriptor()
+	// rechargebonuscampaign.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	rechargebonuscampaign.DefaultUpdatedAt = rechargebonuscampaignDescUpdatedAt.Default.(func() time.Time)
+	// rechargebonuscampaign.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	rechargebonuscampaign.UpdateDefaultUpdatedAt = rechargebonuscampaignDescUpdatedAt.UpdateDefault.(func() time.Time)
+	rechargebonusparticipationFields := schema.RechargeBonusParticipation{}.Fields()
+	_ = rechargebonusparticipationFields
+	// rechargebonusparticipationDescCompletedCount is the schema descriptor for completed_count field.
+	rechargebonusparticipationDescCompletedCount := rechargebonusparticipationFields[2].Descriptor()
+	// rechargebonusparticipation.DefaultCompletedCount holds the default value on creation for the completed_count field.
+	rechargebonusparticipation.DefaultCompletedCount = rechargebonusparticipationDescCompletedCount.Default.(int)
+	// rechargebonusparticipationDescCreatedAt is the schema descriptor for created_at field.
+	rechargebonusparticipationDescCreatedAt := rechargebonusparticipationFields[3].Descriptor()
+	// rechargebonusparticipation.DefaultCreatedAt holds the default value on creation for the created_at field.
+	rechargebonusparticipation.DefaultCreatedAt = rechargebonusparticipationDescCreatedAt.Default.(func() time.Time)
+	// rechargebonusparticipationDescUpdatedAt is the schema descriptor for updated_at field.
+	rechargebonusparticipationDescUpdatedAt := rechargebonusparticipationFields[4].Descriptor()
+	// rechargebonusparticipation.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	rechargebonusparticipation.DefaultUpdatedAt = rechargebonusparticipationDescUpdatedAt.Default.(func() time.Time)
+	// rechargebonusparticipation.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	rechargebonusparticipation.UpdateDefaultUpdatedAt = rechargebonusparticipationDescUpdatedAt.UpdateDefault.(func() time.Time)
 	redeemcodeFields := schema.RedeemCode{}.Fields()
 	_ = redeemcodeFields
 	// redeemcodeDescCode is the schema descriptor for code field.

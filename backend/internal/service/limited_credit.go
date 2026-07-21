@@ -10,6 +10,7 @@ import (
 const (
 	LimitedCreditSourceRedeemCode         = "redeem_code"
 	LimitedCreditSourceDefaultUserSetting = "default_user_setting"
+	LimitedCreditSourceRechargeBonus      = "recharge_bonus"
 	LimitedCreditStatusActive             = "active"
 	LimitedCreditStatusDepleted           = "depleted"
 	LimitedCreditStatusExpired            = "expired"
@@ -142,6 +143,35 @@ func (s *LimitedCreditService) GrantFromDefaultSettings(ctx context.Context, use
 	}
 
 	return s.repo.CreateGrantsIndependent(ctx, grants)
+}
+
+// GrantFromRechargeBonus 为一笔充值订单发放固定 30 天有效的限时额度。
+func (s *LimitedCreditService) GrantFromRechargeBonus(
+	ctx context.Context,
+	userID int64,
+	orderID int64,
+	amount float64,
+	grantedAt time.Time,
+) (*LimitedCreditGrant, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("limited credit service is not configured")
+	}
+	if userID <= 0 || orderID <= 0 {
+		return nil, fmt.Errorf("user id and order id must be greater than zero")
+	}
+	if math.IsNaN(amount) || math.IsInf(amount, 0) || amount <= 0 {
+		return nil, fmt.Errorf("recharge bonus amount must be a finite positive number")
+	}
+	sourceID := orderID
+	return s.repo.CreateGrant(ctx, &LimitedCreditGrant{
+		UserID:        userID,
+		SourceType:    LimitedCreditSourceRechargeBonus,
+		SourceID:      &sourceID,
+		InitialAmount: amount,
+		ExpiresAt:     grantedAt.UTC().AddDate(0, 0, RechargeBonusValidityDays),
+		Status:        LimitedCreditStatusActive,
+		Notes:         fmt.Sprintf("充值订单 %d 活动赠送", orderID),
+	})
 }
 
 // ListActive 返回用户尚未过期且仍有可用或冻结额度的批次。

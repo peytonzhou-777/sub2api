@@ -680,6 +680,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/orders/recharge-activities',
+    name: 'AdminRechargeActivities',
+    component: () => import('@/views/admin/orders/AdminRechargeActivitiesView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Recharge Activities',
+      titleKey: 'nav.rechargeActivities',
+      requiresPayment: true
+    }
+  },
+  {
     path: '/admin/orders/plans',
     name: 'AdminPaymentPlans',
     component: () => import('@/views/admin/orders/AdminPaymentPlansView.vue'),

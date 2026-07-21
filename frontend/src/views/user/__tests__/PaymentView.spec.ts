@@ -110,6 +110,7 @@ function checkoutInfoFixture(overrides: Partial<CheckoutInfoResponse> = {}) {
     help_text: '',
     help_image_url: '',
     stripe_publishable_key: '',
+    recharge_bonus_activity: null,
   }
 
   return {
@@ -235,6 +236,97 @@ async function mountSubscriptionConfirm(options: Parameters<typeof checkoutInfoW
   await flushPromises()
   return wrapper
 }
+
+async function mountRechargeWithCampaign(description = '充值越多，赠送越多') {
+  vi.useRealTimers()
+  routeState.path = '/purchase'
+  routeState.query = {}
+  routerReplace.mockReset().mockResolvedValue(undefined)
+  routerPush.mockReset().mockResolvedValue(undefined)
+  routerResolve.mockClear()
+  createOrder.mockReset()
+  refreshUser.mockReset()
+  fetchActiveSubscriptions.mockReset().mockResolvedValue(undefined)
+  showError.mockReset()
+  showInfo.mockReset()
+  showWarning.mockReset()
+  getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({
+    balance_recharge_multiplier: 2,
+    recharge_bonus_activity: {
+      id: 9,
+      name: '暑期充值活动',
+      description,
+      start_at: '2026-07-01T00:00:00Z',
+      end_at: '2026-08-01T00:00:00Z',
+      participation_limit: 2,
+      tiers: [
+        { min_amount: 100, max_amount: 1000, min_rate: 10, max_rate: 10 },
+      ],
+      status: 'active',
+      created_at: '2026-06-01T00:00:00Z',
+      updated_at: '2026-06-01T00:00:00Z',
+      completed_count: 0,
+      remaining_count: 2,
+      validity_days: 30,
+    },
+  }))
+  window.localStorage.clear()
+
+  const wrapper = shallowMount(PaymentView, {
+    global: {
+      stubs: {
+        AppLayout: {
+          template: '<div><slot /></div>',
+        },
+        AmountInput: {
+          template: '<button data-test="amount-input" @click="$emit(\'update:modelValue\', 300)">set</button>',
+        },
+        PaymentMethodSelector: true,
+        Teleport: true,
+        Transition: false,
+      },
+    },
+  })
+  await flushPromises()
+  await flushPromises()
+  return wrapper
+}
+
+describe('PaymentView recharge bonus campaign', () => {
+  it('shows the active campaign name and description above amount selection', async () => {
+    const wrapper = await mountRechargeWithCampaign()
+
+    const panel = wrapper.find('[data-test="recharge-bonus-campaign"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('暑期充值活动')
+    expect(panel.text()).toContain('充值越多，赠送越多')
+  })
+
+  it('shows the campaign name without an empty description placeholder', async () => {
+    const wrapper = await mountRechargeWithCampaign('')
+
+    const panel = wrapper.find('[data-test="recharge-bonus-campaign"]')
+    expect(panel.text()).toContain('暑期充值活动')
+    expect(panel.find('[data-test="recharge-bonus-description"]').exists()).toBe(false)
+  })
+
+  it('shows payment and credited rows together and excludes campaign name from credited row', async () => {
+    const wrapper = await mountRechargeWithCampaign()
+    expect(wrapper.find('[data-test="payment-amount-row"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="credited-amount-row"]').exists()).toBe(false)
+
+    await wrapper.find('[data-test="amount-input"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="payment-amount-row"]').exists()).toBe(true)
+    const creditedRow = wrapper.find('[data-test="credited-amount-row"]')
+    expect(creditedRow.exists()).toBe(true)
+    expect(creditedRow.text()).toContain('$600.00')
+    expect(creditedRow.text()).toContain('$60.00')
+    expect(creditedRow.text()).not.toContain('暑期充值活动')
+    expect(wrapper.find('[data-test="recharge-bonus-limit-hint"]').exists()).toBe(true)
+  })
+})
 
 describe('PaymentView subscription confirmation amounts', () => {
   it('shows converted CNY pay amount using the subscription rate, not the balance multiplier', async () => {

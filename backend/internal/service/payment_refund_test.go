@@ -10,6 +10,7 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -324,6 +325,31 @@ func TestFinishRefundSuccessStatusesFinalize(t *testing.T) {
 				Save(ctx)
 			require.NoError(t, err)
 
+			campaign, err := client.RechargeBonusCampaign.Create().
+				SetName("退款保留赠送").
+				SetDescription("").
+				SetStartAt(time.Now().Add(-time.Hour)).
+				SetEndAt(time.Now().Add(time.Hour)).
+				SetParticipationLimit(1).
+				SetTiers([]domain.RechargeBonusTier{{MinAmount: 0, MaxAmount: 100, MinRate: 10, MaxRate: 10}}).
+				Save(ctx)
+			require.NoError(t, err)
+			participation, err := client.RechargeBonusParticipation.Create().
+				SetCampaignID(campaign.ID).
+				SetUserID(user.ID).
+				SetCompletedCount(1).
+				Save(ctx)
+			require.NoError(t, err)
+			grant, err := client.UserLimitedCreditGrant.Create().
+				SetUserID(user.ID).
+				SetSourceType(LimitedCreditSourceRechargeBonus).
+				SetSourceID(order.ID).
+				SetInitialAmount(10).
+				SetExpiresAt(time.Now().Add(30 * 24 * time.Hour)).
+				SetStatus(LimitedCreditStatusActive).
+				Save(ctx)
+			require.NoError(t, err)
+
 			svc := &PaymentService{entClient: client}
 			plan := &RefundPlan{
 				OrderID:         order.ID,
@@ -356,6 +382,14 @@ func TestFinishRefundSuccessStatusesFinalize(t *testing.T) {
 				Count(ctx)
 			require.NoError(t, err)
 			require.Zero(t, pendingAudits)
+			reloadedParticipation, err := client.RechargeBonusParticipation.Get(ctx, participation.ID)
+			require.NoError(t, err)
+			require.Equal(t, 1, reloadedParticipation.CompletedCount)
+			reloadedGrant, err := client.UserLimitedCreditGrant.Get(ctx, grant.ID)
+			require.NoError(t, err)
+			require.Equal(t, 10.0, reloadedGrant.InitialAmount)
+			require.Equal(t, LimitedCreditStatusActive, reloadedGrant.Status)
+
 		})
 	}
 }

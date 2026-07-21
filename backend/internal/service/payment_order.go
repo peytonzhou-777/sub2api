@@ -165,7 +165,8 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	if tm <= 0 {
 		tm = defaultOrderTimeoutMin
 	}
-	exp := time.Now().Add(time.Duration(tm) * time.Minute)
+	createdAt := time.Now().UTC()
+	exp := createdAt.Add(time.Duration(tm) * time.Minute)
 	outTradeNo, err := s.allocateOutTradeNo(ctx, tx)
 	if err != nil {
 		return nil, err
@@ -176,6 +177,14 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	if sel != nil {
 		selectedInstanceID = strings.TrimSpace(sel.InstanceID)
 		selectedProviderKey = strings.TrimSpace(sel.ProviderKey)
+	}
+	var rechargeBonus *RechargeBonusOrderSnapshot
+	if req.OrderType == payment.OrderTypeBalance && s.rechargeBonusService != nil {
+		txCtx := dbent.NewTxContext(ctx, tx)
+		rechargeBonus, err = s.rechargeBonusService.QuoteOrder(txCtx, req.UserID, orderAmount, createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("quote recharge bonus: %w", err)
+		}
 	}
 	b := tx.PaymentOrder.Create().
 		SetUserID(req.UserID).
@@ -193,6 +202,7 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		SetStatus(OrderStatusPending).
 		SetExpiresAt(exp).
 		SetClientIP(req.ClientIP).
+		SetCreatedAt(createdAt).
 		SetSrcHost(req.SrcHost)
 	if req.SrcURL != "" {
 		b.SetSrcURL(req.SrcURL)
@@ -205,6 +215,13 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	}
 	if providerSnapshot != nil {
 		b.SetProviderSnapshot(providerSnapshot)
+	}
+	if rechargeBonus != nil {
+		b.SetRechargeBonusCampaignID(rechargeBonus.CampaignID).
+			SetRechargeBonusCampaignName(rechargeBonus.CampaignName).
+			SetRechargeBonusRate(rechargeBonus.Rate).
+			SetRechargeBonusAmount(rechargeBonus.Amount).
+			SetRechargeBonusStatus(paymentorder.RechargeBonusStatus(rechargeBonus.Status))
 	}
 	if plan != nil {
 		b.SetPlanID(plan.ID).SetSubscriptionGroupID(plan.GroupID).SetSubscriptionDays(psComputeValidityDays(plan.ValidityDays, plan.ValidityUnit))
@@ -731,26 +748,27 @@ func classifyCreatePaymentError(req CreateOrderRequest, providerKey string, err 
 
 func buildCreateOrderResponse(order *dbent.PaymentOrder, req CreateOrderRequest, payAmount float64, sel *payment.InstanceSelection, pr *payment.CreatePaymentResponse, resultType payment.CreatePaymentResultType) *CreateOrderResponse {
 	return &CreateOrderResponse{
-		OrderID:      order.ID,
-		Amount:       order.Amount,
-		PayAmount:    payAmount,
-		FeeRate:      order.FeeRate,
-		Status:       OrderStatusPending,
-		ResultType:   resultType,
-		PaymentType:  req.PaymentType,
-		OutTradeNo:   order.OutTradeNo,
-		PayURL:       pr.PayURL,
-		QRCode:       pr.QRCode,
-		ClientSecret: pr.ClientSecret,
-		IntentID:     pr.IntentID,
-		Currency:     pr.Currency,
-		CountryCode:  pr.CountryCode,
-		PaymentEnv:   pr.PaymentEnv,
-		OAuth:        pr.OAuth,
-		JSAPI:        pr.JSAPI,
-		JSAPIPayload: pr.JSAPI,
-		ExpiresAt:    order.ExpiresAt,
-		PaymentMode:  sel.PaymentMode,
+		OrderID:       order.ID,
+		Amount:        order.Amount,
+		PayAmount:     payAmount,
+		FeeRate:       order.FeeRate,
+		Status:        OrderStatusPending,
+		ResultType:    resultType,
+		PaymentType:   req.PaymentType,
+		OutTradeNo:    order.OutTradeNo,
+		PayURL:        pr.PayURL,
+		QRCode:        pr.QRCode,
+		ClientSecret:  pr.ClientSecret,
+		IntentID:      pr.IntentID,
+		Currency:      pr.Currency,
+		CountryCode:   pr.CountryCode,
+		PaymentEnv:    pr.PaymentEnv,
+		OAuth:         pr.OAuth,
+		JSAPI:         pr.JSAPI,
+		JSAPIPayload:  pr.JSAPI,
+		ExpiresAt:     order.ExpiresAt,
+		PaymentMode:   sel.PaymentMode,
+		RechargeBonus: rechargeBonusSnapshotFromOrder(order),
 	}
 }
 

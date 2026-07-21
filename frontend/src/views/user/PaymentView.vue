@@ -45,6 +45,16 @@
               <p class="text-gray-500 dark:text-gray-400">{{ t('payment.notAvailable') }}</p>
             </div>
             <template v-else>
+            <div v-if="checkout.recharge_bonus_activity" data-test="recharge-bonus-campaign" class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/30">
+              <div class="flex items-start gap-3">
+                <Icon name="gift" size="md" class="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
+                <div class="min-w-0">
+                  <p class="text-xs font-medium text-red-600 dark:text-red-400">{{ t('payment.rechargeBonus.title') }}</p>
+                  <h3 class="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">{{ checkout.recharge_bonus_activity.name }}</h3>
+                  <p v-if="checkout.recharge_bonus_activity.description" data-test="recharge-bonus-description" class="mt-1 whitespace-pre-line text-sm leading-5 text-gray-600 dark:text-gray-300">{{ checkout.recharge_bonus_activity.description }}</p>
+                </div>
+              </div>
+            </div>
             <div class="card p-6">
               <AmountInput
                 v-model="amount"
@@ -63,10 +73,25 @@
             </div>
             <div v-if="validAmount > 0" class="card p-6">
               <div class="space-y-2 text-sm">
-                <div class="flex justify-between">
+                <div data-test="payment-amount-row" class="flex justify-between">
                   <span class="text-gray-500 dark:text-gray-400">{{ t('payment.paymentAmount') }}</span>
                   <span class="text-gray-900 dark:text-white">{{ formatSelectedPaymentAmount(validAmount) }}</span>
                 </div>
+                <div data-test="credited-amount-row" class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                  <span class="text-gray-500 dark:text-gray-400">{{ t('payment.creditedBalance') }}</span>
+                  <span class="flex flex-wrap justify-end gap-x-2 text-right">
+                    <span class="text-gray-900 dark:text-white">${{ creditedAmount.toFixed(2) }}</span>
+                    <span v-if="rechargeBonusAmount > 0" class="font-semibold text-red-600 dark:text-red-400">
+                      +${{ formatLimitedCreditAmount(rechargeBonusAmount) }} {{ t('payment.rechargeBonus.limitedCreditWithDays', { days: rechargeBonusValidityDays }) }}
+                    </span>
+                  </span>
+                </div>
+                <p v-if="rechargeBonusAmount > 0 && hasLimitedRechargeBonus" data-test="recharge-bonus-limit-hint" class="text-xs text-red-600 dark:text-red-400">
+                  {{ t('payment.rechargeBonus.limitHint') }}
+                </p>
+                <p v-if="balanceRechargeMultiplier !== 1" class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('payment.rechargeRatePreview', { usd: balanceRechargeMultiplier.toFixed(2) }) }}
+                </p>
                 <div v-if="feeRate > 0" class="flex justify-between">
                   <span class="text-gray-500 dark:text-gray-400">{{ t('payment.fee') }} ({{ feeRate }}%)</span>
                   <span class="text-gray-900 dark:text-white">{{ formatSelectedPaymentAmount(feeAmount) }}</span>
@@ -75,13 +100,6 @@
                   <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('payment.actualPay') }}</span>
                   <span class="text-lg font-bold text-primary-600 dark:text-primary-400">{{ formatSelectedPaymentAmount(totalAmount) }}</span>
                 </div>
-                <div v-if="balanceRechargeMultiplier !== 1" class="flex justify-between" :class="{ 'border-t border-gray-200 pt-2 dark:border-dark-600': feeRate <= 0 }">
-                  <span class="text-gray-500 dark:text-gray-400">{{ t('payment.creditedBalance') }}</span>
-                  <span class="text-gray-900 dark:text-white">${{ creditedAmount.toFixed(2) }}</span>
-                </div>
-                <p v-if="balanceRechargeMultiplier !== 1" class="border-t border-gray-200 pt-2 text-xs text-gray-500 dark:border-dark-600 dark:text-gray-400">
-                  {{ t('payment.rechargeRatePreview', { usd: balanceRechargeMultiplier.toFixed(2) }) }}
-                </p>
               </div>
             </div>
             <button :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmit || submitting" @click="handleSubmitRecharge">
@@ -266,6 +284,7 @@ import { useAppStore } from '@/stores'
 import { paymentAPI } from '@/api/payment'
 import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiError'
 import { isMobileDevice } from '@/utils/device'
+import { calculateCreditedBalancePreview, calculateRechargeBonusPreview } from '@/utils/rechargeBonus'
 import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel, type PeakRateFields } from '@/utils/peak-rate'
 import type { SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType } from '@/types/payment'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -503,6 +522,7 @@ function onPaymentSettled() {
 const checkout = ref<CheckoutInfoResponse>({
   methods: {}, global_min: 0, global_max: 0,
   plans: [], balance_disabled: false, balance_recharge_multiplier: 1, subscription_usd_to_cny_rate: 0, recharge_fee_rate: 0, help_text: '', help_image_url: '', stripe_publishable_key: '',
+  recharge_bonus_activity: null,
 })
 
 const tabs = computed(() => {
@@ -524,7 +544,26 @@ const subscriptionUsdToCnyRate = computed(() => {
   const rate = checkout.value.subscription_usd_to_cny_rate
   return Number.isFinite(rate) && rate > 0 ? rate : 0
 })
-const creditedAmount = computed(() => Math.round((validAmount.value * balanceRechargeMultiplier.value) * 100) / 100)
+const creditedAmount = computed(() =>
+  calculateCreditedBalancePreview(validAmount.value, balanceRechargeMultiplier.value),
+)
+
+// 按后端一致的十进制阶梯规则预估本次充值赠送额度。
+const rechargeBonusAmount = computed(() => {
+  const activity = checkout.value.recharge_bonus_activity
+  if (!activity || activity.remaining_count === 0 || creditedAmount.value <= 0) return 0
+  return calculateRechargeBonusPreview(creditedAmount.value, activity.tiers)
+})
+const rechargeBonusValidityDays = computed(() => checkout.value.recharge_bonus_activity?.validity_days ?? 30)
+const hasLimitedRechargeBonus = computed(() => (checkout.value.recharge_bonus_activity?.participation_limit ?? 0) > 0)
+
+// 限时额度最多保留 8 位小数，且与普通额度一样至少展示 2 位。
+function formatLimitedCreditAmount(value: number): string {
+  const [integer, fraction = ''] = value.toFixed(8).split('.')
+  const trimmed = fraction.replace(/0+$/, '')
+  const normalized = trimmed.length >= 2 ? trimmed : trimmed.padEnd(2, '0')
+  return integer + '.' + normalized
+}
 
 // Adaptive grid: center single card, 2-col for 2 plans, 3-col for 3+
 const planGridClass = computed(() => {

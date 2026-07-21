@@ -110,6 +110,7 @@ type CreateOrderResponse struct {
 	PaymentMode                   string                          `json:"payment_mode,omitempty"`
 	ResumeToken                   string                          `json:"resume_token,omitempty"`
 	AlipayMobilePrecreateDeepLink bool                            `json:"alipay_mobile_precreate_deep_link,omitempty"`
+	RechargeBonus                 *RechargeBonusOrderSnapshot     `json:"recharge_bonus,omitempty"`
 }
 
 type OrderListParams struct {
@@ -190,6 +191,7 @@ type PaymentService struct {
 	resumeService            *PaymentResumeService
 	affiliateService         *AffiliateService
 	notificationEmailService *NotificationEmailService
+	rechargeBonusService     *RechargeBonusService
 }
 
 func NewPaymentService(entClient *dbent.Client, registry *payment.Registry, loadBalancer payment.LoadBalancer, redeemService *RedeemService, subscriptionSvc *SubscriptionService, configService *PaymentConfigService, userRepo UserRepository, groupRepo GroupRepository, affiliateService *AffiliateService) *PaymentService {
@@ -200,6 +202,11 @@ func NewPaymentService(entClient *dbent.Client, registry *payment.Registry, load
 
 func (s *PaymentService) SetNotificationEmailService(notificationEmailService *NotificationEmailService) {
 	s.notificationEmailService = notificationEmailService
+}
+
+// SetRechargeBonusService 注入充值赠送活动服务。
+func (s *PaymentService) SetRechargeBonusService(rechargeBonusService *RechargeBonusService) {
+	s.rechargeBonusService = rechargeBonusService
 }
 
 // --- Provider Registry ---

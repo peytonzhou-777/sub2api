@@ -190,6 +190,7 @@ export default {
     paymentDashboard: 'Payment Dashboard',
     paymentConfig: 'Payment Config',
     paymentPlans: 'Plans',
+    rechargeActivities: 'Recharge Activities',
     channelManagement: 'Channels',
     channelPricing: 'Channel Pricing',
     channelMonitor: 'Channel Monitor',

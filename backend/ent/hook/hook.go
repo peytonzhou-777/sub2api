@@ -321,6 +321,30 @@ func (f ProxyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProxyMutation", m)
 }
 
+// The RechargeBonusCampaignFunc type is an adapter to allow the use of ordinary
+// function as RechargeBonusCampaign mutator.
+type RechargeBonusCampaignFunc func(context.Context, *ent.RechargeBonusCampaignMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RechargeBonusCampaignFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RechargeBonusCampaignMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RechargeBonusCampaignMutation", m)
+}
+
+// The RechargeBonusParticipationFunc type is an adapter to allow the use of ordinary
+// function as RechargeBonusParticipation mutator.
+type RechargeBonusParticipationFunc func(context.Context, *ent.RechargeBonusParticipationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RechargeBonusParticipationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RechargeBonusParticipationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RechargeBonusParticipationMutation", m)
+}
+
 // The RedeemCodeFunc type is an adapter to allow the use of ordinary
 // function as RedeemCode mutator.
 type RedeemCodeFunc func(context.Context, *ent.RedeemCodeMutation) (ent.Value, error)

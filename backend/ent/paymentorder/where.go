@@ -155,6 +155,31 @@ func ProviderKey(v string) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldEQ(FieldProviderKey, v))
 }
 
+// RechargeBonusCampaignID applies equality check predicate on the "recharge_bonus_campaign_id" field. It's identical to RechargeBonusCampaignIDEQ.
+func RechargeBonusCampaignID(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusCampaignID, v))
+}
+
+// RechargeBonusCampaignName applies equality check predicate on the "recharge_bonus_campaign_name" field. It's identical to RechargeBonusCampaignNameEQ.
+func RechargeBonusCampaignName(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusCampaignName, v))
+}
+
+// RechargeBonusRate applies equality check predicate on the "recharge_bonus_rate" field. It's identical to RechargeBonusRateEQ.
+func RechargeBonusRate(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusRate, v))
+}
+
+// RechargeBonusAmount applies equality check predicate on the "recharge_bonus_amount" field. It's identical to RechargeBonusAmountEQ.
+func RechargeBonusAmount(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusAmount, v))
+}
+
+// RechargeBonusExpiresAt applies equality check predicate on the "recharge_bonus_expires_at" field. It's identical to RechargeBonusExpiresAtEQ.
+func RechargeBonusExpiresAt(v time.Time) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusExpiresAt, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldEQ(FieldStatus, v))
@@ -1448,6 +1473,281 @@ func ProviderSnapshotIsNil() predicate.PaymentOrder {
 // ProviderSnapshotNotNil applies the NotNil predicate on the "provider_snapshot" field.
 func ProviderSnapshotNotNil() predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldNotNull(FieldProviderSnapshot))
+}
+
+// RechargeBonusCampaignIDEQ applies the EQ predicate on the "recharge_bonus_campaign_id" field.
+func RechargeBonusCampaignIDEQ(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusCampaignID, v))
+}
+
+// RechargeBonusCampaignIDNEQ applies the NEQ predicate on the "recharge_bonus_campaign_id" field.
+func RechargeBonusCampaignIDNEQ(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldRechargeBonusCampaignID, v))
+}
+
+// RechargeBonusCampaignIDIn applies the In predicate on the "recharge_bonus_campaign_id" field.
+func RechargeBonusCampaignIDIn(vs ...int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldRechargeBonusCampaignID, vs...))
+}
+
+// RechargeBonusCampaignIDNotIn applies the NotIn predicate on the "recharge_bonus_campaign_id" field.
+func RechargeBonusCampaignIDNotIn(vs ...int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldRechargeBonusCampaignID, vs...))
+}
+
+// RechargeBonusCampaignIDGT applies the GT predicate on the "recharge_bonus_campaign_id" field.
+func RechargeBonusCampaignIDGT(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldRechargeBonusCampaignID, v))
+}
+
+// RechargeBonusCampaignIDGTE applies the GTE predicate on the "recharge_bonus_campaign_id" field.
+func RechargeBonusCampaignIDGTE(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldRechargeBonusCampaignID, v))
+}
+
+// RechargeBonusCampaignIDLT applies the LT predicate on the "recharge_bonus_campaign_id" field.
+func RechargeBonusCampaignIDLT(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldRechargeBonusCampaignID, v))
+}
+
+// RechargeBonusCampaignIDLTE applies the LTE predicate on the "recharge_bonus_campaign_id" field.
+func RechargeBonusCampaignIDLTE(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldRechargeBonusCampaignID, v))
+}
+
+// RechargeBonusCampaignIDIsNil applies the IsNil predicate on the "recharge_bonus_campaign_id" field.
+func RechargeBonusCampaignIDIsNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIsNull(FieldRechargeBonusCampaignID))
+}
+
+// RechargeBonusCampaignIDNotNil applies the NotNil predicate on the "recharge_bonus_campaign_id" field.
+func RechargeBonusCampaignIDNotNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotNull(FieldRechargeBonusCampaignID))
+}
+
+// RechargeBonusCampaignNameEQ applies the EQ predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameEQ(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusCampaignName, v))
+}
+
+// RechargeBonusCampaignNameNEQ applies the NEQ predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameNEQ(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldRechargeBonusCampaignName, v))
+}
+
+// RechargeBonusCampaignNameIn applies the In predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameIn(vs ...string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldRechargeBonusCampaignName, vs...))
+}
+
+// RechargeBonusCampaignNameNotIn applies the NotIn predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameNotIn(vs ...string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldRechargeBonusCampaignName, vs...))
+}
+
+// RechargeBonusCampaignNameGT applies the GT predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameGT(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldRechargeBonusCampaignName, v))
+}
+
+// RechargeBonusCampaignNameGTE applies the GTE predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameGTE(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldRechargeBonusCampaignName, v))
+}
+
+// RechargeBonusCampaignNameLT applies the LT predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameLT(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldRechargeBonusCampaignName, v))
+}
+
+// RechargeBonusCampaignNameLTE applies the LTE predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameLTE(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldRechargeBonusCampaignName, v))
+}
+
+// RechargeBonusCampaignNameContains applies the Contains predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameContains(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldContains(FieldRechargeBonusCampaignName, v))
+}
+
+// RechargeBonusCampaignNameHasPrefix applies the HasPrefix predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameHasPrefix(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldHasPrefix(FieldRechargeBonusCampaignName, v))
+}
+
+// RechargeBonusCampaignNameHasSuffix applies the HasSuffix predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameHasSuffix(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldHasSuffix(FieldRechargeBonusCampaignName, v))
+}
+
+// RechargeBonusCampaignNameIsNil applies the IsNil predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameIsNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIsNull(FieldRechargeBonusCampaignName))
+}
+
+// RechargeBonusCampaignNameNotNil applies the NotNil predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameNotNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotNull(FieldRechargeBonusCampaignName))
+}
+
+// RechargeBonusCampaignNameEqualFold applies the EqualFold predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameEqualFold(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEqualFold(FieldRechargeBonusCampaignName, v))
+}
+
+// RechargeBonusCampaignNameContainsFold applies the ContainsFold predicate on the "recharge_bonus_campaign_name" field.
+func RechargeBonusCampaignNameContainsFold(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldContainsFold(FieldRechargeBonusCampaignName, v))
+}
+
+// RechargeBonusRateEQ applies the EQ predicate on the "recharge_bonus_rate" field.
+func RechargeBonusRateEQ(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusRate, v))
+}
+
+// RechargeBonusRateNEQ applies the NEQ predicate on the "recharge_bonus_rate" field.
+func RechargeBonusRateNEQ(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldRechargeBonusRate, v))
+}
+
+// RechargeBonusRateIn applies the In predicate on the "recharge_bonus_rate" field.
+func RechargeBonusRateIn(vs ...float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldRechargeBonusRate, vs...))
+}
+
+// RechargeBonusRateNotIn applies the NotIn predicate on the "recharge_bonus_rate" field.
+func RechargeBonusRateNotIn(vs ...float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldRechargeBonusRate, vs...))
+}
+
+// RechargeBonusRateGT applies the GT predicate on the "recharge_bonus_rate" field.
+func RechargeBonusRateGT(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldRechargeBonusRate, v))
+}
+
+// RechargeBonusRateGTE applies the GTE predicate on the "recharge_bonus_rate" field.
+func RechargeBonusRateGTE(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldRechargeBonusRate, v))
+}
+
+// RechargeBonusRateLT applies the LT predicate on the "recharge_bonus_rate" field.
+func RechargeBonusRateLT(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldRechargeBonusRate, v))
+}
+
+// RechargeBonusRateLTE applies the LTE predicate on the "recharge_bonus_rate" field.
+func RechargeBonusRateLTE(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldRechargeBonusRate, v))
+}
+
+// RechargeBonusAmountEQ applies the EQ predicate on the "recharge_bonus_amount" field.
+func RechargeBonusAmountEQ(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusAmount, v))
+}
+
+// RechargeBonusAmountNEQ applies the NEQ predicate on the "recharge_bonus_amount" field.
+func RechargeBonusAmountNEQ(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldRechargeBonusAmount, v))
+}
+
+// RechargeBonusAmountIn applies the In predicate on the "recharge_bonus_amount" field.
+func RechargeBonusAmountIn(vs ...float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldRechargeBonusAmount, vs...))
+}
+
+// RechargeBonusAmountNotIn applies the NotIn predicate on the "recharge_bonus_amount" field.
+func RechargeBonusAmountNotIn(vs ...float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldRechargeBonusAmount, vs...))
+}
+
+// RechargeBonusAmountGT applies the GT predicate on the "recharge_bonus_amount" field.
+func RechargeBonusAmountGT(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldRechargeBonusAmount, v))
+}
+
+// RechargeBonusAmountGTE applies the GTE predicate on the "recharge_bonus_amount" field.
+func RechargeBonusAmountGTE(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldRechargeBonusAmount, v))
+}
+
+// RechargeBonusAmountLT applies the LT predicate on the "recharge_bonus_amount" field.
+func RechargeBonusAmountLT(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldRechargeBonusAmount, v))
+}
+
+// RechargeBonusAmountLTE applies the LTE predicate on the "recharge_bonus_amount" field.
+func RechargeBonusAmountLTE(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldRechargeBonusAmount, v))
+}
+
+// RechargeBonusStatusEQ applies the EQ predicate on the "recharge_bonus_status" field.
+func RechargeBonusStatusEQ(v RechargeBonusStatus) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusStatus, v))
+}
+
+// RechargeBonusStatusNEQ applies the NEQ predicate on the "recharge_bonus_status" field.
+func RechargeBonusStatusNEQ(v RechargeBonusStatus) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldRechargeBonusStatus, v))
+}
+
+// RechargeBonusStatusIn applies the In predicate on the "recharge_bonus_status" field.
+func RechargeBonusStatusIn(vs ...RechargeBonusStatus) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldRechargeBonusStatus, vs...))
+}
+
+// RechargeBonusStatusNotIn applies the NotIn predicate on the "recharge_bonus_status" field.
+func RechargeBonusStatusNotIn(vs ...RechargeBonusStatus) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldRechargeBonusStatus, vs...))
+}
+
+// RechargeBonusExpiresAtEQ applies the EQ predicate on the "recharge_bonus_expires_at" field.
+func RechargeBonusExpiresAtEQ(v time.Time) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusExpiresAt, v))
+}
+
+// RechargeBonusExpiresAtNEQ applies the NEQ predicate on the "recharge_bonus_expires_at" field.
+func RechargeBonusExpiresAtNEQ(v time.Time) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldRechargeBonusExpiresAt, v))
+}
+
+// RechargeBonusExpiresAtIn applies the In predicate on the "recharge_bonus_expires_at" field.
+func RechargeBonusExpiresAtIn(vs ...time.Time) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldRechargeBonusExpiresAt, vs...))
+}
+
+// RechargeBonusExpiresAtNotIn applies the NotIn predicate on the "recharge_bonus_expires_at" field.
+func RechargeBonusExpiresAtNotIn(vs ...time.Time) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldRechargeBonusExpiresAt, vs...))
+}
+
+// RechargeBonusExpiresAtGT applies the GT predicate on the "recharge_bonus_expires_at" field.
+func RechargeBonusExpiresAtGT(v time.Time) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldRechargeBonusExpiresAt, v))
+}
+
+// RechargeBonusExpiresAtGTE applies the GTE predicate on the "recharge_bonus_expires_at" field.
+func RechargeBonusExpiresAtGTE(v time.Time) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldRechargeBonusExpiresAt, v))
+}
+
+// RechargeBonusExpiresAtLT applies the LT predicate on the "recharge_bonus_expires_at" field.
+func RechargeBonusExpiresAtLT(v time.Time) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldRechargeBonusExpiresAt, v))
+}
+
+// RechargeBonusExpiresAtLTE applies the LTE predicate on the "recharge_bonus_expires_at" field.
+func RechargeBonusExpiresAtLTE(v time.Time) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldRechargeBonusExpiresAt, v))
+}
+
+// RechargeBonusExpiresAtIsNil applies the IsNil predicate on the "recharge_bonus_expires_at" field.
+func RechargeBonusExpiresAtIsNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIsNull(FieldRechargeBonusExpiresAt))
+}
+
+// RechargeBonusExpiresAtNotNil applies the NotNil predicate on the "recharge_bonus_expires_at" field.
+func RechargeBonusExpiresAtNotNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotNull(FieldRechargeBonusExpiresAt))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

@@ -39,6 +39,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
+	"github.com/Wei-Shaw/sub2api/ent/rechargebonuscampaign"
+	"github.com/Wei-Shaw/sub2api/ent/rechargebonusparticipation"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
@@ -92,6 +94,8 @@ const (
 	TypePromoCode                     = "PromoCode"
 	TypePromoCodeUsage                = "PromoCodeUsage"
 	TypeProxy                         = "Proxy"
+	TypeRechargeBonusCampaign         = "RechargeBonusCampaign"
+	TypeRechargeBonusParticipation    = "RechargeBonusParticipation"
 	TypeRedeemCode                    = "RedeemCode"
 	TypeSecuritySecret                = "SecuritySecret"
 	TypeSetting                       = "Setting"
@@ -28728,60 +28732,69 @@ func (m *PaymentAuditLogMutation) ResetEdge(name string) error {
 // PaymentOrderMutation represents an operation that mutates the PaymentOrder nodes in the graph.
 type PaymentOrderMutation struct {
 	config
-	op                       Op
-	typ                      string
-	id                       *int64
-	user_email               *string
-	user_name                *string
-	user_notes               *string
-	amount                   *float64
-	addamount                *float64
-	pay_amount               *float64
-	addpay_amount            *float64
-	fee_rate                 *float64
-	addfee_rate              *float64
-	recharge_code            *string
-	out_trade_no             *string
-	payment_type             *string
-	payment_trade_no         *string
-	pay_url                  *string
-	qr_code                  *string
-	qr_code_img              *string
-	order_type               *string
-	plan_id                  *int64
-	addplan_id               *int64
-	subscription_group_id    *int64
-	addsubscription_group_id *int64
-	subscription_days        *int
-	addsubscription_days     *int
-	provider_instance_id     *string
-	provider_key             *string
-	provider_snapshot        *map[string]interface{}
-	status                   *string
-	refund_amount            *float64
-	addrefund_amount         *float64
-	refund_reason            *string
-	refund_at                *time.Time
-	force_refund             *bool
-	refund_requested_at      *time.Time
-	refund_request_reason    *string
-	refund_requested_by      *string
-	expires_at               *time.Time
-	paid_at                  *time.Time
-	completed_at             *time.Time
-	failed_at                *time.Time
-	failed_reason            *string
-	client_ip                *string
-	src_host                 *string
-	src_url                  *string
-	created_at               *time.Time
-	updated_at               *time.Time
-	clearedFields            map[string]struct{}
-	user                     *int64
-	cleareduser              bool
-	done                     bool
-	oldValue                 func(context.Context) (*PaymentOrder, error)
-	predicates               []predicate.PaymentOrder
+	op                            Op
+	typ                           string
+	id                            *int64
+	user_email                    *string
+	user_name                     *string
+	user_notes                    *string
+	amount                        *float64
+	addamount                     *float64
+	pay_amount                    *float64
+	addpay_amount                 *float64
+	fee_rate                      *float64
+	addfee_rate                   *float64
+	recharge_code                 *string
+	out_trade_no                  *string
+	payment_type                  *string
+	payment_trade_no              *string
+	pay_url                       *string
+	qr_code                       *string
+	qr_code_img                   *string
+	order_type                    *string
+	plan_id                       *int64
+	addplan_id                    *int64
+	subscription_group_id         *int64
+	addsubscription_group_id      *int64
+	subscription_days             *int
+	addsubscription_days          *int
+	provider_instance_id          *string
+	provider_key                  *string
+	provider_snapshot             *map[string]interface{}
+	recharge_bonus_campaign_id    *int64
+	addrecharge_bonus_campaign_id *int64
+	recharge_bonus_campaign_name  *string
+	recharge_bonus_rate           *float64
+	addrecharge_bonus_rate        *float64
+	recharge_bonus_amount         *float64
+	addrecharge_bonus_amount      *float64
+	recharge_bonus_status         *paymentorder.RechargeBonusStatus
+	recharge_bonus_expires_at     *time.Time
+	status                        *string
+	refund_amount                 *float64
+	addrefund_amount              *float64
+	refund_reason                 *string
+	refund_at                     *time.Time
+	force_refund                  *bool
+	refund_requested_at           *time.Time
+	refund_request_reason         *string
+	refund_requested_by           *string
+	expires_at                    *time.Time
+	paid_at                       *time.Time
+	completed_at                  *time.Time
+	failed_at                     *time.Time
+	failed_reason                 *string
+	client_ip                     *string
+	src_host                      *string
+	src_url                       *string
+	created_at                    *time.Time
+	updated_at                    *time.Time
+	clearedFields                 map[string]struct{}
+	user                          *int64
+	cleareduser                   bool
+	done                          bool
+	oldValue                      func(context.Context) (*PaymentOrder, error)
+	predicates                    []predicate.PaymentOrder
 }
 
 var _ ent.Mutation = (*PaymentOrderMutation)(nil)
@@ -29891,6 +29904,322 @@ func (m *PaymentOrderMutation) ResetProviderSnapshot() {
 	delete(m.clearedFields, paymentorder.FieldProviderSnapshot)
 }
 
+// SetRechargeBonusCampaignID sets the "recharge_bonus_campaign_id" field.
+func (m *PaymentOrderMutation) SetRechargeBonusCampaignID(i int64) {
+	m.recharge_bonus_campaign_id = &i
+	m.addrecharge_bonus_campaign_id = nil
+}
+
+// RechargeBonusCampaignID returns the value of the "recharge_bonus_campaign_id" field in the mutation.
+func (m *PaymentOrderMutation) RechargeBonusCampaignID() (r int64, exists bool) {
+	v := m.recharge_bonus_campaign_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRechargeBonusCampaignID returns the old "recharge_bonus_campaign_id" field's value of the PaymentOrder entity.
+// If the PaymentOrder object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentOrderMutation) OldRechargeBonusCampaignID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRechargeBonusCampaignID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRechargeBonusCampaignID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRechargeBonusCampaignID: %w", err)
+	}
+	return oldValue.RechargeBonusCampaignID, nil
+}
+
+// AddRechargeBonusCampaignID adds i to the "recharge_bonus_campaign_id" field.
+func (m *PaymentOrderMutation) AddRechargeBonusCampaignID(i int64) {
+	if m.addrecharge_bonus_campaign_id != nil {
+		*m.addrecharge_bonus_campaign_id += i
+	} else {
+		m.addrecharge_bonus_campaign_id = &i
+	}
+}
+
+// AddedRechargeBonusCampaignID returns the value that was added to the "recharge_bonus_campaign_id" field in this mutation.
+func (m *PaymentOrderMutation) AddedRechargeBonusCampaignID() (r int64, exists bool) {
+	v := m.addrecharge_bonus_campaign_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearRechargeBonusCampaignID clears the value of the "recharge_bonus_campaign_id" field.
+func (m *PaymentOrderMutation) ClearRechargeBonusCampaignID() {
+	m.recharge_bonus_campaign_id = nil
+	m.addrecharge_bonus_campaign_id = nil
+	m.clearedFields[paymentorder.FieldRechargeBonusCampaignID] = struct{}{}
+}
+
+// RechargeBonusCampaignIDCleared returns if the "recharge_bonus_campaign_id" field was cleared in this mutation.
+func (m *PaymentOrderMutation) RechargeBonusCampaignIDCleared() bool {
+	_, ok := m.clearedFields[paymentorder.FieldRechargeBonusCampaignID]
+	return ok
+}
+
+// ResetRechargeBonusCampaignID resets all changes to the "recharge_bonus_campaign_id" field.
+func (m *PaymentOrderMutation) ResetRechargeBonusCampaignID() {
+	m.recharge_bonus_campaign_id = nil
+	m.addrecharge_bonus_campaign_id = nil
+	delete(m.clearedFields, paymentorder.FieldRechargeBonusCampaignID)
+}
+
+// SetRechargeBonusCampaignName sets the "recharge_bonus_campaign_name" field.
+func (m *PaymentOrderMutation) SetRechargeBonusCampaignName(s string) {
+	m.recharge_bonus_campaign_name = &s
+}
+
+// RechargeBonusCampaignName returns the value of the "recharge_bonus_campaign_name" field in the mutation.
+func (m *PaymentOrderMutation) RechargeBonusCampaignName() (r string, exists bool) {
+	v := m.recharge_bonus_campaign_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRechargeBonusCampaignName returns the old "recharge_bonus_campaign_name" field's value of the PaymentOrder entity.
+// If the PaymentOrder object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentOrderMutation) OldRechargeBonusCampaignName(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRechargeBonusCampaignName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRechargeBonusCampaignName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRechargeBonusCampaignName: %w", err)
+	}
+	return oldValue.RechargeBonusCampaignName, nil
+}
+
+// ClearRechargeBonusCampaignName clears the value of the "recharge_bonus_campaign_name" field.
+func (m *PaymentOrderMutation) ClearRechargeBonusCampaignName() {
+	m.recharge_bonus_campaign_name = nil
+	m.clearedFields[paymentorder.FieldRechargeBonusCampaignName] = struct{}{}
+}
+
+// RechargeBonusCampaignNameCleared returns if the "recharge_bonus_campaign_name" field was cleared in this mutation.
+func (m *PaymentOrderMutation) RechargeBonusCampaignNameCleared() bool {
+	_, ok := m.clearedFields[paymentorder.FieldRechargeBonusCampaignName]
+	return ok
+}
+
+// ResetRechargeBonusCampaignName resets all changes to the "recharge_bonus_campaign_name" field.
+func (m *PaymentOrderMutation) ResetRechargeBonusCampaignName() {
+	m.recharge_bonus_campaign_name = nil
+	delete(m.clearedFields, paymentorder.FieldRechargeBonusCampaignName)
+}
+
+// SetRechargeBonusRate sets the "recharge_bonus_rate" field.
+func (m *PaymentOrderMutation) SetRechargeBonusRate(f float64) {
+	m.recharge_bonus_rate = &f
+	m.addrecharge_bonus_rate = nil
+}
+
+// RechargeBonusRate returns the value of the "recharge_bonus_rate" field in the mutation.
+func (m *PaymentOrderMutation) RechargeBonusRate() (r float64, exists bool) {
+	v := m.recharge_bonus_rate
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRechargeBonusRate returns the old "recharge_bonus_rate" field's value of the PaymentOrder entity.
+// If the PaymentOrder object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentOrderMutation) OldRechargeBonusRate(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRechargeBonusRate is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRechargeBonusRate requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRechargeBonusRate: %w", err)
+	}
+	return oldValue.RechargeBonusRate, nil
+}
+
+// AddRechargeBonusRate adds f to the "recharge_bonus_rate" field.
+func (m *PaymentOrderMutation) AddRechargeBonusRate(f float64) {
+	if m.addrecharge_bonus_rate != nil {
+		*m.addrecharge_bonus_rate += f
+	} else {
+		m.addrecharge_bonus_rate = &f
+	}
+}
+
+// AddedRechargeBonusRate returns the value that was added to the "recharge_bonus_rate" field in this mutation.
+func (m *PaymentOrderMutation) AddedRechargeBonusRate() (r float64, exists bool) {
+	v := m.addrecharge_bonus_rate
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRechargeBonusRate resets all changes to the "recharge_bonus_rate" field.
+func (m *PaymentOrderMutation) ResetRechargeBonusRate() {
+	m.recharge_bonus_rate = nil
+	m.addrecharge_bonus_rate = nil
+}
+
+// SetRechargeBonusAmount sets the "recharge_bonus_amount" field.
+func (m *PaymentOrderMutation) SetRechargeBonusAmount(f float64) {
+	m.recharge_bonus_amount = &f
+	m.addrecharge_bonus_amount = nil
+}
+
+// RechargeBonusAmount returns the value of the "recharge_bonus_amount" field in the mutation.
+func (m *PaymentOrderMutation) RechargeBonusAmount() (r float64, exists bool) {
+	v := m.recharge_bonus_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRechargeBonusAmount returns the old "recharge_bonus_amount" field's value of the PaymentOrder entity.
+// If the PaymentOrder object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentOrderMutation) OldRechargeBonusAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRechargeBonusAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRechargeBonusAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRechargeBonusAmount: %w", err)
+	}
+	return oldValue.RechargeBonusAmount, nil
+}
+
+// AddRechargeBonusAmount adds f to the "recharge_bonus_amount" field.
+func (m *PaymentOrderMutation) AddRechargeBonusAmount(f float64) {
+	if m.addrecharge_bonus_amount != nil {
+		*m.addrecharge_bonus_amount += f
+	} else {
+		m.addrecharge_bonus_amount = &f
+	}
+}
+
+// AddedRechargeBonusAmount returns the value that was added to the "recharge_bonus_amount" field in this mutation.
+func (m *PaymentOrderMutation) AddedRechargeBonusAmount() (r float64, exists bool) {
+	v := m.addrecharge_bonus_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRechargeBonusAmount resets all changes to the "recharge_bonus_amount" field.
+func (m *PaymentOrderMutation) ResetRechargeBonusAmount() {
+	m.recharge_bonus_amount = nil
+	m.addrecharge_bonus_amount = nil
+}
+
+// SetRechargeBonusStatus sets the "recharge_bonus_status" field.
+func (m *PaymentOrderMutation) SetRechargeBonusStatus(pbs paymentorder.RechargeBonusStatus) {
+	m.recharge_bonus_status = &pbs
+}
+
+// RechargeBonusStatus returns the value of the "recharge_bonus_status" field in the mutation.
+func (m *PaymentOrderMutation) RechargeBonusStatus() (r paymentorder.RechargeBonusStatus, exists bool) {
+	v := m.recharge_bonus_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRechargeBonusStatus returns the old "recharge_bonus_status" field's value of the PaymentOrder entity.
+// If the PaymentOrder object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentOrderMutation) OldRechargeBonusStatus(ctx context.Context) (v paymentorder.RechargeBonusStatus, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRechargeBonusStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRechargeBonusStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRechargeBonusStatus: %w", err)
+	}
+	return oldValue.RechargeBonusStatus, nil
+}
+
+// ResetRechargeBonusStatus resets all changes to the "recharge_bonus_status" field.
+func (m *PaymentOrderMutation) ResetRechargeBonusStatus() {
+	m.recharge_bonus_status = nil
+}
+
+// SetRechargeBonusExpiresAt sets the "recharge_bonus_expires_at" field.
+func (m *PaymentOrderMutation) SetRechargeBonusExpiresAt(t time.Time) {
+	m.recharge_bonus_expires_at = &t
+}
+
+// RechargeBonusExpiresAt returns the value of the "recharge_bonus_expires_at" field in the mutation.
+func (m *PaymentOrderMutation) RechargeBonusExpiresAt() (r time.Time, exists bool) {
+	v := m.recharge_bonus_expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRechargeBonusExpiresAt returns the old "recharge_bonus_expires_at" field's value of the PaymentOrder entity.
+// If the PaymentOrder object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentOrderMutation) OldRechargeBonusExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRechargeBonusExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRechargeBonusExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRechargeBonusExpiresAt: %w", err)
+	}
+	return oldValue.RechargeBonusExpiresAt, nil
+}
+
+// ClearRechargeBonusExpiresAt clears the value of the "recharge_bonus_expires_at" field.
+func (m *PaymentOrderMutation) ClearRechargeBonusExpiresAt() {
+	m.recharge_bonus_expires_at = nil
+	m.clearedFields[paymentorder.FieldRechargeBonusExpiresAt] = struct{}{}
+}
+
+// RechargeBonusExpiresAtCleared returns if the "recharge_bonus_expires_at" field was cleared in this mutation.
+func (m *PaymentOrderMutation) RechargeBonusExpiresAtCleared() bool {
+	_, ok := m.clearedFields[paymentorder.FieldRechargeBonusExpiresAt]
+	return ok
+}
+
+// ResetRechargeBonusExpiresAt resets all changes to the "recharge_bonus_expires_at" field.
+func (m *PaymentOrderMutation) ResetRechargeBonusExpiresAt() {
+	m.recharge_bonus_expires_at = nil
+	delete(m.clearedFields, paymentorder.FieldRechargeBonusExpiresAt)
+}
+
 // SetStatus sets the "status" field.
 func (m *PaymentOrderMutation) SetStatus(s string) {
 	m.status = &s
@@ -30750,7 +31079,7 @@ func (m *PaymentOrderMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PaymentOrderMutation) Fields() []string {
-	fields := make([]string, 0, 39)
+	fields := make([]string, 0, 45)
 	if m.user != nil {
 		fields = append(fields, paymentorder.FieldUserID)
 	}
@@ -30813,6 +31142,24 @@ func (m *PaymentOrderMutation) Fields() []string {
 	}
 	if m.provider_snapshot != nil {
 		fields = append(fields, paymentorder.FieldProviderSnapshot)
+	}
+	if m.recharge_bonus_campaign_id != nil {
+		fields = append(fields, paymentorder.FieldRechargeBonusCampaignID)
+	}
+	if m.recharge_bonus_campaign_name != nil {
+		fields = append(fields, paymentorder.FieldRechargeBonusCampaignName)
+	}
+	if m.recharge_bonus_rate != nil {
+		fields = append(fields, paymentorder.FieldRechargeBonusRate)
+	}
+	if m.recharge_bonus_amount != nil {
+		fields = append(fields, paymentorder.FieldRechargeBonusAmount)
+	}
+	if m.recharge_bonus_status != nil {
+		fields = append(fields, paymentorder.FieldRechargeBonusStatus)
+	}
+	if m.recharge_bonus_expires_at != nil {
+		fields = append(fields, paymentorder.FieldRechargeBonusExpiresAt)
 	}
 	if m.status != nil {
 		fields = append(fields, paymentorder.FieldStatus)
@@ -30918,6 +31265,18 @@ func (m *PaymentOrderMutation) Field(name string) (ent.Value, bool) {
 		return m.ProviderKey()
 	case paymentorder.FieldProviderSnapshot:
 		return m.ProviderSnapshot()
+	case paymentorder.FieldRechargeBonusCampaignID:
+		return m.RechargeBonusCampaignID()
+	case paymentorder.FieldRechargeBonusCampaignName:
+		return m.RechargeBonusCampaignName()
+	case paymentorder.FieldRechargeBonusRate:
+		return m.RechargeBonusRate()
+	case paymentorder.FieldRechargeBonusAmount:
+		return m.RechargeBonusAmount()
+	case paymentorder.FieldRechargeBonusStatus:
+		return m.RechargeBonusStatus()
+	case paymentorder.FieldRechargeBonusExpiresAt:
+		return m.RechargeBonusExpiresAt()
 	case paymentorder.FieldStatus:
 		return m.Status()
 	case paymentorder.FieldRefundAmount:
@@ -31005,6 +31364,18 @@ func (m *PaymentOrderMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldProviderKey(ctx)
 	case paymentorder.FieldProviderSnapshot:
 		return m.OldProviderSnapshot(ctx)
+	case paymentorder.FieldRechargeBonusCampaignID:
+		return m.OldRechargeBonusCampaignID(ctx)
+	case paymentorder.FieldRechargeBonusCampaignName:
+		return m.OldRechargeBonusCampaignName(ctx)
+	case paymentorder.FieldRechargeBonusRate:
+		return m.OldRechargeBonusRate(ctx)
+	case paymentorder.FieldRechargeBonusAmount:
+		return m.OldRechargeBonusAmount(ctx)
+	case paymentorder.FieldRechargeBonusStatus:
+		return m.OldRechargeBonusStatus(ctx)
+	case paymentorder.FieldRechargeBonusExpiresAt:
+		return m.OldRechargeBonusExpiresAt(ctx)
 	case paymentorder.FieldStatus:
 		return m.OldStatus(ctx)
 	case paymentorder.FieldRefundAmount:
@@ -31197,6 +31568,48 @@ func (m *PaymentOrderMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetProviderSnapshot(v)
 		return nil
+	case paymentorder.FieldRechargeBonusCampaignID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRechargeBonusCampaignID(v)
+		return nil
+	case paymentorder.FieldRechargeBonusCampaignName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRechargeBonusCampaignName(v)
+		return nil
+	case paymentorder.FieldRechargeBonusRate:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRechargeBonusRate(v)
+		return nil
+	case paymentorder.FieldRechargeBonusAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRechargeBonusAmount(v)
+		return nil
+	case paymentorder.FieldRechargeBonusStatus:
+		v, ok := value.(paymentorder.RechargeBonusStatus)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRechargeBonusStatus(v)
+		return nil
+	case paymentorder.FieldRechargeBonusExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRechargeBonusExpiresAt(v)
+		return nil
 	case paymentorder.FieldStatus:
 		v, ok := value.(string)
 		if !ok {
@@ -31349,6 +31762,15 @@ func (m *PaymentOrderMutation) AddedFields() []string {
 	if m.addsubscription_days != nil {
 		fields = append(fields, paymentorder.FieldSubscriptionDays)
 	}
+	if m.addrecharge_bonus_campaign_id != nil {
+		fields = append(fields, paymentorder.FieldRechargeBonusCampaignID)
+	}
+	if m.addrecharge_bonus_rate != nil {
+		fields = append(fields, paymentorder.FieldRechargeBonusRate)
+	}
+	if m.addrecharge_bonus_amount != nil {
+		fields = append(fields, paymentorder.FieldRechargeBonusAmount)
+	}
 	if m.addrefund_amount != nil {
 		fields = append(fields, paymentorder.FieldRefundAmount)
 	}
@@ -31372,6 +31794,12 @@ func (m *PaymentOrderMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedSubscriptionGroupID()
 	case paymentorder.FieldSubscriptionDays:
 		return m.AddedSubscriptionDays()
+	case paymentorder.FieldRechargeBonusCampaignID:
+		return m.AddedRechargeBonusCampaignID()
+	case paymentorder.FieldRechargeBonusRate:
+		return m.AddedRechargeBonusRate()
+	case paymentorder.FieldRechargeBonusAmount:
+		return m.AddedRechargeBonusAmount()
 	case paymentorder.FieldRefundAmount:
 		return m.AddedRefundAmount()
 	}
@@ -31425,6 +31853,27 @@ func (m *PaymentOrderMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddSubscriptionDays(v)
 		return nil
+	case paymentorder.FieldRechargeBonusCampaignID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRechargeBonusCampaignID(v)
+		return nil
+	case paymentorder.FieldRechargeBonusRate:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRechargeBonusRate(v)
+		return nil
+	case paymentorder.FieldRechargeBonusAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRechargeBonusAmount(v)
+		return nil
 	case paymentorder.FieldRefundAmount:
 		v, ok := value.(float64)
 		if !ok {
@@ -31469,6 +31918,15 @@ func (m *PaymentOrderMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(paymentorder.FieldProviderSnapshot) {
 		fields = append(fields, paymentorder.FieldProviderSnapshot)
+	}
+	if m.FieldCleared(paymentorder.FieldRechargeBonusCampaignID) {
+		fields = append(fields, paymentorder.FieldRechargeBonusCampaignID)
+	}
+	if m.FieldCleared(paymentorder.FieldRechargeBonusCampaignName) {
+		fields = append(fields, paymentorder.FieldRechargeBonusCampaignName)
+	}
+	if m.FieldCleared(paymentorder.FieldRechargeBonusExpiresAt) {
+		fields = append(fields, paymentorder.FieldRechargeBonusExpiresAt)
 	}
 	if m.FieldCleared(paymentorder.FieldRefundReason) {
 		fields = append(fields, paymentorder.FieldRefundReason)
@@ -31543,6 +32001,15 @@ func (m *PaymentOrderMutation) ClearField(name string) error {
 		return nil
 	case paymentorder.FieldProviderSnapshot:
 		m.ClearProviderSnapshot()
+		return nil
+	case paymentorder.FieldRechargeBonusCampaignID:
+		m.ClearRechargeBonusCampaignID()
+		return nil
+	case paymentorder.FieldRechargeBonusCampaignName:
+		m.ClearRechargeBonusCampaignName()
+		return nil
+	case paymentorder.FieldRechargeBonusExpiresAt:
+		m.ClearRechargeBonusExpiresAt()
 		return nil
 	case paymentorder.FieldRefundReason:
 		m.ClearRefundReason()
@@ -31644,6 +32111,24 @@ func (m *PaymentOrderMutation) ResetField(name string) error {
 		return nil
 	case paymentorder.FieldProviderSnapshot:
 		m.ResetProviderSnapshot()
+		return nil
+	case paymentorder.FieldRechargeBonusCampaignID:
+		m.ResetRechargeBonusCampaignID()
+		return nil
+	case paymentorder.FieldRechargeBonusCampaignName:
+		m.ResetRechargeBonusCampaignName()
+		return nil
+	case paymentorder.FieldRechargeBonusRate:
+		m.ResetRechargeBonusRate()
+		return nil
+	case paymentorder.FieldRechargeBonusAmount:
+		m.ResetRechargeBonusAmount()
+		return nil
+	case paymentorder.FieldRechargeBonusStatus:
+		m.ResetRechargeBonusStatus()
+		return nil
+	case paymentorder.FieldRechargeBonusExpiresAt:
+		m.ResetRechargeBonusExpiresAt()
 		return nil
 	case paymentorder.FieldStatus:
 		m.ResetStatus()
@@ -37322,6 +37807,1406 @@ func (m *ProxyMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Proxy edge %s", name)
+}
+
+// RechargeBonusCampaignMutation represents an operation that mutates the RechargeBonusCampaign nodes in the graph.
+type RechargeBonusCampaignMutation struct {
+	config
+	op                     Op
+	typ                    string
+	id                     *int64
+	name                   *string
+	description            *string
+	start_at               *time.Time
+	end_at                 *time.Time
+	participation_limit    *int
+	addparticipation_limit *int
+	tiers                  *[]domain.RechargeBonusTier
+	appendtiers            []domain.RechargeBonusTier
+	created_at             *time.Time
+	updated_at             *time.Time
+	clearedFields          map[string]struct{}
+	done                   bool
+	oldValue               func(context.Context) (*RechargeBonusCampaign, error)
+	predicates             []predicate.RechargeBonusCampaign
+}
+
+var _ ent.Mutation = (*RechargeBonusCampaignMutation)(nil)
+
+// rechargebonuscampaignOption allows management of the mutation configuration using functional options.
+type rechargebonuscampaignOption func(*RechargeBonusCampaignMutation)
+
+// newRechargeBonusCampaignMutation creates new mutation for the RechargeBonusCampaign entity.
+func newRechargeBonusCampaignMutation(c config, op Op, opts ...rechargebonuscampaignOption) *RechargeBonusCampaignMutation {
+	m := &RechargeBonusCampaignMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRechargeBonusCampaign,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRechargeBonusCampaignID sets the ID field of the mutation.
+func withRechargeBonusCampaignID(id int64) rechargebonuscampaignOption {
+	return func(m *RechargeBonusCampaignMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RechargeBonusCampaign
+		)
+		m.oldValue = func(ctx context.Context) (*RechargeBonusCampaign, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RechargeBonusCampaign.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRechargeBonusCampaign sets the old RechargeBonusCampaign of the mutation.
+func withRechargeBonusCampaign(node *RechargeBonusCampaign) rechargebonuscampaignOption {
+	return func(m *RechargeBonusCampaignMutation) {
+		m.oldValue = func(context.Context) (*RechargeBonusCampaign, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RechargeBonusCampaignMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RechargeBonusCampaignMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RechargeBonusCampaignMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RechargeBonusCampaignMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RechargeBonusCampaign.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetName sets the "name" field.
+func (m *RechargeBonusCampaignMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *RechargeBonusCampaignMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the RechargeBonusCampaign entity.
+// If the RechargeBonusCampaign object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusCampaignMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *RechargeBonusCampaignMutation) ResetName() {
+	m.name = nil
+}
+
+// SetDescription sets the "description" field.
+func (m *RechargeBonusCampaignMutation) SetDescription(s string) {
+	m.description = &s
+}
+
+// Description returns the value of the "description" field in the mutation.
+func (m *RechargeBonusCampaignMutation) Description() (r string, exists bool) {
+	v := m.description
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDescription returns the old "description" field's value of the RechargeBonusCampaign entity.
+// If the RechargeBonusCampaign object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusCampaignMutation) OldDescription(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDescription is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDescription requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDescription: %w", err)
+	}
+	return oldValue.Description, nil
+}
+
+// ResetDescription resets all changes to the "description" field.
+func (m *RechargeBonusCampaignMutation) ResetDescription() {
+	m.description = nil
+}
+
+// SetStartAt sets the "start_at" field.
+func (m *RechargeBonusCampaignMutation) SetStartAt(t time.Time) {
+	m.start_at = &t
+}
+
+// StartAt returns the value of the "start_at" field in the mutation.
+func (m *RechargeBonusCampaignMutation) StartAt() (r time.Time, exists bool) {
+	v := m.start_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStartAt returns the old "start_at" field's value of the RechargeBonusCampaign entity.
+// If the RechargeBonusCampaign object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusCampaignMutation) OldStartAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStartAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStartAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStartAt: %w", err)
+	}
+	return oldValue.StartAt, nil
+}
+
+// ResetStartAt resets all changes to the "start_at" field.
+func (m *RechargeBonusCampaignMutation) ResetStartAt() {
+	m.start_at = nil
+}
+
+// SetEndAt sets the "end_at" field.
+func (m *RechargeBonusCampaignMutation) SetEndAt(t time.Time) {
+	m.end_at = &t
+}
+
+// EndAt returns the value of the "end_at" field in the mutation.
+func (m *RechargeBonusCampaignMutation) EndAt() (r time.Time, exists bool) {
+	v := m.end_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEndAt returns the old "end_at" field's value of the RechargeBonusCampaign entity.
+// If the RechargeBonusCampaign object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusCampaignMutation) OldEndAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEndAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEndAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEndAt: %w", err)
+	}
+	return oldValue.EndAt, nil
+}
+
+// ResetEndAt resets all changes to the "end_at" field.
+func (m *RechargeBonusCampaignMutation) ResetEndAt() {
+	m.end_at = nil
+}
+
+// SetParticipationLimit sets the "participation_limit" field.
+func (m *RechargeBonusCampaignMutation) SetParticipationLimit(i int) {
+	m.participation_limit = &i
+	m.addparticipation_limit = nil
+}
+
+// ParticipationLimit returns the value of the "participation_limit" field in the mutation.
+func (m *RechargeBonusCampaignMutation) ParticipationLimit() (r int, exists bool) {
+	v := m.participation_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldParticipationLimit returns the old "participation_limit" field's value of the RechargeBonusCampaign entity.
+// If the RechargeBonusCampaign object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusCampaignMutation) OldParticipationLimit(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldParticipationLimit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldParticipationLimit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldParticipationLimit: %w", err)
+	}
+	return oldValue.ParticipationLimit, nil
+}
+
+// AddParticipationLimit adds i to the "participation_limit" field.
+func (m *RechargeBonusCampaignMutation) AddParticipationLimit(i int) {
+	if m.addparticipation_limit != nil {
+		*m.addparticipation_limit += i
+	} else {
+		m.addparticipation_limit = &i
+	}
+}
+
+// AddedParticipationLimit returns the value that was added to the "participation_limit" field in this mutation.
+func (m *RechargeBonusCampaignMutation) AddedParticipationLimit() (r int, exists bool) {
+	v := m.addparticipation_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetParticipationLimit resets all changes to the "participation_limit" field.
+func (m *RechargeBonusCampaignMutation) ResetParticipationLimit() {
+	m.participation_limit = nil
+	m.addparticipation_limit = nil
+}
+
+// SetTiers sets the "tiers" field.
+func (m *RechargeBonusCampaignMutation) SetTiers(dbt []domain.RechargeBonusTier) {
+	m.tiers = &dbt
+	m.appendtiers = nil
+}
+
+// Tiers returns the value of the "tiers" field in the mutation.
+func (m *RechargeBonusCampaignMutation) Tiers() (r []domain.RechargeBonusTier, exists bool) {
+	v := m.tiers
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTiers returns the old "tiers" field's value of the RechargeBonusCampaign entity.
+// If the RechargeBonusCampaign object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusCampaignMutation) OldTiers(ctx context.Context) (v []domain.RechargeBonusTier, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTiers is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTiers requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTiers: %w", err)
+	}
+	return oldValue.Tiers, nil
+}
+
+// AppendTiers adds dbt to the "tiers" field.
+func (m *RechargeBonusCampaignMutation) AppendTiers(dbt []domain.RechargeBonusTier) {
+	m.appendtiers = append(m.appendtiers, dbt...)
+}
+
+// AppendedTiers returns the list of values that were appended to the "tiers" field in this mutation.
+func (m *RechargeBonusCampaignMutation) AppendedTiers() ([]domain.RechargeBonusTier, bool) {
+	if len(m.appendtiers) == 0 {
+		return nil, false
+	}
+	return m.appendtiers, true
+}
+
+// ResetTiers resets all changes to the "tiers" field.
+func (m *RechargeBonusCampaignMutation) ResetTiers() {
+	m.tiers = nil
+	m.appendtiers = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *RechargeBonusCampaignMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *RechargeBonusCampaignMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the RechargeBonusCampaign entity.
+// If the RechargeBonusCampaign object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusCampaignMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *RechargeBonusCampaignMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *RechargeBonusCampaignMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *RechargeBonusCampaignMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the RechargeBonusCampaign entity.
+// If the RechargeBonusCampaign object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusCampaignMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *RechargeBonusCampaignMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the RechargeBonusCampaignMutation builder.
+func (m *RechargeBonusCampaignMutation) Where(ps ...predicate.RechargeBonusCampaign) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RechargeBonusCampaignMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RechargeBonusCampaignMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RechargeBonusCampaign, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RechargeBonusCampaignMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RechargeBonusCampaignMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RechargeBonusCampaign).
+func (m *RechargeBonusCampaignMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RechargeBonusCampaignMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.name != nil {
+		fields = append(fields, rechargebonuscampaign.FieldName)
+	}
+	if m.description != nil {
+		fields = append(fields, rechargebonuscampaign.FieldDescription)
+	}
+	if m.start_at != nil {
+		fields = append(fields, rechargebonuscampaign.FieldStartAt)
+	}
+	if m.end_at != nil {
+		fields = append(fields, rechargebonuscampaign.FieldEndAt)
+	}
+	if m.participation_limit != nil {
+		fields = append(fields, rechargebonuscampaign.FieldParticipationLimit)
+	}
+	if m.tiers != nil {
+		fields = append(fields, rechargebonuscampaign.FieldTiers)
+	}
+	if m.created_at != nil {
+		fields = append(fields, rechargebonuscampaign.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, rechargebonuscampaign.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RechargeBonusCampaignMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case rechargebonuscampaign.FieldName:
+		return m.Name()
+	case rechargebonuscampaign.FieldDescription:
+		return m.Description()
+	case rechargebonuscampaign.FieldStartAt:
+		return m.StartAt()
+	case rechargebonuscampaign.FieldEndAt:
+		return m.EndAt()
+	case rechargebonuscampaign.FieldParticipationLimit:
+		return m.ParticipationLimit()
+	case rechargebonuscampaign.FieldTiers:
+		return m.Tiers()
+	case rechargebonuscampaign.FieldCreatedAt:
+		return m.CreatedAt()
+	case rechargebonuscampaign.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RechargeBonusCampaignMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case rechargebonuscampaign.FieldName:
+		return m.OldName(ctx)
+	case rechargebonuscampaign.FieldDescription:
+		return m.OldDescription(ctx)
+	case rechargebonuscampaign.FieldStartAt:
+		return m.OldStartAt(ctx)
+	case rechargebonuscampaign.FieldEndAt:
+		return m.OldEndAt(ctx)
+	case rechargebonuscampaign.FieldParticipationLimit:
+		return m.OldParticipationLimit(ctx)
+	case rechargebonuscampaign.FieldTiers:
+		return m.OldTiers(ctx)
+	case rechargebonuscampaign.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case rechargebonuscampaign.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown RechargeBonusCampaign field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RechargeBonusCampaignMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case rechargebonuscampaign.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case rechargebonuscampaign.FieldDescription:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDescription(v)
+		return nil
+	case rechargebonuscampaign.FieldStartAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStartAt(v)
+		return nil
+	case rechargebonuscampaign.FieldEndAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEndAt(v)
+		return nil
+	case rechargebonuscampaign.FieldParticipationLimit:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetParticipationLimit(v)
+		return nil
+	case rechargebonuscampaign.FieldTiers:
+		v, ok := value.([]domain.RechargeBonusTier)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTiers(v)
+		return nil
+	case rechargebonuscampaign.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case rechargebonuscampaign.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RechargeBonusCampaign field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RechargeBonusCampaignMutation) AddedFields() []string {
+	var fields []string
+	if m.addparticipation_limit != nil {
+		fields = append(fields, rechargebonuscampaign.FieldParticipationLimit)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RechargeBonusCampaignMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case rechargebonuscampaign.FieldParticipationLimit:
+		return m.AddedParticipationLimit()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RechargeBonusCampaignMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case rechargebonuscampaign.FieldParticipationLimit:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddParticipationLimit(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RechargeBonusCampaign numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RechargeBonusCampaignMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RechargeBonusCampaignMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RechargeBonusCampaignMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown RechargeBonusCampaign nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RechargeBonusCampaignMutation) ResetField(name string) error {
+	switch name {
+	case rechargebonuscampaign.FieldName:
+		m.ResetName()
+		return nil
+	case rechargebonuscampaign.FieldDescription:
+		m.ResetDescription()
+		return nil
+	case rechargebonuscampaign.FieldStartAt:
+		m.ResetStartAt()
+		return nil
+	case rechargebonuscampaign.FieldEndAt:
+		m.ResetEndAt()
+		return nil
+	case rechargebonuscampaign.FieldParticipationLimit:
+		m.ResetParticipationLimit()
+		return nil
+	case rechargebonuscampaign.FieldTiers:
+		m.ResetTiers()
+		return nil
+	case rechargebonuscampaign.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case rechargebonuscampaign.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown RechargeBonusCampaign field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RechargeBonusCampaignMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RechargeBonusCampaignMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RechargeBonusCampaignMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RechargeBonusCampaignMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RechargeBonusCampaignMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RechargeBonusCampaignMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RechargeBonusCampaignMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown RechargeBonusCampaign unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RechargeBonusCampaignMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown RechargeBonusCampaign edge %s", name)
+}
+
+// RechargeBonusParticipationMutation represents an operation that mutates the RechargeBonusParticipation nodes in the graph.
+type RechargeBonusParticipationMutation struct {
+	config
+	op                 Op
+	typ                string
+	id                 *int64
+	campaign_id        *int64
+	addcampaign_id     *int64
+	user_id            *int64
+	adduser_id         *int64
+	completed_count    *int
+	addcompleted_count *int
+	created_at         *time.Time
+	updated_at         *time.Time
+	clearedFields      map[string]struct{}
+	done               bool
+	oldValue           func(context.Context) (*RechargeBonusParticipation, error)
+	predicates         []predicate.RechargeBonusParticipation
+}
+
+var _ ent.Mutation = (*RechargeBonusParticipationMutation)(nil)
+
+// rechargebonusparticipationOption allows management of the mutation configuration using functional options.
+type rechargebonusparticipationOption func(*RechargeBonusParticipationMutation)
+
+// newRechargeBonusParticipationMutation creates new mutation for the RechargeBonusParticipation entity.
+func newRechargeBonusParticipationMutation(c config, op Op, opts ...rechargebonusparticipationOption) *RechargeBonusParticipationMutation {
+	m := &RechargeBonusParticipationMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRechargeBonusParticipation,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRechargeBonusParticipationID sets the ID field of the mutation.
+func withRechargeBonusParticipationID(id int64) rechargebonusparticipationOption {
+	return func(m *RechargeBonusParticipationMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RechargeBonusParticipation
+		)
+		m.oldValue = func(ctx context.Context) (*RechargeBonusParticipation, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RechargeBonusParticipation.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRechargeBonusParticipation sets the old RechargeBonusParticipation of the mutation.
+func withRechargeBonusParticipation(node *RechargeBonusParticipation) rechargebonusparticipationOption {
+	return func(m *RechargeBonusParticipationMutation) {
+		m.oldValue = func(context.Context) (*RechargeBonusParticipation, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RechargeBonusParticipationMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RechargeBonusParticipationMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RechargeBonusParticipationMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RechargeBonusParticipationMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RechargeBonusParticipation.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCampaignID sets the "campaign_id" field.
+func (m *RechargeBonusParticipationMutation) SetCampaignID(i int64) {
+	m.campaign_id = &i
+	m.addcampaign_id = nil
+}
+
+// CampaignID returns the value of the "campaign_id" field in the mutation.
+func (m *RechargeBonusParticipationMutation) CampaignID() (r int64, exists bool) {
+	v := m.campaign_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCampaignID returns the old "campaign_id" field's value of the RechargeBonusParticipation entity.
+// If the RechargeBonusParticipation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusParticipationMutation) OldCampaignID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCampaignID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCampaignID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCampaignID: %w", err)
+	}
+	return oldValue.CampaignID, nil
+}
+
+// AddCampaignID adds i to the "campaign_id" field.
+func (m *RechargeBonusParticipationMutation) AddCampaignID(i int64) {
+	if m.addcampaign_id != nil {
+		*m.addcampaign_id += i
+	} else {
+		m.addcampaign_id = &i
+	}
+}
+
+// AddedCampaignID returns the value that was added to the "campaign_id" field in this mutation.
+func (m *RechargeBonusParticipationMutation) AddedCampaignID() (r int64, exists bool) {
+	v := m.addcampaign_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCampaignID resets all changes to the "campaign_id" field.
+func (m *RechargeBonusParticipationMutation) ResetCampaignID() {
+	m.campaign_id = nil
+	m.addcampaign_id = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *RechargeBonusParticipationMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *RechargeBonusParticipationMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the RechargeBonusParticipation entity.
+// If the RechargeBonusParticipation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusParticipationMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *RechargeBonusParticipationMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *RechargeBonusParticipationMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *RechargeBonusParticipationMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetCompletedCount sets the "completed_count" field.
+func (m *RechargeBonusParticipationMutation) SetCompletedCount(i int) {
+	m.completed_count = &i
+	m.addcompleted_count = nil
+}
+
+// CompletedCount returns the value of the "completed_count" field in the mutation.
+func (m *RechargeBonusParticipationMutation) CompletedCount() (r int, exists bool) {
+	v := m.completed_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCompletedCount returns the old "completed_count" field's value of the RechargeBonusParticipation entity.
+// If the RechargeBonusParticipation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusParticipationMutation) OldCompletedCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCompletedCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCompletedCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCompletedCount: %w", err)
+	}
+	return oldValue.CompletedCount, nil
+}
+
+// AddCompletedCount adds i to the "completed_count" field.
+func (m *RechargeBonusParticipationMutation) AddCompletedCount(i int) {
+	if m.addcompleted_count != nil {
+		*m.addcompleted_count += i
+	} else {
+		m.addcompleted_count = &i
+	}
+}
+
+// AddedCompletedCount returns the value that was added to the "completed_count" field in this mutation.
+func (m *RechargeBonusParticipationMutation) AddedCompletedCount() (r int, exists bool) {
+	v := m.addcompleted_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCompletedCount resets all changes to the "completed_count" field.
+func (m *RechargeBonusParticipationMutation) ResetCompletedCount() {
+	m.completed_count = nil
+	m.addcompleted_count = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *RechargeBonusParticipationMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *RechargeBonusParticipationMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the RechargeBonusParticipation entity.
+// If the RechargeBonusParticipation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusParticipationMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *RechargeBonusParticipationMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *RechargeBonusParticipationMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *RechargeBonusParticipationMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the RechargeBonusParticipation entity.
+// If the RechargeBonusParticipation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RechargeBonusParticipationMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *RechargeBonusParticipationMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the RechargeBonusParticipationMutation builder.
+func (m *RechargeBonusParticipationMutation) Where(ps ...predicate.RechargeBonusParticipation) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RechargeBonusParticipationMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RechargeBonusParticipationMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RechargeBonusParticipation, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RechargeBonusParticipationMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RechargeBonusParticipationMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RechargeBonusParticipation).
+func (m *RechargeBonusParticipationMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RechargeBonusParticipationMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.campaign_id != nil {
+		fields = append(fields, rechargebonusparticipation.FieldCampaignID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, rechargebonusparticipation.FieldUserID)
+	}
+	if m.completed_count != nil {
+		fields = append(fields, rechargebonusparticipation.FieldCompletedCount)
+	}
+	if m.created_at != nil {
+		fields = append(fields, rechargebonusparticipation.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, rechargebonusparticipation.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RechargeBonusParticipationMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case rechargebonusparticipation.FieldCampaignID:
+		return m.CampaignID()
+	case rechargebonusparticipation.FieldUserID:
+		return m.UserID()
+	case rechargebonusparticipation.FieldCompletedCount:
+		return m.CompletedCount()
+	case rechargebonusparticipation.FieldCreatedAt:
+		return m.CreatedAt()
+	case rechargebonusparticipation.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RechargeBonusParticipationMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case rechargebonusparticipation.FieldCampaignID:
+		return m.OldCampaignID(ctx)
+	case rechargebonusparticipation.FieldUserID:
+		return m.OldUserID(ctx)
+	case rechargebonusparticipation.FieldCompletedCount:
+		return m.OldCompletedCount(ctx)
+	case rechargebonusparticipation.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case rechargebonusparticipation.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown RechargeBonusParticipation field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RechargeBonusParticipationMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case rechargebonusparticipation.FieldCampaignID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCampaignID(v)
+		return nil
+	case rechargebonusparticipation.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case rechargebonusparticipation.FieldCompletedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCompletedCount(v)
+		return nil
+	case rechargebonusparticipation.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case rechargebonusparticipation.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RechargeBonusParticipation field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RechargeBonusParticipationMutation) AddedFields() []string {
+	var fields []string
+	if m.addcampaign_id != nil {
+		fields = append(fields, rechargebonusparticipation.FieldCampaignID)
+	}
+	if m.adduser_id != nil {
+		fields = append(fields, rechargebonusparticipation.FieldUserID)
+	}
+	if m.addcompleted_count != nil {
+		fields = append(fields, rechargebonusparticipation.FieldCompletedCount)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RechargeBonusParticipationMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case rechargebonusparticipation.FieldCampaignID:
+		return m.AddedCampaignID()
+	case rechargebonusparticipation.FieldUserID:
+		return m.AddedUserID()
+	case rechargebonusparticipation.FieldCompletedCount:
+		return m.AddedCompletedCount()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RechargeBonusParticipationMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case rechargebonusparticipation.FieldCampaignID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCampaignID(v)
+		return nil
+	case rechargebonusparticipation.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case rechargebonusparticipation.FieldCompletedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCompletedCount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RechargeBonusParticipation numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RechargeBonusParticipationMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RechargeBonusParticipationMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RechargeBonusParticipationMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown RechargeBonusParticipation nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RechargeBonusParticipationMutation) ResetField(name string) error {
+	switch name {
+	case rechargebonusparticipation.FieldCampaignID:
+		m.ResetCampaignID()
+		return nil
+	case rechargebonusparticipation.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case rechargebonusparticipation.FieldCompletedCount:
+		m.ResetCompletedCount()
+		return nil
+	case rechargebonusparticipation.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case rechargebonusparticipation.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown RechargeBonusParticipation field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RechargeBonusParticipationMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RechargeBonusParticipationMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RechargeBonusParticipationMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RechargeBonusParticipationMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RechargeBonusParticipationMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RechargeBonusParticipationMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RechargeBonusParticipationMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown RechargeBonusParticipation unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RechargeBonusParticipationMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown RechargeBonusParticipation edge %s", name)
 }
 
 // RedeemCodeMutation represents an operation that mutates the RedeemCode nodes in the graph.
