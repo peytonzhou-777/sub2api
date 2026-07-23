@@ -619,6 +619,7 @@ type adminServiceImpl struct {
 	apiKeyRepo                  APIKeyRepository
 	redeemCodeRepo              RedeemCodeRepository
 	userGroupRateRepo           UserGroupRateRepository
+	userRPMCache                UserRPMCache
 	billingCacheService         *BillingCacheService
 	proxyProber                 ProxyExitInfoProber
 	proxyLatencyCache           ProxyLatencyCache
