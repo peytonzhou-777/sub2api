@@ -313,6 +313,21 @@ describe('user KeysView column settings', () => {
     expect(visibleColumnKeys(wrapper)).not.toContain('id')
   })
 
+  it('sorts API key group options by rate multiplier from low to high', async () => {
+    getAvailableGroups.mockResolvedValue([
+      { id: 1, name: 'High Rate', rate_multiplier: 1.5 },
+      { id: 2, name: 'Low Rate', rate_multiplier: 0.5 },
+      { id: 3, name: 'Standard Rate', rate_multiplier: 1 },
+    ])
+
+    const wrapper = await mountView()
+    const groupOptions = (
+      wrapper.vm as unknown as { groupOptions: Array<{ value: number }> }
+    ).groupOptions
+
+    expect(groupOptions.map((option) => option.value)).toEqual([2, 3, 1])
+  })
+
   it('shows a hidden column when toggled and persists the preference', async () => {
     const wrapper = await mountView()
 
