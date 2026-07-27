@@ -9,13 +9,19 @@ const {
   getAllGroups,
   getBatchUsersUsage,
   listEnabledDefinitions,
-  getBatchUserAttributes
+  getBatchUserAttributes,
+  routerPush
 } = vi.hoisted(() => ({
   listUsers: vi.fn(),
   getAllGroups: vi.fn(),
   getBatchUsersUsage: vi.fn(),
   listEnabledDefinitions: vi.fn(),
-  getBatchUserAttributes: vi.fn()
+  getBatchUserAttributes: vi.fn(),
+  routerPush: vi.fn()
+}))
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: routerPush })
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -61,6 +67,7 @@ const createAdminUser = (overrides: Partial<AdminUser> = {}): AdminUser => ({
   email: 'scoped@example.com',
   role: 'user',
   balance: 0,
+  limited_remaining_amount: 0,
   concurrency: 1,
   status: 'active',
   allowed_groups: [],
@@ -82,6 +89,7 @@ const DataTableStub = {
   template: `
     <div>
       <div data-test="columns">{{ columns.map(col => col.key).join(',') }}</div>
+      <div data-test="column-labels">{{ columns.map(col => col.label).join(',') }}</div>
       <div data-test="row-order">{{ data.map(row => row.email).join(',') }}</div>
       <div data-test="selected-keys">{{ (selectedKeys || []).join(',') }}</div>
       <button data-test="sort-last-used" @click="$emit('sort', 'last_used_at', 'desc')">sort</button>
@@ -97,6 +105,9 @@ const DataTableStub = {
         <slot :name="'header-' + col.key" :column="col" />
       </template>
       <div v-for="row in data" :key="row.id">
+        <slot name="cell-email" :value="row.email" :row="row" />
+        <slot name="cell-balance" :value="row.balance" :row="row" />
+        <slot name="cell-limited_remaining_amount" :value="row.limited_remaining_amount" :row="row" />
         <slot name="cell-last_used_at" :value="row.last_used_at" :row="row" />
       </div>
     </div>
@@ -129,6 +140,7 @@ describe('admin UsersView', () => {
     getBatchUsersUsage.mockReset()
     listEnabledDefinitions.mockReset()
     getBatchUserAttributes.mockReset()
+    routerPush.mockReset()
 
     listUsers.mockResolvedValue({
       items: [createAdminUser()],
@@ -197,6 +209,75 @@ describe('admin UsersView', () => {
       }),
       expect.any(Object)
     )
+  })
+
+  it('shows notes under the email without an avatar and adds permanent and limited credit columns', async () => {
+    listUsers.mockResolvedValue({
+      items: [createAdminUser({
+        notes: '重点客户',
+        balance: 18.5,
+        limited_remaining_amount: 7.25
+      })],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1
+    })
+
+    const wrapper = mount(UsersView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: {
+            template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
+          },
+          DataTable: DataTableStub,
+          Pagination: true,
+          ConfirmDialog: true,
+          EmptyState: true,
+          GroupBadge: true,
+          Select: true,
+          UserAttributesConfigModal: true,
+          UserConcurrencyCell: true,
+          UserCreateModal: true,
+          UserEditModal: true,
+          BulkEditUserModal: BulkEditUserModalStub,
+          UserPlatformQuotaModal: true,
+          UserApiKeysModal: true,
+          UserAllowedGroupsModal: true,
+          UserBalanceModal: true,
+          UserBalanceHistoryModal: true,
+          GroupReplaceModal: true,
+          Icon: true,
+          Teleport: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    const visibleColumns = wrapper.get('[data-test="columns"]').text().split(',')
+    expect(visibleColumns).toContain('balance')
+    expect(visibleColumns).toContain('limited_remaining_amount')
+    expect(visibleColumns).not.toContain('notes')
+    const columnLabels = wrapper.get('[data-test="column-labels"]').text()
+    expect(columnLabels).toContain('admin.users.columns.permanentBalance')
+    expect(columnLabels).toContain('admin.users.columns.limitedBalance')
+    expect(columnLabels).not.toContain('admin.users.columns.balance,')
+    expect(wrapper.text()).toContain('重点客户')
+    expect(wrapper.text()).toContain('$18.50')
+    expect(wrapper.text()).toContain('$7.25')
+    expect(wrapper.findAll('[data-test="manage-permanent-credit"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-test="manage-limited-credit"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-test="manage-permanent-credit"]')[0]?.text()).toBe('admin.users.manageCredit')
+    expect(wrapper.findAll('[data-test="manage-limited-credit"]')[0]?.text()).toBe('admin.users.manageCredit')
+
+    await wrapper.get('[data-test="manage-permanent-credit"]').trigger('click')
+    expect(routerPush).toHaveBeenLastCalledWith({ path: '/admin/credits', query: { user: '42' } })
+
+    await wrapper.get('[data-test="manage-limited-credit"]').trigger('click')
+    expect(routerPush).toHaveBeenLastCalledWith({ path: '/admin/credits', query: { user: '42' } })
+    expect(wrapper.get('[data-test="user-identity"]').find('.rounded-full').exists()).toBe(false)
   })
 
   it('clears usage current-page sort when switching to last_used_at server sort', async () => {

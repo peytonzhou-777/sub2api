@@ -279,34 +279,21 @@
           @sort="handleSort"
           @update:selected-keys="handleSelectedKeysUpdate"
         >
-          <template #cell-email="{ value }">
-            <div class="flex items-center gap-2">
-              <div
-                class="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30"
+          <template #cell-email="{ value, row }">
+            <div class="max-w-xs" data-test="user-identity">
+              <span class="block font-medium text-gray-900 dark:text-white">{{ value }}</span>
+              <span
+                v-if="row.notes"
+                :title="row.notes"
+                class="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400"
               >
-                <span class="text-sm font-medium text-primary-700 dark:text-primary-300">
-                  {{ value.charAt(0).toUpperCase() }}
-                </span>
-              </div>
-              <span class="font-medium text-gray-900 dark:text-white">{{ value }}</span>
+                {{ row.notes }}
+              </span>
             </div>
           </template>
 
           <template #cell-username="{ value }">
             <span class="text-sm text-gray-700 dark:text-gray-300">{{ value || '-' }}</span>
-          </template>
-
-          <template #cell-notes="{ value }">
-            <div class="max-w-xs">
-              <span
-                v-if="value"
-                :title="value.length > 30 ? value : undefined"
-                class="block truncate text-sm text-gray-600 dark:text-gray-400"
-              >
-                {{ value.length > 30 ? value.substring(0, 25) + '...' : value }}
-              </span>
-              <span v-else class="text-sm text-gray-400">-</span>
-            </div>
           </template>
 
           <!-- Dynamic attribute columns -->
@@ -437,11 +424,28 @@
                 </div>
               </div>
               <button
-                @click.stop="handleDeposit(row)"
+                data-test="manage-permanent-credit"
+                @click.stop="handleCreditManagement(row)"
                 class="rounded px-2 py-0.5 text-xs font-medium text-emerald-600 transition-colors hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
-                :title="t('admin.users.deposit')"
+                :title="t('admin.users.manageCredit')"
               >
-                {{ t('admin.users.deposit') }}
+                {{ t('admin.users.manageCredit') }}
+              </button>
+            </div>
+          </template>
+
+          <template #cell-limited_remaining_amount="{ value, row }">
+            <div class="flex items-center gap-2">
+              <span class="font-medium text-gray-900 dark:text-white">
+                ${{ Number(value ?? 0).toFixed(2) }}
+              </span>
+              <button
+                data-test="manage-limited-credit"
+                class="rounded px-2 py-0.5 text-xs font-medium text-emerald-600 transition-colors hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
+                :title="t('admin.users.manageCredit')"
+                @click.stop="handleCreditManagement(row)"
+              >
+                {{ t('admin.users.manageCredit') }}
               </button>
             </div>
           </template>
@@ -866,13 +870,13 @@ const allColumns = computed<Column[]>(() => [
   { key: 'email', label: t('admin.users.columns.user'), sortable: true },
   { key: 'id', label: t('admin.users.columns.id'), sortable: true },
   { key: 'username', label: t('admin.users.columns.username'), sortable: true },
-  { key: 'notes', label: t('admin.users.columns.notes'), sortable: false },
   // Dynamic attribute columns
   ...attributeColumns.value,
   { key: 'role', label: t('admin.users.columns.role'), sortable: true },
   { key: 'groups', label: t('admin.users.columns.groups'), sortable: false },
   { key: 'subscriptions', label: t('admin.users.columns.subscriptions'), sortable: false },
-  { key: 'balance', label: t('admin.users.columns.balance'), sortable: true },
+  { key: 'balance', label: t('admin.users.columns.permanentBalance'), sortable: true },
+  { key: 'limited_remaining_amount', label: t('admin.users.columns.limitedBalance'), sortable: false },
   { key: 'balance_platform_quota', label: t('admin.users.columns.balancePlatformQuota'), sortable: false },
   { key: 'usage', label: t('admin.users.columns.usage'), sortable: false },
   { key: 'usage_anthropic', label: t('admin.users.columns.usageAnthropic'), sortable: false },
@@ -898,11 +902,11 @@ const hiddenColumns = reactive<Set<string>>(new Set())
 
 // Default hidden columns (columns hidden by default on first load)
 const DEFAULT_HIDDEN_COLUMNS = [
-  'notes', 'groups', 'subscriptions', 'usage', 'concurrency',
+  'groups', 'subscriptions', 'usage', 'concurrency',
   'usage_anthropic', 'usage_openai', 'usage_gemini', 'usage_antigravity',
   'balance_platform_quota'
 ]
-const REMOVED_COLUMNS = new Set(['last_login_at'])
+const REMOVED_COLUMNS = new Set(['last_login_at', 'notes'])
 // 强制可见列：加载时会被强制移出 hiddenColumns，并在列设置 UI 上 disabled。
 // 当前没有列需要强制可见 —— last_active_at 已改为可被用户隐藏。
 const FORCED_VISIBLE_COLUMNS = new Set<string>()
@@ -1788,7 +1792,12 @@ const confirmDelete = async () => {
 }
 
 const handleDeposit = (user: AdminUser) => {
-	void router.push({ path: '/admin/credits', query: { user: String(user.id), action: 'balance-add' } })
+  void router.push({ path: '/admin/credits', query: { user: String(user.id), action: 'balance-add' } })
+}
+
+// 从任一额度列进入统一额度管理页，并自动展开指定用户。
+const handleCreditManagement = (user: AdminUser) => {
+  void router.push({ path: '/admin/credits', query: { user: String(user.id) } })
 }
 
 const handleWithdraw = (user: AdminUser) => {

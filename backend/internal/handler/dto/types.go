@@ -45,6 +45,8 @@ type AdminUser struct {
 
 	Notes      string     `json:"notes"`
 	LastUsedAt *time.Time `json:"last_used_at"`
+	// LimitedRemainingAmount 是当前有效限时额度的可用金额汇总。
+	LimitedRemainingAmount float64 `json:"limited_remaining_amount"`
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]rateMultiplier
 	GroupRates map[int64]float64 `json:"group_rates,omitempty"`

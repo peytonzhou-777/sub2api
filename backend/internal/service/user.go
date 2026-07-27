@@ -20,10 +20,13 @@ type User struct {
 	Role           string
 	Balance        float64
 	FrozenBalance  float64
-	Concurrency    int
-	Status         string
-	AllowedGroups  []int64
-	TokenVersion   int64 // Incremented on password change to invalidate existing tokens
+	// LimitedRemainingAmount 和 LimitedActiveCount 仅在管理员列表查询中批量填充。
+	LimitedRemainingAmount float64
+	LimitedActiveCount     int
+	Concurrency            int
+	Status                 string
+	AllowedGroups          []int64
+	TokenVersion           int64 // Incremented on password change to invalidate existing tokens
 	// TokenVersionResolved indicates TokenVersion already contains the fingerprint-derived
 	// value expected in JWT claims and refresh-token state.
 	TokenVersionResolved bool

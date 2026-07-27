@@ -13,6 +13,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/ent/authidentitychannel"
+	dbgrant "github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -39,6 +40,9 @@ func (s *adminServiceImpl) ListUsers(ctx context.Context, page, pageSize int, fi
 			}
 		}
 	}
+	if err := s.loadUserLimitedCreditSummaries(ctx, users); err != nil {
+		return nil, 0, err
+	}
 	// 批量加载用户专属分组倍率
 	if s.userGroupRateRepo != nil && len(users) > 0 {
 		if batchRepo, ok := s.userGroupRateRepo.(userGroupRateBatchReader); ok {
@@ -62,6 +66,53 @@ func (s *adminServiceImpl) ListUsers(ctx context.Context, page, pageSize int, fi
 		}
 	}
 	return users, result.Total, nil
+}
+
+// loadUserLimitedCreditSummaries 批量汇总当前页用户的有效限时额度，避免逐用户查询。
+func (s *adminServiceImpl) loadUserLimitedCreditSummaries(ctx context.Context, users []User) error {
+	if len(users) == 0 || s.entClient == nil {
+		return nil
+	}
+
+	userIDs := make([]int64, 0, len(users))
+	for i := range users {
+		userIDs = append(userIDs, users[i].ID)
+	}
+	grants, err := s.entClient.UserLimitedCreditGrant.Query().
+		Where(
+			dbgrant.UserIDIn(userIDs...),
+			dbgrant.StatusEQ(LimitedCreditStatusActive),
+			dbgrant.ExpiresAtGT(time.Now().UTC()),
+		).
+		All(ctx)
+	if err != nil {
+		return fmt.Errorf("load user limited credit summaries: %w", err)
+	}
+
+	applyUserLimitedCreditSummaries(users, grants)
+	return nil
+}
+
+// applyUserLimitedCreditSummaries 将有效额度记录聚合到用户列表项。
+func applyUserLimitedCreditSummaries(users []User, grants []*dbent.UserLimitedCreditGrant) {
+	userIndexes := make(map[int64]int, len(users))
+	for i := range users {
+		userIndexes[users[i].ID] = i
+	}
+	for _, grant := range grants {
+		index, ok := userIndexes[grant.UserID]
+		if !ok {
+			continue
+		}
+		remaining := grant.InitialAmount - grant.UsedAmount
+		if remaining < 0 {
+			remaining = 0
+		}
+		if remaining > 0 || grant.FrozenAmount > 0 {
+			users[index].LimitedActiveCount++
+			users[index].LimitedRemainingAmount += remaining
+		}
+	}
 }
 
 func (s *adminServiceImpl) loadUserGroupRatesOneByOne(ctx context.Context, users []User) {

@@ -134,17 +134,16 @@ func (s *adminServiceImpl) ListCreditUsers(ctx context.Context, page, pageSize i
 	}
 	result := make([]AdminCreditUser, 0, len(users))
 	for _, user := range users {
-		item := AdminCreditUser{ID: user.ID, Email: user.Email, Username: user.Username, Status: user.Status, Balance: user.Balance, FrozenBalance: user.FrozenBalance, UpdatedAt: user.UpdatedAt}
-		grants, queryErr := s.entClient.UserLimitedCreditGrant.Query().Where(dbgrant.UserIDEQ(user.ID), dbgrant.StatusEQ(LimitedCreditStatusActive), dbgrant.ExpiresAtGT(time.Now().UTC())).All(ctx)
-		if queryErr != nil {
-			return nil, 0, queryErr
-		}
-		for _, grant := range grants {
-			remaining := math.Max(grant.InitialAmount-grant.UsedAmount, 0)
-			if remaining > 0 || grant.FrozenAmount > 0 {
-				item.LimitedActiveCount++
-				item.LimitedRemainingAmount += remaining
-			}
+		item := AdminCreditUser{
+			ID:                     user.ID,
+			Email:                  user.Email,
+			Username:               user.Username,
+			Status:                 user.Status,
+			Balance:                user.Balance,
+			FrozenBalance:          user.FrozenBalance,
+			LimitedRemainingAmount: user.LimitedRemainingAmount,
+			LimitedActiveCount:     user.LimitedActiveCount,
+			UpdatedAt:              user.UpdatedAt,
 		}
 		result = append(result, item)
 	}
