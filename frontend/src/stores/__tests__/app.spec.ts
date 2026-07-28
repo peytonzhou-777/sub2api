@@ -31,6 +31,8 @@ function createPublicSettings(overrides: Partial<PublicSettings> = {}): PublicSe
     site_subtitle: '',
     api_base_url: '',
     contact_info: '',
+    customer_service_group_number: '',
+    customer_service_group_link: '',
     doc_url: '',
     home_content: '',
     compact_home_enabled: false,
@@ -354,13 +356,21 @@ describe('useAppStore', () => {
     })
 
     it('force 在无活动请求时绕过缓存，刷新期间的普通调用等待刷新结果', async () => {
-      const initial = createPublicSettings({ site_name: 'Initial Site' })
+      const initial = createPublicSettings({
+        site_name: 'Initial Site',
+        customer_service_group_number: '001234567',
+        customer_service_group_link: 'https://qm.qq.com/q/initial',
+      })
       vi.mocked(getPublicSettings).mockResolvedValueOnce(initial)
       const store = useAppStore()
       await store.fetchPublicSettings()
 
       const deferred = createDeferred<PublicSettings>()
-      const updated = createPublicSettings({ site_name: 'Updated Site' })
+      const updated = createPublicSettings({
+        site_name: 'Updated Site',
+        customer_service_group_number: '009876543',
+        customer_service_group_link: 'https://qm.qq.com/q/updated',
+      })
       vi.mocked(getPublicSettings).mockReturnValueOnce(deferred.promise)
 
       const refresh = store.fetchPublicSettings(true)
@@ -371,6 +381,8 @@ describe('useAppStore', () => {
       deferred.resolve(updated)
       await expect(Promise.all([refresh, duringRefresh])).resolves.toEqual([updated, updated])
       expect(store.siteName).toBe('Updated Site')
+      expect(store.customerServiceGroupNumber).toBe('009876543')
+      expect(store.customerServiceGroupLink).toBe('https://qm.qq.com/q/updated')
 
       await expect(store.fetchPublicSettings()).resolves.toEqual(updated)
       expect(getPublicSettings).toHaveBeenCalledTimes(2)
@@ -400,6 +412,8 @@ describe('useAppStore', () => {
         site_logo: '/logo.png',
         version: '1.0.0',
         contact_info: 'test@test.com',
+        customer_service_group_number: '001234567',
+        customer_service_group_link: 'https://qm.qq.com/q/example',
         api_base_url: 'https://api.test.com',
         doc_url: 'https://docs.test.com',
       }
@@ -411,7 +425,21 @@ describe('useAppStore', () => {
       expect(store.siteName).toBe('TestSite')
       expect(store.siteLogo).toBe('/logo.png')
       expect(store.siteVersion).toBe('1.0.0')
+      expect(store.customerServiceGroupNumber).toBe('001234567')
+      expect(store.customerServiceGroupLink).toBe('https://qm.qq.com/q/example')
       expect(store.publicSettingsLoaded).toBe(true)
+    })
+
+    it('旧版注入缺少客服群字段时回退为空字符串', () => {
+      const windowAny = window as any
+      windowAny.__APP_CONFIG__ = {
+        site_name: 'Legacy Site',
+      }
+
+      const store = useAppStore()
+      expect(store.initFromInjectedConfig()).toBe(true)
+      expect(store.customerServiceGroupNumber).toBe('')
+      expect(store.customerServiceGroupLink).toBe('')
     })
 
     it('无注入配置时返回 false', () => {
@@ -451,6 +479,8 @@ describe('useAppStore', () => {
         site_subtitle: '',
         api_base_url: '',
         contact_info: '',
+        customer_service_group_number: '',
+        customer_service_group_link: '',
         doc_url: '',
         home_content: '',
         compact_home_enabled: false,

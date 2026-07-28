@@ -3,6 +3,7 @@
 package admin
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -19,11 +20,14 @@ import (
 
 func TestUpdateSettingsPartialPayloadKeepsUnsentKeys(t *testing.T) {
 	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
-		service.SettingKeySiteName:         "Example Gateway",
-		service.SettingKeySiteSubtitle:     "Example Gateway Platform",
-		service.SettingKeySMTPHost:         "smtp.example.com",
-		service.SettingKeySMTPFrom:         "noreply@example.com",
-		service.SettingKeyTurnstileEnabled: "true",
+		service.SettingKeySiteName:                   "Example Gateway",
+		service.SettingKeySiteWordmarkSuffix:         "Pro",
+		service.SettingKeySiteSubtitle:               "Example Gateway Platform",
+		service.SettingKeySMTPHost:                   "smtp.example.com",
+		service.SettingKeySMTPFrom:                   "noreply@example.com",
+		service.SettingKeyTurnstileEnabled:           "true",
+		service.SettingKeyCustomerServiceGroupNumber: "001234567",
+		service.SettingKeyCustomerServiceGroupLink:   "https://qm.qq.com/q/example",
 	})
 
 	rec := doUpdateSettings(t, h, map[string]any{"risk_control_enabled": true}, nil)
@@ -33,10 +37,13 @@ func TestUpdateSettingsPartialPayloadKeepsUnsentKeys(t *testing.T) {
 		"the field the caller actually sent must be written")
 
 	require.Equal(t, "Example Gateway", repo.values[service.SettingKeySiteName])
+	require.Equal(t, "Pro", repo.values[service.SettingKeySiteWordmarkSuffix])
 	require.Equal(t, "Example Gateway Platform", repo.values[service.SettingKeySiteSubtitle])
 	require.Equal(t, "smtp.example.com", repo.values[service.SettingKeySMTPHost])
 	require.Equal(t, "noreply@example.com", repo.values[service.SettingKeySMTPFrom])
 	require.Equal(t, "true", repo.values[service.SettingKeyTurnstileEnabled])
+	require.Equal(t, "001234567", repo.values[service.SettingKeyCustomerServiceGroupNumber])
+	require.Equal(t, "https://qm.qq.com/q/example", repo.values[service.SettingKeyCustomerServiceGroupLink])
 }
 
 // A full payload keeps whole-document semantics: fields explicitly set to their
@@ -185,4 +192,71 @@ func TestUpdateSettingsValidatesTencentCaptchaAppIDWhenEnabledFlagIsOmitted(t *t
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Contains(t, rec.Body.String(), "positive integer")
+}
+
+func TestUpdateSettingsCustomerServiceGroupTrimsValues(t *testing.T) {
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
+
+	rec := doUpdateSettings(t, h, map[string]any{
+		"customer_service_group_number": " 001234567 ",
+		"customer_service_group_link":   " https://qm.qq.com/q/example ",
+	}, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "001234567", repo.values[service.SettingKeyCustomerServiceGroupNumber])
+	require.Equal(t, "https://qm.qq.com/q/example", repo.values[service.SettingKeyCustomerServiceGroupLink])
+
+	var resp struct {
+		Data struct {
+			CustomerServiceGroupNumber string `json:"customer_service_group_number"`
+			CustomerServiceGroupLink   string `json:"customer_service_group_link"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "001234567", resp.Data.CustomerServiceGroupNumber)
+	require.Equal(t, "https://qm.qq.com/q/example", resp.Data.CustomerServiceGroupLink)
+}
+
+func TestUpdateSettingsCustomerServiceGroupRejectsInvalidLink(t *testing.T) {
+	h, _ := newStepUpSwitchTestHandler(t, map[string]string{})
+
+	rec := doUpdateSettings(t, h, map[string]any{
+		"customer_service_group_number": "123456789",
+		"customer_service_group_link":   "javascript:alert(1)",
+	}, nil)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestUpdateSettingsCustomerServiceGroupAllowsClearing(t *testing.T) {
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+		service.SettingKeyCustomerServiceGroupNumber: "001234567",
+		service.SettingKeyCustomerServiceGroupLink:   "https://qm.qq.com/q/example",
+	})
+
+	rec := doUpdateSettings(t, h, map[string]any{
+		"customer_service_group_number": "",
+		"customer_service_group_link":   "",
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Empty(t, repo.values[service.SettingKeyCustomerServiceGroupNumber])
+	require.Empty(t, repo.values[service.SettingKeyCustomerServiceGroupLink])
+}
+
+func TestDiffSettingsIncludesCustomerServiceGroupFields(t *testing.T) {
+	before := &service.SystemSettings{}
+	after := &service.SystemSettings{
+		CustomerServiceGroupNumber: "123456789",
+		CustomerServiceGroupLink:   "https://qm.qq.com/q/example",
+	}
+
+	changed := diffSettings(
+		before,
+		after,
+		&service.AuthSourceDefaultSettings{},
+		&service.AuthSourceDefaultSettings{},
+		UpdateSettingsRequest{},
+	)
+
+	require.Contains(t, changed, "customer_service_group_number")
+	require.Contains(t, changed, "customer_service_group_link")
 }

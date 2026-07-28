@@ -31,7 +31,7 @@
 .codex-public-pill-dark { border: 1px solid #333; background: #181818; color: #fff; }
 .codex-public-pill-dark:hover { background: #282828; }
 
-.codex-hero { position: relative; display: grid; min-height: min(1200px, 100svh); place-items: center; isolation: isolate; }
+.codex-hero { position: relative; display: grid; min-height: clamp(680px, 82svh, 920px); place-items: center; isolation: isolate; }
 .codex-hero-media { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
 .codex-hero::after { position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgb(0 0 0 / .08), rgb(0 0 0 / .02) 55%, rgb(0 0 0 / .28)); content: ''; }
 .codex-hero-content { width: min(1080px, calc(100% - 48px)); padding-top: 64px; color: #080808; text-align: center; text-wrap: balance; }
@@ -146,7 +146,7 @@
   .codex-public-nav { height: 56px; padding: 0 16px; }
   .codex-public-brand-name { display: none; }
   .codex-public-actions .codex-desktop-only { display: none; }
-  .codex-hero { min-height: 844px; }
+  .codex-hero { min-height: clamp(640px, 88svh, 720px); }
   .codex-hero-content { width: calc(100% - 32px); padding-top: 56px; }
   .codex-hero-brand-block { transform: translateY(-56px); }
   .codex-hero-logo { width: 56px; height: 56px; margin-bottom: 22px; }

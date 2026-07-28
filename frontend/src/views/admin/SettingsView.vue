@@ -6316,7 +6316,7 @@
 	                <Toggle v-model="form.backend_mode_enabled" />
 	              </div>
 
-	              <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+	              <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
                 <div>
                   <label
                     class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
@@ -6331,6 +6331,23 @@
                   />
                   <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                     {{ t("admin.settings.site.siteNameHint") }}
+                  </p>
+                </div>
+                <div>
+                  <label
+                    class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{ t("admin.settings.site.siteWordmarkSuffix") }}
+                  </label>
+                  <input
+                    v-model="form.site_wordmark_suffix"
+                    type="text"
+                    maxlength="16"
+                    class="input"
+                    :placeholder="t('admin.settings.site.siteWordmarkSuffixPlaceholder')"
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.site.siteWordmarkSuffixHint") }}
                   </p>
                 </div>
                 <div>
@@ -6566,6 +6583,48 @@
                 <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                   {{ t("admin.settings.site.contactInfoHint") }}
                 </p>
+              </div>
+
+              <!-- Customer Service Group -->
+              <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div>
+                  <label
+                    class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{ t("admin.settings.site.customerServiceGroupNumber") }}
+                  </label>
+                  <input
+                    v-model="form.customer_service_group_number"
+                    data-testid="customer-service-group-number"
+                    type="text"
+                    class="input"
+                    :placeholder="
+                      t('admin.settings.site.customerServiceGroupNumberPlaceholder')
+                    "
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.site.customerServiceGroupNumberHint") }}
+                  </p>
+                </div>
+                <div>
+                  <label
+                    class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{ t("admin.settings.site.customerServiceGroupLink") }}
+                  </label>
+                  <input
+                    v-model="form.customer_service_group_link"
+                    data-testid="customer-service-group-link"
+                    type="url"
+                    class="input font-mono text-sm"
+                    :placeholder="
+                      t('admin.settings.site.customerServiceGroupLinkPlaceholder')
+                    "
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.site.customerServiceGroupLinkHint") }}
+                  </p>
+                </div>
               </div>
 
               <!-- Doc URL -->
@@ -9577,9 +9636,12 @@ const form = reactive<SettingsForm>({
   default_user_rpm_limit: 0,
   site_name: "Sub2API",
   site_logo: "",
+  site_wordmark_suffix: "API",
   site_subtitle: "Subscription to API Conversion Platform",
   api_base_url: "",
   contact_info: "",
+  customer_service_group_number: "",
+  customer_service_group_link: "",
   doc_url: "",
   home_content: "",
   compact_home_enabled: false,
@@ -11189,7 +11251,10 @@ async function saveSettings() {
       if (!url) return true;
       try {
         const u = new URL(url);
-        return u.protocol === "http:" || u.protocol === "https:";
+        return (
+          (u.protocol === "http:" || u.protocol === "https:") &&
+          u.hash === ""
+        );
       } catch {
         return false;
       }
@@ -11197,6 +11262,15 @@ async function saveSettings() {
     // Optional URL fields: auto-clear invalid values so they don't cause backend 400 errors
     if (!isValidHttpUrl(form.frontend_url)) form.frontend_url = "";
     if (!isValidHttpUrl(form.doc_url)) form.doc_url = "";
+    form.customer_service_group_number =
+      form.customer_service_group_number.trim();
+    form.customer_service_group_link = form.customer_service_group_link.trim();
+    if (!isValidHttpUrl(form.customer_service_group_link)) {
+      appStore.showError(
+        t("admin.settings.site.customerServiceGroupLinkInvalid"),
+      );
+      return;
+    }
     syncWeChatConnectMode();
     const wechatStoredMode = deriveWeChatConnectStoredMode(
       form.wechat_connect_open_enabled,
@@ -11257,9 +11331,12 @@ async function saveSettings() {
       default_user_rpm_limit: form.default_user_rpm_limit,
       site_name: form.site_name,
       site_logo: form.site_logo,
+      site_wordmark_suffix: form.site_wordmark_suffix,
       site_subtitle: form.site_subtitle,
       api_base_url: form.api_base_url,
       contact_info: form.contact_info,
+      customer_service_group_number: form.customer_service_group_number,
+      customer_service_group_link: form.customer_service_group_link,
       doc_url: form.doc_url,
       home_content: form.home_content,
       compact_home_enabled: form.compact_home_enabled,

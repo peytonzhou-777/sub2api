@@ -101,6 +101,64 @@ func TestSettingService_GetPublicSettings_ExposesCompactHomeEnabled(t *testing.T
 	require.False(t, missingSettings.CompactHomeEnabled)
 }
 
+func TestSettingService_GetPublicSettings_ExposesWordmarkSuffix(t *testing.T) {
+	repo := &settingPublicRepoStub{
+		values: map[string]string{
+			SettingKeySiteWordmarkSuffix: "Pro",
+		},
+	}
+	svc := NewSettingService(repo, &config.Config{})
+
+	settings, err := svc.GetPublicSettings(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "Pro", settings.SiteWordmarkSuffix)
+
+	injected, err := svc.GetPublicSettingsForInjection(context.Background())
+	require.NoError(t, err)
+	payload, ok := injected.(*PublicSettingsInjectionPayload)
+	require.True(t, ok)
+	require.Equal(t, "Pro", payload.SiteWordmarkSuffix)
+}
+
+func TestSettingService_GetPublicSettings_DefaultsWordmarkSuffixToAPI(t *testing.T) {
+	svc := NewSettingService(&settingPublicRepoStub{values: map[string]string{}}, &config.Config{})
+
+	settings, err := svc.GetPublicSettings(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "API", settings.SiteWordmarkSuffix)
+}
+
+func TestSettingService_GetPublicSettings_ExposesCustomerServiceGroup(t *testing.T) {
+	repo := &settingPublicRepoStub{
+		values: map[string]string{
+			SettingKeyCustomerServiceGroupNumber: "001234567",
+			SettingKeyCustomerServiceGroupLink:   "https://qm.qq.com/q/example",
+		},
+	}
+	svc := NewSettingService(repo, &config.Config{})
+
+	settings, err := svc.GetPublicSettings(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "001234567", settings.CustomerServiceGroupNumber)
+	require.Equal(t, "https://qm.qq.com/q/example", settings.CustomerServiceGroupLink)
+
+	injected, err := svc.GetPublicSettingsForInjection(context.Background())
+	require.NoError(t, err)
+	payload, ok := injected.(*PublicSettingsInjectionPayload)
+	require.True(t, ok)
+	require.Equal(t, "001234567", payload.CustomerServiceGroupNumber)
+	require.Equal(t, "https://qm.qq.com/q/example", payload.CustomerServiceGroupLink)
+}
+
+func TestSettingService_GetPublicSettings_DefaultsCustomerServiceGroupToEmpty(t *testing.T) {
+	svc := NewSettingService(&settingPublicRepoStub{values: map[string]string{}}, &config.Config{})
+
+	settings, err := svc.GetPublicSettings(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, settings.CustomerServiceGroupNumber)
+	require.Empty(t, settings.CustomerServiceGroupLink)
+}
+
 func TestSettingService_ChannelMonitorHideThroughputDefaultsToPrivate(t *testing.T) {
 	missing := NewSettingService(&settingPublicRepoStub{values: map[string]string{}}, &config.Config{}).GetChannelMonitorRuntime(context.Background())
 	require.True(t, missing.HideThroughput)

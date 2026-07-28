@@ -156,9 +156,12 @@ type UpdateSettingsRequest struct {
 	// OEM设置
 	SiteName                    string                `json:"site_name"`
 	SiteLogo                    string                `json:"site_logo"`
+	SiteWordmarkSuffix          string                `json:"site_wordmark_suffix" binding:"max=16"`
 	SiteSubtitle                string                `json:"site_subtitle"`
 	APIBaseURL                  string                `json:"api_base_url"`
 	ContactInfo                 string                `json:"contact_info"`
+	CustomerServiceGroupNumber  string                `json:"customer_service_group_number"`
+	CustomerServiceGroupLink    string                `json:"customer_service_group_link"`
 	DocURL                      string                `json:"doc_url"`
 	HomeContent                 string                `json:"home_content"`
 	CompactHomeEnabled          bool                  `json:"compact_home_enabled"`
@@ -1279,6 +1282,16 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		}
 	}
 
+	// 客服群号保留字符串语义，群链接仅允许安全的绝对 HTTP(S) 地址。
+	req.CustomerServiceGroupNumber = strings.TrimSpace(req.CustomerServiceGroupNumber)
+	req.CustomerServiceGroupLink = strings.TrimSpace(req.CustomerServiceGroupLink)
+	if req.CustomerServiceGroupLink != "" {
+		if err := config.ValidateAbsoluteHTTPURL(req.CustomerServiceGroupLink); err != nil {
+			response.BadRequest(c, "Customer service group link must be an absolute http(s) URL")
+			return
+		}
+	}
+
 	// 自定义菜单项验证
 	const (
 		maxCustomMenuItems    = 20
@@ -1641,9 +1654,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		GoogleOAuthFrontendRedirectURL:         req.GoogleOAuthFrontendRedirectURL,
 		SiteName:                               req.SiteName,
 		SiteLogo:                               req.SiteLogo,
+		SiteWordmarkSuffix:                     req.SiteWordmarkSuffix,
 		SiteSubtitle:                           req.SiteSubtitle,
 		APIBaseURL:                             req.APIBaseURL,
 		ContactInfo:                            req.ContactInfo,
+		CustomerServiceGroupNumber:             req.CustomerServiceGroupNumber,
+		CustomerServiceGroupLink:               req.CustomerServiceGroupLink,
 		DocURL:                                 req.DocURL,
 		HomeContent:                            req.HomeContent,
 		CompactHomeEnabled:                     req.CompactHomeEnabled,
@@ -2262,9 +2278,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		GoogleOAuthFrontendRedirectURL:                         updatedSettings.GoogleOAuthFrontendRedirectURL,
 		SiteName:                                               updatedSettings.SiteName,
 		SiteLogo:                                               updatedSettings.SiteLogo,
+		SiteWordmarkSuffix:                                     updatedSettings.SiteWordmarkSuffix,
 		SiteSubtitle:                                           updatedSettings.SiteSubtitle,
 		APIBaseURL:                                             updatedSettings.APIBaseURL,
 		ContactInfo:                                            updatedSettings.ContactInfo,
+		CustomerServiceGroupNumber:                             updatedSettings.CustomerServiceGroupNumber,
+		CustomerServiceGroupLink:                               updatedSettings.CustomerServiceGroupLink,
 		DocURL:                                                 updatedSettings.DocURL,
 		HomeContent:                                            updatedSettings.HomeContent,
 		CompactHomeEnabled:                                     updatedSettings.CompactHomeEnabled,

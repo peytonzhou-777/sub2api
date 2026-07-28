@@ -150,9 +150,12 @@ type SystemSettings struct {
 
 	SiteName                    string           `json:"site_name"`
 	SiteLogo                    string           `json:"site_logo"`
+	SiteWordmarkSuffix          string           `json:"site_wordmark_suffix"`
 	SiteSubtitle                string           `json:"site_subtitle"`
 	APIBaseURL                  string           `json:"api_base_url"`
 	ContactInfo                 string           `json:"contact_info"`
+	CustomerServiceGroupNumber  string           `json:"customer_service_group_number"`
+	CustomerServiceGroupLink    string           `json:"customer_service_group_link"`
 	DocURL                      string           `json:"doc_url"`
 	HomeContent                 string           `json:"home_content"`
 	CompactHomeEnabled          bool             `json:"compact_home_enabled"`
@@ -381,9 +384,12 @@ type PublicSettings struct {
 	AliyunCaptchaRegion                 string                   `json:"aliyun_captcha_region"`
 	SiteName                            string                   `json:"site_name"`
 	SiteLogo                            string                   `json:"site_logo"`
+	SiteWordmarkSuffix                  string                   `json:"site_wordmark_suffix"`
 	SiteSubtitle                        string                   `json:"site_subtitle"`
 	APIBaseURL                          string                   `json:"api_base_url"`
 	ContactInfo                         string                   `json:"contact_info"`
+	CustomerServiceGroupNumber          string                   `json:"customer_service_group_number"`
+	CustomerServiceGroupLink            string                   `json:"customer_service_group_link"`
 	DocURL                              string                   `json:"doc_url"`
 	HomeContent                         string                   `json:"home_content"`
 	CompactHomeEnabled                  bool                     `json:"compact_home_enabled"`

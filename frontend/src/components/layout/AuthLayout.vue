@@ -15,7 +15,7 @@
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </div>
           <h1 class="mb-2 text-3xl font-medium tracking-[-0.03em]">
-            <SiteWordmark :name="siteName" />
+            <SiteWordmark :name="siteName" :suffix="siteWordmarkSuffix" />
           </h1>
           <p class="text-sm text-white/75">
             {{ siteSubtitle }}
@@ -35,7 +35,7 @@
 
       <!-- Copyright -->
       <div class="mt-8 text-center text-xs text-white/55">
-        &copy; {{ currentYear }} <SiteWordmark :name="siteName" />. All rights reserved.
+        &copy; {{ currentYear }} <SiteWordmark :name="siteName" :suffix="siteWordmarkSuffix" />. All rights reserved.
       </div>
     </div>
   </div>
@@ -52,6 +52,7 @@ const appStore = useAppStore()
 
 const siteName = computed(() => appStore.siteName || 'Sub2API')
 const siteLogo = computed(() => sanitizeUrl(appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
+const siteWordmarkSuffix = computed(() => appStore.cachedPublicSettings?.site_wordmark_suffix || 'API')
 const siteSubtitle = computed(() => appStore.cachedPublicSettings?.site_subtitle || 'Subscription to API Conversion Platform')
 const settingsLoaded = computed(() => appStore.publicSettingsLoaded)
 

@@ -341,9 +341,12 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	// OEM设置
 	updates[SettingKeySiteName] = settings.SiteName
 	updates[SettingKeySiteLogo] = settings.SiteLogo
+	updates[SettingKeySiteWordmarkSuffix] = strings.TrimSpace(settings.SiteWordmarkSuffix)
 	updates[SettingKeySiteSubtitle] = settings.SiteSubtitle
 	updates[SettingKeyAPIBaseURL] = settings.APIBaseURL
 	updates[SettingKeyContactInfo] = settings.ContactInfo
+	updates[SettingKeyCustomerServiceGroupNumber] = strings.TrimSpace(settings.CustomerServiceGroupNumber)
+	updates[SettingKeyCustomerServiceGroupLink] = strings.TrimSpace(settings.CustomerServiceGroupLink)
 	updates[SettingKeyDocURL] = settings.DocURL
 	updates[SettingKeyHomeContent] = settings.HomeContent
 	updates[SettingKeyCompactHomeEnabled] = strconv.FormatBool(settings.CompactHomeEnabled)

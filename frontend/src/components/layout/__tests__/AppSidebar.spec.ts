@@ -63,6 +63,12 @@ describe('AppSidebar header styles', () => {
     expect(suffixStyleMatch?.[0]).toContain('height: 100%;')
     expect(suffixStyleMatch?.[0]).toContain('align-items: center;')
   })
+
+  it('reads the console suffix from the public branding setting with an API fallback', () => {
+    expect(componentSource).toContain("const siteWordmarkSuffix = computed(() => appStore.cachedPublicSettings?.site_wordmark_suffix || 'API')")
+    expect(componentSource).toContain('{{ siteWordmarkSuffix }}')
+    expect(componentSource).not.toContain('<span class="sidebar-brand-suffix">API</span>')
+  })
 })
 
 describe('AppSidebar Codex background', () => {

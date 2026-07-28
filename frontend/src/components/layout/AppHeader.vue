@@ -12,8 +12,36 @@
         </button>
       </div>
 
-      <!-- Right: Announcements + Docs + Language + Balance + User Dropdown -->
-      <div class="flex items-center gap-3">
+      <!-- Right: Customer Service Group + Announcements + Docs + Language + Balance + User Dropdown -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Customer Service Group -->
+        <a
+          v-if="showCustomerServiceGroup"
+          data-test="customer-service-group"
+          :href="customerServiceGroupLink"
+          target="_blank"
+          rel="noopener noreferrer"
+          :aria-label="
+            t('common.customerServiceGroupAction', {
+              number: customerServiceGroupNumber
+            })
+          "
+          :title="
+            t('common.customerServiceGroupAction', {
+              number: customerServiceGroupNumber
+            })
+          "
+          class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white sm:px-2.5 sm:text-sm"
+          @click="copyCustomerServiceGroupNumber"
+        >
+          <Icon name="chat" size="sm" />
+          <span>{{
+            t('common.customerServiceGroupNumber', {
+              number: customerServiceGroupNumber
+            })
+          }}</span>
+        </a>
+
         <!-- Announcement Bell -->
         <AnnouncementBell v-if="user" />
 
@@ -289,6 +317,7 @@ import { useAdminSettingsStore } from '@/stores/adminSettings'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { useClipboard } from '@/composables/useClipboard'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 import { formatDateOnly } from '@/utils/format'
@@ -302,6 +331,7 @@ const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
 const onboardingStore = useOnboardingStore()
 const limitedCreditStore = useLimitedCreditStore()
+const { copyToClipboard } = useClipboard()
 
 const user = computed(() => authStore.user)
 const dropdownOpen = ref(false)
@@ -309,6 +339,15 @@ const dropdownRef = ref<HTMLElement | null>(null)
 const contactInfo = computed(() => appStore.contactInfo)
 const docUrl = computed(() => sanitizeUrl(appStore.docUrl))
 const modelPlazaEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.modelPlaza))
+const customerServiceGroupNumber = computed(() => appStore.customerServiceGroupNumber.trim())
+const customerServiceGroupLink = computed(() => sanitizeUrl(appStore.customerServiceGroupLink))
+const showCustomerServiceGroup = computed(() => {
+  return Boolean(
+    user.value &&
+      customerServiceGroupNumber.value &&
+      customerServiceGroupLink.value
+  )
+})
 const paymentEnabled = computed(() => appStore.cachedPublicSettings?.payment_enabled !== false)
 const avatarUrl = computed(() => user.value?.avatar_url?.trim() || '')
 const ordinaryAvailableBalance = computed(() => Number(user.value?.balance || 0))
@@ -336,6 +375,14 @@ const limitedCreditSignal = computed(() => {
       green: 'bg-green-500',
   }[getLimitedCreditSignalLevel(credit)]
 })
+
+// 点击入口时复制群号；不阻止锚点默认行为，确保外部群链接同步在新标签页打开。
+function copyCustomerServiceGroupNumber(): void {
+  void copyToClipboard(
+    customerServiceGroupNumber.value,
+    t('common.customerServiceGroupCopied')
+  )
+}
 
 // 只在标准模式的管理员下显示新手引导按钮
 const showOnboardingButton = computed(() => {

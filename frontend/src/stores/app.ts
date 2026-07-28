@@ -30,6 +30,8 @@ export const useAppStore = defineStore('app', () => {
   const siteLogo = ref<string>('')
   const siteVersion = ref<string>('')
   const contactInfo = ref<string>('')
+  const customerServiceGroupNumber = ref<string>('')
+  const customerServiceGroupLink = ref<string>('')
   const apiBaseUrl = ref<string>('')
   const docUrl = ref<string>('')
   const cachedPublicSettings = ref<PublicSettings | null>(null)
@@ -298,6 +300,8 @@ export const useAppStore = defineStore('app', () => {
     siteLogo.value = config.site_logo || ''
     siteVersion.value = config.version || ''
     contactInfo.value = config.contact_info || ''
+    customerServiceGroupNumber.value = config.customer_service_group_number?.trim() || ''
+    customerServiceGroupLink.value = config.customer_service_group_link?.trim() || ''
     apiBaseUrl.value = config.api_base_url || ''
     docUrl.value = config.doc_url || ''
     publicSettingsLoaded.value = true
@@ -341,9 +345,12 @@ export const useAppStore = defineStore('app', () => {
         aliyun_captcha_region: 'cn',
         site_name: siteName.value,
         site_logo: siteLogo.value,
+        site_wordmark_suffix: 'API',
         site_subtitle: '',
         api_base_url: apiBaseUrl.value,
         contact_info: contactInfo.value,
+        customer_service_group_number: customerServiceGroupNumber.value,
+        customer_service_group_link: customerServiceGroupLink.value,
         doc_url: docUrl.value,
         home_content: '',
         compact_home_enabled: false,
@@ -447,6 +454,8 @@ export const useAppStore = defineStore('app', () => {
     siteLogo,
     siteVersion,
     contactInfo,
+    customerServiceGroupNumber,
+    customerServiceGroupLink,
     apiBaseUrl,
     docUrl,
     cachedPublicSettings,

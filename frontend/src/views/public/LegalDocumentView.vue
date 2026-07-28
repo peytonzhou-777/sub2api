@@ -8,7 +8,7 @@
               <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
             </span>
             <span class="truncate text-base font-semibold text-gray-950 dark:text-white">
-              <SiteWordmark :name="siteName" />
+              <SiteWordmark :name="siteName" :suffix="siteWordmarkSuffix" />
             </span>
           </template>
           <template v-else>
@@ -122,6 +122,7 @@ const documentId = computed(() => String(route.params.documentId || ''))
 const isAdminComplianceDocument = computed(() => documentId.value === 'admin-compliance')
 const documents = computed(() => settings.value?.login_agreement_documents ?? [])
 const siteName = computed(() => settings.value?.site_name || 'Sub2API')
+const siteWordmarkSuffix = computed(() => settings.value?.site_wordmark_suffix || 'API')
 const siteLogo = computed(() => sanitizeUrl(settings.value?.site_logo || '', {
   allowRelative: true,
   allowDataUrl: true,

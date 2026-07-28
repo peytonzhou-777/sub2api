@@ -385,9 +385,12 @@ const baseSettingsResponse = {
   affiliate_rebate_credit_validity_days: 30,
   site_name: "Sub2API",
   site_logo: "",
+  site_wordmark_suffix: "API",
   site_subtitle: "",
   api_base_url: "",
   contact_info: "",
+  customer_service_group_number: "",
+  customer_service_group_link: "",
   doc_url: "",
   home_content: "",
   compact_home_enabled: false,
@@ -735,6 +738,87 @@ describe("admin SettingsView payment visible method controls", () => {
 
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({ compact_home_enabled: true }),
+    );
+  });
+
+  it("loads, trims, and submits customer service group settings", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      customer_service_group_number: "001234567",
+      customer_service_group_link: "https://qm.qq.com/q/example",
+    });
+    const wrapper = mountView();
+    await flushPromises();
+
+    const numberInput = wrapper.get(
+      '[data-testid="customer-service-group-number"]',
+    );
+    const linkInput = wrapper.get(
+      '[data-testid="customer-service-group-link"]',
+    );
+    expect((numberInput.element as HTMLInputElement).value).toBe("001234567");
+    expect((linkInput.element as HTMLInputElement).value).toBe(
+      "https://qm.qq.com/q/example",
+    );
+
+    await numberInput.setValue(" 009876543 ");
+    await linkInput.setValue(" https://qm.qq.com/q/updated ");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer_service_group_number: "009876543",
+        customer_service_group_link: "https://qm.qq.com/q/updated",
+      }),
+    );
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "https://qm.qq.com/q/example#fragment",
+  ])("blocks invalid customer service group links before saving: %s", async (link) => {
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper
+      .get('[data-testid="customer-service-group-number"]')
+      .setValue("123456789");
+    await wrapper
+      .get('[data-testid="customer-service-group-link"]')
+      .setValue(link);
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith(
+      "admin.settings.site.customerServiceGroupLinkInvalid",
+    );
+  });
+
+  it("submits empty strings to clear customer service group settings", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      customer_service_group_number: "001234567",
+      customer_service_group_link: "https://qm.qq.com/q/example",
+    });
+    const wrapper = mountView();
+    await flushPromises();
+
+    await wrapper
+      .get('[data-testid="customer-service-group-number"]')
+      .setValue("");
+    await wrapper
+      .get('[data-testid="customer-service-group-link"]')
+      .setValue("");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer_service_group_number: "",
+        customer_service_group_link: "",
+      }),
     );
   });
 

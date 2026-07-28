@@ -14,9 +14,23 @@ describe('HomeView 公共导航与页脚', () => {
     expect(styles).toMatch(/\.codex-public-nav\s*\{[\s\S]*?justify-content:\s*flex-end;/)
   })
 
+  it('收紧首屏高度并在移动端保留稳定展示空间', () => {
+    const styles = readFileSync(resolve(__dirname, '../../styles/codex/public-shell.css'), 'utf8')
+    expect(styles).toContain('min-height: clamp(680px, 82svh, 920px);')
+    expect(styles).toMatch(/@media \(max-width: 767px\)[\s\S]*?\.codex-hero\s*\{\s*min-height:\s*clamp\(640px, 88svh, 720px\);\s*\}/)
+    expect(styles).not.toContain('min-height: min(1200px, 100svh);')
+    expect(styles).not.toContain('.codex-hero { min-height: 844px; }')
+  })
+
   it('不在页脚展示 GitHub 固定外链', () => {
     expect(source).not.toContain('https://github.com/Wei-Shaw/sub2api')
     expect(source).not.toContain('>GitHub</a>')
+  })
+
+  it('从公开设置读取品牌后缀并用于首页与页脚', () => {
+    expect(source).toContain('const siteWordmarkSuffix = computed')
+    expect(source).toContain("cachedPublicSettings?.site_wordmark_suffix || 'API'")
+    expect(source.match(/<SiteWordmark :name="siteName" :suffix="siteWordmarkSuffix" \/>/g)).toHaveLength(2)
   })
 
   it('展示站点信息并重构首张信息卡', () => {

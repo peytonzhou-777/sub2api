@@ -106,7 +106,7 @@
             <div class="codex-hero-logo">
               <img :src="siteLogo || '/logo.svg'" alt="" class="h-full w-full object-contain" />
             </div>
-            <h1><SiteWordmark :name="siteName" /></h1>
+            <h1><SiteWordmark :name="siteName" :suffix="siteWordmarkSuffix" /></h1>
             <p>{{ siteSubtitle }}</p>
             <router-link :to="isAuthenticated ? dashboardPath : '/login'" class="codex-public-pill codex-reveal-delay">
               {{ isAuthenticated ? t('home.goToDashboard') : t('home.getStarted') }}
@@ -139,7 +139,7 @@
 
     <footer class="codex-footer">
       <div class="codex-footer-inner">
-        <p>&copy; {{ currentYear }} <SiteWordmark :name="siteName" />. {{ t('home.footer.allRightsReserved') }}</p>
+        <p>&copy; {{ currentYear }} <SiteWordmark :name="siteName" :suffix="siteWordmarkSuffix" />. {{ t('home.footer.allRightsReserved') }}</p>
         <div v-if="docUrl" class="codex-footer-links">
           <a :href="docUrl" target="_blank" rel="noopener noreferrer">{{ t('home.docs') }}</a>
         </div>
@@ -167,6 +167,7 @@ const navSolid = ref(false)
 
 const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API')
 const siteLogo = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
+const siteWordmarkSuffix = computed(() => appStore.cachedPublicSettings?.site_wordmark_suffix || 'API')
 const siteSubtitle = computed(() => appStore.cachedPublicSettings?.site_subtitle || 'AI API Gateway Platform')
 const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')

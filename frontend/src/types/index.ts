@@ -232,9 +232,12 @@ export interface PublicSettings {
   aliyun_captcha_region?: string
   site_name: string
   site_logo: string
+  site_wordmark_suffix?: string
   site_subtitle: string
   api_base_url: string
   contact_info: string
+  customer_service_group_number?: string
+  customer_service_group_link?: string
   doc_url: string
   home_content: string
   compact_home_enabled: boolean

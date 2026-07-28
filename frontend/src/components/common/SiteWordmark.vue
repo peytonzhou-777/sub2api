@@ -1,13 +1,14 @@
 <template>
   <span class="site-wordmark">
     <span class="site-wordmark-name"><slot>{{ name }}</slot></span>
-    <span class="site-wordmark-suffix" aria-label="API">API</span>
+    <span class="site-wordmark-suffix" :aria-label="suffix || 'API'">{{ suffix || 'API' }}</span>
   </span>
 </template>
 
 <script setup lang="ts">
 defineProps<{
   name?: string
+  suffix?: string
 }>()
 </script>
 

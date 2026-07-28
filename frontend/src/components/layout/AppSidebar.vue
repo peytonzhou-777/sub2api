@@ -26,7 +26,7 @@
           @click="handleMenuItemClick(homePath)"
         >
           <span class="min-w-0 truncate">{{ siteName }}</span>
-          <span class="sidebar-brand-suffix">API</span>
+          <span class="sidebar-brand-suffix">{{ siteWordmarkSuffix }}</span>
         </router-link>
       </div>
     </div>
@@ -247,6 +247,7 @@ const expandedGroups = ref<Set<string>>(new Set())
 // Site settings from appStore (cached, no flicker)
 const siteName = computed(() => appStore.siteName)
 const siteLogo = computed(() => sanitizeUrl(appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
+const siteWordmarkSuffix = computed(() => appStore.cachedPublicSettings?.site_wordmark_suffix || 'API')
 const settingsLoaded = computed(() => appStore.publicSettingsLoaded)
 
 // SVG Icon Components

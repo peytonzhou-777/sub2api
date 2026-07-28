@@ -151,9 +151,12 @@ type SystemSettings struct {
 
 	SiteName                    string
 	SiteLogo                    string
+	SiteWordmarkSuffix          string
 	SiteSubtitle                string
 	APIBaseURL                  string
 	ContactInfo                 string
+	CustomerServiceGroupNumber  string
+	CustomerServiceGroupLink    string
 	DocURL                      string
 	HomeContent                 string
 	CompactHomeEnabled          bool
@@ -348,9 +351,12 @@ type PublicSettings struct {
 	AliyunCaptchaRegion                 string
 	SiteName                            string
 	SiteLogo                            string
+	SiteWordmarkSuffix                  string
 	SiteSubtitle                        string
 	APIBaseURL                          string
 	ContactInfo                         string
+	CustomerServiceGroupNumber          string
+	CustomerServiceGroupLink            string
 	DocURL                              string
 	HomeContent                         string
 	CompactHomeEnabled                  bool
