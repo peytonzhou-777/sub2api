@@ -39,6 +39,12 @@ export default {
           enabled: 'Enable Available Channels',
           enabledHint: 'When off, the sidebar entry is hidden and the endpoint returns an empty list.',
         },
+        accountPool: {
+          title: 'Account Pool',
+          description: 'Expose read-only status for all non-deleted accounts to signed-in users. Disabled by default.',
+          enabled: 'Account pool visible to users',
+          enabledHint: 'When disabled, the menu and user record account column are hidden, the route redirects to the dashboard, and the API returns 404.',
+        },
         modelPlaza: {
           title: 'Model Plaza',
           description: 'A public page showcasing available models and pricing by group. Disabled by default.',

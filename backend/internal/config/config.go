@@ -70,6 +70,7 @@ type Config struct {
 	Turnstile               TurnstileConfig               `mapstructure:"turnstile"`
 	Database                DatabaseConfig                `mapstructure:"database"`
 	Redis                   RedisConfig                   `mapstructure:"redis"`
+	AccountPool             AccountPoolConfig             `mapstructure:"account_pool"`
 	Ops                     OpsConfig                     `mapstructure:"ops"`
 	JWT                     JWTConfig                     `mapstructure:"jwt"`
 	Totp                    TotpConfig                    `mapstructure:"totp"`
@@ -99,6 +100,15 @@ type Config struct {
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
 	ImageStorage            ImageStorageConfig            `mapstructure:"image_storage"`
+}
+
+// AccountPoolConfig 配置号池快照的后台构建和观测保留阈值。
+type AccountPoolConfig struct {
+	ReconciliationIntervalSeconds int `mapstructure:"reconciliation_interval_seconds"`
+	BuildBatchSize                int `mapstructure:"build_batch_size"`
+	SnapshotTTLMinutes            int `mapstructure:"snapshot_ttl_minutes"`
+	UsageFreshSeconds             int `mapstructure:"usage_fresh_seconds"`
+	UsageRetentionSeconds         int `mapstructure:"usage_retention_seconds"`
 }
 
 type LogConfig struct {
@@ -2090,6 +2100,11 @@ func setDefaults() {
 	viper.SetDefault("redis.enable_tls", false)
 
 	// Batch Image queue
+	viper.SetDefault("account_pool.reconciliation_interval_seconds", 60)
+	viper.SetDefault("account_pool.build_batch_size", 500)
+	viper.SetDefault("account_pool.snapshot_ttl_minutes", 10)
+	viper.SetDefault("account_pool.usage_fresh_seconds", 900)
+	viper.SetDefault("account_pool.usage_retention_seconds", 3600)
 	viper.SetDefault("batch_image.enabled", false)
 	viper.SetDefault("batch_image.max_items_per_job_default", 200)
 	viper.SetDefault("batch_image.max_items_per_job_trial", 50)

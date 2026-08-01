@@ -95,6 +95,10 @@ func RegisterUserRoutes(
 			channels.GET("/available", h.AvailableChannel.List)
 		}
 
+		// 号池仅提供只读快照，并叠加重查询限流。
+		authenticated.GET("/account-pool", panelRateLimiter.Heavy(), h.AccountPool.List)
+		authenticated.GET("/account-pool/:id/personal-usage", panelRateLimiter.Heavy(), h.AccountPool.PersonalUsage)
+
 		// 使用记录（聚合统计属重查询，叠加更严格的按用户限流）
 		usage := authenticated.Group("/usage")
 		usage.Use(panelRateLimiter.Heavy())

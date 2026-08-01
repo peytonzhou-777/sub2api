@@ -868,6 +868,18 @@ export default {
     }
   },
 
+  accountPool: {
+    title: 'Account Pool',
+    search: 'Search account ID',
+    searchPlaceholder: 'Account ID (digits only)',
+    invalidId: 'Account ID must be a number greater than zero',
+    deletedOrMissing: 'Account was deleted or does not exist',
+    total: '{total} accounts',
+    columns: { id: 'Account ID', platformType: 'Account Type', capacity: 'Account Capacity', usageWindow: 'Account Usage', personalUsage: 'Personal Usage', resetCount: 'Account Reset Count', status: 'Account Status' },
+    personalUsage: { query: 'Query personal usage', loading: 'Loading', unavailable: 'Temporarily unavailable', notSupported: 'Not supported', observedAt: 'Observed', actualCost: 'actual', req: 'req', token: 'token' },
+    status: { active: 'Active', disabled: 'Disabled', error: 'Error', temporarily_unavailable: 'Temporarily unavailable', overloaded: 'Overloaded', rate_limited: 'Rate limited', paused: 'Paused', quota_exceeded: 'Quota exceeded' },
+  },
+
   // Empty States
   empty: {
     noData: 'No data found'

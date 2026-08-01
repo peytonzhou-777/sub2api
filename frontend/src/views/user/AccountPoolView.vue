@@ -1,0 +1,275 @@
+<template>
+  <AppLayout>
+    <TablePageLayout>
+      <template #filters>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="w-full sm:w-80">
+            <label for="account-pool-id" class="sr-only">{{ t('accountPool.search') }}</label>
+            <input
+              id="account-pool-id"
+              :value="searchInput"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              class="input"
+              :class="{ 'border-red-500': invalidSearch }"
+              :placeholder="t('accountPool.searchPlaceholder')"
+              @input="handleInput"
+              @keydown.enter.prevent="submitSearch"
+            />
+            <p v-if="invalidSearch" class="mt-1 text-sm text-red-600">{{ t('accountPool.invalidId') }}</p>
+          </div>
+          <button class="btn btn-secondary" :disabled="loading || retryUntil > Date.now()" :title="t('common.refresh')" @click="load(true)">
+            <Icon name="refresh" size="md" :class="{ 'animate-spin': loading }" />
+          </button>
+        </div>
+      </template>
+
+      <template #table>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+            <thead class="bg-gray-50 dark:bg-dark-800">
+              <tr>
+                <th v-for="column in columns" :key="column" class="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">{{ column }}</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-700 dark:bg-dark-900">
+              <tr v-if="loading && !page.items.length"><td colspan="7" class="px-4 py-12 text-center text-gray-500">{{ t('common.loading') }}</td></tr>
+              <tr v-else-if="!page.items.length"><td colspan="7" class="px-4 py-12 text-center text-gray-500">{{ submittedId ? t('accountPool.deletedOrMissing') : t('common.noData') }}</td></tr>
+              <tr v-for="account in page.items" :key="account.id">
+                <td class="whitespace-nowrap px-4 py-3 font-mono text-sm font-medium">#{{ account.id }}</td>
+                <td class="min-w-56 px-4 py-3 text-sm">
+                  <div class="flex min-w-0 flex-col gap-1">
+                    <div class="flex flex-wrap items-center gap-1">
+                      <PlatformTypeBadge
+                        :platform="platformOf(account)"
+                        :type="typeOf(account)"
+                        :auth-mode="account.auth_mode"
+                        :plan-type="account.plan_type"
+                        :privacy-mode="account.privacy_mode"
+                      />
+                      <span v-if="antigravityTierLabel(account)" :class="['inline-block rounded px-1.5 py-0.5 text-[10px] font-medium', antigravityTierClass(account)]">
+                        {{ antigravityTierLabel(account) }}
+                      </span>
+                    </div>
+                  </div>
+                </td>
+                <td class="whitespace-nowrap px-4 py-3 text-sm"><AccountPoolCapacityCell :capacity="account.capacity" /></td>
+                <td class="min-w-64 px-4 py-3 text-sm"><AccountPoolUsageCell :windows="account.usage_windows" /></td>
+                <td class="min-w-72 px-4 py-3 text-sm"><AccountPoolPersonalUsageCell :account="account" /></td>
+                <td class="whitespace-nowrap px-4 py-3 text-sm">{{ account.reset_count_state === 'fresh' && account.reset_count != null ? account.reset_count : '--' }}</td>
+                <td class="min-w-36 px-4 py-3 text-sm"><AccountPoolStatusCell :status="account.status" /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+      <template #pagination>
+        <Pagination
+          v-if="!submittedId && page.total > 0"
+          :page="page.page"
+          :total="page.total"
+          :page-size="page.page_size"
+          @update:page="changePage"
+          @update:pageSize="changePageSize"
+        />
+      </template>
+    </TablePageLayout>
+  </AppLayout>
+</template>
+
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import AppLayout from '@/components/layout/AppLayout.vue'
+import TablePageLayout from '@/components/layout/TablePageLayout.vue'
+import Icon from '@/components/icons/Icon.vue'
+import Pagination from '@/components/common/Pagination.vue'
+import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
+import AccountPoolCapacityCell from '@/components/account/AccountPoolCapacityCell.vue'
+import AccountPoolStatusCell from '@/components/account/AccountPoolStatusCell.vue'
+import AccountPoolUsageCell from '@/components/account/AccountPoolUsageCell.vue'
+import AccountPoolPersonalUsageCell from '@/components/account/AccountPoolPersonalUsageCell.vue'
+import accountPoolAPI, { type AccountPoolPage } from '@/api/accountPool'
+import type { AccountPlatform, AccountType } from '@/types'
+import { useAppStore } from '@/stores/app'
+import { extractApiErrorMessage } from '@/utils/apiError'
+import { getPersistedPageSize, setPersistedPageSize } from '@/composables/usePersistedPageSize'
+
+const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
+const appStore = useAppStore()
+const page = ref<AccountPoolPage>({ items: [], total: 0, page: 1, page_size: getPersistedPageSize(), pages: 1 })
+const loading = ref(false)
+const searchInput = ref('')
+const submittedId = ref('')
+const etag = ref('')
+const lastLoadedAt = ref(0)
+const retryUntil = ref(0)
+let controller: AbortController | undefined
+let debounceTimer: ReturnType<typeof setTimeout> | undefined
+let pollTimer: ReturnType<typeof setInterval> | undefined
+let retryTimer: ReturnType<typeof setTimeout> | undefined
+let sequence = 0
+
+const invalidSearch = computed(() => searchInput.value !== '' && /^0+$/.test(searchInput.value))
+const columns = computed(() => [t('accountPool.columns.id'), t('accountPool.columns.platformType'), t('accountPool.columns.capacity'), t('accountPool.columns.usageWindow'), t('accountPool.columns.personalUsage'), t('accountPool.columns.resetCount'), t('accountPool.columns.status')])
+
+function platformOf(account: AccountPoolPage['items'][number]): AccountPlatform {
+  return account.platform as AccountPlatform
+}
+
+function typeOf(account: AccountPoolPage['items'][number]): AccountType {
+  return account.type as AccountType
+}
+
+function antigravityTierLabel(account: AccountPoolPage['items'][number]): string {
+  switch (account.antigravity_tier) {
+    case 'free-tier': return t('admin.accounts.tier.free')
+    case 'g1-pro-tier': return t('admin.accounts.tier.pro')
+    case 'g1-ultra-tier': return t('admin.accounts.tier.ultra')
+    default: return ''
+  }
+}
+
+function antigravityTierClass(account: AccountPoolPage['items'][number]): string {
+  switch (account.antigravity_tier) {
+    case 'free-tier': return 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300'
+    case 'g1-pro-tier': return 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
+    case 'g1-ultra-tier': return 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300'
+    default: return ''
+  }
+}
+
+function normalizeId(value: unknown): string {
+  const digits = String(value ?? '').replace(/[^0-9]/g, '')
+  if (!digits || /^0+$/.test(digits)) return digits
+  return digits.replace(/^0+/, '')
+}
+
+function handleInput(event: Event) {
+  const input = event.target as HTMLInputElement
+  const filtered = input.value.replace(/[^0-9]/g, '')
+  input.value = filtered
+  searchInput.value = filtered
+  if (debounceTimer) clearTimeout(debounceTimer)
+  if (filtered === '') {
+    clearSearch()
+    return
+  }
+  debounceTimer = setTimeout(submitSearch, 300)
+}
+
+// clearSearch 立即取消旧搜索并恢复完整列表第一页。
+function clearSearch() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = undefined
+  controller?.abort()
+  controller = undefined
+  sequence++
+  loading.value = false
+  searchInput.value = ''
+  submittedId.value = ''
+  etag.value = ''
+  page.value = { ...page.value, page: 1 }
+  void router.replace({ query: { ...route.query, account_id: undefined } })
+  void load(true, 1)
+}
+
+function submitSearch() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  const normalized = normalizeId(searchInput.value)
+  if (normalized && /^0+$/.test(searchInput.value)) return
+  searchInput.value = normalized
+  submittedId.value = normalized
+  etag.value = ''
+  if (!normalized) {
+    clearSearch()
+    return
+  }
+  page.value = { ...page.value, page: 1 }
+  void router.replace({ query: { ...route.query, account_id: normalized } })
+  void load(true, 1)
+}
+
+async function load(force = false, targetPage = page.value.page) {
+  if (document.hidden || invalidSearch.value || Date.now() < retryUntil.value) return
+  controller?.abort()
+  controller = new AbortController()
+  const current = ++sequence
+  loading.value = true
+  try {
+    const result = await accountPoolAPI.list({ page: submittedId.value ? 1 : targetPage, pageSize: page.value.page_size, accountId: submittedId.value || undefined, etag: force ? undefined : etag.value || undefined, signal: controller.signal })
+    if (current !== sequence) return
+    if (result.data) page.value = result.data
+    if (result.etag) etag.value = result.etag
+    lastLoadedAt.value = Date.now()
+  } catch (error: unknown) {
+    if (current !== sequence) return
+    const apiError = error as { code?: string; status?: number; retryAfter?: number }
+    if (apiError.status === 429) {
+      scheduleRetry(apiError.retryAfter)
+    } else if (apiError.code !== 'ERR_CANCELED') {
+      appStore.showError(extractApiErrorMessage(error, t('common.error')))
+    }
+  } finally {
+    if (current === sequence) loading.value = false
+  }
+}
+
+function changePage(target: number) {
+  etag.value = ''
+  void load(true, target)
+}
+
+function changePageSize(size: number) {
+  setPersistedPageSize(size)
+  page.value = { ...page.value, page: 1, page_size: size }
+  etag.value = ''
+  void load(true, 1)
+}
+
+// scheduleRetry 遵守服务端 Retry-After，并在到期后仅补发一次请求。
+function scheduleRetry(retryAfter?: number) {
+  const delay = Math.min(Math.max(1, retryAfter ?? 30) * 1000, 2_147_483_647)
+  retryUntil.value = Date.now() + delay
+  if (retryTimer) clearTimeout(retryTimer)
+  retryTimer = setTimeout(() => {
+    retryTimer = undefined
+    retryUntil.value = 0
+    if (!document.hidden) void load(true)
+  }, delay)
+}
+
+function handleVisibility() {
+  if (!document.hidden && Date.now() - lastLoadedAt.value >= 30_000) void load()
+}
+
+watch(() => route.query.account_id, (value) => {
+  const normalized = normalizeId(Array.isArray(value) ? value[0] : value)
+  if (normalized !== submittedId.value) {
+    searchInput.value = normalized
+    submittedId.value = normalized
+    etag.value = ''
+    void load(true, 1)
+  }
+})
+
+onMounted(() => {
+  const normalized = normalizeId(Array.isArray(route.query.account_id) ? route.query.account_id[0] : route.query.account_id)
+  searchInput.value = normalized
+  submittedId.value = normalized
+  void load(true, 1)
+  pollTimer = setInterval(() => { if (!document.hidden) void load() }, 30_000)
+  document.addEventListener('visibilitychange', handleVisibility)
+})
+
+onBeforeUnmount(() => {
+  controller?.abort()
+  if (debounceTimer) clearTimeout(debounceTimer)
+  if (pollTimer) clearInterval(pollTimer)
+  if (retryTimer) clearTimeout(retryTimer)
+  document.removeEventListener('visibilitychange', handleVisibility)
+})
+</script>

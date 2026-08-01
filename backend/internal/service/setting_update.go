@@ -43,6 +43,9 @@ func (s *SettingService) UpdateSettingsOmitting(ctx context.Context, settings *S
 		return err
 	}
 	omitted.dropFrom(updates)
+	if err := s.prepareAccountPoolEnabledEpoch(ctx, updates); err != nil {
+		return err
+	}
 
 	if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {
 		return err
@@ -73,11 +76,34 @@ func (s *SettingService) UpdateSettingsWithAuthSourceDefaultsOmitting(ctx contex
 		updates[key] = value
 	}
 	omitted.dropFrom(updates)
+	if err := s.prepareAccountPoolEnabledEpoch(ctx, updates); err != nil {
+		return err
+	}
 
 	if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {
 		return err
 	}
 	s.refreshCachedSettingsAfterWrite(ctx, settings, omitted)
+	return nil
+}
+
+// prepareAccountPoolEnabledEpoch 在每次“关→开”时生成新标识，使旧 generation 立即失效。
+func (s *SettingService) prepareAccountPoolEnabledEpoch(ctx context.Context, updates map[string]string) error {
+	next, included := updates[SettingKeyAccountPoolEnabled]
+	if !included || next != "true" {
+		return nil
+	}
+	current, err := s.settingRepo.GetValue(ctx, SettingKeyAccountPoolEnabled)
+	if err != nil && !errors.Is(err, ErrSettingNotFound) {
+		return fmt.Errorf("read account pool enabled setting: %w", err)
+	}
+	epoch, epochErr := s.settingRepo.GetValue(ctx, SettingKeyAccountPoolEnabledEpoch)
+	if epochErr != nil && !errors.Is(epochErr, ErrSettingNotFound) {
+		return fmt.Errorf("read account pool enabled epoch: %w", epochErr)
+	}
+	if current != "true" || strings.TrimSpace(epoch) == "" {
+		updates[SettingKeyAccountPoolEnabledEpoch] = strconv.FormatInt(time.Now().UTC().UnixNano(), 36)
+	}
 	return nil
 }
 
@@ -449,6 +475,8 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	// Available channels feature switch
 	updates[SettingKeyAvailableChannelsEnabled] = strconv.FormatBool(settings.AvailableChannelsEnabled)
+	// Account pool feature switch
+	updates[SettingKeyAccountPoolEnabled] = strconv.FormatBool(settings.AccountPoolEnabled)
 
 	// Model plaza feature switches + description
 	updates[SettingKeyModelPlazaEnabled] = strconv.FormatBool(settings.ModelPlazaEnabled)

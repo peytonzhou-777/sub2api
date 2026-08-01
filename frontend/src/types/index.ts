@@ -274,6 +274,7 @@ export interface PublicSettings {
   /** When true, user monitor hides RPM/TPM so scale cannot be reverse-estimated. */
   channel_monitor_hide_throughput?: boolean
   available_channels_enabled: boolean
+  account_pool_enabled: boolean
   model_plaza_enabled: boolean
   model_plaza_require_auth: boolean
   service_quota_enabled: boolean

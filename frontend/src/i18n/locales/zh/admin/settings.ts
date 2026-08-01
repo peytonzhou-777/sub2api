@@ -39,6 +39,12 @@ export default {
           enabled: '启用可用渠道',
           enabledHint: '关闭后用户端侧边栏入口隐藏，接口返回空数组。',
         },
+        accountPool: {
+          title: '号池',
+          description: '向已登录用户公开所有未删除账号的只读状态。默认关闭。',
+          enabled: '号池对用户可见',
+          enabledHint: '关闭后隐藏菜单和记录账号列，直接访问页面会跳转概览，接口返回 404。',
+        },
         modelPlaza: {
           title: '模型广场',
           description: '以分组为单位向访客展示可用模型与价格的公开页面。默认关闭。',

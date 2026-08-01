@@ -104,6 +104,11 @@ export const FeatureFlags = {
     mode: 'opt-in',
     label: 'Available Channels',
   }),
+  accountPool: defineFlag({
+    key: 'account_pool_enabled',
+    mode: 'opt-in',
+    label: 'Account Pool',
+  }),
   modelPlaza: defineFlag({
     key: 'model_plaza_enabled',
     mode: 'opt-in',

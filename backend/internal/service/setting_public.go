@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 )
@@ -235,6 +236,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyChannelMonitorDefaultIntervalSeconds,
 		SettingKeyChannelMonitorHideThroughput,
 		SettingKeyAvailableChannelsEnabled,
+		SettingKeyAccountPoolEnabled,
 		SettingKeyModelPlazaEnabled,
 		SettingKeyModelPlazaRequireAuth,
 		SettingKeyAffiliateEnabled,
@@ -363,6 +365,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		ChannelMonitorHideThroughput:         !isFalseSettingValue(settings[SettingKeyChannelMonitorHideThroughput]),
 
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
+		AccountPoolEnabled:       settings[SettingKeyAccountPoolEnabled] == "true",
 
 		ModelPlazaEnabled:     settings[SettingKeyModelPlazaEnabled] == "true",
 		ModelPlazaRequireAuth: settings[SettingKeyModelPlazaRequireAuth] == "true",
@@ -477,6 +480,33 @@ func (s *SettingService) GetChannelMonitorRuntime(ctx context.Context) ChannelMo
 // switch consumed by the user-facing handler.
 type AvailableChannelsRuntime struct {
 	Enabled bool
+}
+
+// IsAccountPoolEnabled 直接读取号池开关；读取失败时按默认关闭处理。
+func (s *SettingService) IsAccountPoolEnabled(ctx context.Context) bool {
+	vals, err := s.settingRepo.GetMultiple(ctx, []string{SettingKeyAccountPoolEnabled})
+	return err == nil && vals[SettingKeyAccountPoolEnabled] == "true"
+}
+
+// GetAccountPoolEnabledEpoch 返回当前开启会话标识；缺失时由后台任务补齐。
+func (s *SettingService) GetAccountPoolEnabledEpoch(ctx context.Context) string {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyAccountPoolEnabledEpoch)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+// EnsureAccountPoolEnabledEpoch 为升级前已开启但没有 epoch 的部署补齐标识。
+func (s *SettingService) EnsureAccountPoolEnabledEpoch(ctx context.Context) (string, error) {
+	if value := s.GetAccountPoolEnabledEpoch(ctx); value != "" {
+		return value, nil
+	}
+	value := strconv.FormatInt(time.Now().UTC().UnixNano(), 36)
+	if err := s.settingRepo.Set(ctx, SettingKeyAccountPoolEnabledEpoch, value); err != nil {
+		return "", err
+	}
+	return value, nil
 }
 
 // GetAvailableChannelsRuntime reads the available-channels feature switch directly
@@ -616,6 +646,7 @@ type PublicSettingsInjectionPayload struct {
 	// without waiting for API redaction alone (defense in depth).
 	ChannelMonitorHideThroughput bool `json:"channel_monitor_hide_throughput"`
 	AvailableChannelsEnabled     bool `json:"available_channels_enabled"`
+	AccountPoolEnabled           bool `json:"account_pool_enabled"`
 	ModelPlazaEnabled            bool `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth        bool `json:"model_plaza_require_auth"`
 	AffiliateEnabled             bool `json:"affiliate_enabled"`
@@ -698,6 +729,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 		ChannelMonitorHideThroughput:         settings.ChannelMonitorHideThroughput,
 		AvailableChannelsEnabled:             settings.AvailableChannelsEnabled,
+		AccountPoolEnabled:                   settings.AccountPoolEnabled,
 		ModelPlazaEnabled:                    settings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:                settings.ModelPlazaRequireAuth,
 		AffiliateEnabled:                     settings.AffiliateEnabled,

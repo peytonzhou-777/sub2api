@@ -48,6 +48,7 @@ export async function list(
     include_scheduler_score?: string
     sort_by?: string
     sort_order?: 'asc' | 'desc'
+    account_id?: string
   },
   options?: {
     signal?: AbortSignal
@@ -84,6 +85,7 @@ export async function listWithEtag(
     include_scheduler_score?: string
     sort_by?: string
     sort_order?: 'asc' | 'desc'
+    account_id?: string
   },
   options?: {
     signal?: AbortSignal

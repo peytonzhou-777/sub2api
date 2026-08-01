@@ -837,6 +837,8 @@ var ProviderSet = wire.NewSet(
 	NewAntigravityGatewayService,
 	ProvideRateLimitService,
 	ProvideAccountUsageService,
+	ProvideAccountPoolService,
+	ProvideAccountPoolReconciler,
 	ProvideAccountTestService,
 	ProvideUpstreamBillingProbeService,
 	ProvideOllamaCloudUsageService,
@@ -907,6 +909,27 @@ var ProviderSet = wire.NewSet(
 	NewChannelMonitorRequestTemplateService,
 	ProvideUserPlatformQuotaUsageFlusher,
 )
+
+// ProvideAccountPoolService 使用部署配置创建号池快照服务。
+func ProvideAccountPoolService(source AccountPoolSource, cache AccountPoolSnapshotCache, concurrency *ConcurrencyService, usageLogRepo UsageLogRepository, cfg *config.Config) *AccountPoolService {
+	pool := NewAccountPoolService(source, cache, concurrency, AccountPoolOptions{
+		BuildBatchSize: cfg.AccountPool.BuildBatchSize,
+		SnapshotTTL:    time.Duration(cfg.AccountPool.SnapshotTTLMinutes) * time.Minute,
+		UsageFresh:     time.Duration(cfg.AccountPool.UsageFreshSeconds) * time.Second,
+		UsageRetention: time.Duration(cfg.AccountPool.UsageRetentionSeconds) * time.Second,
+	})
+	if reader, ok := usageLogRepo.(AccountPoolPersonalUsageReader); ok {
+		pool.SetPersonalUsageReader(reader)
+	}
+	return pool
+}
+
+// ProvideAccountPoolReconciler 创建并启动号池周期对账。
+func ProvideAccountPoolReconciler(pool *AccountPoolService, settings *SettingService, ops OpsRepository, cfg *config.Config) *AccountPoolReconciler {
+	runner := NewAccountPoolReconciler(pool, settings, ops, time.Duration(cfg.AccountPool.ReconciliationIntervalSeconds)*time.Second)
+	runner.Start()
+	return runner
+}
 
 // ProvideUserPlatformQuotaUsageFlusher 创建并启动 UserPlatformQuotaUsageFlusher。
 func ProvideUserPlatformQuotaUsageFlusher(cfg *config.Config, cache BillingCache, quotaRepo UserPlatformQuotaRepository, tw *TimingWheelService) *UserPlatformQuotaUsageFlusher {

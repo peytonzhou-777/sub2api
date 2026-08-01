@@ -17,6 +17,47 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// GetUserAccountPersonalUsage 聚合当前用户在指定账号的两个本地用量窗口。
+// 查询只读 usage_logs，不触发任何账号凭据刷新或上游配额请求。
+func (r *usageLogRepository) GetUserAccountPersonalUsage(
+	ctx context.Context,
+	userID, accountID int64,
+	fiveHourStart, sevenDayStart, end time.Time,
+) (*service.AccountPoolPersonalUsageStats, error) {
+	query := `
+		SELECT
+			COUNT(*) FILTER (WHERE created_at >= $3 AND created_at < $5),
+			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens)
+				FILTER (WHERE created_at >= $3 AND created_at < $5), 0),
+			COALESCE(SUM(actual_cost) FILTER (WHERE created_at >= $3 AND created_at < $5), 0),
+			COUNT(*) FILTER (WHERE created_at >= $4 AND created_at < $5),
+			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens)
+				FILTER (WHERE created_at >= $4 AND created_at < $5), 0),
+			COALESCE(SUM(actual_cost) FILTER (WHERE created_at >= $4 AND created_at < $5), 0)
+		FROM usage_logs
+		WHERE user_id = $1
+		  AND account_id = $2
+		  AND created_at >= $4
+		  AND created_at < $5
+	`
+	stats := &service.AccountPoolPersonalUsageStats{}
+	if err := scanSingleRow(
+		ctx,
+		r.sql,
+		query,
+		[]any{userID, accountID, fiveHourStart, sevenDayStart, end},
+		&stats.FiveHour.Requests,
+		&stats.FiveHour.Tokens,
+		&stats.FiveHour.ActualCost,
+		&stats.SevenDay.Requests,
+		&stats.SevenDay.Tokens,
+		&stats.SevenDay.ActualCost,
+	); err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
 // GetUserStatsAggregated returns aggregated usage statistics for a user using database-level aggregation
 func (r *usageLogRepository) GetUserStatsAggregated(ctx context.Context, userID int64, startTime, endTime time.Time) (*usagestats.UsageStats, error) {
 	query := `

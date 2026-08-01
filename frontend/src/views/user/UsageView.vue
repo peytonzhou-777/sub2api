@@ -172,6 +172,7 @@
 
       <template v-if="activeTab === 'usage'">
         <UsageTable
+          account-id-link="user"
           :data="usageLogs"
           :loading="loading"
           :columns="visibleColumns"
@@ -642,6 +643,8 @@ const exportToCSV = async () => {
       'Reasoning Effort',
       'Inbound Endpoint',
       'IP Address',
+      'Group',
+      ...(appStore.cachedPublicSettings?.account_pool_enabled === true ? ['Account ID'] : []),
       'Type',
       'Billing Mode',
       'Input Tokens',
@@ -661,6 +664,8 @@ const exportToCSV = async () => {
       formatReasoningEffort(log.reasoning_effort),
       log.inbound_endpoint || '',
       log.ip_address || '',
+      log.group?.name || '',
+      ...(appStore.cachedPublicSettings?.account_pool_enabled === true ? [log.account_id ?? ''] : []),
       getRequestTypeExportText(log),
       getBillingModeLabel(getDisplayBillingMode(log), t),
       log.input_tokens,
@@ -704,6 +709,9 @@ const allColumns = computed<Column[]>(() => [
   { key: 'endpoint', label: t('usage.endpoint'), sortable: false },
   { key: 'ip_address', label: 'IP', sortable: false },
   { key: 'group', label: t('admin.usage.group'), sortable: false },
+  ...(appStore.cachedPublicSettings?.account_pool_enabled === true
+    ? [{ key: 'account_id', label: t('accountPool.columns.id'), sortable: false }]
+    : []),
   { key: 'stream', label: t('usage.type'), sortable: false },
   { key: 'billing_mode', label: t('admin.usage.billingMode'), sortable: false },
   { key: 'tokens', label: t('usage.tokens'), sortable: false },

@@ -489,6 +489,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { adminAPI } from '@/api/admin'
@@ -535,6 +536,9 @@ import { formatMultiplier } from '@/utils/formatters'
 import type { Account, AccountPlatform, AccountSchedulerGroupScore, AccountType, AccountUsageInfo, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel, UpstreamBillingProbeSnapshot } from '@/types'
 
 const { t } = useI18n()
+const route = useRoute()
+// 从号池跳转时预填账号 ID；兼容未提供完整路由对象的旧测试桩。
+const routeAccountID = String(route?.query?.account_id ?? '')
 const appStore = useAppStore()
 const authStore = useAuthStore()
 
@@ -1071,6 +1075,9 @@ const {
 } = useTableLoader<Account, any>({
   fetchFn: adminAPI.accounts.list,
   initialParams: {
+    account_id: /^\d+$/.test(routeAccountID) && Number(routeAccountID) > 0
+      ? String(Number(routeAccountID))
+      : '',
     platform: '',
     type: '',
     status: '',

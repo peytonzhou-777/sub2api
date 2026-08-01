@@ -16,6 +16,20 @@ import { refreshAuthTokens } from './tokenRefresh'
 import { getAPIBaseURL } from './url'
 export { buildApiUrl, buildGatewayUrl } from './url'
 
+// parseRetryAfter 将标准秒数或 HTTP 日期转换为客户端需要等待的秒数。
+export function parseRetryAfter(value: unknown, now = Date.now()): number | undefined {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (typeof raw !== 'string' && typeof raw !== 'number') return undefined
+  const text = String(raw).trim()
+  if (/^\d+$/.test(text)) {
+    const seconds = Number(text)
+    return Number.isFinite(seconds) ? Math.max(0, seconds) : undefined
+  }
+  const retryAt = Date.parse(text)
+  if (Number.isNaN(retryAt)) return undefined
+  return Math.max(0, Math.ceil((retryAt - now) / 1000))
+}
+
 // ==================== Axios Instance Configuration ====================
 
 export const apiClient: AxiosInstance = axios.create({
@@ -52,7 +66,7 @@ apiClient.interceptors.request.use(
     }
 
     // Attach timezone for all GET requests (backend may use it for default date ranges)
-    if (config.method === 'get') {
+    if (config.method === 'get' && config.url !== '/account-pool') {
       if (!config.params) {
         config.params = {}
       }
@@ -251,6 +265,7 @@ apiClient.interceptors.response.use(
         error: apiData.error,
         message: apiData.message || apiData.detail || error.message,
         metadata: apiData.metadata,
+        retryAfter: parseRetryAfter(error.response.headers?.['retry-after']),
       })
     }
 

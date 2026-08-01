@@ -454,6 +454,11 @@ const (
 	// sidebar entry is hidden. Defaults to false (opt-in feature).
 	SettingKeyAvailableChannelsEnabled = "available_channels_enabled"
 
+	// SettingKeyAccountPoolEnabled 控制用户只读号池页面和快照生产，默认关闭。
+	SettingKeyAccountPoolEnabled = "account_pool_enabled"
+	// SettingKeyAccountPoolEnabledEpoch 标识本次开启会话，防止重新开启时复用旧快照。
+	SettingKeyAccountPoolEnabledEpoch = "account_pool_enabled_epoch"
+
 	// SettingKeyModelPlazaEnabled is a DB-backed soft switch for the Model Plaza page
 	// (public group/model pricing showcase). When false: the plaza endpoint returns 404
 	// and the header entry is hidden. Defaults to false (opt-in feature).

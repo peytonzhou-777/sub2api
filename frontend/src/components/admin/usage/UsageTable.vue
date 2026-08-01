@@ -52,6 +52,15 @@
           <span class="text-sm text-gray-900 dark:text-white">{{ row.account?.name || '-' }}</span>
         </template>
 
+		<template #cell-account_id="{ row }">
+		  <RouterLink
+		    v-if="Number(row.account_id) > 0"
+		    class="whitespace-nowrap font-mono text-sm text-primary-600 hover:underline dark:text-primary-400"
+		    :to="accountIdLink === 'admin' ? `/admin/accounts?account_id=${row.account_id}` : `/account-pool?account_id=${row.account_id}`"
+		  >#{{ row.account_id }}</RouterLink>
+		  <span v-else>--</span>
+		</template>
+
         <template #cell-model="{ row }">
           <div class="space-y-0.5 text-xs">
             <div v-if="row.model_mapping_chain && row.model_mapping_chain.includes('→')" class="space-y-0.5">
@@ -562,6 +571,7 @@ interface Props {
   showUpstreamEndpoint?: boolean
   /** 嵌入统一卡片内使用：去掉自身卡片外观 */
   flat?: boolean
+  accountIdLink?: 'user' | 'admin'
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -571,7 +581,8 @@ const props = withDefaults(defineProps<Props>(), {
   defaultSortOrder: 'asc',
   showAccountBilling: true,
   showUpstreamEndpoint: true,
-  flat: false
+  flat: false,
+  accountIdLink: 'admin'
 })
 const emit = defineEmits<{
   userClick: [userID: number, email?: string]

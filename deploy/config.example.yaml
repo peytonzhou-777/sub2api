@@ -967,6 +967,14 @@ database:
 # Redis Configuration
 # Redis 配置
 # =============================================================================
+account_pool:
+  # 号池开启时的快照对账周期；只复用本地观测，不请求上游。
+  reconciliation_interval_seconds: 60
+  build_batch_size: 500
+  snapshot_ttl_minutes: 10
+  usage_fresh_seconds: 900
+  usage_retention_seconds: 3600
+
 redis:
   # Redis host address
   # Redis 主机地址

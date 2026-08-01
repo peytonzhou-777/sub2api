@@ -100,6 +100,16 @@
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
         </template>
 
+        <template #cell-account_id="{ row }">
+          <RouterLink
+            v-if="Number(row.account_id) > 0"
+            class="whitespace-nowrap font-mono text-sm text-primary-600 hover:underline dark:text-primary-400"
+            :to="`/admin/accounts?account_id=${row.account_id}`"
+            @click.stop
+          >#{{ row.account_id }}</RouterLink>
+          <span v-else class="text-sm text-gray-400 dark:text-gray-500">--</span>
+        </template>
+
         <template #cell-category="{ row }">
           <span class="text-sm text-gray-900 dark:text-white">
             {{ t('usage.errors.categories.' + mapErrorCategory(row.phase, row.type)) }}
@@ -200,6 +210,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'user', label: t('admin.ops.errorLog.user') },
   { key: 'api_key', label: t('admin.ops.errorLog.apiKey') },
   { key: 'account', label: t('admin.ops.errorLog.account') },
+  { key: 'account_id', label: t('accountPool.columns.id') },
   { key: 'platform', label: t('admin.ops.errorLog.platform') },
   { key: 'model', label: t('admin.ops.errorLog.model'), sortable: true },
   { key: 'endpoint', label: t('admin.ops.errorLog.endpoint') },
