@@ -40,6 +40,7 @@ describe('AnnouncementPopup', () => {
 
   afterEach(() => {
     document.body.innerHTML = ''
+    document.body.className = ''
     document.body.style.overflow = ''
   })
 
@@ -106,7 +107,7 @@ describe('AnnouncementPopup', () => {
     expect(dismissPopup).not.toHaveBeenCalled()
 
     await wrapper.setProps({ announcement: null })
-    expect(document.body.style.overflow).toBe('')
+    expect(document.body.classList.contains('announcement-popup-open')).toBe(false)
     wrapper.unmount()
   })
 
@@ -124,6 +125,60 @@ describe('AnnouncementPopup', () => {
 
     expect(dismissPopup).toHaveBeenCalledTimes(1)
     expect(wrapper.emitted('close')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('uses the accessible Codex dialog shell and releases the body scroll lock', async () => {
+    const store = useAnnouncementStore()
+    store.currentPopup = {
+      id: 7,
+      title: '系统维护通知',
+      content: '**维护时间**<script>alert(1)</script>',
+      notify_mode: 'popup',
+      created_at: '2026-07-12T00:00:00Z',
+      read_at: null,
+    }
+
+    const wrapper = mount(AnnouncementPopup, { attachTo: document.body })
+    const dialog = document.body.querySelector('[role="dialog"]')
+
+    expect(dialog).not.toBeNull()
+    expect(dialog?.querySelector('.announcement-popup-panel')).not.toBeNull()
+    expect(dialog?.textContent).toContain('系统维护通知')
+    expect(dialog?.querySelector('strong')?.textContent).toBe('维护时间')
+    expect(dialog?.querySelector('script')).toBeNull()
+    expect(document.body.classList.contains('announcement-popup-open')).toBe(true)
+
+    wrapper.unmount()
+    expect(document.body.classList.contains('announcement-popup-open')).toBe(false)
+  })
+
+  it('supports action, overlay and Escape dismissal', async () => {
+    const store = useAnnouncementStore()
+    store.currentPopup = {
+      id: 8,
+      title: '新公告',
+      content: '公告正文',
+      notify_mode: 'popup',
+      created_at: '2026-07-12T00:00:00Z',
+      read_at: null,
+    }
+    const dismiss = vi.spyOn(store, 'dismissPopup').mockResolvedValue()
+    const wrapper = mount(AnnouncementPopup, { attachTo: document.body })
+
+    const action = document.body.querySelector<HTMLButtonElement>('.announcement-popup-action')
+    expect(action).not.toBeNull()
+    action?.click()
+    await wrapper.vm.$nextTick()
+    expect(dismiss).toHaveBeenCalledTimes(1)
+
+    const overlay = document.body.querySelector<HTMLElement>('.announcement-popup-overlay')
+    overlay?.click()
+    await wrapper.vm.$nextTick()
+    expect(dismiss).toHaveBeenCalledTimes(2)
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(dismiss).toHaveBeenCalledTimes(3)
     wrapper.unmount()
   })
 })

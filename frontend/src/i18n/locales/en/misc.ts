@@ -394,9 +394,9 @@ export default {
       title: 'Recharge Promotion',
       countdown: 'Countdown: ',
       countdownDaysHours: '{days}d {hours}h',
-      participation: 'Participated: {completed}/{limit}',
+      participation: 'Available uses: {remaining}',
       limitedCreditWithDays: 'limited credit ({days} days)',
-      limitHint: 'Whether the bonus is granted depends on your actual remaining participation count when payment is credited.',
+      limitHint: 'Bonus credit depends on the available campaign uses when the recharge is credited.',
     },
     rechargeActivities: {
       create: 'New Activity',

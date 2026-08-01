@@ -418,9 +418,9 @@ export default {
       title: '充值活动',
       countdown: '活动倒计时：',
       countdownDaysHours: '{days}天{hours}小时',
-      participation: '已参与活动：{completed}/{limit}',
+      participation: '可参与次数：{remaining}',
       limitedCreditWithDays: '限时额度（有效期 {days} 天）',
-      limitHint: '最终是否赠送以到账时实际剩余参与次数为准',
+      limitHint: '赠送额度以充值到账时可参与活动次数为准',
     },
     rechargeActivities: {
       create: '新建活动',

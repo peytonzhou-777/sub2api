@@ -1,0 +1,7 @@
+@import './fonts.css';
+@import './tokens.css';
+@import './motion.css';
+@import './components.css';
+@import './workbench-shell.css';
+@import './public-shell.css';
+@import './compatibility.css';

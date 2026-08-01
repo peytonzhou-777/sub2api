@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
+
 import BaseDialog from '../BaseDialog.vue'
 
 vi.mock('vue-i18n', () => ({
@@ -33,5 +34,18 @@ describe('BaseDialog', () => {
 
     expect(document.body.querySelector<HTMLElement>('.modal-body')?.scrollTop).toBe(0)
     wrapper.unmount()
+  })
+
+  it('uses the Codex seam classes between dialog sections', () => {
+    const wrapper = mount(BaseDialog, {
+      props: { show: true, title: '测试弹窗' },
+      slots: { default: '内容', footer: '操作' },
+      global: {
+        stubs: { Teleport: true, Transition: false, Icon: true }
+      }
+    })
+
+    expect(wrapper.get('.modal-header').classes()).toContain('codex-seam-bottom')
+    expect(wrapper.get('.modal-footer').classes()).toContain('codex-seam-top')
   })
 })

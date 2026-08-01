@@ -72,7 +72,7 @@ describe('DataTable', () => {
     expect(nameHeader.find('[data-test="custom-name-header"]').exists()).toBe(true)
     expect(nameHeader.attributes('aria-sort')).toBe('ascending')
     expect(nameHeader.findAll('svg')).toHaveLength(2)
-    expect(nameHeader.findAll('svg')[0].classes()).toContain('text-primary-600')
+    expect(nameHeader.findAll('svg')[0].classes()).toContain('text-[var(--codex-accent-blue)]')
     expect(nameHeader.findAll('svg')[1].classes()).toContain('text-gray-300')
 
     await nameHeader.trigger('click')
@@ -80,7 +80,20 @@ describe('DataTable', () => {
 
     expect(nameHeader.attributes('aria-sort')).toBe('descending')
     expect(nameHeader.findAll('svg')[0].classes()).toContain('text-gray-300')
-    expect(nameHeader.findAll('svg')[1].classes()).toContain('text-primary-600')
+    expect(nameHeader.findAll('svg')[1].classes()).toContain('text-[var(--codex-accent-blue)]')
+  })
+
+  it('uses the neutral Codex hover class for data rows', async () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [{ key: 'name', label: 'Name' }],
+        data: [{ id: 1, name: 'Alpha' }]
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-row-id="1"]').classes()).toContain('codex-table-row')
   })
 
   it('renders every row with no virtual padding spacer for small datasets (virtualization off)', async () => {
