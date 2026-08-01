@@ -74,8 +74,8 @@
             </div>
           </div>
           <button @click="showCreateModal = true" class="btn btn-primary" data-tour="keys-create-btn">
-            <Icon name="plus" size="md" class="mr-2" />
-            {{ t('keys.createKey') }}
+            <Icon name="plus" size="md" />
+            <span class="flex-1 text-center">{{ t('keys.createKey') }}</span>
           </button>
         </div>
       </template>
@@ -507,39 +507,6 @@
           </Select>
         </div>
 
-        <!-- Custom Key Section (only for create) -->
-        <div v-if="!showEditModal" class="space-y-3">
-          <div class="flex items-center justify-between">
-            <label class="input-label mb-0">{{ t('keys.customKeyLabel') }}</label>
-            <button
-              type="button"
-              @click="formData.use_custom_key = !formData.use_custom_key"
-              :class="[
-                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                formData.use_custom_key ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-              ]"
-            >
-              <span
-                :class="[
-                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                  formData.use_custom_key ? 'translate-x-4' : 'translate-x-0'
-                ]"
-              />
-            </button>
-          </div>
-          <div v-if="formData.use_custom_key">
-            <input
-              v-model="formData.custom_key"
-              type="text"
-              class="input font-mono"
-              :placeholder="t('keys.customKeyPlaceholder')"
-              :class="{ 'border-red-500 dark:border-red-500': customKeyError }"
-            />
-            <p v-if="customKeyError" class="mt-1 text-sm text-red-500">{{ customKeyError }}</p>
-            <p v-else class="input-hint">{{ t('keys.customKeyHint') }}</p>
-          </div>
-        </div>
-
         <div v-if="showEditModal">
           <label class="input-label">{{ t('keys.statusLabel') }}</label>
           <Select
@@ -553,21 +520,7 @@
         <div class="space-y-3">
           <div class="flex items-center justify-between">
             <label class="input-label mb-0">{{ t('keys.ipRestriction') }}</label>
-            <button
-              type="button"
-              @click="formData.enable_ip_restriction = !formData.enable_ip_restriction"
-              :class="[
-                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                formData.enable_ip_restriction ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-              ]"
-            >
-              <span
-                :class="[
-                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                  formData.enable_ip_restriction ? 'translate-x-4' : 'translate-x-0'
-                ]"
-              />
-            </button>
+            <Toggle v-model="formData.enable_ip_restriction" :aria-label="t('keys.ipRestriction')" />
           </div>
 
           <div v-if="formData.enable_ip_restriction" class="space-y-4 pt-2">
@@ -598,26 +551,6 @@
         <!-- Quota Limit Section -->
         <div class="space-y-3">
           <label class="input-label">{{ t('keys.quotaLimit') }}</label>
-          <!-- Switch commented out - always show input, 0 = unlimited
-          <div class="flex items-center justify-between">
-            <label class="input-label mb-0">{{ t('keys.quotaLimit') }}</label>
-            <button
-              type="button"
-              @click="formData.enable_quota = !formData.enable_quota"
-              :class="[
-                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                formData.enable_quota ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-              ]"
-            >
-              <span
-                :class="[
-                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                  formData.enable_quota ? 'translate-x-4' : 'translate-x-0'
-                ]"
-              />
-            </button>
-          </div>
-          -->
 
           <div class="space-y-4">
             <div>
@@ -665,21 +598,7 @@
         <div class="space-y-3">
           <div class="flex items-center justify-between">
             <label class="input-label mb-0">{{ t('keys.rateLimitSection') }}</label>
-            <button
-              type="button"
-              @click="formData.enable_rate_limit = !formData.enable_rate_limit"
-              :class="[
-                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                formData.enable_rate_limit ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-              ]"
-            >
-              <span
-                :class="[
-                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                  formData.enable_rate_limit ? 'translate-x-4' : 'translate-x-0'
-                ]"
-              />
-            </button>
+            <Toggle v-model="formData.enable_rate_limit" :aria-label="t('keys.rateLimitSection')" />
           </div>
 
           <div v-if="formData.enable_rate_limit" class="space-y-4 pt-2">
@@ -839,21 +758,7 @@
         <div class="space-y-3">
           <div class="flex items-center justify-between">
             <label class="input-label mb-0">{{ t('keys.expiration') }}</label>
-            <button
-              type="button"
-              @click="formData.enable_expiration = !formData.enable_expiration"
-              :class="[
-                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                formData.enable_expiration ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-              ]"
-            >
-              <span
-                :class="[
-                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                  formData.enable_expiration ? 'translate-x-4' : 'translate-x-0'
-                ]"
-              />
-            </button>
+            <Toggle v-model="formData.enable_expiration" :aria-label="t('keys.expiration')" />
           </div>
 
           <div v-if="formData.enable_expiration" class="space-y-4 pt-2">
@@ -1135,6 +1040,7 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import EmptyState from '@/components/common/EmptyState.vue'
 	import Select from '@/components/common/Select.vue'
 	import SearchInput from '@/components/common/SearchInput.vue'
+	import Toggle from '@/components/common/Toggle.vue'
 	import Icon from '@/components/icons/Icon.vue'
 	import UseKeyModal from '@/components/keys/UseKeyModal.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
@@ -1331,8 +1237,6 @@ const formData = ref({
   name: '',
   group_id: null as number | null,
   status: 'active' as 'active' | 'inactive',
-  use_custom_key: false,
-  custom_key: '',
   enable_ip_restriction: false,
   ip_whitelist: '',
   ip_blacklist: '',
@@ -1347,22 +1251,6 @@ const formData = ref({
   enable_expiration: false,
   expiration_preset: '30' as '7' | '30' | '90' | 'custom',
   expiration_date: ''
-})
-
-// 自定义Key验证
-const customKeyError = computed(() => {
-  if (!formData.value.use_custom_key || !formData.value.custom_key) {
-    return ''
-  }
-  const key = formData.value.custom_key
-  if (key.length < 16) {
-    return t('keys.customKeyTooShort')
-  }
-  // 检查字符：只允许字母、数字、下划线、连字符
-  if (!/^[a-zA-Z0-9_-]+$/.test(key)) {
-    return t('keys.customKeyInvalidChars')
-  }
-  return ''
 })
 
 const statusOptions = computed(() => [
@@ -1565,8 +1453,6 @@ const editKey = (key: ApiKey) => {
     name: key.name,
     group_id: key.group_id,
     status: key.status === 'quota_exhausted' || key.status === 'expired' ? 'inactive' : key.status,
-    use_custom_key: false,
-    custom_key: '',
     enable_ip_restriction: hasIPRestriction,
     ip_whitelist: (key.ip_whitelist || []).join('\n'),
     ip_blacklist: (key.ip_blacklist || []).join('\n'),
@@ -1668,18 +1554,6 @@ const handleSubmit = async () => {
     return
   }
 
-  // Validate custom key if enabled
-  if (!showEditModal.value && formData.value.use_custom_key) {
-    if (!formData.value.custom_key) {
-      appStore.showError(t('keys.customKeyRequired'))
-      return
-    }
-    if (customKeyError.value) {
-      appStore.showError(customKeyError.value)
-      return
-    }
-  }
-
   // Parse IP lists only if IP restriction is enabled
   const parseIPList = (text: string): string[] =>
     text.split('\n').map(ip => ip.trim()).filter(ip => ip.length > 0)
@@ -1735,11 +1609,10 @@ const handleSubmit = async () => {
       await keysAPI.update(selectedKey.value.id, updates)
       appStore.showSuccess(t('keys.keyUpdatedSuccess'))
     } else {
-      const customKey = formData.value.use_custom_key ? formData.value.custom_key : undefined
       await keysAPI.create(
         formData.value.name,
         formData.value.group_id,
-        customKey,
+        undefined,
         ipWhitelist,
         ipBlacklist,
         quota,
@@ -1791,8 +1664,6 @@ const closeModals = () => {
     name: '',
     group_id: null,
     status: 'active',
-    use_custom_key: false,
-    custom_key: '',
     enable_ip_restriction: false,
     ip_whitelist: '',
     ip_blacklist: '',

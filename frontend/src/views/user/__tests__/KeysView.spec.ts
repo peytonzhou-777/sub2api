@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import type { ApiKey } from '@/types'
 import KeysView from '../KeysView.vue'
+
+const keysViewSource = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), '../KeysView.vue'),
+  'utf8'
+)
 
 const {
   listKeys,
@@ -437,5 +445,13 @@ describe('user KeysView column settings', () => {
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
+  })
+})
+
+describe('user KeysView create form', () => {
+  it('does not expose custom API key creation controls', () => {
+    expect(keysViewSource).not.toContain("t('keys.customKeyLabel')")
+    expect(keysViewSource).not.toContain('formData.use_custom_key')
+    expect(keysViewSource).not.toContain('formData.custom_key')
   })
 })

@@ -1,5 +1,5 @@
 <template>
-  <div class="relative flex min-h-screen flex-col bg-gray-50 dark:bg-dark-950">
+  <div class="codex-public relative flex min-h-screen flex-col">
     <!-- Header (same pattern as HomeView) -->
     <header class="relative z-20 px-6 py-4">
       <nav class="mx-auto flex max-w-6xl items-center justify-between">
@@ -7,7 +7,7 @@
           <div class="h-10 w-10 overflow-hidden rounded-xl shadow-md">
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </div>
-          <span class="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">{{ siteName }}</span>
+          <span class="text-lg font-semibold tracking-tight text-gray-900 dark:text-white"><SiteWordmark :name="siteName" /></span>
         </router-link>
         <div class="flex items-center gap-3">
           <LocaleSwitcher />
@@ -21,14 +21,6 @@
           >
             <Icon name="book" size="md" />
           </a>
-          <button
-            @click="toggleTheme"
-            class="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
-            :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
-          >
-            <Icon v-if="isDark" name="sun" size="md" />
-            <Icon v-else name="moon" size="md" />
-          </button>
         </div>
       </nav>
     </header>
@@ -394,7 +386,7 @@
     <footer class="relative z-10 border-t border-gray-200/50 px-6 py-8 dark:border-dark-800/50">
       <div class="mx-auto flex max-w-6xl flex-col items-center justify-center gap-4 text-center sm:flex-row sm:text-left">
         <p class="text-sm text-gray-500 dark:text-dark-400">
-          &copy; {{ currentYear }} {{ siteName }}. {{ t('home.footer.allRightsReserved') }}
+          &copy; {{ currentYear }} <SiteWordmark :name="siteName" />. {{ t('home.footer.allRightsReserved') }}
         </p>
         <div class="flex items-center gap-4">
           <a
@@ -421,6 +413,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
+import SiteWordmark from '@/components/common/SiteWordmark.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { buildGatewayUrl } from '@/api/client'
 import { formatDateLocalInput } from '@/utils/format'
@@ -435,16 +428,6 @@ const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appS
 const siteLogo = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
 const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
 const githubUrl = 'https://github.com/Wei-Shaw/sub2api'
-
-// ==================== Theme (same as HomeView) ====================
-
-const isDark = ref(document.documentElement.classList.contains('dark'))
-
-function toggleTheme() {
-  isDark.value = !isDark.value
-  document.documentElement.classList.toggle('dark', isDark.value)
-  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
-}
 
 const currentYear = computed(() => new Date().getFullYear())
 
@@ -536,7 +519,7 @@ const RING_GRADIENTS = [
 const ringAnimated = ref(false)
 const displayPcts = ref<number[]>([])
 
-const ringTrackColor = computed(() => isDark.value ? '#222222' : '#F0F0EE')
+const ringTrackColor = computed(() => '#222222')
 
 interface RingItem {
   title: string
@@ -906,14 +889,6 @@ async function queryKey() {
 
 // ==================== Lifecycle ====================
 
-function initTheme() {
-  const savedTheme = localStorage.getItem('theme')
-  if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-    isDark.value = true
-    document.documentElement.classList.add('dark')
-  }
-}
-
 function formatResetTime(resetAt: string | null | undefined): string {
   if (!resetAt) return ''
   const diff = new Date(resetAt).getTime() - now.value.getTime()
@@ -927,7 +902,6 @@ function formatResetTime(resetAt: string | null | undefined): string {
 }
 
 onMounted(() => {
-  initTheme()
   if (!appStore.publicSettingsLoaded) {
     appStore.fetchPublicSettings()
   }
