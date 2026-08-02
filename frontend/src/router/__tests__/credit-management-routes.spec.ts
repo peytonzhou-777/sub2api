@@ -7,13 +7,15 @@ const root = dirname(fileURLToPath(import.meta.url))
 const routerSource = readFileSync(resolve(root, '../index.ts'), 'utf8')
 const sidebarSource = readFileSync(resolve(root, '../../components/layout/AppSidebar.vue'), 'utf8')
 const creditsViewSource = readFileSync(resolve(root, '../../views/admin/CreditsView.vue'), 'utf8')
+const grantEventsViewSource = readFileSync(resolve(root, '../../views/admin/CreditGrantEventsView.vue'), 'utf8')
 const rechargeActivitiesViewSource = readFileSync(resolve(root, '../../views/admin/orders/AdminRechargeActivitiesView.vue'), 'utf8')
 const resetRebatesViewSource = readFileSync(resolve(root, '../../views/admin/ResetRebatesView.vue'), 'utf8')
 const recurringGrantsViewSource = readFileSync(resolve(root, '../../views/admin/RecurringCreditGrantsView.vue'), 'utf8')
 
 describe('credit management routes', () => {
-  it('places all four credit functions under credit management', () => {
+  it('places all five credit functions under credit management', () => {
     expect(routerSource).toContain("path: '/admin/credits'")
+    expect(routerSource).toContain("path: '/admin/credits/grant-events'")
     expect(routerSource).toContain("path: '/admin/credits/recharge-activities'")
     expect(routerSource).toContain("path: '/admin/credits/reset-rebates'")
     expect(routerSource).toContain("path: '/admin/credits/recurring-grants'")
@@ -27,10 +29,12 @@ describe('credit management routes', () => {
   it('uses an expandable credit management sidebar group instead of page tabs', () => {
     expect(sidebarSource).toMatch(/path: '\/admin\/credits',[\s\S]*?expandOnly: true,[\s\S]*?children: \[/)
     expect(sidebarSource).toContain("{ path: '/admin/credits', label: t('admin.credits.tabs.users')")
+    expect(sidebarSource).toContain("{ path: '/admin/credits/grant-events', label: t('admin.credits.tabs.grantEvents')")
     expect(sidebarSource).toContain("{ path: '/admin/credits/recharge-activities', label: t('admin.credits.tabs.rechargeActivities')")
     expect(sidebarSource).toContain("{ path: '/admin/credits/recurring-grants', label: t('admin.credits.tabs.recurringGrants')")
     expect(sidebarSource).toContain("{ path: '/admin/credits/reset-rebates', label: t('admin.credits.tabs.resetRebates')")
     expect(creditsViewSource).not.toContain('CreditManagementTabs')
+    expect(grantEventsViewSource).not.toContain('CreditManagementTabs')
     expect(rechargeActivitiesViewSource).not.toContain('CreditManagementTabs')
     expect(resetRebatesViewSource).not.toContain('CreditManagementTabs')
     expect(recurringGrantsViewSource).not.toContain('CreditManagementTabs')

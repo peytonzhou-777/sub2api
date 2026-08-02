@@ -337,8 +337,13 @@ func registerDashboardRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	credits := admin.Group("/credits")
 	{
+		credits.GET("/grant-events", h.Admin.User.ListCreditGrantEvents)
+		credits.POST("/grant-events", h.Admin.User.CreateCreditGrantEvent)
+		credits.PUT("/grant-events/:event_id", h.Admin.User.UpdateCreditGrantEvent)
+		credits.DELETE("/grant-events/:event_id", h.Admin.User.DeleteCreditGrantEvent)
 		credits.GET("/users", h.Admin.User.ListCreditUsers)
 		credits.GET("/users/:id", h.Admin.User.GetCreditUserDetail)
+		credits.POST("/users/:id/grant-events/:event_id/trigger", h.Admin.User.TriggerCreditGrantEvent)
 		credits.POST("/users/:id/balance-adjustments", h.Admin.User.AdjustCreditBalance)
 		credits.POST("/users/:id/limited-credits", h.Admin.User.CreateAdminLimitedCredit)
 		credits.POST("/users/:id/limited-credits/:grant_id/adjustments", h.Admin.User.AdjustAdminLimitedCredit)

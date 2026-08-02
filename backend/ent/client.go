@@ -30,6 +30,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
 	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
+	"github.com/Wei-Shaw/sub2api/ent/creditgrantevent"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
@@ -61,6 +62,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/usercreditgranteventtrigger"
 	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
 	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditledger"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
@@ -104,6 +106,8 @@ type Client struct {
 	ChannelMonitorRequestTemplate *ChannelMonitorRequestTemplateClient
 	// CompositeModelRoute is the client for interacting with the CompositeModelRoute builders.
 	CompositeModelRoute *CompositeModelRouteClient
+	// CreditGrantEvent is the client for interacting with the CreditGrantEvent builders.
+	CreditGrantEvent *CreditGrantEventClient
 	// ErrorPassthroughRule is the client for interacting with the ErrorPassthroughRule builders.
 	ErrorPassthroughRule *ErrorPassthroughRuleClient
 	// Group is the client for interacting with the Group builders.
@@ -166,6 +170,8 @@ type Client struct {
 	UserAttributeDefinition *UserAttributeDefinitionClient
 	// UserAttributeValue is the client for interacting with the UserAttributeValue builders.
 	UserAttributeValue *UserAttributeValueClient
+	// UserCreditGrantEventTrigger is the client for interacting with the UserCreditGrantEventTrigger builders.
+	UserCreditGrantEventTrigger *UserCreditGrantEventTriggerClient
 	// UserLimitedCreditGrant is the client for interacting with the UserLimitedCreditGrant builders.
 	UserLimitedCreditGrant *UserLimitedCreditGrantClient
 	// UserLimitedCreditLedger is the client for interacting with the UserLimitedCreditLedger builders.
@@ -200,6 +206,7 @@ func (c *Client) init() {
 	c.ChannelMonitorHistory = NewChannelMonitorHistoryClient(c.config)
 	c.ChannelMonitorRequestTemplate = NewChannelMonitorRequestTemplateClient(c.config)
 	c.CompositeModelRoute = NewCompositeModelRouteClient(c.config)
+	c.CreditGrantEvent = NewCreditGrantEventClient(c.config)
 	c.ErrorPassthroughRule = NewErrorPassthroughRuleClient(c.config)
 	c.Group = NewGroupClient(c.config)
 	c.IdempotencyRecord = NewIdempotencyRecordClient(c.config)
@@ -231,6 +238,7 @@ func (c *Client) init() {
 	c.UserAllowedGroup = NewUserAllowedGroupClient(c.config)
 	c.UserAttributeDefinition = NewUserAttributeDefinitionClient(c.config)
 	c.UserAttributeValue = NewUserAttributeValueClient(c.config)
+	c.UserCreditGrantEventTrigger = NewUserCreditGrantEventTriggerClient(c.config)
 	c.UserLimitedCreditGrant = NewUserLimitedCreditGrantClient(c.config)
 	c.UserLimitedCreditLedger = NewUserLimitedCreditLedgerClient(c.config)
 	c.UserPlatformQuota = NewUserPlatformQuotaClient(c.config)
@@ -342,6 +350,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ChannelMonitorHistory:         NewChannelMonitorHistoryClient(cfg),
 		ChannelMonitorRequestTemplate: NewChannelMonitorRequestTemplateClient(cfg),
 		CompositeModelRoute:           NewCompositeModelRouteClient(cfg),
+		CreditGrantEvent:              NewCreditGrantEventClient(cfg),
 		ErrorPassthroughRule:          NewErrorPassthroughRuleClient(cfg),
 		Group:                         NewGroupClient(cfg),
 		IdempotencyRecord:             NewIdempotencyRecordClient(cfg),
@@ -373,6 +382,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		UserAllowedGroup:              NewUserAllowedGroupClient(cfg),
 		UserAttributeDefinition:       NewUserAttributeDefinitionClient(cfg),
 		UserAttributeValue:            NewUserAttributeValueClient(cfg),
+		UserCreditGrantEventTrigger:   NewUserCreditGrantEventTriggerClient(cfg),
 		UserLimitedCreditGrant:        NewUserLimitedCreditGrantClient(cfg),
 		UserLimitedCreditLedger:       NewUserLimitedCreditLedgerClient(cfg),
 		UserPlatformQuota:             NewUserPlatformQuotaClient(cfg),
@@ -411,6 +421,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ChannelMonitorHistory:         NewChannelMonitorHistoryClient(cfg),
 		ChannelMonitorRequestTemplate: NewChannelMonitorRequestTemplateClient(cfg),
 		CompositeModelRoute:           NewCompositeModelRouteClient(cfg),
+		CreditGrantEvent:              NewCreditGrantEventClient(cfg),
 		ErrorPassthroughRule:          NewErrorPassthroughRuleClient(cfg),
 		Group:                         NewGroupClient(cfg),
 		IdempotencyRecord:             NewIdempotencyRecordClient(cfg),
@@ -442,6 +453,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		UserAllowedGroup:              NewUserAllowedGroupClient(cfg),
 		UserAttributeDefinition:       NewUserAttributeDefinitionClient(cfg),
 		UserAttributeValue:            NewUserAttributeValueClient(cfg),
+		UserCreditGrantEventTrigger:   NewUserCreditGrantEventTriggerClient(cfg),
 		UserLimitedCreditGrant:        NewUserLimitedCreditGrantClient(cfg),
 		UserLimitedCreditLedger:       NewUserLimitedCreditLedgerClient(cfg),
 		UserPlatformQuota:             NewUserPlatformQuotaClient(cfg),
@@ -479,15 +491,16 @@ func (c *Client) Use(hooks ...Hook) {
 		c.AuthIdentity, c.AuthIdentityChannel, c.BatchImageEvent, c.BatchImageItem,
 		c.BatchImageJob, c.ChannelMonitor, c.ChannelMonitorDailyRollup,
 		c.ChannelMonitorHistory, c.ChannelMonitorRequestTemplate,
-		c.CompositeModelRoute, c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
-		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
-		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
-		c.Proxy, c.RechargeBonusCampaign, c.RechargeBonusParticipation,
-		c.RecurringCreditBatch, c.RecurringCreditTask, c.RecurringCreditTaskAudit,
-		c.RecurringCreditUserItem, c.RedeemCode, c.ResetRebateAccountItem,
-		c.ResetRebateBatch, c.ResetRebateUserItem, c.SecuritySecret, c.Setting,
-		c.SubscriptionPlan, c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog,
-		c.User, c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
+		c.CompositeModelRoute, c.CreditGrantEvent, c.ErrorPassthroughRule, c.Group,
+		c.IdempotencyRecord, c.IdentityAdoptionDecision, c.PaymentAuditLog,
+		c.PaymentOrder, c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode,
+		c.PromoCodeUsage, c.Proxy, c.RechargeBonusCampaign,
+		c.RechargeBonusParticipation, c.RecurringCreditBatch, c.RecurringCreditTask,
+		c.RecurringCreditTaskAudit, c.RecurringCreditUserItem, c.RedeemCode,
+		c.ResetRebateAccountItem, c.ResetRebateBatch, c.ResetRebateUserItem,
+		c.SecuritySecret, c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile,
+		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
+		c.UserAttributeDefinition, c.UserAttributeValue, c.UserCreditGrantEventTrigger,
 		c.UserLimitedCreditGrant, c.UserLimitedCreditLedger, c.UserPlatformQuota,
 		c.UserSubscription,
 	} {
@@ -503,15 +516,16 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.AuthIdentity, c.AuthIdentityChannel, c.BatchImageEvent, c.BatchImageItem,
 		c.BatchImageJob, c.ChannelMonitor, c.ChannelMonitorDailyRollup,
 		c.ChannelMonitorHistory, c.ChannelMonitorRequestTemplate,
-		c.CompositeModelRoute, c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
-		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
-		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
-		c.Proxy, c.RechargeBonusCampaign, c.RechargeBonusParticipation,
-		c.RecurringCreditBatch, c.RecurringCreditTask, c.RecurringCreditTaskAudit,
-		c.RecurringCreditUserItem, c.RedeemCode, c.ResetRebateAccountItem,
-		c.ResetRebateBatch, c.ResetRebateUserItem, c.SecuritySecret, c.Setting,
-		c.SubscriptionPlan, c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog,
-		c.User, c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
+		c.CompositeModelRoute, c.CreditGrantEvent, c.ErrorPassthroughRule, c.Group,
+		c.IdempotencyRecord, c.IdentityAdoptionDecision, c.PaymentAuditLog,
+		c.PaymentOrder, c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode,
+		c.PromoCodeUsage, c.Proxy, c.RechargeBonusCampaign,
+		c.RechargeBonusParticipation, c.RecurringCreditBatch, c.RecurringCreditTask,
+		c.RecurringCreditTaskAudit, c.RecurringCreditUserItem, c.RedeemCode,
+		c.ResetRebateAccountItem, c.ResetRebateBatch, c.ResetRebateUserItem,
+		c.SecuritySecret, c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile,
+		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
+		c.UserAttributeDefinition, c.UserAttributeValue, c.UserCreditGrantEventTrigger,
 		c.UserLimitedCreditGrant, c.UserLimitedCreditLedger, c.UserPlatformQuota,
 		c.UserSubscription,
 	} {
@@ -552,6 +566,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ChannelMonitorRequestTemplate.mutate(ctx, m)
 	case *CompositeModelRouteMutation:
 		return c.CompositeModelRoute.mutate(ctx, m)
+	case *CreditGrantEventMutation:
+		return c.CreditGrantEvent.mutate(ctx, m)
 	case *ErrorPassthroughRuleMutation:
 		return c.ErrorPassthroughRule.mutate(ctx, m)
 	case *GroupMutation:
@@ -614,6 +630,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.UserAttributeDefinition.mutate(ctx, m)
 	case *UserAttributeValueMutation:
 		return c.UserAttributeValue.mutate(ctx, m)
+	case *UserCreditGrantEventTriggerMutation:
+		return c.UserCreditGrantEventTrigger.mutate(ctx, m)
 	case *UserLimitedCreditGrantMutation:
 		return c.UserLimitedCreditGrant.mutate(ctx, m)
 	case *UserLimitedCreditLedgerMutation:
@@ -2976,6 +2994,141 @@ func (c *CompositeModelRouteClient) mutate(ctx context.Context, m *CompositeMode
 		return (&CompositeModelRouteDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown CompositeModelRoute mutation op: %q", m.Op())
+	}
+}
+
+// CreditGrantEventClient is a client for the CreditGrantEvent schema.
+type CreditGrantEventClient struct {
+	config
+}
+
+// NewCreditGrantEventClient returns a client for the CreditGrantEvent from the given config.
+func NewCreditGrantEventClient(c config) *CreditGrantEventClient {
+	return &CreditGrantEventClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `creditgrantevent.Hooks(f(g(h())))`.
+func (c *CreditGrantEventClient) Use(hooks ...Hook) {
+	c.hooks.CreditGrantEvent = append(c.hooks.CreditGrantEvent, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `creditgrantevent.Intercept(f(g(h())))`.
+func (c *CreditGrantEventClient) Intercept(interceptors ...Interceptor) {
+	c.inters.CreditGrantEvent = append(c.inters.CreditGrantEvent, interceptors...)
+}
+
+// Create returns a builder for creating a CreditGrantEvent entity.
+func (c *CreditGrantEventClient) Create() *CreditGrantEventCreate {
+	mutation := newCreditGrantEventMutation(c.config, OpCreate)
+	return &CreditGrantEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of CreditGrantEvent entities.
+func (c *CreditGrantEventClient) CreateBulk(builders ...*CreditGrantEventCreate) *CreditGrantEventCreateBulk {
+	return &CreditGrantEventCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CreditGrantEventClient) MapCreateBulk(slice any, setFunc func(*CreditGrantEventCreate, int)) *CreditGrantEventCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CreditGrantEventCreateBulk{err: fmt.Errorf("calling to CreditGrantEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CreditGrantEventCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &CreditGrantEventCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for CreditGrantEvent.
+func (c *CreditGrantEventClient) Update() *CreditGrantEventUpdate {
+	mutation := newCreditGrantEventMutation(c.config, OpUpdate)
+	return &CreditGrantEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *CreditGrantEventClient) UpdateOne(_m *CreditGrantEvent) *CreditGrantEventUpdateOne {
+	mutation := newCreditGrantEventMutation(c.config, OpUpdateOne, withCreditGrantEvent(_m))
+	return &CreditGrantEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *CreditGrantEventClient) UpdateOneID(id int64) *CreditGrantEventUpdateOne {
+	mutation := newCreditGrantEventMutation(c.config, OpUpdateOne, withCreditGrantEventID(id))
+	return &CreditGrantEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for CreditGrantEvent.
+func (c *CreditGrantEventClient) Delete() *CreditGrantEventDelete {
+	mutation := newCreditGrantEventMutation(c.config, OpDelete)
+	return &CreditGrantEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *CreditGrantEventClient) DeleteOne(_m *CreditGrantEvent) *CreditGrantEventDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *CreditGrantEventClient) DeleteOneID(id int64) *CreditGrantEventDeleteOne {
+	builder := c.Delete().Where(creditgrantevent.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &CreditGrantEventDeleteOne{builder}
+}
+
+// Query returns a query builder for CreditGrantEvent.
+func (c *CreditGrantEventClient) Query() *CreditGrantEventQuery {
+	return &CreditGrantEventQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeCreditGrantEvent},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a CreditGrantEvent entity by its id.
+func (c *CreditGrantEventClient) Get(ctx context.Context, id int64) (*CreditGrantEvent, error) {
+	return c.Query().Where(creditgrantevent.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *CreditGrantEventClient) GetX(ctx context.Context, id int64) *CreditGrantEvent {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *CreditGrantEventClient) Hooks() []Hook {
+	hooks := c.hooks.CreditGrantEvent
+	return append(hooks[:len(hooks):len(hooks)], creditgrantevent.Hooks[:]...)
+}
+
+// Interceptors returns the client interceptors.
+func (c *CreditGrantEventClient) Interceptors() []Interceptor {
+	inters := c.inters.CreditGrantEvent
+	return append(inters[:len(inters):len(inters)], creditgrantevent.Interceptors[:]...)
+}
+
+func (c *CreditGrantEventClient) mutate(ctx context.Context, m *CreditGrantEventMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&CreditGrantEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&CreditGrantEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&CreditGrantEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&CreditGrantEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown CreditGrantEvent mutation op: %q", m.Op())
 	}
 }
 
@@ -7797,6 +7950,203 @@ func (c *UserAttributeValueClient) mutate(ctx context.Context, m *UserAttributeV
 	}
 }
 
+// UserCreditGrantEventTriggerClient is a client for the UserCreditGrantEventTrigger schema.
+type UserCreditGrantEventTriggerClient struct {
+	config
+}
+
+// NewUserCreditGrantEventTriggerClient returns a client for the UserCreditGrantEventTrigger from the given config.
+func NewUserCreditGrantEventTriggerClient(c config) *UserCreditGrantEventTriggerClient {
+	return &UserCreditGrantEventTriggerClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `usercreditgranteventtrigger.Hooks(f(g(h())))`.
+func (c *UserCreditGrantEventTriggerClient) Use(hooks ...Hook) {
+	c.hooks.UserCreditGrantEventTrigger = append(c.hooks.UserCreditGrantEventTrigger, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `usercreditgranteventtrigger.Intercept(f(g(h())))`.
+func (c *UserCreditGrantEventTriggerClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UserCreditGrantEventTrigger = append(c.inters.UserCreditGrantEventTrigger, interceptors...)
+}
+
+// Create returns a builder for creating a UserCreditGrantEventTrigger entity.
+func (c *UserCreditGrantEventTriggerClient) Create() *UserCreditGrantEventTriggerCreate {
+	mutation := newUserCreditGrantEventTriggerMutation(c.config, OpCreate)
+	return &UserCreditGrantEventTriggerCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UserCreditGrantEventTrigger entities.
+func (c *UserCreditGrantEventTriggerClient) CreateBulk(builders ...*UserCreditGrantEventTriggerCreate) *UserCreditGrantEventTriggerCreateBulk {
+	return &UserCreditGrantEventTriggerCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UserCreditGrantEventTriggerClient) MapCreateBulk(slice any, setFunc func(*UserCreditGrantEventTriggerCreate, int)) *UserCreditGrantEventTriggerCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UserCreditGrantEventTriggerCreateBulk{err: fmt.Errorf("calling to UserCreditGrantEventTriggerClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UserCreditGrantEventTriggerCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UserCreditGrantEventTriggerCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UserCreditGrantEventTrigger.
+func (c *UserCreditGrantEventTriggerClient) Update() *UserCreditGrantEventTriggerUpdate {
+	mutation := newUserCreditGrantEventTriggerMutation(c.config, OpUpdate)
+	return &UserCreditGrantEventTriggerUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UserCreditGrantEventTriggerClient) UpdateOne(_m *UserCreditGrantEventTrigger) *UserCreditGrantEventTriggerUpdateOne {
+	mutation := newUserCreditGrantEventTriggerMutation(c.config, OpUpdateOne, withUserCreditGrantEventTrigger(_m))
+	return &UserCreditGrantEventTriggerUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UserCreditGrantEventTriggerClient) UpdateOneID(id int64) *UserCreditGrantEventTriggerUpdateOne {
+	mutation := newUserCreditGrantEventTriggerMutation(c.config, OpUpdateOne, withUserCreditGrantEventTriggerID(id))
+	return &UserCreditGrantEventTriggerUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UserCreditGrantEventTrigger.
+func (c *UserCreditGrantEventTriggerClient) Delete() *UserCreditGrantEventTriggerDelete {
+	mutation := newUserCreditGrantEventTriggerMutation(c.config, OpDelete)
+	return &UserCreditGrantEventTriggerDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UserCreditGrantEventTriggerClient) DeleteOne(_m *UserCreditGrantEventTrigger) *UserCreditGrantEventTriggerDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UserCreditGrantEventTriggerClient) DeleteOneID(id int64) *UserCreditGrantEventTriggerDeleteOne {
+	builder := c.Delete().Where(usercreditgranteventtrigger.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UserCreditGrantEventTriggerDeleteOne{builder}
+}
+
+// Query returns a query builder for UserCreditGrantEventTrigger.
+func (c *UserCreditGrantEventTriggerClient) Query() *UserCreditGrantEventTriggerQuery {
+	return &UserCreditGrantEventTriggerQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUserCreditGrantEventTrigger},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UserCreditGrantEventTrigger entity by its id.
+func (c *UserCreditGrantEventTriggerClient) Get(ctx context.Context, id int64) (*UserCreditGrantEventTrigger, error) {
+	return c.Query().Where(usercreditgranteventtrigger.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UserCreditGrantEventTriggerClient) GetX(ctx context.Context, id int64) *UserCreditGrantEventTrigger {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryEvent queries the event edge of a UserCreditGrantEventTrigger.
+func (c *UserCreditGrantEventTriggerClient) QueryEvent(_m *UserCreditGrantEventTrigger) *CreditGrantEventQuery {
+	query := (&CreditGrantEventClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(usercreditgranteventtrigger.Table, usercreditgranteventtrigger.FieldID, id),
+			sqlgraph.To(creditgrantevent.Table, creditgrantevent.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, usercreditgranteventtrigger.EventTable, usercreditgranteventtrigger.EventColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryUser queries the user edge of a UserCreditGrantEventTrigger.
+func (c *UserCreditGrantEventTriggerClient) QueryUser(_m *UserCreditGrantEventTrigger) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(usercreditgranteventtrigger.Table, usercreditgranteventtrigger.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, usercreditgranteventtrigger.UserTable, usercreditgranteventtrigger.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryBalanceHistory queries the balance_history edge of a UserCreditGrantEventTrigger.
+func (c *UserCreditGrantEventTriggerClient) QueryBalanceHistory(_m *UserCreditGrantEventTrigger) *RedeemCodeQuery {
+	query := (&RedeemCodeClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(usercreditgranteventtrigger.Table, usercreditgranteventtrigger.FieldID, id),
+			sqlgraph.To(redeemcode.Table, redeemcode.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, usercreditgranteventtrigger.BalanceHistoryTable, usercreditgranteventtrigger.BalanceHistoryColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryLimitedCreditGrant queries the limited_credit_grant edge of a UserCreditGrantEventTrigger.
+func (c *UserCreditGrantEventTriggerClient) QueryLimitedCreditGrant(_m *UserCreditGrantEventTrigger) *UserLimitedCreditGrantQuery {
+	query := (&UserLimitedCreditGrantClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(usercreditgranteventtrigger.Table, usercreditgranteventtrigger.FieldID, id),
+			sqlgraph.To(userlimitedcreditgrant.Table, userlimitedcreditgrant.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, usercreditgranteventtrigger.LimitedCreditGrantTable, usercreditgranteventtrigger.LimitedCreditGrantColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *UserCreditGrantEventTriggerClient) Hooks() []Hook {
+	return c.hooks.UserCreditGrantEventTrigger
+}
+
+// Interceptors returns the client interceptors.
+func (c *UserCreditGrantEventTriggerClient) Interceptors() []Interceptor {
+	return c.inters.UserCreditGrantEventTrigger
+}
+
+func (c *UserCreditGrantEventTriggerClient) mutate(ctx context.Context, m *UserCreditGrantEventTriggerMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UserCreditGrantEventTriggerCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UserCreditGrantEventTriggerUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UserCreditGrantEventTriggerUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UserCreditGrantEventTriggerDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UserCreditGrantEventTrigger mutation op: %q", m.Op())
+	}
+}
+
 // UserLimitedCreditGrantClient is a client for the UserLimitedCreditGrant schema.
 type UserLimitedCreditGrantClient struct {
 	config
@@ -8483,31 +8833,33 @@ type (
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
 		AuthIdentityChannel, BatchImageEvent, BatchImageItem, BatchImageJob,
 		ChannelMonitor, ChannelMonitorDailyRollup, ChannelMonitorHistory,
-		ChannelMonitorRequestTemplate, CompositeModelRoute, ErrorPassthroughRule,
-		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
-		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RechargeBonusCampaign, RechargeBonusParticipation,
-		RecurringCreditBatch, RecurringCreditTask, RecurringCreditTaskAudit,
-		RecurringCreditUserItem, RedeemCode, ResetRebateAccountItem, ResetRebateBatch,
-		ResetRebateUserItem, SecuritySecret, Setting, SubscriptionPlan,
-		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
-		UserAttributeDefinition, UserAttributeValue, UserLimitedCreditGrant,
-		UserLimitedCreditLedger, UserPlatformQuota, UserSubscription []ent.Hook
+		ChannelMonitorRequestTemplate, CompositeModelRoute, CreditGrantEvent,
+		ErrorPassthroughRule, Group, IdempotencyRecord, IdentityAdoptionDecision,
+		PaymentAuditLog, PaymentOrder, PaymentProviderInstance, PendingAuthSession,
+		PromoCode, PromoCodeUsage, Proxy, RechargeBonusCampaign,
+		RechargeBonusParticipation, RecurringCreditBatch, RecurringCreditTask,
+		RecurringCreditTaskAudit, RecurringCreditUserItem, RedeemCode,
+		ResetRebateAccountItem, ResetRebateBatch, ResetRebateUserItem, SecuritySecret,
+		Setting, SubscriptionPlan, TLSFingerprintProfile, UsageCleanupTask, UsageLog,
+		User, UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
+		UserCreditGrantEventTrigger, UserLimitedCreditGrant, UserLimitedCreditLedger,
+		UserPlatformQuota, UserSubscription []ent.Hook
 	}
 	inters struct {
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
 		AuthIdentityChannel, BatchImageEvent, BatchImageItem, BatchImageJob,
 		ChannelMonitor, ChannelMonitorDailyRollup, ChannelMonitorHistory,
-		ChannelMonitorRequestTemplate, CompositeModelRoute, ErrorPassthroughRule,
-		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
-		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RechargeBonusCampaign, RechargeBonusParticipation,
-		RecurringCreditBatch, RecurringCreditTask, RecurringCreditTaskAudit,
-		RecurringCreditUserItem, RedeemCode, ResetRebateAccountItem, ResetRebateBatch,
-		ResetRebateUserItem, SecuritySecret, Setting, SubscriptionPlan,
-		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
-		UserAttributeDefinition, UserAttributeValue, UserLimitedCreditGrant,
-		UserLimitedCreditLedger, UserPlatformQuota, UserSubscription []ent.Interceptor
+		ChannelMonitorRequestTemplate, CompositeModelRoute, CreditGrantEvent,
+		ErrorPassthroughRule, Group, IdempotencyRecord, IdentityAdoptionDecision,
+		PaymentAuditLog, PaymentOrder, PaymentProviderInstance, PendingAuthSession,
+		PromoCode, PromoCodeUsage, Proxy, RechargeBonusCampaign,
+		RechargeBonusParticipation, RecurringCreditBatch, RecurringCreditTask,
+		RecurringCreditTaskAudit, RecurringCreditUserItem, RedeemCode,
+		ResetRebateAccountItem, ResetRebateBatch, ResetRebateUserItem, SecuritySecret,
+		Setting, SubscriptionPlan, TLSFingerprintProfile, UsageCleanupTask, UsageLog,
+		User, UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
+		UserCreditGrantEventTrigger, UserLimitedCreditGrant, UserLimitedCreditLedger,
+		UserPlatformQuota, UserSubscription []ent.Interceptor
 	}
 )
 

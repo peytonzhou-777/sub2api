@@ -20,6 +20,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
 	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
+	"github.com/Wei-Shaw/sub2api/ent/creditgrantevent"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
@@ -49,6 +50,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/usercreditgranteventtrigger"
 	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
 	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditledger"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
@@ -943,6 +945,47 @@ func init() {
 	compositemodelrouteDescEnabled := compositemodelrouteFields[7].Descriptor()
 	// compositemodelroute.DefaultEnabled holds the default value on creation for the enabled field.
 	compositemodelroute.DefaultEnabled = compositemodelrouteDescEnabled.Default.(bool)
+	creditgranteventMixin := schema.CreditGrantEvent{}.Mixin()
+	creditgranteventMixinHooks1 := creditgranteventMixin[1].Hooks()
+	creditgrantevent.Hooks[0] = creditgranteventMixinHooks1[0]
+	creditgranteventMixinInters1 := creditgranteventMixin[1].Interceptors()
+	creditgrantevent.Interceptors[0] = creditgranteventMixinInters1[0]
+	creditgranteventMixinFields0 := creditgranteventMixin[0].Fields()
+	_ = creditgranteventMixinFields0
+	creditgranteventFields := schema.CreditGrantEvent{}.Fields()
+	_ = creditgranteventFields
+	// creditgranteventDescCreatedAt is the schema descriptor for created_at field.
+	creditgranteventDescCreatedAt := creditgranteventMixinFields0[0].Descriptor()
+	// creditgrantevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	creditgrantevent.DefaultCreatedAt = creditgranteventDescCreatedAt.Default.(func() time.Time)
+	// creditgranteventDescUpdatedAt is the schema descriptor for updated_at field.
+	creditgranteventDescUpdatedAt := creditgranteventMixinFields0[1].Descriptor()
+	// creditgrantevent.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	creditgrantevent.DefaultUpdatedAt = creditgranteventDescUpdatedAt.Default.(func() time.Time)
+	// creditgrantevent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	creditgrantevent.UpdateDefaultUpdatedAt = creditgranteventDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// creditgranteventDescName is the schema descriptor for name field.
+	creditgranteventDescName := creditgranteventFields[0].Descriptor()
+	// creditgrantevent.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	creditgrantevent.NameValidator = func() func(string) error {
+		validators := creditgranteventDescName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(name string) error {
+			for _, fn := range fns {
+				if err := fn(name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// creditgranteventDescCreditType is the schema descriptor for credit_type field.
+	creditgranteventDescCreditType := creditgranteventFields[1].Descriptor()
+	// creditgrantevent.CreditTypeValidator is a validator for the "credit_type" field. It is called by the builders before save.
+	creditgrantevent.CreditTypeValidator = creditgranteventDescCreditType.Validators[0].(func(string) error)
 	errorpassthroughruleMixin := schema.ErrorPassthroughRule{}.Mixin()
 	errorpassthroughruleMixinFields0 := errorpassthroughruleMixin[0].Fields()
 	_ = errorpassthroughruleMixinFields0
@@ -2701,6 +2744,16 @@ func init() {
 	userattributevalueDescValue := userattributevalueFields[2].Descriptor()
 	// userattributevalue.DefaultValue holds the default value on creation for the value field.
 	userattributevalue.DefaultValue = userattributevalueDescValue.Default.(string)
+	usercreditgranteventtriggerFields := schema.UserCreditGrantEventTrigger{}.Fields()
+	_ = usercreditgranteventtriggerFields
+	// usercreditgranteventtriggerDescCreditTypeSnapshot is the schema descriptor for credit_type_snapshot field.
+	usercreditgranteventtriggerDescCreditTypeSnapshot := usercreditgranteventtriggerFields[2].Descriptor()
+	// usercreditgranteventtrigger.CreditTypeSnapshotValidator is a validator for the "credit_type_snapshot" field. It is called by the builders before save.
+	usercreditgranteventtrigger.CreditTypeSnapshotValidator = usercreditgranteventtriggerDescCreditTypeSnapshot.Validators[0].(func(string) error)
+	// usercreditgranteventtriggerDescTriggeredAt is the schema descriptor for triggered_at field.
+	usercreditgranteventtriggerDescTriggeredAt := usercreditgranteventtriggerFields[8].Descriptor()
+	// usercreditgranteventtrigger.DefaultTriggeredAt holds the default value on creation for the triggered_at field.
+	usercreditgranteventtrigger.DefaultTriggeredAt = usercreditgranteventtriggerDescTriggeredAt.Default.(func() time.Time)
 	userlimitedcreditgrantFields := schema.UserLimitedCreditGrant{}.Fields()
 	_ = userlimitedcreditgrantFields
 	// userlimitedcreditgrantDescSourceType is the schema descriptor for source_type field.

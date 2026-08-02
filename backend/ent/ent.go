@@ -27,6 +27,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
 	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
+	"github.com/Wei-Shaw/sub2api/ent/creditgrantevent"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
@@ -55,6 +56,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/usercreditgranteventtrigger"
 	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
 	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditledger"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
@@ -134,6 +136,7 @@ func checkColumn(t, c string) error {
 			channelmonitorhistory.Table:         channelmonitorhistory.ValidColumn,
 			channelmonitorrequesttemplate.Table: channelmonitorrequesttemplate.ValidColumn,
 			compositemodelroute.Table:           compositemodelroute.ValidColumn,
+			creditgrantevent.Table:              creditgrantevent.ValidColumn,
 			errorpassthroughrule.Table:          errorpassthroughrule.ValidColumn,
 			group.Table:                         group.ValidColumn,
 			idempotencyrecord.Table:             idempotencyrecord.ValidColumn,
@@ -162,6 +165,7 @@ func checkColumn(t, c string) error {
 			userallowedgroup.Table:              userallowedgroup.ValidColumn,
 			userattributedefinition.Table:       userattributedefinition.ValidColumn,
 			userattributevalue.Table:            userattributevalue.ValidColumn,
+			usercreditgranteventtrigger.Table:   usercreditgranteventtrigger.ValidColumn,
 			userlimitedcreditgrant.Table:        userlimitedcreditgrant.ValidColumn,
 			userlimitedcreditledger.Table:       userlimitedcreditledger.ValidColumn,
 			userplatformquota.Table:             userplatformquota.ValidColumn,

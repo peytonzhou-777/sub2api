@@ -14,6 +14,7 @@ const (
 	LimitedCreditSourceAuthSourceDefault  = "auth_source_default"
 	LimitedCreditSourceAffiliateRebate    = "affiliate_rebate"
 	LimitedCreditSourceRechargeBonus      = "recharge_bonus"
+	LimitedCreditSourceCreditGrantEvent   = "credit_grant_event"
 	LimitedCreditStatusActive             = "active"
 	LimitedCreditSourcePromoCode          = "promo_code"
 	LimitedCreditStatusDepleted           = "depleted"

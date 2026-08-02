@@ -14,9 +14,11 @@ const {
   resetLimitedCredit,
   revokeLimitedCredit,
   listLimitedCreditLedger,
+  triggerCreditGrantEvent,
   getUserBalanceHistory,
   showSuccess,
   showError,
+  showWarning,
   replace,
 } = vi.hoisted(() => ({
   listCreditUsers: vi.fn(),
@@ -27,9 +29,11 @@ const {
   resetLimitedCredit: vi.fn(),
   revokeLimitedCredit: vi.fn(),
   listLimitedCreditLedger: vi.fn(),
+  triggerCreditGrantEvent: vi.fn(),
   getUserBalanceHistory: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn(),
+  showWarning: vi.fn(),
   replace: vi.fn(),
 }))
 
@@ -43,6 +47,7 @@ vi.mock('@/api/admin', () => ({
     resetLimitedCredit,
     revokeLimitedCredit,
     listLimitedCreditLedger,
+    triggerCreditGrantEvent,
   },
   adminAPI: {
     users: {
@@ -52,7 +57,7 @@ vi.mock('@/api/admin', () => ({
 }))
 
 vi.mock('@/stores/app', () => ({
-  useAppStore: () => ({ showSuccess, showError }),
+  useAppStore: () => ({ showSuccess, showError, showWarning }),
 }))
 
 vi.mock('vue-router', () => ({
@@ -93,6 +98,8 @@ function createCreditUser(overrides: Record<string, unknown> = {}) {
     frozen_balance: 0,
     limited_remaining_amount: 0,
     limited_active_count: 0,
+    triggered_event_count: 0,
+    active_event_count: 2,
     updated_at: '2026-07-20T00:00:00Z',
     ...overrides,
   }
@@ -102,6 +109,20 @@ function createDetail(overrides: Record<string, unknown> = {}) {
   return {
     ...createCreditUser(),
     limited_credits: [],
+    credit_grant_events: [],
+    ...overrides,
+  }
+}
+
+function createGrantEvent(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 11,
+    name: '新用户赠额',
+    credit_type: 'permanent',
+    amount: 5,
+    created_at: '2026-08-01T00:00:00Z',
+    updated_at: '2026-08-01T00:00:00Z',
+    triggered: false,
     ...overrides,
   }
 }
@@ -168,9 +189,11 @@ describe('额度管理永久额度冲突处理', () => {
       resetLimitedCredit,
       revokeLimitedCredit,
       listLimitedCreditLedger,
+      triggerCreditGrantEvent,
       getUserBalanceHistory,
       showSuccess,
       showError,
+      showWarning,
       replace,
     ]) {
       fn.mockReset()
@@ -190,6 +213,7 @@ describe('额度管理永久额度冲突处理', () => {
     resetLimitedCredit.mockResolvedValue({})
     revokeLimitedCredit.mockResolvedValue({})
     listLimitedCreditLedger.mockResolvedValue([])
+    triggerCreditGrantEvent.mockResolvedValue({})
     getUserBalanceHistory.mockResolvedValue({ items: [] })
     replace.mockResolvedValue(undefined)
   })
@@ -420,6 +444,108 @@ describe('额度管理永久额度冲突处理', () => {
     expect(getCreditUser).toHaveBeenCalledTimes(1)
     expect(conflictDialog(wrapper).props('show')).toBe(false)
     expect(showError).toHaveBeenCalledWith(expectedMessage)
+    wrapper.unmount()
+  })
+
+  it('用户列表展示已触发事件数与当前有效事件数', async () => {
+    listCreditUsers.mockResolvedValueOnce({
+      items: [createCreditUser({ triggered_event_count: 1, active_event_count: 3 })],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="grant-event-progress"]').text()).toBe('1/3')
+    wrapper.unmount()
+  })
+
+  it('详情仅为未触发事件展示发放按钮', async () => {
+    getCreditUser.mockResolvedValueOnce(createDetail({
+      credit_grant_events: [
+        createGrantEvent(),
+        createGrantEvent({
+          id: 12,
+          name: '已发放事件',
+          triggered: true,
+          triggered_at: '2026-08-01T01:00:00Z',
+          actual_credit_type: 'limited',
+          actual_amount: 8,
+          actual_validity_days: 30,
+          actual_expires_at: '2026-08-31T01:00:00Z',
+        }),
+      ],
+    }))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await findButtonByText(wrapper, 'admin.credits.manage').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="trigger-grant-event-11"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="trigger-grant-event-12"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="grant-event-details"]').text()).toContain('admin.credits.actualGrant')
+    wrapper.unmount()
+  })
+
+  it('发放成功后刷新事件状态、用户列表和已展开的永久额度流水', async () => {
+    const initialEvent = createGrantEvent()
+    const triggeredEvent = createGrantEvent({
+      triggered: true,
+      triggered_at: '2026-08-01T01:00:00Z',
+      actual_credit_type: 'permanent',
+      actual_amount: 5,
+    })
+    getCreditUser
+      .mockResolvedValueOnce(createDetail({ credit_grant_events: [initialEvent] }))
+      .mockResolvedValueOnce(createDetail({ balance: 15, triggered_event_count: 1, credit_grant_events: [triggeredEvent] }))
+    triggerCreditGrantEvent.mockResolvedValueOnce(triggeredEvent)
+
+    const wrapper = mountView()
+    await flushPromises()
+    await findButtonByText(wrapper, 'admin.credits.manage').trigger('click')
+    await flushPromises()
+    await findButtonByText(wrapper, 'admin.credits.balanceHistory').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="trigger-grant-event-11"]').trigger('click')
+    await flushPromises()
+
+    expect(triggerCreditGrantEvent).toHaveBeenCalledWith(7, 11)
+    expect(getCreditUser).toHaveBeenCalledTimes(2)
+    expect(listCreditUsers).toHaveBeenCalledTimes(2)
+    expect(getUserBalanceHistory).toHaveBeenCalledTimes(2)
+    expect(showSuccess).toHaveBeenCalledWith('admin.credits.grantEventSuccess')
+    expect(wrapper.find('[data-test="trigger-grant-event-11"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('重复发放返回 409 时刷新详情与列表并提示最新状态', async () => {
+    const initialEvent = createGrantEvent()
+    const triggeredEvent = createGrantEvent({
+      triggered: true,
+      triggered_at: '2026-08-01T01:00:00Z',
+      actual_credit_type: 'permanent',
+      actual_amount: 5,
+    })
+    getCreditUser
+      .mockResolvedValueOnce(createDetail({ credit_grant_events: [initialEvent] }))
+      .mockResolvedValueOnce(createDetail({ triggered_event_count: 1, credit_grant_events: [triggeredEvent] }))
+    triggerCreditGrantEvent.mockRejectedValueOnce({ status: 409, message: 'already triggered' })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await findButtonByText(wrapper, 'admin.credits.manage').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="trigger-grant-event-11"]').trigger('click')
+    await flushPromises()
+
+    expect(getCreditUser).toHaveBeenCalledTimes(2)
+    expect(listCreditUsers).toHaveBeenCalledTimes(2)
+    expect(showWarning).toHaveBeenCalledWith('admin.credits.grantEventAlreadyTriggered')
+    expect(wrapper.find('[data-test="trigger-grant-event-11"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

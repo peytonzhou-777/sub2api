@@ -51,6 +51,9 @@ type ChannelMonitorRequestTemplate func(*sql.Selector)
 // CompositeModelRoute is the predicate function for compositemodelroute builders.
 type CompositeModelRoute func(*sql.Selector)
 
+// CreditGrantEvent is the predicate function for creditgrantevent builders.
+type CreditGrantEvent func(*sql.Selector)
+
 // ErrorPassthroughRule is the predicate function for errorpassthroughrule builders.
 type ErrorPassthroughRule func(*sql.Selector)
 
@@ -134,6 +137,9 @@ type UserAttributeDefinition func(*sql.Selector)
 
 // UserAttributeValue is the predicate function for userattributevalue builders.
 type UserAttributeValue func(*sql.Selector)
+
+// UserCreditGrantEventTrigger is the predicate function for usercreditgranteventtrigger builders.
+type UserCreditGrantEventTrigger func(*sql.Selector)
 
 // UserLimitedCreditGrant is the predicate function for userlimitedcreditgrant builders.
 type UserLimitedCreditGrant func(*sql.Selector)

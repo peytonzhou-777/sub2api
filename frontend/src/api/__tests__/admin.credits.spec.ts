@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
+const { get, post, put, remove } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), remove: vi.fn() }))
 
-vi.mock('@/api/client', () => ({ apiClient: { get, post } }))
+vi.mock('@/api/client', () => ({ apiClient: { get, post, put, delete: remove } }))
 
-import { adjustBalance, adjustLimitedCredit, createLimitedCredit, getCreditUser, listCreditUsers, resetLimitedCredit, revokeLimitedCredit } from '@/api/admin/credits'
+import { adjustBalance, adjustLimitedCredit, createCreditGrantEvent, createLimitedCredit, deleteCreditGrantEvent, getCreditUser, listCreditGrantEvents, listCreditUsers, resetLimitedCredit, revokeLimitedCredit, triggerCreditGrantEvent, updateCreditGrantEvent } from '@/api/admin/credits'
 
 describe('admin credits api', () => {
-  beforeEach(() => { get.mockReset(); post.mockReset(); get.mockResolvedValue({ data: {} }); post.mockResolvedValue({ data: {} }) })
+  beforeEach(() => {
+    for (const fn of [get, post, put, remove]) {
+      fn.mockReset()
+      fn.mockResolvedValue({ data: {} })
+    }
+  })
 
   it('loads users and detail', async () => {
     await listCreditUsers(2, 10, 'user@example.com')
@@ -30,5 +35,20 @@ describe('admin credits api', () => {
       '/admin/credits/users/7/limited-credits/9/reset',
       '/admin/credits/users/7/limited-credits/9/revoke'
     ])
+  })
+
+  it('uses grant event CRUD and trigger endpoints', async () => {
+    const expected = '2026-08-01T00:00:00Z'
+    await listCreditGrantEvents(2, 10, 'welcome')
+    await createCreditGrantEvent({ name: 'Welcome', credit_type: 'permanent', amount: 5 })
+    await updateCreditGrantEvent(3, { name: 'Welcome', credit_type: 'limited', amount: 8, validity_days: 30, expected_updated_at: expected })
+    await deleteCreditGrantEvent(3, expected)
+    await triggerCreditGrantEvent(7, 3)
+
+    expect(get).toHaveBeenCalledWith('/admin/credits/grant-events', { params: { page: 2, page_size: 10, search: 'welcome' } })
+    expect(post).toHaveBeenCalledWith('/admin/credits/grant-events', { name: 'Welcome', credit_type: 'permanent', amount: 5 })
+    expect(put).toHaveBeenCalledWith('/admin/credits/grant-events/3', { name: 'Welcome', credit_type: 'limited', amount: 8, validity_days: 30, expected_updated_at: expected })
+    expect(remove).toHaveBeenCalledWith('/admin/credits/grant-events/3', { params: { expected_updated_at: expected } })
+    expect(post).toHaveBeenCalledWith('/admin/credits/users/7/grant-events/3/trigger')
   })
 })

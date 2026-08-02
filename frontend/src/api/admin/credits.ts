@@ -25,11 +25,43 @@ export interface CreditUser {
   frozen_balance: number
   limited_remaining_amount: number
   limited_active_count: number
+  triggered_event_count: number
+  active_event_count: number
   updated_at: string
 }
 
 export interface CreditUserDetail extends CreditUser {
   limited_credits: AdminLimitedCredit[]
+  credit_grant_events: CreditGrantEventUserStatus[]
+}
+
+export type CreditGrantEventType = 'permanent' | 'limited'
+
+export interface CreditGrantEvent {
+  id: number
+  name: string
+  credit_type: CreditGrantEventType
+  amount: number
+  validity_days?: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CreditGrantEventUserStatus extends CreditGrantEvent {
+  triggered: boolean
+  triggered_at?: string
+  actual_credit_type?: CreditGrantEventType
+  actual_amount?: number
+  actual_validity_days?: number
+  actual_expires_at?: string
+}
+
+export interface CreditGrantEventPayload {
+  name: string
+  credit_type: CreditGrantEventType
+  amount: number
+  validity_days?: number
+  expected_updated_at?: string
 }
 
 export interface LimitedCreditLedgerEntry {
@@ -47,6 +79,37 @@ export async function listCreditUsers(page = 1, pageSize = 20, search = '') {
 
 export async function getCreditUser(id: number) {
   const { data } = await apiClient.get<CreditUserDetail>(`/admin/credits/users/${id}`)
+  return data
+}
+
+export async function listCreditGrantEvents(page = 1, pageSize = 20, search = '') {
+  const { data } = await apiClient.get<PaginatedResponse<CreditGrantEvent>>('/admin/credits/grant-events', {
+    params: { page, page_size: pageSize, search }
+  })
+  return data
+}
+
+export async function createCreditGrantEvent(payload: CreditGrantEventPayload) {
+  const { data } = await apiClient.post<CreditGrantEvent>('/admin/credits/grant-events', payload)
+  return data
+}
+
+export async function updateCreditGrantEvent(id: number, payload: CreditGrantEventPayload) {
+  const { data } = await apiClient.put<CreditGrantEvent>('/admin/credits/grant-events/' + id, payload)
+  return data
+}
+
+export async function deleteCreditGrantEvent(id: number, expectedUpdatedAt: string) {
+  const { data } = await apiClient.delete<{ message: string }>('/admin/credits/grant-events/' + id, {
+    params: { expected_updated_at: expectedUpdatedAt }
+  })
+  return data
+}
+
+export async function triggerCreditGrantEvent(userId: number, eventId: number) {
+  const { data } = await apiClient.post<CreditGrantEventUserStatus>(
+    '/admin/credits/users/' + userId + '/grant-events/' + eventId + '/trigger'
+  )
   return data
 }
 

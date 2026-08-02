@@ -30,13 +30,16 @@ type AdminCreditUser struct {
 	FrozenBalance          float64   `json:"frozen_balance"`
 	LimitedRemainingAmount float64   `json:"limited_remaining_amount"`
 	LimitedActiveCount     int       `json:"limited_active_count"`
+	TriggeredEventCount    int       `json:"triggered_event_count"`
+	ActiveEventCount       int       `json:"active_event_count"`
 	UpdatedAt              time.Time `json:"updated_at"`
 }
 
 // AdminCreditUserDetail 返回用户余额和最近失效的限时额度。
 type AdminCreditUserDetail struct {
 	AdminCreditUser
-	LimitedCredits []LimitedCreditGrant `json:"limited_credits"`
+	LimitedCredits    []LimitedCreditGrant         `json:"limited_credits"`
+	CreditGrantEvents []CreditGrantEventUserStatus `json:"credit_grant_events"`
 }
 
 type AdminBalanceAdjustmentInput struct {
@@ -75,6 +78,11 @@ type LimitedCreditLedgerEntry struct {
 type AdminCreditService interface {
 	ListCreditUsers(context.Context, int, int, string) ([]AdminCreditUser, int64, error)
 	GetCreditUserDetail(context.Context, int64) (*AdminCreditUserDetail, error)
+	ListCreditGrantEvents(context.Context, int, int, string) ([]CreditGrantEvent, int64, error)
+	CreateCreditGrantEvent(context.Context, CreditGrantEventInput) (*CreditGrantEvent, error)
+	UpdateCreditGrantEvent(context.Context, int64, CreditGrantEventInput, time.Time) (*CreditGrantEvent, error)
+	DeleteCreditGrantEvent(context.Context, int64, time.Time) error
+	TriggerCreditGrantEvent(context.Context, int64, int64) (*CreditGrantEventUserStatus, error)
 	AdjustCreditBalance(context.Context, int64, AdminBalanceAdjustmentInput) (*AdminCreditUserDetail, error)
 	CreateAdminLimitedCredit(context.Context, int64, AdminLimitedCreditCreateInput) (*LimitedCreditGrant, error)
 	AdjustAdminLimitedCredit(context.Context, int64, int64, AdminLimitedCreditAdjustmentInput) (*LimitedCreditGrant, error)
@@ -147,6 +155,9 @@ func (s *adminServiceImpl) ListCreditUsers(ctx context.Context, page, pageSize i
 		}
 		result = append(result, item)
 	}
+	if err := s.attachCreditGrantEventCounts(ctx, result); err != nil {
+		return nil, 0, err
+	}
 	return result, total, nil
 }
 
@@ -179,6 +190,17 @@ func (s *adminServiceImpl) GetCreditUserDetail(ctx context.Context, userID int64
 		if effectiveStatus == LimitedCreditStatusActive && (grant.RemainingAmount() > 0 || grant.FrozenAmount > 0) {
 			detail.LimitedActiveCount++
 			detail.LimitedRemainingAmount += grant.RemainingAmount()
+		}
+	}
+	events, err := s.listCreditGrantEventStatuses(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	detail.CreditGrantEvents = events
+	detail.ActiveEventCount = len(events)
+	for _, event := range events {
+		if event.Triggered {
+			detail.TriggeredEventCount++
 		}
 	}
 	return detail, nil

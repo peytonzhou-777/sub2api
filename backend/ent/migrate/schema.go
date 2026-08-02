@@ -855,6 +855,35 @@ var (
 			},
 		},
 	}
+	// CreditGrantEventsColumns holds the columns for the "credit_grant_events" table.
+	CreditGrantEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "credit_type", Type: field.TypeString, Size: 16},
+		{Name: "amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "validity_days", Type: field.TypeInt, Nullable: true},
+	}
+	// CreditGrantEventsTable holds the schema information for the "credit_grant_events" table.
+	CreditGrantEventsTable = &schema.Table{
+		Name:       "credit_grant_events",
+		Columns:    CreditGrantEventsColumns,
+		PrimaryKey: []*schema.Column{CreditGrantEventsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "creditgrantevent_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{CreditGrantEventsColumns[1]},
+			},
+			{
+				Name:    "creditgrantevent_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{CreditGrantEventsColumns[3]},
+			},
+		},
+	}
 	// ErrorPassthroughRulesColumns holds the columns for the "error_passthrough_rules" table.
 	ErrorPassthroughRulesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -2199,6 +2228,68 @@ var (
 			},
 		},
 	}
+	// UserCreditGrantEventTriggersColumns holds the columns for the "user_credit_grant_event_triggers" table.
+	UserCreditGrantEventTriggersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "credit_type_snapshot", Type: field.TypeString, Size: 16},
+		{Name: "amount_snapshot", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "validity_days_snapshot", Type: field.TypeInt, Nullable: true},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "triggered_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "event_id", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "balance_history_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "limited_credit_grant_id", Type: field.TypeInt64, Nullable: true},
+	}
+	// UserCreditGrantEventTriggersTable holds the schema information for the "user_credit_grant_event_triggers" table.
+	UserCreditGrantEventTriggersTable = &schema.Table{
+		Name:       "user_credit_grant_event_triggers",
+		Columns:    UserCreditGrantEventTriggersColumns,
+		PrimaryKey: []*schema.Column{UserCreditGrantEventTriggersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "user_credit_grant_event_triggers_credit_grant_events_event",
+				Columns:    []*schema.Column{UserCreditGrantEventTriggersColumns[6]},
+				RefColumns: []*schema.Column{CreditGrantEventsColumns[0]},
+				OnDelete:   schema.Restrict,
+			},
+			{
+				Symbol:     "user_credit_grant_event_triggers_users_user",
+				Columns:    []*schema.Column{UserCreditGrantEventTriggersColumns[7]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+			{
+				Symbol:     "user_credit_grant_event_triggers_redeem_codes_balance_history",
+				Columns:    []*schema.Column{UserCreditGrantEventTriggersColumns[8]},
+				RefColumns: []*schema.Column{RedeemCodesColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "user_credit_grant_event_triggers_user_limited_credit_grants_limited_credit_grant",
+				Columns:    []*schema.Column{UserCreditGrantEventTriggersColumns[9]},
+				RefColumns: []*schema.Column{UserLimitedCreditGrantsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "usercreditgranteventtrigger_event_id_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{UserCreditGrantEventTriggersColumns[6], UserCreditGrantEventTriggersColumns[7]},
+			},
+			{
+				Name:    "usercreditgranteventtrigger_user_id_triggered_at",
+				Unique:  false,
+				Columns: []*schema.Column{UserCreditGrantEventTriggersColumns[7], UserCreditGrantEventTriggersColumns[5]},
+			},
+			{
+				Name:    "usercreditgranteventtrigger_event_id_triggered_at",
+				Unique:  false,
+				Columns: []*schema.Column{UserCreditGrantEventTriggersColumns[6], UserCreditGrantEventTriggersColumns[5]},
+			},
+		},
+	}
 	// UserLimitedCreditGrantsColumns holds the columns for the "user_limited_credit_grants" table.
 	UserLimitedCreditGrantsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -2252,6 +2343,14 @@ var (
 				Columns: []*schema.Column{UserLimitedCreditGrantsColumns[1], UserLimitedCreditGrantsColumns[2], UserLimitedCreditGrantsColumns[11]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "source_type = 'recurring_grant' AND source_id IS NOT NULL",
+				},
+			},
+			{
+				Name:    "idx_user_limited_credit_grants_credit_event_user",
+				Unique:  true,
+				Columns: []*schema.Column{UserLimitedCreditGrantsColumns[1], UserLimitedCreditGrantsColumns[2], UserLimitedCreditGrantsColumns[11]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "source_type = 'credit_grant_event' AND source_id IS NOT NULL",
 				},
 			},
 		},
@@ -2465,6 +2564,7 @@ var (
 		ChannelMonitorHistoriesTable,
 		ChannelMonitorRequestTemplatesTable,
 		CompositeModelRoutesTable,
+		CreditGrantEventsTable,
 		ErrorPassthroughRulesTable,
 		GroupsTable,
 		IdempotencyRecordsTable,
@@ -2493,6 +2593,7 @@ var (
 		UserAllowedGroupsTable,
 		UserAttributeDefinitionsTable,
 		UserAttributeValuesTable,
+		UserCreditGrantEventTriggersTable,
 		UserLimitedCreditGrantsTable,
 		UserLimitedCreditLedgerTable,
 		UserPlatformQuotasTable,
@@ -2559,6 +2660,9 @@ func init() {
 	CompositeModelRoutesTable.ForeignKeys[0].RefTable = GroupsTable
 	CompositeModelRoutesTable.Annotation = &entsql.Annotation{
 		Table: "composite_model_routes",
+	}
+	CreditGrantEventsTable.Annotation = &entsql.Annotation{
+		Table: "credit_grant_events",
 	}
 	ErrorPassthroughRulesTable.Annotation = &entsql.Annotation{
 		Table: "error_passthrough_rules",
@@ -2661,6 +2765,13 @@ func init() {
 	UserAttributeValuesTable.ForeignKeys[1].RefTable = UserAttributeDefinitionsTable
 	UserAttributeValuesTable.Annotation = &entsql.Annotation{
 		Table: "user_attribute_values",
+	}
+	UserCreditGrantEventTriggersTable.ForeignKeys[0].RefTable = CreditGrantEventsTable
+	UserCreditGrantEventTriggersTable.ForeignKeys[1].RefTable = UsersTable
+	UserCreditGrantEventTriggersTable.ForeignKeys[2].RefTable = RedeemCodesTable
+	UserCreditGrantEventTriggersTable.ForeignKeys[3].RefTable = UserLimitedCreditGrantsTable
+	UserCreditGrantEventTriggersTable.Annotation = &entsql.Annotation{
+		Table: "user_credit_grant_event_triggers",
 	}
 	UserLimitedCreditGrantsTable.ForeignKeys[0].RefTable = UsersTable
 	UserLimitedCreditGrantsTable.Annotation = &entsql.Annotation{

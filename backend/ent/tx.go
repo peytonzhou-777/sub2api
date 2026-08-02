@@ -44,6 +44,8 @@ type Tx struct {
 	ChannelMonitorRequestTemplate *ChannelMonitorRequestTemplateClient
 	// CompositeModelRoute is the client for interacting with the CompositeModelRoute builders.
 	CompositeModelRoute *CompositeModelRouteClient
+	// CreditGrantEvent is the client for interacting with the CreditGrantEvent builders.
+	CreditGrantEvent *CreditGrantEventClient
 	// ErrorPassthroughRule is the client for interacting with the ErrorPassthroughRule builders.
 	ErrorPassthroughRule *ErrorPassthroughRuleClient
 	// Group is the client for interacting with the Group builders.
@@ -100,6 +102,8 @@ type Tx struct {
 	UserAttributeDefinition *UserAttributeDefinitionClient
 	// UserAttributeValue is the client for interacting with the UserAttributeValue builders.
 	UserAttributeValue *UserAttributeValueClient
+	// UserCreditGrantEventTrigger is the client for interacting with the UserCreditGrantEventTrigger builders.
+	UserCreditGrantEventTrigger *UserCreditGrantEventTriggerClient
 	// UserLimitedCreditGrant is the client for interacting with the UserLimitedCreditGrant builders.
 	UserLimitedCreditGrant *UserLimitedCreditGrantClient
 	// UserLimitedCreditLedger is the client for interacting with the UserLimitedCreditLedger builders.
@@ -254,6 +258,7 @@ func (tx *Tx) init() {
 	tx.ChannelMonitorHistory = NewChannelMonitorHistoryClient(tx.config)
 	tx.ChannelMonitorRequestTemplate = NewChannelMonitorRequestTemplateClient(tx.config)
 	tx.CompositeModelRoute = NewCompositeModelRouteClient(tx.config)
+	tx.CreditGrantEvent = NewCreditGrantEventClient(tx.config)
 	tx.ErrorPassthroughRule = NewErrorPassthroughRuleClient(tx.config)
 	tx.Group = NewGroupClient(tx.config)
 	tx.IdempotencyRecord = NewIdempotencyRecordClient(tx.config)
@@ -282,6 +287,7 @@ func (tx *Tx) init() {
 	tx.UserAllowedGroup = NewUserAllowedGroupClient(tx.config)
 	tx.UserAttributeDefinition = NewUserAttributeDefinitionClient(tx.config)
 	tx.UserAttributeValue = NewUserAttributeValueClient(tx.config)
+	tx.UserCreditGrantEventTrigger = NewUserCreditGrantEventTriggerClient(tx.config)
 	tx.UserLimitedCreditGrant = NewUserLimitedCreditGrantClient(tx.config)
 	tx.UserLimitedCreditLedger = NewUserLimitedCreditLedgerClient(tx.config)
 	tx.UserPlatformQuota = NewUserPlatformQuotaClient(tx.config)

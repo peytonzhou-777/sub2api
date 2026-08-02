@@ -23,6 +23,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
 	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
+	"github.com/Wei-Shaw/sub2api/ent/creditgrantevent"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
@@ -52,6 +53,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/usercreditgranteventtrigger"
 	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
 	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditledger"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
@@ -517,6 +519,33 @@ func (f TraverseCompositeModelRoute) Traverse(ctx context.Context, q ent.Query) 
 		return f(ctx, q)
 	}
 	return fmt.Errorf("unexpected query type %T. expect *ent.CompositeModelRouteQuery", q)
+}
+
+// The CreditGrantEventFunc type is an adapter to allow the use of ordinary function as a Querier.
+type CreditGrantEventFunc func(context.Context, *ent.CreditGrantEventQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f CreditGrantEventFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.CreditGrantEventQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.CreditGrantEventQuery", q)
+}
+
+// The TraverseCreditGrantEvent type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseCreditGrantEvent func(context.Context, *ent.CreditGrantEventQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseCreditGrantEvent) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseCreditGrantEvent) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.CreditGrantEventQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.CreditGrantEventQuery", q)
 }
 
 // The ErrorPassthroughRuleFunc type is an adapter to allow the use of ordinary function as a Querier.
@@ -1275,6 +1304,33 @@ func (f TraverseUserAttributeValue) Traverse(ctx context.Context, q ent.Query) e
 	return fmt.Errorf("unexpected query type %T. expect *ent.UserAttributeValueQuery", q)
 }
 
+// The UserCreditGrantEventTriggerFunc type is an adapter to allow the use of ordinary function as a Querier.
+type UserCreditGrantEventTriggerFunc func(context.Context, *ent.UserCreditGrantEventTriggerQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f UserCreditGrantEventTriggerFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.UserCreditGrantEventTriggerQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.UserCreditGrantEventTriggerQuery", q)
+}
+
+// The TraverseUserCreditGrantEventTrigger type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseUserCreditGrantEventTrigger func(context.Context, *ent.UserCreditGrantEventTriggerQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseUserCreditGrantEventTrigger) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseUserCreditGrantEventTrigger) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.UserCreditGrantEventTriggerQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.UserCreditGrantEventTriggerQuery", q)
+}
+
 // The UserLimitedCreditGrantFunc type is an adapter to allow the use of ordinary function as a Querier.
 type UserLimitedCreditGrantFunc func(context.Context, *ent.UserLimitedCreditGrantQuery) (ent.Value, error)
 
@@ -1416,6 +1472,8 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.ChannelMonitorRequestTemplateQuery, predicate.ChannelMonitorRequestTemplate, channelmonitorrequesttemplate.OrderOption]{typ: ent.TypeChannelMonitorRequestTemplate, tq: q}, nil
 	case *ent.CompositeModelRouteQuery:
 		return &query[*ent.CompositeModelRouteQuery, predicate.CompositeModelRoute, compositemodelroute.OrderOption]{typ: ent.TypeCompositeModelRoute, tq: q}, nil
+	case *ent.CreditGrantEventQuery:
+		return &query[*ent.CreditGrantEventQuery, predicate.CreditGrantEvent, creditgrantevent.OrderOption]{typ: ent.TypeCreditGrantEvent, tq: q}, nil
 	case *ent.ErrorPassthroughRuleQuery:
 		return &query[*ent.ErrorPassthroughRuleQuery, predicate.ErrorPassthroughRule, errorpassthroughrule.OrderOption]{typ: ent.TypeErrorPassthroughRule, tq: q}, nil
 	case *ent.GroupQuery:
@@ -1472,6 +1530,8 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.UserAttributeDefinitionQuery, predicate.UserAttributeDefinition, userattributedefinition.OrderOption]{typ: ent.TypeUserAttributeDefinition, tq: q}, nil
 	case *ent.UserAttributeValueQuery:
 		return &query[*ent.UserAttributeValueQuery, predicate.UserAttributeValue, userattributevalue.OrderOption]{typ: ent.TypeUserAttributeValue, tq: q}, nil
+	case *ent.UserCreditGrantEventTriggerQuery:
+		return &query[*ent.UserCreditGrantEventTriggerQuery, predicate.UserCreditGrantEventTrigger, usercreditgranteventtrigger.OrderOption]{typ: ent.TypeUserCreditGrantEventTrigger, tq: q}, nil
 	case *ent.UserLimitedCreditGrantQuery:
 		return &query[*ent.UserLimitedCreditGrantQuery, predicate.UserLimitedCreditGrant, userlimitedcreditgrant.OrderOption]{typ: ent.TypeUserLimitedCreditGrant, tq: q}, nil
 	case *ent.UserLimitedCreditLedgerQuery:

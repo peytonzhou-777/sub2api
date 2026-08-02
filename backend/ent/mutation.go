@@ -27,6 +27,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
 	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
+	"github.com/Wei-Shaw/sub2api/ent/creditgrantevent"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
@@ -56,6 +57,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/usercreditgranteventtrigger"
 	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
 	"github.com/Wei-Shaw/sub2api/ent/userlimitedcreditledger"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
@@ -87,6 +89,7 @@ const (
 	TypeChannelMonitorHistory         = "ChannelMonitorHistory"
 	TypeChannelMonitorRequestTemplate = "ChannelMonitorRequestTemplate"
 	TypeCompositeModelRoute           = "CompositeModelRoute"
+	TypeCreditGrantEvent              = "CreditGrantEvent"
 	TypeErrorPassthroughRule          = "ErrorPassthroughRule"
 	TypeGroup                         = "Group"
 	TypeIdempotencyRecord             = "IdempotencyRecord"
@@ -115,6 +118,7 @@ const (
 	TypeUserAllowedGroup              = "UserAllowedGroup"
 	TypeUserAttributeDefinition       = "UserAttributeDefinition"
 	TypeUserAttributeValue            = "UserAttributeValue"
+	TypeUserCreditGrantEventTrigger   = "UserCreditGrantEventTrigger"
 	TypeUserLimitedCreditGrant        = "UserLimitedCreditGrant"
 	TypeUserLimitedCreditLedger       = "UserLimitedCreditLedger"
 	TypeUserPlatformQuota             = "UserPlatformQuota"
@@ -20535,6 +20539,767 @@ func (m *CompositeModelRouteMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown CompositeModelRoute edge %s", name)
+}
+
+// CreditGrantEventMutation represents an operation that mutates the CreditGrantEvent nodes in the graph.
+type CreditGrantEventMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int64
+	created_at       *time.Time
+	updated_at       *time.Time
+	deleted_at       *time.Time
+	name             *string
+	credit_type      *string
+	amount           *float64
+	addamount        *float64
+	validity_days    *int
+	addvalidity_days *int
+	clearedFields    map[string]struct{}
+	done             bool
+	oldValue         func(context.Context) (*CreditGrantEvent, error)
+	predicates       []predicate.CreditGrantEvent
+}
+
+var _ ent.Mutation = (*CreditGrantEventMutation)(nil)
+
+// creditgranteventOption allows management of the mutation configuration using functional options.
+type creditgranteventOption func(*CreditGrantEventMutation)
+
+// newCreditGrantEventMutation creates new mutation for the CreditGrantEvent entity.
+func newCreditGrantEventMutation(c config, op Op, opts ...creditgranteventOption) *CreditGrantEventMutation {
+	m := &CreditGrantEventMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeCreditGrantEvent,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withCreditGrantEventID sets the ID field of the mutation.
+func withCreditGrantEventID(id int64) creditgranteventOption {
+	return func(m *CreditGrantEventMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *CreditGrantEvent
+		)
+		m.oldValue = func(ctx context.Context) (*CreditGrantEvent, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().CreditGrantEvent.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withCreditGrantEvent sets the old CreditGrantEvent of the mutation.
+func withCreditGrantEvent(node *CreditGrantEvent) creditgranteventOption {
+	return func(m *CreditGrantEventMutation) {
+		m.oldValue = func(context.Context) (*CreditGrantEvent, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m CreditGrantEventMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m CreditGrantEventMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *CreditGrantEventMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *CreditGrantEventMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().CreditGrantEvent.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *CreditGrantEventMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *CreditGrantEventMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the CreditGrantEvent entity.
+// If the CreditGrantEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CreditGrantEventMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *CreditGrantEventMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *CreditGrantEventMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *CreditGrantEventMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the CreditGrantEvent entity.
+// If the CreditGrantEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CreditGrantEventMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *CreditGrantEventMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetDeletedAt sets the "deleted_at" field.
+func (m *CreditGrantEventMutation) SetDeletedAt(t time.Time) {
+	m.deleted_at = &t
+}
+
+// DeletedAt returns the value of the "deleted_at" field in the mutation.
+func (m *CreditGrantEventMutation) DeletedAt() (r time.Time, exists bool) {
+	v := m.deleted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDeletedAt returns the old "deleted_at" field's value of the CreditGrantEvent entity.
+// If the CreditGrantEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CreditGrantEventMutation) OldDeletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDeletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDeletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDeletedAt: %w", err)
+	}
+	return oldValue.DeletedAt, nil
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (m *CreditGrantEventMutation) ClearDeletedAt() {
+	m.deleted_at = nil
+	m.clearedFields[creditgrantevent.FieldDeletedAt] = struct{}{}
+}
+
+// DeletedAtCleared returns if the "deleted_at" field was cleared in this mutation.
+func (m *CreditGrantEventMutation) DeletedAtCleared() bool {
+	_, ok := m.clearedFields[creditgrantevent.FieldDeletedAt]
+	return ok
+}
+
+// ResetDeletedAt resets all changes to the "deleted_at" field.
+func (m *CreditGrantEventMutation) ResetDeletedAt() {
+	m.deleted_at = nil
+	delete(m.clearedFields, creditgrantevent.FieldDeletedAt)
+}
+
+// SetName sets the "name" field.
+func (m *CreditGrantEventMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *CreditGrantEventMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the CreditGrantEvent entity.
+// If the CreditGrantEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CreditGrantEventMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *CreditGrantEventMutation) ResetName() {
+	m.name = nil
+}
+
+// SetCreditType sets the "credit_type" field.
+func (m *CreditGrantEventMutation) SetCreditType(s string) {
+	m.credit_type = &s
+}
+
+// CreditType returns the value of the "credit_type" field in the mutation.
+func (m *CreditGrantEventMutation) CreditType() (r string, exists bool) {
+	v := m.credit_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreditType returns the old "credit_type" field's value of the CreditGrantEvent entity.
+// If the CreditGrantEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CreditGrantEventMutation) OldCreditType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreditType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreditType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreditType: %w", err)
+	}
+	return oldValue.CreditType, nil
+}
+
+// ResetCreditType resets all changes to the "credit_type" field.
+func (m *CreditGrantEventMutation) ResetCreditType() {
+	m.credit_type = nil
+}
+
+// SetAmount sets the "amount" field.
+func (m *CreditGrantEventMutation) SetAmount(f float64) {
+	m.amount = &f
+	m.addamount = nil
+}
+
+// Amount returns the value of the "amount" field in the mutation.
+func (m *CreditGrantEventMutation) Amount() (r float64, exists bool) {
+	v := m.amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAmount returns the old "amount" field's value of the CreditGrantEvent entity.
+// If the CreditGrantEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CreditGrantEventMutation) OldAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAmount: %w", err)
+	}
+	return oldValue.Amount, nil
+}
+
+// AddAmount adds f to the "amount" field.
+func (m *CreditGrantEventMutation) AddAmount(f float64) {
+	if m.addamount != nil {
+		*m.addamount += f
+	} else {
+		m.addamount = &f
+	}
+}
+
+// AddedAmount returns the value that was added to the "amount" field in this mutation.
+func (m *CreditGrantEventMutation) AddedAmount() (r float64, exists bool) {
+	v := m.addamount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAmount resets all changes to the "amount" field.
+func (m *CreditGrantEventMutation) ResetAmount() {
+	m.amount = nil
+	m.addamount = nil
+}
+
+// SetValidityDays sets the "validity_days" field.
+func (m *CreditGrantEventMutation) SetValidityDays(i int) {
+	m.validity_days = &i
+	m.addvalidity_days = nil
+}
+
+// ValidityDays returns the value of the "validity_days" field in the mutation.
+func (m *CreditGrantEventMutation) ValidityDays() (r int, exists bool) {
+	v := m.validity_days
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValidityDays returns the old "validity_days" field's value of the CreditGrantEvent entity.
+// If the CreditGrantEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CreditGrantEventMutation) OldValidityDays(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValidityDays is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValidityDays requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValidityDays: %w", err)
+	}
+	return oldValue.ValidityDays, nil
+}
+
+// AddValidityDays adds i to the "validity_days" field.
+func (m *CreditGrantEventMutation) AddValidityDays(i int) {
+	if m.addvalidity_days != nil {
+		*m.addvalidity_days += i
+	} else {
+		m.addvalidity_days = &i
+	}
+}
+
+// AddedValidityDays returns the value that was added to the "validity_days" field in this mutation.
+func (m *CreditGrantEventMutation) AddedValidityDays() (r int, exists bool) {
+	v := m.addvalidity_days
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearValidityDays clears the value of the "validity_days" field.
+func (m *CreditGrantEventMutation) ClearValidityDays() {
+	m.validity_days = nil
+	m.addvalidity_days = nil
+	m.clearedFields[creditgrantevent.FieldValidityDays] = struct{}{}
+}
+
+// ValidityDaysCleared returns if the "validity_days" field was cleared in this mutation.
+func (m *CreditGrantEventMutation) ValidityDaysCleared() bool {
+	_, ok := m.clearedFields[creditgrantevent.FieldValidityDays]
+	return ok
+}
+
+// ResetValidityDays resets all changes to the "validity_days" field.
+func (m *CreditGrantEventMutation) ResetValidityDays() {
+	m.validity_days = nil
+	m.addvalidity_days = nil
+	delete(m.clearedFields, creditgrantevent.FieldValidityDays)
+}
+
+// Where appends a list predicates to the CreditGrantEventMutation builder.
+func (m *CreditGrantEventMutation) Where(ps ...predicate.CreditGrantEvent) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the CreditGrantEventMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *CreditGrantEventMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.CreditGrantEvent, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *CreditGrantEventMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *CreditGrantEventMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (CreditGrantEvent).
+func (m *CreditGrantEventMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *CreditGrantEventMutation) Fields() []string {
+	fields := make([]string, 0, 7)
+	if m.created_at != nil {
+		fields = append(fields, creditgrantevent.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, creditgrantevent.FieldUpdatedAt)
+	}
+	if m.deleted_at != nil {
+		fields = append(fields, creditgrantevent.FieldDeletedAt)
+	}
+	if m.name != nil {
+		fields = append(fields, creditgrantevent.FieldName)
+	}
+	if m.credit_type != nil {
+		fields = append(fields, creditgrantevent.FieldCreditType)
+	}
+	if m.amount != nil {
+		fields = append(fields, creditgrantevent.FieldAmount)
+	}
+	if m.validity_days != nil {
+		fields = append(fields, creditgrantevent.FieldValidityDays)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *CreditGrantEventMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case creditgrantevent.FieldCreatedAt:
+		return m.CreatedAt()
+	case creditgrantevent.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case creditgrantevent.FieldDeletedAt:
+		return m.DeletedAt()
+	case creditgrantevent.FieldName:
+		return m.Name()
+	case creditgrantevent.FieldCreditType:
+		return m.CreditType()
+	case creditgrantevent.FieldAmount:
+		return m.Amount()
+	case creditgrantevent.FieldValidityDays:
+		return m.ValidityDays()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *CreditGrantEventMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case creditgrantevent.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case creditgrantevent.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case creditgrantevent.FieldDeletedAt:
+		return m.OldDeletedAt(ctx)
+	case creditgrantevent.FieldName:
+		return m.OldName(ctx)
+	case creditgrantevent.FieldCreditType:
+		return m.OldCreditType(ctx)
+	case creditgrantevent.FieldAmount:
+		return m.OldAmount(ctx)
+	case creditgrantevent.FieldValidityDays:
+		return m.OldValidityDays(ctx)
+	}
+	return nil, fmt.Errorf("unknown CreditGrantEvent field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *CreditGrantEventMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case creditgrantevent.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case creditgrantevent.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case creditgrantevent.FieldDeletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDeletedAt(v)
+		return nil
+	case creditgrantevent.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case creditgrantevent.FieldCreditType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreditType(v)
+		return nil
+	case creditgrantevent.FieldAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAmount(v)
+		return nil
+	case creditgrantevent.FieldValidityDays:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValidityDays(v)
+		return nil
+	}
+	return fmt.Errorf("unknown CreditGrantEvent field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *CreditGrantEventMutation) AddedFields() []string {
+	var fields []string
+	if m.addamount != nil {
+		fields = append(fields, creditgrantevent.FieldAmount)
+	}
+	if m.addvalidity_days != nil {
+		fields = append(fields, creditgrantevent.FieldValidityDays)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *CreditGrantEventMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case creditgrantevent.FieldAmount:
+		return m.AddedAmount()
+	case creditgrantevent.FieldValidityDays:
+		return m.AddedValidityDays()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *CreditGrantEventMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case creditgrantevent.FieldAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAmount(v)
+		return nil
+	case creditgrantevent.FieldValidityDays:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddValidityDays(v)
+		return nil
+	}
+	return fmt.Errorf("unknown CreditGrantEvent numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *CreditGrantEventMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(creditgrantevent.FieldDeletedAt) {
+		fields = append(fields, creditgrantevent.FieldDeletedAt)
+	}
+	if m.FieldCleared(creditgrantevent.FieldValidityDays) {
+		fields = append(fields, creditgrantevent.FieldValidityDays)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *CreditGrantEventMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *CreditGrantEventMutation) ClearField(name string) error {
+	switch name {
+	case creditgrantevent.FieldDeletedAt:
+		m.ClearDeletedAt()
+		return nil
+	case creditgrantevent.FieldValidityDays:
+		m.ClearValidityDays()
+		return nil
+	}
+	return fmt.Errorf("unknown CreditGrantEvent nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *CreditGrantEventMutation) ResetField(name string) error {
+	switch name {
+	case creditgrantevent.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case creditgrantevent.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case creditgrantevent.FieldDeletedAt:
+		m.ResetDeletedAt()
+		return nil
+	case creditgrantevent.FieldName:
+		m.ResetName()
+		return nil
+	case creditgrantevent.FieldCreditType:
+		m.ResetCreditType()
+		return nil
+	case creditgrantevent.FieldAmount:
+		m.ResetAmount()
+		return nil
+	case creditgrantevent.FieldValidityDays:
+		m.ResetValidityDays()
+		return nil
+	}
+	return fmt.Errorf("unknown CreditGrantEvent field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *CreditGrantEventMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *CreditGrantEventMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *CreditGrantEventMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *CreditGrantEventMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *CreditGrantEventMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *CreditGrantEventMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *CreditGrantEventMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown CreditGrantEvent unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *CreditGrantEventMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown CreditGrantEvent edge %s", name)
 }
 
 // ErrorPassthroughRuleMutation represents an operation that mutates the ErrorPassthroughRule nodes in the graph.
@@ -62696,6 +63461,1105 @@ func (m *UserAttributeValueMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown UserAttributeValue edge %s", name)
+}
+
+// UserCreditGrantEventTriggerMutation represents an operation that mutates the UserCreditGrantEventTrigger nodes in the graph.
+type UserCreditGrantEventTriggerMutation struct {
+	config
+	op                          Op
+	typ                         string
+	id                          *int64
+	credit_type_snapshot        *string
+	amount_snapshot             *float64
+	addamount_snapshot          *float64
+	validity_days_snapshot      *int
+	addvalidity_days_snapshot   *int
+	expires_at                  *time.Time
+	triggered_at                *time.Time
+	clearedFields               map[string]struct{}
+	event                       *int64
+	clearedevent                bool
+	user                        *int64
+	cleareduser                 bool
+	balance_history             *int64
+	clearedbalance_history      bool
+	limited_credit_grant        *int64
+	clearedlimited_credit_grant bool
+	done                        bool
+	oldValue                    func(context.Context) (*UserCreditGrantEventTrigger, error)
+	predicates                  []predicate.UserCreditGrantEventTrigger
+}
+
+var _ ent.Mutation = (*UserCreditGrantEventTriggerMutation)(nil)
+
+// usercreditgranteventtriggerOption allows management of the mutation configuration using functional options.
+type usercreditgranteventtriggerOption func(*UserCreditGrantEventTriggerMutation)
+
+// newUserCreditGrantEventTriggerMutation creates new mutation for the UserCreditGrantEventTrigger entity.
+func newUserCreditGrantEventTriggerMutation(c config, op Op, opts ...usercreditgranteventtriggerOption) *UserCreditGrantEventTriggerMutation {
+	m := &UserCreditGrantEventTriggerMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeUserCreditGrantEventTrigger,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withUserCreditGrantEventTriggerID sets the ID field of the mutation.
+func withUserCreditGrantEventTriggerID(id int64) usercreditgranteventtriggerOption {
+	return func(m *UserCreditGrantEventTriggerMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *UserCreditGrantEventTrigger
+		)
+		m.oldValue = func(ctx context.Context) (*UserCreditGrantEventTrigger, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().UserCreditGrantEventTrigger.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withUserCreditGrantEventTrigger sets the old UserCreditGrantEventTrigger of the mutation.
+func withUserCreditGrantEventTrigger(node *UserCreditGrantEventTrigger) usercreditgranteventtriggerOption {
+	return func(m *UserCreditGrantEventTriggerMutation) {
+		m.oldValue = func(context.Context) (*UserCreditGrantEventTrigger, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m UserCreditGrantEventTriggerMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m UserCreditGrantEventTriggerMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *UserCreditGrantEventTriggerMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *UserCreditGrantEventTriggerMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().UserCreditGrantEventTrigger.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetEventID sets the "event_id" field.
+func (m *UserCreditGrantEventTriggerMutation) SetEventID(i int64) {
+	m.event = &i
+}
+
+// EventID returns the value of the "event_id" field in the mutation.
+func (m *UserCreditGrantEventTriggerMutation) EventID() (r int64, exists bool) {
+	v := m.event
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEventID returns the old "event_id" field's value of the UserCreditGrantEventTrigger entity.
+// If the UserCreditGrantEventTrigger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserCreditGrantEventTriggerMutation) OldEventID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEventID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEventID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEventID: %w", err)
+	}
+	return oldValue.EventID, nil
+}
+
+// ResetEventID resets all changes to the "event_id" field.
+func (m *UserCreditGrantEventTriggerMutation) ResetEventID() {
+	m.event = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *UserCreditGrantEventTriggerMutation) SetUserID(i int64) {
+	m.user = &i
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *UserCreditGrantEventTriggerMutation) UserID() (r int64, exists bool) {
+	v := m.user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the UserCreditGrantEventTrigger entity.
+// If the UserCreditGrantEventTrigger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserCreditGrantEventTriggerMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *UserCreditGrantEventTriggerMutation) ResetUserID() {
+	m.user = nil
+}
+
+// SetCreditTypeSnapshot sets the "credit_type_snapshot" field.
+func (m *UserCreditGrantEventTriggerMutation) SetCreditTypeSnapshot(s string) {
+	m.credit_type_snapshot = &s
+}
+
+// CreditTypeSnapshot returns the value of the "credit_type_snapshot" field in the mutation.
+func (m *UserCreditGrantEventTriggerMutation) CreditTypeSnapshot() (r string, exists bool) {
+	v := m.credit_type_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreditTypeSnapshot returns the old "credit_type_snapshot" field's value of the UserCreditGrantEventTrigger entity.
+// If the UserCreditGrantEventTrigger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserCreditGrantEventTriggerMutation) OldCreditTypeSnapshot(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreditTypeSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreditTypeSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreditTypeSnapshot: %w", err)
+	}
+	return oldValue.CreditTypeSnapshot, nil
+}
+
+// ResetCreditTypeSnapshot resets all changes to the "credit_type_snapshot" field.
+func (m *UserCreditGrantEventTriggerMutation) ResetCreditTypeSnapshot() {
+	m.credit_type_snapshot = nil
+}
+
+// SetAmountSnapshot sets the "amount_snapshot" field.
+func (m *UserCreditGrantEventTriggerMutation) SetAmountSnapshot(f float64) {
+	m.amount_snapshot = &f
+	m.addamount_snapshot = nil
+}
+
+// AmountSnapshot returns the value of the "amount_snapshot" field in the mutation.
+func (m *UserCreditGrantEventTriggerMutation) AmountSnapshot() (r float64, exists bool) {
+	v := m.amount_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAmountSnapshot returns the old "amount_snapshot" field's value of the UserCreditGrantEventTrigger entity.
+// If the UserCreditGrantEventTrigger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserCreditGrantEventTriggerMutation) OldAmountSnapshot(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAmountSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAmountSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAmountSnapshot: %w", err)
+	}
+	return oldValue.AmountSnapshot, nil
+}
+
+// AddAmountSnapshot adds f to the "amount_snapshot" field.
+func (m *UserCreditGrantEventTriggerMutation) AddAmountSnapshot(f float64) {
+	if m.addamount_snapshot != nil {
+		*m.addamount_snapshot += f
+	} else {
+		m.addamount_snapshot = &f
+	}
+}
+
+// AddedAmountSnapshot returns the value that was added to the "amount_snapshot" field in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) AddedAmountSnapshot() (r float64, exists bool) {
+	v := m.addamount_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAmountSnapshot resets all changes to the "amount_snapshot" field.
+func (m *UserCreditGrantEventTriggerMutation) ResetAmountSnapshot() {
+	m.amount_snapshot = nil
+	m.addamount_snapshot = nil
+}
+
+// SetValidityDaysSnapshot sets the "validity_days_snapshot" field.
+func (m *UserCreditGrantEventTriggerMutation) SetValidityDaysSnapshot(i int) {
+	m.validity_days_snapshot = &i
+	m.addvalidity_days_snapshot = nil
+}
+
+// ValidityDaysSnapshot returns the value of the "validity_days_snapshot" field in the mutation.
+func (m *UserCreditGrantEventTriggerMutation) ValidityDaysSnapshot() (r int, exists bool) {
+	v := m.validity_days_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValidityDaysSnapshot returns the old "validity_days_snapshot" field's value of the UserCreditGrantEventTrigger entity.
+// If the UserCreditGrantEventTrigger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserCreditGrantEventTriggerMutation) OldValidityDaysSnapshot(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValidityDaysSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValidityDaysSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValidityDaysSnapshot: %w", err)
+	}
+	return oldValue.ValidityDaysSnapshot, nil
+}
+
+// AddValidityDaysSnapshot adds i to the "validity_days_snapshot" field.
+func (m *UserCreditGrantEventTriggerMutation) AddValidityDaysSnapshot(i int) {
+	if m.addvalidity_days_snapshot != nil {
+		*m.addvalidity_days_snapshot += i
+	} else {
+		m.addvalidity_days_snapshot = &i
+	}
+}
+
+// AddedValidityDaysSnapshot returns the value that was added to the "validity_days_snapshot" field in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) AddedValidityDaysSnapshot() (r int, exists bool) {
+	v := m.addvalidity_days_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearValidityDaysSnapshot clears the value of the "validity_days_snapshot" field.
+func (m *UserCreditGrantEventTriggerMutation) ClearValidityDaysSnapshot() {
+	m.validity_days_snapshot = nil
+	m.addvalidity_days_snapshot = nil
+	m.clearedFields[usercreditgranteventtrigger.FieldValidityDaysSnapshot] = struct{}{}
+}
+
+// ValidityDaysSnapshotCleared returns if the "validity_days_snapshot" field was cleared in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) ValidityDaysSnapshotCleared() bool {
+	_, ok := m.clearedFields[usercreditgranteventtrigger.FieldValidityDaysSnapshot]
+	return ok
+}
+
+// ResetValidityDaysSnapshot resets all changes to the "validity_days_snapshot" field.
+func (m *UserCreditGrantEventTriggerMutation) ResetValidityDaysSnapshot() {
+	m.validity_days_snapshot = nil
+	m.addvalidity_days_snapshot = nil
+	delete(m.clearedFields, usercreditgranteventtrigger.FieldValidityDaysSnapshot)
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *UserCreditGrantEventTriggerMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *UserCreditGrantEventTriggerMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the UserCreditGrantEventTrigger entity.
+// If the UserCreditGrantEventTrigger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserCreditGrantEventTriggerMutation) OldExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (m *UserCreditGrantEventTriggerMutation) ClearExpiresAt() {
+	m.expires_at = nil
+	m.clearedFields[usercreditgranteventtrigger.FieldExpiresAt] = struct{}{}
+}
+
+// ExpiresAtCleared returns if the "expires_at" field was cleared in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) ExpiresAtCleared() bool {
+	_, ok := m.clearedFields[usercreditgranteventtrigger.FieldExpiresAt]
+	return ok
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *UserCreditGrantEventTriggerMutation) ResetExpiresAt() {
+	m.expires_at = nil
+	delete(m.clearedFields, usercreditgranteventtrigger.FieldExpiresAt)
+}
+
+// SetBalanceHistoryID sets the "balance_history_id" field.
+func (m *UserCreditGrantEventTriggerMutation) SetBalanceHistoryID(i int64) {
+	m.balance_history = &i
+}
+
+// BalanceHistoryID returns the value of the "balance_history_id" field in the mutation.
+func (m *UserCreditGrantEventTriggerMutation) BalanceHistoryID() (r int64, exists bool) {
+	v := m.balance_history
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBalanceHistoryID returns the old "balance_history_id" field's value of the UserCreditGrantEventTrigger entity.
+// If the UserCreditGrantEventTrigger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserCreditGrantEventTriggerMutation) OldBalanceHistoryID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBalanceHistoryID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBalanceHistoryID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBalanceHistoryID: %w", err)
+	}
+	return oldValue.BalanceHistoryID, nil
+}
+
+// ClearBalanceHistoryID clears the value of the "balance_history_id" field.
+func (m *UserCreditGrantEventTriggerMutation) ClearBalanceHistoryID() {
+	m.balance_history = nil
+	m.clearedFields[usercreditgranteventtrigger.FieldBalanceHistoryID] = struct{}{}
+}
+
+// BalanceHistoryIDCleared returns if the "balance_history_id" field was cleared in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) BalanceHistoryIDCleared() bool {
+	_, ok := m.clearedFields[usercreditgranteventtrigger.FieldBalanceHistoryID]
+	return ok
+}
+
+// ResetBalanceHistoryID resets all changes to the "balance_history_id" field.
+func (m *UserCreditGrantEventTriggerMutation) ResetBalanceHistoryID() {
+	m.balance_history = nil
+	delete(m.clearedFields, usercreditgranteventtrigger.FieldBalanceHistoryID)
+}
+
+// SetLimitedCreditGrantID sets the "limited_credit_grant_id" field.
+func (m *UserCreditGrantEventTriggerMutation) SetLimitedCreditGrantID(i int64) {
+	m.limited_credit_grant = &i
+}
+
+// LimitedCreditGrantID returns the value of the "limited_credit_grant_id" field in the mutation.
+func (m *UserCreditGrantEventTriggerMutation) LimitedCreditGrantID() (r int64, exists bool) {
+	v := m.limited_credit_grant
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLimitedCreditGrantID returns the old "limited_credit_grant_id" field's value of the UserCreditGrantEventTrigger entity.
+// If the UserCreditGrantEventTrigger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserCreditGrantEventTriggerMutation) OldLimitedCreditGrantID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLimitedCreditGrantID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLimitedCreditGrantID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLimitedCreditGrantID: %w", err)
+	}
+	return oldValue.LimitedCreditGrantID, nil
+}
+
+// ClearLimitedCreditGrantID clears the value of the "limited_credit_grant_id" field.
+func (m *UserCreditGrantEventTriggerMutation) ClearLimitedCreditGrantID() {
+	m.limited_credit_grant = nil
+	m.clearedFields[usercreditgranteventtrigger.FieldLimitedCreditGrantID] = struct{}{}
+}
+
+// LimitedCreditGrantIDCleared returns if the "limited_credit_grant_id" field was cleared in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) LimitedCreditGrantIDCleared() bool {
+	_, ok := m.clearedFields[usercreditgranteventtrigger.FieldLimitedCreditGrantID]
+	return ok
+}
+
+// ResetLimitedCreditGrantID resets all changes to the "limited_credit_grant_id" field.
+func (m *UserCreditGrantEventTriggerMutation) ResetLimitedCreditGrantID() {
+	m.limited_credit_grant = nil
+	delete(m.clearedFields, usercreditgranteventtrigger.FieldLimitedCreditGrantID)
+}
+
+// SetTriggeredAt sets the "triggered_at" field.
+func (m *UserCreditGrantEventTriggerMutation) SetTriggeredAt(t time.Time) {
+	m.triggered_at = &t
+}
+
+// TriggeredAt returns the value of the "triggered_at" field in the mutation.
+func (m *UserCreditGrantEventTriggerMutation) TriggeredAt() (r time.Time, exists bool) {
+	v := m.triggered_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTriggeredAt returns the old "triggered_at" field's value of the UserCreditGrantEventTrigger entity.
+// If the UserCreditGrantEventTrigger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserCreditGrantEventTriggerMutation) OldTriggeredAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTriggeredAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTriggeredAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTriggeredAt: %w", err)
+	}
+	return oldValue.TriggeredAt, nil
+}
+
+// ResetTriggeredAt resets all changes to the "triggered_at" field.
+func (m *UserCreditGrantEventTriggerMutation) ResetTriggeredAt() {
+	m.triggered_at = nil
+}
+
+// ClearEvent clears the "event" edge to the CreditGrantEvent entity.
+func (m *UserCreditGrantEventTriggerMutation) ClearEvent() {
+	m.clearedevent = true
+	m.clearedFields[usercreditgranteventtrigger.FieldEventID] = struct{}{}
+}
+
+// EventCleared reports if the "event" edge to the CreditGrantEvent entity was cleared.
+func (m *UserCreditGrantEventTriggerMutation) EventCleared() bool {
+	return m.clearedevent
+}
+
+// EventIDs returns the "event" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// EventID instead. It exists only for internal usage by the builders.
+func (m *UserCreditGrantEventTriggerMutation) EventIDs() (ids []int64) {
+	if id := m.event; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetEvent resets all changes to the "event" edge.
+func (m *UserCreditGrantEventTriggerMutation) ResetEvent() {
+	m.event = nil
+	m.clearedevent = false
+}
+
+// ClearUser clears the "user" edge to the User entity.
+func (m *UserCreditGrantEventTriggerMutation) ClearUser() {
+	m.cleareduser = true
+	m.clearedFields[usercreditgranteventtrigger.FieldUserID] = struct{}{}
+}
+
+// UserCleared reports if the "user" edge to the User entity was cleared.
+func (m *UserCreditGrantEventTriggerMutation) UserCleared() bool {
+	return m.cleareduser
+}
+
+// UserIDs returns the "user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UserID instead. It exists only for internal usage by the builders.
+func (m *UserCreditGrantEventTriggerMutation) UserIDs() (ids []int64) {
+	if id := m.user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUser resets all changes to the "user" edge.
+func (m *UserCreditGrantEventTriggerMutation) ResetUser() {
+	m.user = nil
+	m.cleareduser = false
+}
+
+// ClearBalanceHistory clears the "balance_history" edge to the RedeemCode entity.
+func (m *UserCreditGrantEventTriggerMutation) ClearBalanceHistory() {
+	m.clearedbalance_history = true
+	m.clearedFields[usercreditgranteventtrigger.FieldBalanceHistoryID] = struct{}{}
+}
+
+// BalanceHistoryCleared reports if the "balance_history" edge to the RedeemCode entity was cleared.
+func (m *UserCreditGrantEventTriggerMutation) BalanceHistoryCleared() bool {
+	return m.BalanceHistoryIDCleared() || m.clearedbalance_history
+}
+
+// BalanceHistoryIDs returns the "balance_history" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// BalanceHistoryID instead. It exists only for internal usage by the builders.
+func (m *UserCreditGrantEventTriggerMutation) BalanceHistoryIDs() (ids []int64) {
+	if id := m.balance_history; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetBalanceHistory resets all changes to the "balance_history" edge.
+func (m *UserCreditGrantEventTriggerMutation) ResetBalanceHistory() {
+	m.balance_history = nil
+	m.clearedbalance_history = false
+}
+
+// ClearLimitedCreditGrant clears the "limited_credit_grant" edge to the UserLimitedCreditGrant entity.
+func (m *UserCreditGrantEventTriggerMutation) ClearLimitedCreditGrant() {
+	m.clearedlimited_credit_grant = true
+	m.clearedFields[usercreditgranteventtrigger.FieldLimitedCreditGrantID] = struct{}{}
+}
+
+// LimitedCreditGrantCleared reports if the "limited_credit_grant" edge to the UserLimitedCreditGrant entity was cleared.
+func (m *UserCreditGrantEventTriggerMutation) LimitedCreditGrantCleared() bool {
+	return m.LimitedCreditGrantIDCleared() || m.clearedlimited_credit_grant
+}
+
+// LimitedCreditGrantIDs returns the "limited_credit_grant" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// LimitedCreditGrantID instead. It exists only for internal usage by the builders.
+func (m *UserCreditGrantEventTriggerMutation) LimitedCreditGrantIDs() (ids []int64) {
+	if id := m.limited_credit_grant; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetLimitedCreditGrant resets all changes to the "limited_credit_grant" edge.
+func (m *UserCreditGrantEventTriggerMutation) ResetLimitedCreditGrant() {
+	m.limited_credit_grant = nil
+	m.clearedlimited_credit_grant = false
+}
+
+// Where appends a list predicates to the UserCreditGrantEventTriggerMutation builder.
+func (m *UserCreditGrantEventTriggerMutation) Where(ps ...predicate.UserCreditGrantEventTrigger) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the UserCreditGrantEventTriggerMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *UserCreditGrantEventTriggerMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.UserCreditGrantEventTrigger, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *UserCreditGrantEventTriggerMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *UserCreditGrantEventTriggerMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (UserCreditGrantEventTrigger).
+func (m *UserCreditGrantEventTriggerMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *UserCreditGrantEventTriggerMutation) Fields() []string {
+	fields := make([]string, 0, 9)
+	if m.event != nil {
+		fields = append(fields, usercreditgranteventtrigger.FieldEventID)
+	}
+	if m.user != nil {
+		fields = append(fields, usercreditgranteventtrigger.FieldUserID)
+	}
+	if m.credit_type_snapshot != nil {
+		fields = append(fields, usercreditgranteventtrigger.FieldCreditTypeSnapshot)
+	}
+	if m.amount_snapshot != nil {
+		fields = append(fields, usercreditgranteventtrigger.FieldAmountSnapshot)
+	}
+	if m.validity_days_snapshot != nil {
+		fields = append(fields, usercreditgranteventtrigger.FieldValidityDaysSnapshot)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, usercreditgranteventtrigger.FieldExpiresAt)
+	}
+	if m.balance_history != nil {
+		fields = append(fields, usercreditgranteventtrigger.FieldBalanceHistoryID)
+	}
+	if m.limited_credit_grant != nil {
+		fields = append(fields, usercreditgranteventtrigger.FieldLimitedCreditGrantID)
+	}
+	if m.triggered_at != nil {
+		fields = append(fields, usercreditgranteventtrigger.FieldTriggeredAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *UserCreditGrantEventTriggerMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case usercreditgranteventtrigger.FieldEventID:
+		return m.EventID()
+	case usercreditgranteventtrigger.FieldUserID:
+		return m.UserID()
+	case usercreditgranteventtrigger.FieldCreditTypeSnapshot:
+		return m.CreditTypeSnapshot()
+	case usercreditgranteventtrigger.FieldAmountSnapshot:
+		return m.AmountSnapshot()
+	case usercreditgranteventtrigger.FieldValidityDaysSnapshot:
+		return m.ValidityDaysSnapshot()
+	case usercreditgranteventtrigger.FieldExpiresAt:
+		return m.ExpiresAt()
+	case usercreditgranteventtrigger.FieldBalanceHistoryID:
+		return m.BalanceHistoryID()
+	case usercreditgranteventtrigger.FieldLimitedCreditGrantID:
+		return m.LimitedCreditGrantID()
+	case usercreditgranteventtrigger.FieldTriggeredAt:
+		return m.TriggeredAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *UserCreditGrantEventTriggerMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case usercreditgranteventtrigger.FieldEventID:
+		return m.OldEventID(ctx)
+	case usercreditgranteventtrigger.FieldUserID:
+		return m.OldUserID(ctx)
+	case usercreditgranteventtrigger.FieldCreditTypeSnapshot:
+		return m.OldCreditTypeSnapshot(ctx)
+	case usercreditgranteventtrigger.FieldAmountSnapshot:
+		return m.OldAmountSnapshot(ctx)
+	case usercreditgranteventtrigger.FieldValidityDaysSnapshot:
+		return m.OldValidityDaysSnapshot(ctx)
+	case usercreditgranteventtrigger.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
+	case usercreditgranteventtrigger.FieldBalanceHistoryID:
+		return m.OldBalanceHistoryID(ctx)
+	case usercreditgranteventtrigger.FieldLimitedCreditGrantID:
+		return m.OldLimitedCreditGrantID(ctx)
+	case usercreditgranteventtrigger.FieldTriggeredAt:
+		return m.OldTriggeredAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown UserCreditGrantEventTrigger field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *UserCreditGrantEventTriggerMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case usercreditgranteventtrigger.FieldEventID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEventID(v)
+		return nil
+	case usercreditgranteventtrigger.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case usercreditgranteventtrigger.FieldCreditTypeSnapshot:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreditTypeSnapshot(v)
+		return nil
+	case usercreditgranteventtrigger.FieldAmountSnapshot:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAmountSnapshot(v)
+		return nil
+	case usercreditgranteventtrigger.FieldValidityDaysSnapshot:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValidityDaysSnapshot(v)
+		return nil
+	case usercreditgranteventtrigger.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
+		return nil
+	case usercreditgranteventtrigger.FieldBalanceHistoryID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBalanceHistoryID(v)
+		return nil
+	case usercreditgranteventtrigger.FieldLimitedCreditGrantID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLimitedCreditGrantID(v)
+		return nil
+	case usercreditgranteventtrigger.FieldTriggeredAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTriggeredAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown UserCreditGrantEventTrigger field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *UserCreditGrantEventTriggerMutation) AddedFields() []string {
+	var fields []string
+	if m.addamount_snapshot != nil {
+		fields = append(fields, usercreditgranteventtrigger.FieldAmountSnapshot)
+	}
+	if m.addvalidity_days_snapshot != nil {
+		fields = append(fields, usercreditgranteventtrigger.FieldValidityDaysSnapshot)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *UserCreditGrantEventTriggerMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case usercreditgranteventtrigger.FieldAmountSnapshot:
+		return m.AddedAmountSnapshot()
+	case usercreditgranteventtrigger.FieldValidityDaysSnapshot:
+		return m.AddedValidityDaysSnapshot()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *UserCreditGrantEventTriggerMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case usercreditgranteventtrigger.FieldAmountSnapshot:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAmountSnapshot(v)
+		return nil
+	case usercreditgranteventtrigger.FieldValidityDaysSnapshot:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddValidityDaysSnapshot(v)
+		return nil
+	}
+	return fmt.Errorf("unknown UserCreditGrantEventTrigger numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *UserCreditGrantEventTriggerMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(usercreditgranteventtrigger.FieldValidityDaysSnapshot) {
+		fields = append(fields, usercreditgranteventtrigger.FieldValidityDaysSnapshot)
+	}
+	if m.FieldCleared(usercreditgranteventtrigger.FieldExpiresAt) {
+		fields = append(fields, usercreditgranteventtrigger.FieldExpiresAt)
+	}
+	if m.FieldCleared(usercreditgranteventtrigger.FieldBalanceHistoryID) {
+		fields = append(fields, usercreditgranteventtrigger.FieldBalanceHistoryID)
+	}
+	if m.FieldCleared(usercreditgranteventtrigger.FieldLimitedCreditGrantID) {
+		fields = append(fields, usercreditgranteventtrigger.FieldLimitedCreditGrantID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *UserCreditGrantEventTriggerMutation) ClearField(name string) error {
+	switch name {
+	case usercreditgranteventtrigger.FieldValidityDaysSnapshot:
+		m.ClearValidityDaysSnapshot()
+		return nil
+	case usercreditgranteventtrigger.FieldExpiresAt:
+		m.ClearExpiresAt()
+		return nil
+	case usercreditgranteventtrigger.FieldBalanceHistoryID:
+		m.ClearBalanceHistoryID()
+		return nil
+	case usercreditgranteventtrigger.FieldLimitedCreditGrantID:
+		m.ClearLimitedCreditGrantID()
+		return nil
+	}
+	return fmt.Errorf("unknown UserCreditGrantEventTrigger nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *UserCreditGrantEventTriggerMutation) ResetField(name string) error {
+	switch name {
+	case usercreditgranteventtrigger.FieldEventID:
+		m.ResetEventID()
+		return nil
+	case usercreditgranteventtrigger.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case usercreditgranteventtrigger.FieldCreditTypeSnapshot:
+		m.ResetCreditTypeSnapshot()
+		return nil
+	case usercreditgranteventtrigger.FieldAmountSnapshot:
+		m.ResetAmountSnapshot()
+		return nil
+	case usercreditgranteventtrigger.FieldValidityDaysSnapshot:
+		m.ResetValidityDaysSnapshot()
+		return nil
+	case usercreditgranteventtrigger.FieldExpiresAt:
+		m.ResetExpiresAt()
+		return nil
+	case usercreditgranteventtrigger.FieldBalanceHistoryID:
+		m.ResetBalanceHistoryID()
+		return nil
+	case usercreditgranteventtrigger.FieldLimitedCreditGrantID:
+		m.ResetLimitedCreditGrantID()
+		return nil
+	case usercreditgranteventtrigger.FieldTriggeredAt:
+		m.ResetTriggeredAt()
+		return nil
+	}
+	return fmt.Errorf("unknown UserCreditGrantEventTrigger field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) AddedEdges() []string {
+	edges := make([]string, 0, 4)
+	if m.event != nil {
+		edges = append(edges, usercreditgranteventtrigger.EdgeEvent)
+	}
+	if m.user != nil {
+		edges = append(edges, usercreditgranteventtrigger.EdgeUser)
+	}
+	if m.balance_history != nil {
+		edges = append(edges, usercreditgranteventtrigger.EdgeBalanceHistory)
+	}
+	if m.limited_credit_grant != nil {
+		edges = append(edges, usercreditgranteventtrigger.EdgeLimitedCreditGrant)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case usercreditgranteventtrigger.EdgeEvent:
+		if id := m.event; id != nil {
+			return []ent.Value{*id}
+		}
+	case usercreditgranteventtrigger.EdgeUser:
+		if id := m.user; id != nil {
+			return []ent.Value{*id}
+		}
+	case usercreditgranteventtrigger.EdgeBalanceHistory:
+		if id := m.balance_history; id != nil {
+			return []ent.Value{*id}
+		}
+	case usercreditgranteventtrigger.EdgeLimitedCreditGrant:
+		if id := m.limited_credit_grant; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 4)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 4)
+	if m.clearedevent {
+		edges = append(edges, usercreditgranteventtrigger.EdgeEvent)
+	}
+	if m.cleareduser {
+		edges = append(edges, usercreditgranteventtrigger.EdgeUser)
+	}
+	if m.clearedbalance_history {
+		edges = append(edges, usercreditgranteventtrigger.EdgeBalanceHistory)
+	}
+	if m.clearedlimited_credit_grant {
+		edges = append(edges, usercreditgranteventtrigger.EdgeLimitedCreditGrant)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *UserCreditGrantEventTriggerMutation) EdgeCleared(name string) bool {
+	switch name {
+	case usercreditgranteventtrigger.EdgeEvent:
+		return m.clearedevent
+	case usercreditgranteventtrigger.EdgeUser:
+		return m.cleareduser
+	case usercreditgranteventtrigger.EdgeBalanceHistory:
+		return m.clearedbalance_history
+	case usercreditgranteventtrigger.EdgeLimitedCreditGrant:
+		return m.clearedlimited_credit_grant
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *UserCreditGrantEventTriggerMutation) ClearEdge(name string) error {
+	switch name {
+	case usercreditgranteventtrigger.EdgeEvent:
+		m.ClearEvent()
+		return nil
+	case usercreditgranteventtrigger.EdgeUser:
+		m.ClearUser()
+		return nil
+	case usercreditgranteventtrigger.EdgeBalanceHistory:
+		m.ClearBalanceHistory()
+		return nil
+	case usercreditgranteventtrigger.EdgeLimitedCreditGrant:
+		m.ClearLimitedCreditGrant()
+		return nil
+	}
+	return fmt.Errorf("unknown UserCreditGrantEventTrigger unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *UserCreditGrantEventTriggerMutation) ResetEdge(name string) error {
+	switch name {
+	case usercreditgranteventtrigger.EdgeEvent:
+		m.ResetEvent()
+		return nil
+	case usercreditgranteventtrigger.EdgeUser:
+		m.ResetUser()
+		return nil
+	case usercreditgranteventtrigger.EdgeBalanceHistory:
+		m.ResetBalanceHistory()
+		return nil
+	case usercreditgranteventtrigger.EdgeLimitedCreditGrant:
+		m.ResetLimitedCreditGrant()
+		return nil
+	}
+	return fmt.Errorf("unknown UserCreditGrantEventTrigger edge %s", name)
 }
 
 // UserLimitedCreditGrantMutation represents an operation that mutates the UserLimitedCreditGrant nodes in the graph.

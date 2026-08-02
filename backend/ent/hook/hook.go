@@ -189,6 +189,18 @@ func (f CompositeModelRouteFunc) Mutate(ctx context.Context, m ent.Mutation) (en
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CompositeModelRouteMutation", m)
 }
 
+// The CreditGrantEventFunc type is an adapter to allow the use of ordinary
+// function as CreditGrantEvent mutator.
+type CreditGrantEventFunc func(context.Context, *ent.CreditGrantEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f CreditGrantEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.CreditGrantEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CreditGrantEventMutation", m)
+}
+
 // The ErrorPassthroughRuleFunc type is an adapter to allow the use of ordinary
 // function as ErrorPassthroughRule mutator.
 type ErrorPassthroughRuleFunc func(context.Context, *ent.ErrorPassthroughRuleMutation) (ent.Value, error)
@@ -523,6 +535,18 @@ func (f UserAttributeValueFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserAttributeValueMutation", m)
+}
+
+// The UserCreditGrantEventTriggerFunc type is an adapter to allow the use of ordinary
+// function as UserCreditGrantEventTrigger mutator.
+type UserCreditGrantEventTriggerFunc func(context.Context, *ent.UserCreditGrantEventTriggerMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UserCreditGrantEventTriggerFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UserCreditGrantEventTriggerMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserCreditGrantEventTriggerMutation", m)
 }
 
 // The UserLimitedCreditGrantFunc type is an adapter to allow the use of ordinary

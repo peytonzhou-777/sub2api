@@ -4,9 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	dbevent "github.com/Wei-Shaw/sub2api/ent/creditgrantevent"
+	dbpaymentorder "github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	dbrecurringbatch "github.com/Wei-Shaw/sub2api/ent/recurringcreditbatch"
+	dbbatch "github.com/Wei-Shaw/sub2api/ent/resetrebatebatch"
+	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	dbgrant "github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
@@ -159,7 +165,102 @@ func (r *limitedCreditRepository) ListActiveByUser(ctx context.Context, userID i
 		}
 		out = append(out, *grant)
 	}
+	if err := r.attachSourceReasons(ctx, client, out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+// attachSourceReasons 按来源批量补充钱包标题文案，避免在每份额度中重复保存文本。
+func (r *limitedCreditRepository) attachSourceReasons(ctx context.Context, client *dbent.Client, grants []service.LimitedCreditGrant) error {
+	resetBatchIDs := make([]int64, 0)
+	rechargeOrderIDs := make([]int64, 0)
+	recurringBatchIDs := make([]int64, 0)
+	creditGrantEventIDs := make([]int64, 0)
+	for _, grant := range grants {
+		if grant.SourceID == nil {
+			continue
+		}
+		switch grant.SourceType {
+		case service.LimitedCreditSourceResetRebate:
+			resetBatchIDs = append(resetBatchIDs, *grant.SourceID)
+		case service.LimitedCreditSourceRechargeBonus:
+			rechargeOrderIDs = append(rechargeOrderIDs, *grant.SourceID)
+		case service.LimitedCreditSourceRecurring:
+			recurringBatchIDs = append(recurringBatchIDs, *grant.SourceID)
+		case service.LimitedCreditSourceCreditGrantEvent:
+			creditGrantEventIDs = append(creditGrantEventIDs, *grant.SourceID)
+		}
+	}
+
+	resetReasons := make(map[int64]string, len(resetBatchIDs))
+	if len(resetBatchIDs) > 0 {
+		batches, err := client.ResetRebateBatch.Query().Where(dbbatch.IDIn(resetBatchIDs...)).All(ctx)
+		if err != nil {
+			return err
+		}
+		for _, batch := range batches {
+			resetReasons[batch.ID] = batch.RebateReason
+		}
+	}
+
+	rechargeReasons := make(map[int64]string, len(rechargeOrderIDs))
+	if len(rechargeOrderIDs) > 0 {
+		orders, err := client.PaymentOrder.Query().Where(dbpaymentorder.IDIn(rechargeOrderIDs...)).All(ctx)
+		if err != nil {
+			return err
+		}
+		for _, order := range orders {
+			if order.RechargeBonusCampaignName != nil {
+				rechargeReasons[order.ID] = *order.RechargeBonusCampaignName
+			}
+		}
+	}
+
+	recurringReasons := make(map[int64]string, len(recurringBatchIDs))
+	if len(recurringBatchIDs) > 0 {
+		batches, err := client.RecurringCreditBatch.Query().Where(dbrecurringbatch.IDIn(recurringBatchIDs...)).All(ctx)
+		if err != nil {
+			return err
+		}
+		for _, batch := range batches {
+			recurringReasons[batch.ID] = batch.TaskName
+		}
+	}
+
+	creditGrantEventReasons := make(map[int64]string, len(creditGrantEventIDs))
+	if len(creditGrantEventIDs) > 0 {
+		// 钱包展示不受事件软删除影响，因此显式读取已删除事件的当前名称。
+		events, err := client.CreditGrantEvent.Query().
+			Where(dbevent.IDIn(creditGrantEventIDs...)).
+			All(mixins.SkipSoftDelete(ctx))
+		if err != nil {
+			return err
+		}
+		for _, event := range events {
+			creditGrantEventReasons[event.ID] = event.Name
+		}
+	}
+
+	for i := range grants {
+		if grants[i].SourceID == nil {
+			continue
+		}
+		switch grants[i].SourceType {
+		case service.LimitedCreditSourceResetRebate:
+			grants[i].SourceReason = resetReasons[*grants[i].SourceID]
+		case service.LimitedCreditSourceRechargeBonus:
+			grants[i].SourceReason = rechargeReasons[*grants[i].SourceID]
+		case service.LimitedCreditSourceRecurring:
+			grants[i].SourceReason = recurringReasons[*grants[i].SourceID]
+		case service.LimitedCreditSourceCreditGrantEvent:
+			grants[i].SourceReason = creditGrantEventReasons[*grants[i].SourceID]
+			if grants[i].SourceReason == "" {
+				grants[i].SourceReason = strings.TrimSpace(strings.TrimPrefix(grants[i].Notes, "赠额事件："))
+			}
+		}
+	}
+	return nil
 }
 
 // GetAvailableAmount 汇总用户当前可立即抵扣的限时额度。

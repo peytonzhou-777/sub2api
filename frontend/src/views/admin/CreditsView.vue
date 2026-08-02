@@ -11,16 +11,17 @@
 
       <div class="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800">
         <table class="w-full text-left text-sm">
-          <thead class="bg-gray-50 text-gray-500 dark:bg-dark-700 dark:text-dark-300"><tr><th class="px-4 py-3">{{ t('admin.credits.user') }}</th><th class="px-4 py-3">{{ t('admin.credits.permanent') }}</th><th class="px-4 py-3">{{ t('admin.credits.limited') }}</th><th class="px-4 py-3">{{ t('admin.credits.total') }}</th><th class="px-4 py-3 text-right">{{ t('common.actions') }}</th></tr></thead>
+          <thead class="bg-gray-50 text-gray-500 dark:bg-dark-700 dark:text-dark-300"><tr><th class="px-4 py-3">{{ t('admin.credits.user') }}</th><th class="px-4 py-3">{{ t('admin.credits.permanent') }}</th><th class="px-4 py-3">{{ t('admin.credits.limited') }}</th><th class="px-4 py-3">{{ t('admin.credits.total') }}</th><th class="px-4 py-3">{{ t('admin.credits.eventProgress') }}</th><th class="px-4 py-3 text-right">{{ t('common.actions') }}</th></tr></thead>
           <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
             <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50 dark:hover:bg-dark-700/60">
               <td class="px-4 py-3"><p class="font-medium text-gray-900 dark:text-white">{{ user.email }}</p><p class="text-xs text-gray-500">#{{ user.id }} · {{ user.username || '-' }}</p></td>
               <td class="px-4 py-3 font-medium">${{ money(user.balance) }}</td>
               <td class="px-4 py-3"><span class="font-medium text-red-600 dark:text-red-400">${{ money(user.limited_remaining_amount) }}</span><span class="ml-2 text-xs text-gray-500">{{ user.limited_active_count }} {{ t('admin.credits.items') }}</span></td>
               <td class="px-4 py-3 font-semibold">${{ money(user.balance + user.limited_remaining_amount) }}</td>
+              <td class="px-4 py-3 font-medium" data-test="grant-event-progress">{{ user.triggered_event_count }}/{{ user.active_event_count }}</td>
               <td class="px-4 py-3 text-right"><button class="btn btn-secondary btn-sm" @click="openUser(user.id)">{{ t('admin.credits.manage') }}</button></td>
             </tr>
-            <tr v-if="!loading && users.length === 0"><td colspan="5" class="px-4 py-12 text-center text-gray-500">{{ t('admin.credits.empty') }}</td></tr>
+            <tr v-if="!loading && users.length === 0"><td colspan="6" class="px-4 py-12 text-center text-gray-500">{{ t('admin.credits.empty') }}</td></tr>
           </tbody>
         </table>
       </div>
@@ -33,6 +34,43 @@
           <section class="mt-5 rounded-lg border border-gray-200 p-4 dark:border-dark-700">
             <div class="flex items-center justify-between"><div><p class="text-sm text-gray-500">{{ t('admin.credits.permanent') }}</p><p class="text-2xl font-semibold">${{ money(detail.balance) }}</p><p v-if="detail.frozen_balance > 0" class="text-xs text-amber-600">{{ t('admin.credits.frozen') }} ${{ money(detail.frozen_balance) }}</p></div><div class="flex flex-wrap justify-end gap-2"><button class="btn btn-secondary" @click="toggleBalanceHistory">{{ t('admin.credits.balanceHistory') }}</button><button class="btn btn-secondary" @click="startAction('balance-add')">{{ t('admin.credits.add') }}</button><button class="btn btn-danger" @click="startAction('balance-subtract')">{{ t('admin.credits.subtract') }}</button></div></div>
             <div v-if="showBalanceHistory" class="mt-4 divide-y divide-gray-100 border-t border-gray-100 pt-2 text-xs dark:divide-dark-700 dark:border-dark-700"><div v-for="entry in balanceHistory" :key="entry.id" class="flex justify-between gap-3 py-2"><div><p>{{ t(`admin.credits.balanceEvents.${entry.type}`) }}</p><p v-if="entry.notes" class="text-gray-500">{{ entry.notes }}</p></div><div class="text-right"><p :class="entry.value >= 0 ? 'text-green-600' : 'text-red-600'">{{ entry.value >= 0 ? '+' : '' }}${{ precise(entry.value) }}</p><p class="text-gray-500">{{ localDate(entry.used_at || entry.created_at) }}</p></div></div><p v-if="balanceHistory.length === 0" class="py-3 text-center text-gray-500">{{ t('admin.credits.noHistory') }}</p></div>
+          </section>
+          <section class="mt-6" data-test="grant-event-details">
+            <h3 class="font-semibold">{{ t('admin.credits.eventDetails') }}</h3>
+            <div class="mt-3 space-y-3">
+              <article v-for="event in detail.credit_grant_events" :key="event.id" class="rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="break-words font-medium text-gray-900 dark:text-white">{{ event.name }}</p>
+                    <p class="mt-1 text-xs text-gray-500">
+                      {{ t('admin.credits.currentConfig') }}:
+                      {{ eventTypeText(event.credit_type) }} · {{ '$' }}{{ precise(event.amount) }}
+                      <template v-if="event.credit_type === 'limited'"> · {{ t('admin.credits.grantEvents.daysValue', { days: event.validity_days }) }}</template>
+                    </p>
+                  </div>
+                  <span class="shrink-0 rounded-full px-2 py-1 text-xs font-medium" :class="event.triggered ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-dark-300'">
+                    {{ event.triggered ? t('admin.credits.triggered') : t('admin.credits.untriggered') }}
+                  </span>
+                </div>
+                <div v-if="event.triggered" class="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-dark-700">
+                  <p>
+                    {{ t('admin.credits.actualGrant') }}:
+                    {{ eventTypeText(event.actual_credit_type || event.credit_type) }} · {{ '$' }}{{ precise(event.actual_amount ?? event.amount) }}
+                    <template v-if="(event.actual_credit_type || event.credit_type) === 'limited' && event.actual_validity_days"> · {{ t('admin.credits.grantEvents.daysValue', { days: event.actual_validity_days }) }}</template>
+                  </p>
+                  <p v-if="event.actual_expires_at" class="mt-1">{{ t('admin.credits.grantEvents.validity') }}: {{ localDate(event.actual_expires_at) }}</p>
+                  <p v-if="event.triggered_at" class="mt-1">{{ t('admin.credits.triggeredAt') }}: {{ localDate(event.triggered_at) }}</p>
+                </div>
+                <div v-else class="mt-3 flex justify-end">
+                  <button class="btn btn-primary btn-sm" :disabled="triggeringEventId !== null" :data-test="'trigger-grant-event-' + event.id" @click="triggerCreditEvent(event)">
+                    {{ t('admin.credits.grantEvent') }}
+                  </button>
+                </div>
+              </article>
+              <p v-if="detail.credit_grant_events.length === 0" class="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500 dark:border-dark-700">
+                {{ t('admin.credits.grantEvents.empty') }}
+              </p>
+            </div>
           </section>
           <div class="mt-6 flex flex-wrap items-center justify-between gap-2"><h3 class="font-semibold">{{ t('admin.credits.limitedDetails') }}</h3><div class="flex gap-2"><Select v-model="limitedFilter" class="w-32" :options="[{value:'active',label:t('admin.credits.activeOnly')},{value:'all',label:t('admin.credits.allRecords')}]" /><button class="btn btn-primary" @click="startAction('limited-create')"><Icon name="plus" size="sm" />{{ t('admin.credits.createLimited') }}</button></div></div>
           <div class="mt-3 space-y-3">
@@ -82,13 +120,14 @@ import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores/app'
 import { adminAPI, creditsAPI } from '@/api/admin'
 import type { BalanceHistoryItem } from '@/api/admin'
-import type { AdminLimitedCredit, CreditUser, CreditUserDetail, LimitedCreditLedgerEntry } from '@/api/admin/credits'
+import type { AdminLimitedCredit, CreditGrantEventType, CreditGrantEventUserStatus, CreditUser, CreditUserDetail, LimitedCreditLedgerEntry } from '@/api/admin/credits'
 import { extractApiErrorStatus } from '@/utils/apiError'
 
 const { t } = useI18n(); const route = useRoute(); const router = useRouter(); const appStore = useAppStore()
 const users = ref<CreditUser[]>([]); const detail = ref<CreditUserDetail | null>(null); const search = ref(''); const loading = ref(false); const submitting = ref(false)
 const expandedLedger = ref<number | null>(null); const ledger = ref<LimitedCreditLedgerEntry[]>([])
 const showBalanceHistory = ref(false); const balanceHistory = ref<BalanceHistoryItem[]>([])
+const triggeringEventId = ref<number | null>(null)
 const limitedFilter = ref('active')
 const action = ref(''); const selectedGrant = ref<AdminLimitedCredit | null>(null); const form = reactive({ value: 0, amount: 0, operation: 'add', notes: '' })
 interface PendingBalanceAdjustment {
@@ -106,6 +145,7 @@ const balanceConflictSession = ref(0)
 const pendingBalanceAdjustment = ref<PendingBalanceAdjustment | null>(null)
 const money = (v:number) => v.toFixed(2); const precise=(v:number)=>v.toFixed(8).replace(/\.?(?:0+)$/,''); const localDate=(v:string)=>new Date(v).toLocaleString()
 const sourceText=(v:string)=>t(`admin.credits.sources.${v}`); const statusText=(v:string)=>t(`admin.credits.statuses.${v}`)
+const eventTypeText=(v:CreditGrantEventType)=>v==='permanent'?t('admin.credits.permanent'):t('admin.credits.limited')
 const formatLedgerAmount=(entry:LimitedCreditLedgerEntry)=>['admin_extend_expiry','admin_reduce_expiry'].includes(entry.event_type)?`${precise(entry.amount)} ${t('admin.credits.dayUnit')}`:`$${precise(entry.amount)} ${t('admin.credits.creditUnit')}`
 const actionTitle=computed(()=>t(`admin.credits.actions.${action.value || 'none'}`))
 const displayedCredits=computed(()=>limitedFilter.value==='all'?(detail.value?.limited_credits||[]):(detail.value?.limited_credits||[]).filter(item=>item.status==='active'&&new Date(item.expires_at)>new Date()))
@@ -140,7 +180,45 @@ function resetAction() {
   selectedGrant.value = null
 }
 async function toggleLedger(grant:AdminLimitedCredit){if(!detail.value)return;if(expandedLedger.value===grant.id){expandedLedger.value=null;return}ledger.value=await creditsAPI.listLimitedCreditLedger(detail.value.id,grant.id);expandedLedger.value=grant.id}
-async function toggleBalanceHistory(){if(!detail.value)return;showBalanceHistory.value=!showBalanceHistory.value;if(showBalanceHistory.value&&balanceHistory.value.length===0){const result=await adminAPI.users.getUserBalanceHistory(detail.value.id,1,50);balanceHistory.value=(result.items||[]).filter(item=>['balance','admin_balance','affiliate_balance'].includes(item.type))}}
+async function loadBalanceHistory(userId:number){const result=await adminAPI.users.getUserBalanceHistory(userId,1,50);balanceHistory.value=(result.items||[]).filter(item=>['balance','admin_balance','affiliate_balance'].includes(item.type))}
+async function toggleBalanceHistory(){if(!detail.value)return;showBalanceHistory.value=!showBalanceHistory.value;if(showBalanceHistory.value&&balanceHistory.value.length===0)await loadBalanceHistory(detail.value.id)}
+
+/** 发放事件后刷新用户额度、事件状态及已展开的永久额度流水。 */
+async function triggerCreditEvent(event:CreditGrantEventUserStatus){
+  const currentDetail=detail.value
+  if(!currentDetail||event.triggered||triggeringEventId.value!==null)return
+  triggeringEventId.value=event.id
+  try{
+    const triggered=await creditsAPI.triggerCreditGrantEvent(currentDetail.id,event.id)
+    const eventIndex=currentDetail.credit_grant_events.findIndex(item=>item.id===event.id)
+    if(eventIndex>=0)currentDetail.credit_grant_events[eventIndex]=triggered
+    try{
+      await refreshUserDetail(currentDetail.id)
+      await loadUsers()
+      if(showBalanceHistory.value)await loadBalanceHistory(currentDetail.id)
+      appStore.showSuccess(t('admin.credits.grantEventSuccess'))
+    }catch(refreshError:unknown){
+      appStore.showSuccess(t('admin.credits.grantEventSuccess'))
+      appStore.showError(extractCreditActionErrorMessage(refreshError))
+    }
+  }catch(error:unknown){
+    if(extractApiErrorStatus(error)===409){
+      try{
+        await refreshUserDetail(currentDetail.id)
+        await loadUsers()
+        if(showBalanceHistory.value)await loadBalanceHistory(currentDetail.id)
+      }catch(refreshError:unknown){
+        appStore.showError(extractCreditActionErrorMessage(refreshError))
+        return
+      }
+      appStore.showWarning(t('admin.credits.grantEventAlreadyTriggered'))
+    }else{
+      appStore.showError(extractCreditActionErrorMessage(error))
+    }
+  }finally{
+    triggeringEventId.value=null
+  }
+}
 /**
  * 清理当前额度冲突流程，避免状态带入下一个用户或下一次操作。
  */

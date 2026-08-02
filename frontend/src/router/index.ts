@@ -480,6 +480,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Recharge Activities', titleKey: 'nav.rechargeActivities', requiresPayment: true }
   },
   {
+    path: '/admin/credits/grant-events',
+    name: 'AdminCreditGrantEvents',
+    component: () => import('@/views/admin/CreditGrantEventsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Credit Grant Events', titleKey: 'admin.credits.grantEvents.title' }
+  },
+  {
     path: '/admin/credits/reset-rebates',
     name: 'AdminResetRebates',
     component: () => import('@/views/admin/ResetRebatesView.vue'),
