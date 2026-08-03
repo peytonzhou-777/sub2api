@@ -133,6 +133,42 @@
 .codex-footer-links { display: flex; flex-wrap: wrap; gap: 20px; }
 .codex-footer a:hover { color: #fff; }
 
+/* 亮色主题沿用 Codex 的中性表面和黑白主操作，Hero 媒体保持原有可读性。 */
+html:not(.dark) .codex-public { background: var(--codex-canvas); color: var(--codex-text); }
+html:not(.dark) .codex-public-nav.is-solid { border-bottom-color: var(--codex-line); background: rgb(255 255 255 / .88); color: var(--codex-text); }
+html:not(.dark) .codex-section { background: var(--codex-canvas); }
+html:not(.dark) .codex-section-kicker { color: var(--codex-text-faint); }
+html:not(.dark) .codex-section h2,
+html:not(.dark) .codex-rebate-copy h2 { color: var(--codex-text); }
+html:not(.dark) .codex-rebate-description { color: var(--codex-text-muted); }
+html:not(.dark) .codex-rebate-section::before,
+html:not(.dark) .codex-rebate-orbit { display: none; }
+html:not(.dark) .codex-rebate-value { color: var(--codex-text-muted); }
+html:not(.dark) .codex-rebate-value strong { background: linear-gradient(110deg, #0285ff 6%, #7651c9 56%, #a45bd8 92%); background-clip: text; color: transparent; filter: drop-shadow(0 10px 28px rgb(118 81 201 / .16)); }
+html:not(.dark) .codex-rebate-value small { color: var(--codex-accent-blue); }
+html:not(.dark) .codex-rebate-benefits li { border-color: var(--codex-line); background: var(--codex-panel-raised); color: var(--codex-text-muted); }
+html:not(.dark) .codex-rebate-benefits li:first-child { border-color: rgb(2 133 255 / .24); color: var(--codex-accent-blue); }
+html:not(.dark) .codex-rebate-benefits li:last-child { border-color: rgb(118 81 201 / .26); color: var(--codex-accent-purple); }
+html:not(.dark) .codex-rebate-visual { border-color: var(--codex-line); background: var(--codex-panel-raised); box-shadow: inset 0 1px #fff, 0 24px 64px rgb(0 0 0 / .1); }
+html:not(.dark) .codex-rebate-visual::after { box-shadow: inset 0 0 0 1px rgb(13 13 13 / .02); }
+html:not(.dark) .codex-rebate-stage { border-color: var(--codex-line); background: var(--codex-panel); box-shadow: inset 0 1px #fff; }
+html:not(.dark) .codex-rebate-stage-official { border-color: rgb(2 133 255 / .22); }
+html:not(.dark) .codex-rebate-stage-reward { border-color: rgb(118 81 201 / .24); }
+html:not(.dark) .codex-rebate-stage-icon { border-color: var(--codex-line); background: var(--codex-panel-raised); color: var(--codex-text-muted); }
+html:not(.dark) .codex-rebate-stage-official .codex-rebate-stage-icon { color: var(--codex-accent-blue); }
+html:not(.dark) .codex-rebate-stage-reward .codex-rebate-stage-icon { color: var(--codex-accent-purple); }
+html:not(.dark) .codex-rebate-stage-label,
+html:not(.dark) .codex-rebate-stage-note { color: var(--codex-text-faint); }
+html:not(.dark) .codex-rebate-stage-title { color: var(--codex-text); }
+html:not(.dark) .codex-rebate-reset-row { border-color: var(--codex-line); background: var(--codex-panel-raised); color: var(--codex-text); }
+html:not(.dark) .codex-feature-grid { border-color: var(--codex-line); background: var(--codex-line); }
+html:not(.dark) .codex-feature { background: var(--codex-panel); }
+html:not(.dark) .codex-feature:hover { background: var(--codex-panel-raised); }
+html:not(.dark) .codex-feature-icon { border-color: var(--codex-line-strong); color: var(--codex-text); }
+html:not(.dark) .codex-feature p { color: var(--codex-text-muted); }
+html:not(.dark) .codex-footer { border-top-color: var(--codex-line); background: var(--codex-canvas); color: var(--codex-text-muted); }
+html:not(.dark) .codex-footer a:hover { color: var(--codex-text); }
+
 @media (max-width: 1023px) and (min-width: 768px) {
   .codex-rebate-showcase { grid-template-columns: 1fr; gap: 64px; }
   .codex-rebate-copy { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 48px; }

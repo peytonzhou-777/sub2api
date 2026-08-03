@@ -84,7 +84,7 @@ onUnmounted(() => {
 }
 
 .table-scroll-container :deep(thead) {
-  background: #141414;
+  background: var(--codex-table-head);
 }
 
 .table-scroll-container :deep(tbody) {
@@ -94,15 +94,15 @@ onUnmounted(() => {
 .table-scroll-container :deep(th) {
   @apply px-5 py-4 text-left text-sm font-medium;
   border-bottom: 1px solid var(--codex-line);
-  background: #141414;
+  background: var(--codex-table-head);
   color: var(--codex-text-muted);
 }
 
 .table-scroll-container :deep(td) {
   @apply px-5 py-4 text-sm;
-  border-bottom: 1px solid #242424;
+  border-bottom: 1px solid var(--codex-table-line);
   background: var(--codex-panel);
-  color: #d7d7d7;
+  color: var(--codex-text);
 }
 
 /* 移动端：恢复正常滚动 */

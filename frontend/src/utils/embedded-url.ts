@@ -47,5 +47,7 @@ export function buildEmbeddedUrl(
 
 export function detectTheme(): 'light' | 'dark' {
   if (typeof document === 'undefined') return 'light'
+  const resolvedTheme = document.documentElement.dataset.theme
+  if (resolvedTheme === 'light' || resolvedTheme === 'dark') return resolvedTheme
   return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
 }

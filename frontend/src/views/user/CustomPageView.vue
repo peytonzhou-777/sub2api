@@ -116,7 +116,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores'
@@ -125,7 +125,8 @@ import { useAdminSettingsStore } from '@/stores/adminSettings'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { buildApiUrl } from '@/api/client'
-import { buildEmbeddedUrl, detectTheme } from '@/utils/embedded-url'
+import { buildEmbeddedUrl } from '@/utils/embedded-url'
+import { useTheme } from '@/composables/useTheme'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
@@ -140,15 +141,14 @@ const route = useRoute()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
+const { resolvedTheme: pageTheme } = useTheme()
 
 const loading = ref(false)
-const pageTheme = ref<'light' | 'dark'>('light')
 const renderedHtml = ref('')
 const markdownContainer = ref<HTMLElement | null>(null)
 const tocItems = ref<TocItem[]>([])
 const tocVisible = ref(typeof window !== 'undefined' ? window.innerWidth > 768 : true)
 const activeHeadingId = ref('')
-let themeObserver: MutationObserver | null = null
 
 const menuItemId = computed(() => route.params.id as string)
 
@@ -344,31 +344,12 @@ watch(markdownSlug, (slug) => {
 }, { immediate: true })
 
 onMounted(async () => {
-  pageTheme.value = detectTheme()
-
-  if (typeof document !== 'undefined') {
-    themeObserver = new MutationObserver(() => {
-      pageTheme.value = detectTheme()
-    })
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    })
-  }
-
   if (appStore.publicSettingsLoaded) return
   loading.value = true
   try {
     await appStore.fetchPublicSettings()
   } finally {
     loading.value = false
-  }
-})
-
-onUnmounted(() => {
-  if (themeObserver) {
-    themeObserver.disconnect()
-    themeObserver = null
   }
 })
 </script>

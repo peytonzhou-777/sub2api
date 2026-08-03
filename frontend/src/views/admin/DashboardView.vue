@@ -345,6 +345,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
+import { useTheme } from '@/composables/useTheme'
 
 const { t } = useI18n()
 import { adminAPI } from '@/api/admin'
@@ -388,6 +389,7 @@ ChartJS.register(
 )
 
 const appStore = useAppStore()
+const { isDark: isDarkMode } = useTheme()
 const router = useRouter()
 const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
 const stats = ref<DashboardStats | null>(null)
@@ -435,11 +437,6 @@ const granularityOptions = computed(() => [
   { value: 'day', label: t('admin.dashboard.day') },
   { value: 'hour', label: t('admin.dashboard.hour') }
 ])
-
-// Dark mode detection
-const isDarkMode = computed(() => {
-  return document.documentElement.classList.contains('dark')
-})
 
 // Chart colors
 const chartColors = computed(() => ({

@@ -64,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, nextTick } from 'vue'
+import { computed, ref, onMounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { extractI18nErrorMessage } from '@/utils/apiError'
@@ -74,6 +74,7 @@ import { getPaymentPopupFeatures } from '@/components/payment/providerConfig'
 import { currencySymbol } from '@/components/payment/currency'
 import type { Stripe, StripeElements } from '@stripe/stripe-js'
 import Icon from '@/components/icons/Icon.vue'
+import { useTheme } from '@/composables/useTheme'
 
 // Stripe payment methods that open a popup (redirect or QR code)
 const POPUP_METHODS = new Set(['alipay', 'wechat_pay'])
@@ -93,6 +94,7 @@ const emit = defineEmits<{ success: []; done: []; back: []; redirect: [orderId: 
 const { t } = useI18n()
 const router = useRouter()
 const appStore = useAppStore()
+const { resolvedTheme } = useTheme()
 
 const stripeMount = ref<HTMLElement | null>(null)
 const loading = ref(true)
@@ -109,6 +111,14 @@ const paymentAmountSymbol = computed(() => currencySymbol(props.currency))
 let stripeInstance: Stripe | null = null
 let elementsInstance: StripeElements | null = null
 
+function stripeAppearance(theme: 'light' | 'dark') {
+  return { theme: theme === 'dark' ? 'night' as const : 'stripe' as const, variables: { borderRadius: '8px' } }
+}
+
+watch(resolvedTheme, (theme) => {
+  elementsInstance?.update({ appearance: stripeAppearance(theme) })
+})
+
 onMounted(async () => {
   try {
     const { loadStripe } = await import('@stripe/stripe-js/pure')
@@ -120,10 +130,9 @@ onMounted(async () => {
     await nextTick()
     if (!stripeMount.value) return
 
-    const isDark = document.documentElement.classList.contains('dark')
     const elements = stripe.elements({
       clientSecret: props.clientSecret,
-      appearance: { theme: isDark ? 'night' : 'stripe', variables: { borderRadius: '8px' } },
+      appearance: stripeAppearance(resolvedTheme.value),
     })
     elementsInstance = elements
     const paymentElement = elements.create('payment', {

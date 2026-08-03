@@ -26,6 +26,7 @@
         </div>
         <div class="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
           <LocaleSwitcher />
+          <ThemeSwitcher />
           <a
             v-if="docUrl"
             :href="docUrl"
@@ -36,14 +37,6 @@
           >
             <Icon name="book" size="md" />
           </a>
-          <button
-            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-dark-400 dark:hover:bg-dark-800"
-            :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
-            @click="toggleTheme"
-          >
-            <Icon v-if="isDark" name="sun" size="md" />
-            <Icon v-else name="moon" size="md" />
-          </button>
           <router-link
             :to="isAuthenticated ? dashboardPath : '/login'"
             class="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
@@ -81,6 +74,7 @@
     <header class="codex-public-nav" :class="{ 'is-solid': navSolid }">
       <nav class="codex-public-actions" aria-label="Main navigation">
         <LocaleSwitcher />
+        <ThemeSwitcher />
         <a
           v-if="docUrl"
           :href="docUrl"
@@ -153,6 +147,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
+import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 import CodexBackgroundVideo from '@/components/public/CodexBackgroundVideo.vue'
 import HeroSloganCarousel from '@/components/public/HeroSloganCarousel.vue'
@@ -177,7 +172,6 @@ const isHomeContentUrl = computed(() => /^https?:\/\//i.test(homeContent.value.t
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const dashboardPath = computed(() => authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
 const currentYear = new Date().getFullYear()
-const isDark = ref(document.documentElement.classList.contains('dark'))
 
 const features = computed(() => [
   { icon: 'openAI' as const, title: 'Codex 专营', description: '专注 ChatGPT 账号，营造 Codex 编程社区，随时分享实用经验。' },
@@ -189,25 +183,7 @@ function updateNavSurface() {
   navSolid.value = window.scrollY > 36
 }
 
-function toggleTheme() {
-  isDark.value = !isDark.value
-  document.documentElement.classList.toggle('dark', isDark.value)
-  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
-}
-
-function initTheme() {
-  const savedTheme = localStorage.getItem('theme')
-  if (
-    savedTheme === 'dark' ||
-    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  ) {
-    isDark.value = true
-    document.documentElement.classList.add('dark')
-  }
-}
-
 onMounted(() => {
-  initTheme()
   authStore.checkAuth()
   if (!appStore.publicSettingsLoaded) {
     appStore.fetchPublicSettings()

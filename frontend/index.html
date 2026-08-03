@@ -7,6 +7,25 @@
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sub2API - AI API Gateway</title>
+    <script>
+      // 在样式加载前解析主题，避免首屏出现明暗闪烁。
+      (() => {
+        const root = document.documentElement
+        let mode = 'system'
+        try {
+          const stored = localStorage.getItem('theme')
+          if (stored === 'light' || stored === 'dark' || stored === 'system') mode = stored
+        } catch {}
+        const theme = mode === 'system'
+          ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : mode
+        root.classList.toggle('dark', theme === 'dark')
+        root.dataset.theme = theme
+        root.dataset.themeMode = mode
+        root.dataset.visualTheme = 'codex'
+        root.style.colorScheme = theme
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

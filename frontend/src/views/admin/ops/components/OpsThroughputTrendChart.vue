@@ -10,6 +10,7 @@ import { formatHistoryLabel, sumNumbers } from '../utils/opsFormatters'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import { formatNumber } from '@/utils/format'
+import { useTheme } from '@/composables/useTheme'
 
 ChartJS.register(Title, Tooltip, Legend, LineElement, LinearScale, PointElement, CategoryScale, Filler)
 
@@ -24,6 +25,7 @@ interface Props {
 
 const props = defineProps<Props>()
 const { t } = useI18n()
+const { isDark: isDarkMode } = useTheme()
 const emit = defineEmits<{
   (e: 'selectPlatform', platform: string): void
   (e: 'selectGroup', groupId: number): void
@@ -43,7 +45,6 @@ watch(
   }
 )
 
-const isDarkMode = computed(() => document.documentElement.classList.contains('dark'))
 const colors = computed(() => ({
   blue: '#3b82f6',
   blueAlpha: '#3b82f620',

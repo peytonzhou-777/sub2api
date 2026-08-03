@@ -70,6 +70,9 @@
         <!-- Language Switcher -->
         <LocaleSwitcher />
 
+        <!-- Theme Switcher -->
+        <ThemeSwitcher />
+
         <!-- Balance Display -->
         <div
           v-if="user"
@@ -315,6 +318,7 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore, useAuthStore, useLimitedCreditStore, useOnboardingStore } from '@/stores'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
+import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useClipboard } from '@/composables/useClipboard'

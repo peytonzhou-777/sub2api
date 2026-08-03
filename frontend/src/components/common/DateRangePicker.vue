@@ -391,7 +391,7 @@ onUnmounted(() => {
   gap: 0.5rem;
   border: 1px solid var(--codex-line);
   border-radius: var(--codex-radius);
-  background: #121212;
+  background: var(--codex-input);
   padding: 0.5rem 0.75rem;
   color: var(--codex-text);
   font-size: 0.875rem;
@@ -400,19 +400,19 @@ onUnmounted(() => {
 
 .date-picker-trigger:hover {
   border-color: var(--codex-line-strong);
-  background: #171717;
+  background: var(--codex-panel-raised);
 }
 
 .date-picker-trigger:focus-visible {
-  border-color: #666;
+  border-color: var(--codex-accent-blue);
   outline: none;
-  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.14);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--codex-accent-blue) 18%, transparent);
 }
 
 .date-picker-trigger-open {
-  border-color: #666;
-  background: #171717;
-  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.14);
+  border-color: var(--codex-accent-blue);
+  background: var(--codex-panel-raised);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--codex-accent-blue) 18%, transparent);
 }
 
 .date-picker-icon,
@@ -452,7 +452,7 @@ onUnmounted(() => {
 }
 
 .date-picker-preset-active {
-  background: #303030;
+  background: color-mix(in srgb, var(--codex-accent-blue) 12%, transparent);
   color: var(--codex-accent-blue);
 }
 
@@ -477,16 +477,16 @@ onUnmounted(() => {
   width: 100%;
   border: 1px solid var(--codex-line);
   border-radius: 6px;
-  background: #121212;
+  background: var(--codex-input);
   padding: 0.375rem 0.5rem;
   color: var(--codex-text);
   font-size: 0.875rem;
 }
 
 .date-picker-input:focus {
-  border-color: #666;
+  border-color: var(--codex-accent-blue);
   outline: none;
-  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.14);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--codex-accent-blue) 18%, transparent);
 }
 
 .date-picker-input::-webkit-calendar-picker-indicator {
@@ -509,16 +509,16 @@ onUnmounted(() => {
 .date-picker-apply {
   min-height: 34px;
   border-radius: var(--codex-pill);
-  background: #f4f4f4;
+  background: var(--codex-primary-bg);
   padding: 0.375rem 1rem;
-  color: #0a0a0a;
+  color: var(--codex-primary-text);
   font-size: 0.875rem;
   font-weight: 500;
   transition: background var(--codex-fast);
 }
 
 .date-picker-apply:hover {
-  background: #dcdcdc;
+  background: var(--codex-primary-hover);
 }
 
 /* Dropdown animation */

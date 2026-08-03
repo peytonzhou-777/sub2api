@@ -4,6 +4,7 @@ import App from './App.vue'
 import router from './router'
 import i18n, { initI18n } from './i18n'
 import { useAppStore } from '@/stores/app'
+import { initTheme } from '@/composables/useTheme'
 import { updateFavicon } from '@/utils/branding'
 import { isIOSDevice } from '@/utils/device'
 import './style.css'
@@ -23,15 +24,9 @@ function initIOSViewportZoomFix() {
   viewport.setAttribute('content', `${content}, maximum-scale=1.0`)
 }
 
-function initThemeClass() {
-  // 新工作台固定为暗色，避免读取旧偏好造成启动闪烁。
-  document.documentElement.classList.add('dark')
-  document.documentElement.dataset.visualTheme = 'codex'
-}
-
 async function bootstrap() {
-  // Apply theme class globally before app mount to keep all routes consistent.
-  initThemeClass()
+  // 在应用挂载前同步主题状态，确保所有路由与第三方组件读取一致。
+  initTheme()
   initIOSViewportZoomFix()
 
   const app = createApp(App)

@@ -7,6 +7,7 @@ import type { OpsErrorDistributionResponse } from '@/api/admin/ops'
 import type { ChartState } from '../types'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import { useTheme } from '@/composables/useTheme'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -20,8 +21,7 @@ const emit = defineEmits<{
   (e: 'openDetails'): void
 }>()
 const { t } = useI18n()
-
-const isDarkMode = computed(() => document.documentElement.classList.contains('dark'))
+const { isDark: isDarkMode } = useTheme()
 const colors = computed(() => ({
   blue: '#3b82f6',
   red: '#ef4444',

@@ -1,5 +1,4 @@
-/* 迁移兼容层：统一覆盖现有共享组件，保留全部业务模板与状态语义。 */
-.dark .btn,
+/* 迁移兼容层：共享组件统一消费语义 token，保留全部业务模板与状态语义。 */
 .btn {
   min-height: var(--codex-control-sm);
   border-radius: var(--codex-pill);
@@ -8,66 +7,52 @@
   transition: background var(--codex-fast), border-color var(--codex-fast), color var(--codex-fast), transform var(--codex-fast);
 }
 
-.dark .btn-primary,
 .btn-primary {
-  background: #f4f4f4;
-  color: #0a0a0a;
+  background: var(--codex-primary-bg);
+  color: var(--codex-primary-text);
   box-shadow: none;
 }
 
-.dark .btn-primary:hover,
-.btn-primary:hover { background: #dcdcdc; }
+.btn-primary:hover { background: var(--codex-primary-hover); }
 
-.dark .btn-secondary,
 .btn-secondary {
   border-color: var(--codex-line);
   background: var(--codex-panel-raised);
   color: var(--codex-text);
 }
 
-.dark .btn-secondary:hover,
 .btn-secondary:hover { border-color: var(--codex-line-strong); background: var(--codex-panel-hover); }
 
-.dark .btn-ghost,
 .btn-ghost { color: var(--codex-text-muted); }
-.dark .btn-ghost:hover,
 .btn-ghost:hover { background: var(--codex-panel-hover); color: var(--codex-text); }
 
-.dark .input,
 .input,
-.dark select,
-.dark textarea {
+html[data-visual-theme='codex'] select,
+html[data-visual-theme='codex'] textarea {
   min-height: var(--codex-control);
   border-color: var(--codex-line);
   border-radius: var(--codex-radius);
-  background: #121212;
+  background: var(--codex-input);
   color: var(--codex-text);
   box-shadow: none;
 }
 
-.dark .input:focus,
 .input:focus,
-.dark select:focus,
-.dark textarea:focus {
-  border-color: #666;
-  box-shadow: 0 0 0 2px rgb(255 255 255 / .14);
+html[data-visual-theme='codex'] select:focus,
+html[data-visual-theme='codex'] textarea:focus {
+  border-color: var(--codex-accent-blue);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--codex-accent-blue) 18%, transparent);
 }
 
-.dark .input::placeholder,
 .input::placeholder,
-.dark textarea::placeholder,
-textarea::placeholder {
+html[data-visual-theme='codex'] textarea::placeholder {
   color: var(--codex-text-muted);
   opacity: 1;
 }
 
-.dark .card,
 .card,
-.dark .glass-card,
 .glass-card,
-.dark .card-glass,
 .card-glass,
-.dark .stat-card,
 .stat-card {
   border-color: var(--codex-line);
   border-radius: var(--codex-radius-lg);
@@ -82,43 +67,28 @@ textarea::placeholder {
   transform: translateY(-1px);
 }
 
-.dark .table-container,
 .table-container { border-color: var(--codex-line); border-radius: var(--codex-radius); background: var(--codex-panel); }
-.dark .table th,
-.table th { height: 40px; border-color: var(--codex-line); background: #141414; color: var(--codex-text-muted); }
-.dark .table td,
-.table td { height: 44px; border-color: #242424; color: #d7d7d7; }
-.dark .table tbody tr:hover,
-.table tbody tr:hover { background: #1d1d1d; }
+.table th { height: 40px; border-color: var(--codex-line); background: var(--codex-table-head); color: var(--codex-text-muted); }
+.table td { height: 44px; border-color: var(--codex-table-line); color: var(--codex-text); }
+.table tbody tr:hover { background: var(--codex-panel-hover); }
 
-.dark .empty-state-description,
 .empty-state-description { color: var(--codex-text-muted); }
 
-.dark .dropdown,
 .dropdown,
-.dark .modal-content,
 .modal-content,
-.dark .dialog-container,
 .dialog-container {
   border-color: var(--codex-line-strong);
   border-radius: var(--codex-radius-lg);
-  background: #1b1b1b;
-  color: var(--codex-text);
-  box-shadow: 0 16px 48px rgb(0 0 0 / .45);
-}
-
-.dark .dropdown-item,
-.dropdown-item { min-height: 36px; border-radius: 7px; color: #d8d8d8; }
-.dark .dropdown-item:hover,
-.dropdown-item:hover { background: #292929; color: #fff; }
-
-.dark .dropdown,
-.dropdown {
-  border-color: var(--codex-overlay-border);
   background: var(--codex-overlay);
+  color: var(--codex-text);
   box-shadow: var(--codex-overlay-highlight), var(--codex-overlay-shadow);
-  backdrop-filter: blur(18px) saturate(1.18);
 }
+
+.dropdown,
+.modal-content { backdrop-filter: blur(18px) saturate(1.18); }
+
+.dropdown-item { min-height: 36px; border-radius: 7px; color: var(--codex-text-muted); }
+.dropdown-item:hover { background: var(--codex-panel-hover); color: var(--codex-text); }
 
 .codex-seam-top,
 .codex-seam-bottom {
@@ -126,17 +96,14 @@ textarea::placeholder {
 }
 
 .modal-overlay,
-.dialog-overlay { background: rgb(0 0 0 / .7); backdrop-filter: blur(8px); }
+.dialog-overlay { background: var(--codex-modal-backdrop); backdrop-filter: blur(8px); }
 
-.dark .tabs,
-.tabs { border: 1px solid var(--codex-line); border-radius: var(--codex-radius); background: #111; }
-.dark .tab-active,
-.tab-active { background: #2a2a2a; color: #fff; box-shadow: none; }
+.tabs { border: 1px solid var(--codex-line); border-radius: var(--codex-radius); background: var(--codex-panel-raised); }
+.tab-active { background: var(--codex-panel-hover); color: var(--codex-text); box-shadow: none; }
 
-.dark .skeleton,
-.skeleton { background: #272727; }
-.progress { background: #2b2b2b; }
-.progress-bar { background: #eee; }
+.skeleton { background: var(--codex-panel-hover); }
+.progress { background: var(--codex-line); }
+.progress-bar { background: var(--codex-primary-bg); }
 
 .codex-subtle-action {
   border-radius: 6px;
@@ -149,9 +116,7 @@ textarea::placeholder {
   color: var(--codex-accent-blue) !important;
 }
 
-.codex-subtle-action:focus-visible {
-  color: var(--codex-text) !important;
-}
+.codex-subtle-action:focus-visible { color: var(--codex-text) !important; }
 
 /* Codex 风格开关：紧凑轨道、白色圆点与清晰的蓝色开启态。 */
 .codex-switch {

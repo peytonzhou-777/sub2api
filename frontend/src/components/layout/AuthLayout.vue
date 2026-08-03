@@ -2,6 +2,7 @@
   <div class="codex-auth relative flex min-h-screen items-center justify-center overflow-hidden p-4">
     <CodexBackgroundVideo class="pointer-events-none absolute inset-0" />
     <div class="pointer-events-none absolute inset-0 bg-black/45 backdrop-blur-[2px]"></div>
+    <ThemeSwitcher class="codex-auth-theme" />
 
     <!-- Content Container -->
     <div class="relative z-10 w-full max-w-md">
@@ -24,7 +25,7 @@
       </div>
 
       <!-- Card Container -->
-      <div class="rounded-[14px] border border-white/15 bg-[#151515]/95 p-8 text-white shadow-2xl shadow-black/40 backdrop-blur-xl">
+      <div class="codex-auth-card rounded-[14px] p-8 backdrop-blur-xl">
         <slot />
       </div>
 
@@ -47,6 +48,7 @@ import { useAppStore } from '@/stores'
 import { sanitizeUrl } from '@/utils/url'
 import CodexBackgroundVideo from '@/components/public/CodexBackgroundVideo.vue'
 import SiteWordmark from '@/components/common/SiteWordmark.vue'
+import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 
 const appStore = useAppStore()
 
@@ -62,3 +64,20 @@ onMounted(() => {
   appStore.fetchPublicSettings()
 })
 </script>
+
+<style scoped>
+.codex-auth-theme {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  color: #fff;
+}
+
+.codex-auth-card {
+  border: 1px solid var(--codex-overlay-border);
+  background: var(--codex-auth-card);
+  box-shadow: var(--codex-overlay-highlight), var(--codex-overlay-shadow);
+  color: var(--codex-text);
+}
+</style>

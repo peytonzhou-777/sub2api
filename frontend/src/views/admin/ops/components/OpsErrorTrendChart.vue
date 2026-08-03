@@ -18,6 +18,7 @@ import type { ChartState } from '../types'
 import { formatHistoryLabel, sumNumbers } from '../utils/opsFormatters'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import { useTheme } from '@/composables/useTheme'
 
 ChartJS.register(Title, Tooltip, Legend, LineElement, LinearScale, PointElement, CategoryScale, Filler)
 
@@ -33,8 +34,7 @@ const emit = defineEmits<{
   (e: 'openUpstreamErrors'): void
 }>()
 const { t } = useI18n()
-
-const isDarkMode = computed(() => document.documentElement.classList.contains('dark'))
+const { isDark: isDarkMode } = useTheme()
 const colors = computed(() => ({
   red: '#ef4444',
   redAlpha: '#ef444420',

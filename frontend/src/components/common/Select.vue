@@ -481,7 +481,7 @@ onUnmounted(() => {
   gap: 0.5rem;
   border: 1px solid var(--codex-line);
   border-radius: var(--codex-radius);
-  background: #121212;
+  background: var(--codex-input);
   padding: 0.625rem 0.875rem;
   color: var(--codex-text);
   font-size: 0.875rem;
@@ -490,19 +490,19 @@ onUnmounted(() => {
 
 .select-trigger:hover {
   border-color: var(--codex-line-strong);
-  background: #171717;
+  background: var(--codex-panel-raised);
 }
 
 .select-trigger:focus-visible {
-  border-color: #666;
+  border-color: var(--codex-accent-blue);
   outline: none;
-  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.14);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--codex-accent-blue) 18%, transparent);
 }
 
 .select-trigger-open {
-  border-color: #666;
-  background: #171717;
-  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.14);
+  border-color: var(--codex-accent-blue);
+  background: var(--codex-panel-raised);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--codex-accent-blue) 18%, transparent);
 }
 
 .select-trigger-error {
@@ -511,7 +511,7 @@ onUnmounted(() => {
 
 .select-trigger-disabled {
   cursor: not-allowed;
-  background: #0d0d0d;
+  background: var(--codex-panel-raised);
   opacity: 0.55;
 }
 
@@ -579,7 +579,7 @@ onUnmounted(() => {
   margin: 2px 4px;
   border-radius: 7px;
   padding: 0.5rem 0.75rem;
-  color: #d7d7d7;
+  color: var(--codex-text);
   font-size: 0.875rem;
   transition: background var(--codex-fast), color var(--codex-fast);
   pointer-events: auto !important;
@@ -587,11 +587,11 @@ onUnmounted(() => {
 
 .select-dropdown-portal .select-option:hover {
   background: var(--codex-panel-hover);
-  color: #fff;
+  color: var(--codex-text);
 }
 
 .select-dropdown-portal .select-option-selected {
-  background: #303030;
+  background: color-mix(in srgb, var(--codex-accent-blue) 12%, transparent);
   color: var(--codex-accent-blue);
 }
 
