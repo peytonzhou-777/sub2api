@@ -88,6 +88,14 @@ describe('AppSidebar Codex background', () => {
   })
 })
 
+describe('AppSidebar mobile drawer', () => {
+  it('uses a theme-aware opaque surface above the mobile backdrop', () => {
+    expect(componentSource).toContain('class="sidebar-mobile-overlay fixed inset-0 z-30 lg:hidden"')
+    expect(workbenchStyleSource).toMatch(/@media \(max-width: 1023px\)[\s\S]*?\.codex-workbench \.sidebar \{[\s\S]*?background:\s*color-mix\(in srgb, var\(--codex-sidebar\) 92%, var\(--codex-canvas\)\);/)
+    expect(workbenchStyleSource).toMatch(/\.codex-workbench \.sidebar-mobile-overlay \{[\s\S]*?background:\s*var\(--codex-modal-backdrop\);/)
+  })
+})
+
 describe('AppSidebar user account navigation', () => {
   const routerPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../router/index.ts')
   const appPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../App.vue')

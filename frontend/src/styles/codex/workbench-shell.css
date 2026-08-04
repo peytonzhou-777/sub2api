@@ -119,7 +119,21 @@ html.dark .codex-workbench::before {
 
 @media (max-width: 1023px) {
   .codex-workbench-content { padding: 16px; }
-  .codex-workbench .sidebar { width: min(86vw, 288px) !important; }
+  /* 移动端抽屉使用独立实底，避免页面遮罩透过桌面端透明侧栏降低文字对比度。 */
+  .codex-workbench .sidebar {
+    width: min(86vw, 288px) !important;
+    border-right: 1px solid var(--codex-overlay-border);
+    background: color-mix(in srgb, var(--codex-sidebar) 92%, var(--codex-canvas));
+    box-shadow:
+      inset -1px 0 0 color-mix(in srgb, var(--codex-text) 5%, transparent),
+      18px 0 48px rgb(0 0 0 / 0.22);
+    backdrop-filter: blur(24px) saturate(1.12);
+  }
+
+  .codex-workbench .sidebar-mobile-overlay {
+    background: var(--codex-modal-backdrop);
+    backdrop-filter: blur(1px);
+  }
 
   .codex-panel-titlebar { border-top-left-radius: 13px; }
   .codex-workbench-main::after { border-top-left-radius: 13px; }

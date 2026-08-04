@@ -58,7 +58,7 @@
                   </button>
                   <button
                     @click="closeModal"
-                    class="flex h-9 w-9 items-center justify-center rounded-lg bg-white/50 text-gray-500 backdrop-blur-sm transition-all hover:bg-white hover:text-gray-700 dark:bg-dark-700/50 dark:text-gray-400 dark:hover:bg-dark-700 dark:hover:text-gray-300"
+                    class="announcement-center-close flex h-9 w-9 items-center justify-center rounded-lg backdrop-blur-sm transition-all"
                     :aria-label="t('common.close')"
                   >
                     <Icon name="x" size="sm" />
@@ -249,7 +249,7 @@
                 <!-- Close button -->
                 <button
                   @click="closeDetail"
-                  class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/50 text-gray-500 backdrop-blur-sm transition-all hover:bg-white hover:text-gray-700 hover:shadow-lg dark:bg-dark-700/50 dark:text-gray-400 dark:hover:bg-dark-700 dark:hover:text-gray-300"
+                  class="announcement-center-close flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl backdrop-blur-sm transition-all"
                   :aria-label="t('common.close')"
                 >
                   <Icon name="x" size="md" />
@@ -423,7 +423,7 @@ watch(
 
 <style scoped>
 .announcement-center-overlay {
-  background: rgb(0 0 0 / 0.68);
+  background: var(--codex-modal-backdrop);
   backdrop-filter: blur(10px) saturate(0.9);
 }
 
@@ -431,9 +431,9 @@ watch(
   position: relative;
   border: 1px solid var(--codex-overlay-border);
   border-radius: 18px;
-  background: linear-gradient(145deg, rgb(45 45 49 / 0.92), rgb(25 25 28 / 0.94));
+  background: var(--codex-overlay);
   color: var(--codex-text);
-  box-shadow: var(--codex-overlay-highlight), 0 28px 90px rgb(0 0 0 / 0.62);
+  box-shadow: var(--codex-overlay-highlight), var(--codex-overlay-shadow);
   backdrop-filter: blur(28px) saturate(1.18);
 }
 
@@ -445,7 +445,12 @@ watch(
   width: 360px;
   height: 280px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgb(181 140 255 / 0.18), rgb(120 184 255 / 0.08) 45%, transparent 72%);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--codex-accent-purple) 18%, transparent),
+    color-mix(in srgb, var(--codex-accent-blue) 8%, transparent) 45%,
+    transparent 72%
+  );
   content: '';
   filter: blur(16px);
   pointer-events: none;
@@ -453,13 +458,30 @@ watch(
 
 .announcement-center-header {
   border-bottom: 1px solid var(--codex-seam);
-  background: rgb(37 37 40 / 0.56);
+  background: color-mix(in srgb, var(--codex-panel-raised) 72%, transparent);
 }
 
-.announcement-center-header > * { position: relative; z-index: 1; }
 .announcement-center-header > .absolute { opacity: 0.35; }
-.announcement-center-body { position: relative; z-index: 1; background: rgb(15 15 17 / 0.48); }
-.announcement-center-footer { border-top: 1px solid var(--codex-seam); background: rgb(31 31 34 / 0.7); }
+.announcement-center-body {
+  position: relative;
+  z-index: 1;
+  background: color-mix(in srgb, var(--codex-canvas) 86%, transparent);
+}
+.announcement-center-footer {
+  border-top: 1px solid var(--codex-seam);
+  background: color-mix(in srgb, var(--codex-panel-raised) 78%, transparent);
+}
+
+.announcement-center-close {
+  border: 1px solid var(--codex-overlay-border);
+  background: color-mix(in srgb, var(--codex-panel-raised) 84%, transparent);
+  color: var(--codex-text-muted);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--codex-text) 4%, transparent);
+}
+.announcement-center-close:hover {
+  background: var(--codex-panel-hover);
+  color: var(--codex-text);
+}
 
 .announcement-center-panel :deep(.text-gray-900),
 .announcement-center-panel :deep(.dark\:text-white) { color: var(--codex-text) !important; }
@@ -469,12 +491,16 @@ watch(
 .announcement-center-panel :deep(.border-gray-100),
 .announcement-center-panel :deep(.dark\:border-dark-700) { border-color: var(--codex-seam) !important; }
 .announcement-center-panel :deep(.hover\:bg-gray-50:hover),
-.announcement-center-panel :deep(.dark\:hover\:bg-dark-700\/30:hover) { background: rgb(255 255 255 / 0.055) !important; }
+.announcement-center-panel :deep(.dark\:hover\:bg-dark-700\/30:hover) { background: var(--codex-panel-hover) !important; }
 .announcement-center-panel :deep(.bg-blue-50\/30),
-.announcement-center-panel :deep(.dark\:bg-blue-900\/5) { background: rgb(120 184 255 / 0.055) !important; }
+.announcement-center-panel :deep(.dark\:bg-blue-900\/5) {
+  background: color-mix(in srgb, var(--codex-accent-blue) 7%, transparent) !important;
+}
 
 .announcement-detail-panel { max-height: calc(100vh - 48px); }
-.announcement-detail-header { background: linear-gradient(110deg, rgb(42 45 52 / 0.82), rgb(38 33 48 / 0.72)); }
+.announcement-detail-header {
+  background: color-mix(in srgb, var(--codex-panel-raised) 82%, var(--codex-panel));
+}
 
 @media (max-width: 640px) {
   .announcement-center-overlay { align-items: flex-end; padding: 12px; }
@@ -515,19 +541,11 @@ watch(
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb {
-  background: linear-gradient(to bottom, #cbd5e1, #94a3b8);
+  background: var(--codex-line-strong);
   border-radius: 4px;
 }
 
-.dark .overflow-y-auto::-webkit-scrollbar-thumb {
-  background: linear-gradient(to bottom, #4b5563, #374151);
-}
-
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(to bottom, #94a3b8, #64748b);
-}
-
-.dark .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(to bottom, #6b7280, #4b5563);
+  background: var(--codex-text-faint);
 }
 </style>
