@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -60,7 +61,7 @@ func (r *accountPoolSource) ListAccountPoolBuildBatch(ctx context.Context, after
 	return records, hasMore, nil
 }
 
-func (r *accountPoolSource) ListAccountPoolPage(ctx context.Context, page, pageSize int, accountID *int64) ([]service.AccountPoolSourceRecord, int64, error) {
+func (r *accountPoolSource) ListAccountPoolPage(ctx context.Context, page, pageSize int, accountID *int64, sortOrder string) ([]service.AccountPoolSourceRecord, int64, error) {
 	// 与构建路径保持一致，数据库降级也不得返回未分组账号。
 	query := r.client.Account.Query().Where(dbaccount.HasAccountGroups())
 	if accountID != nil {
@@ -71,8 +72,12 @@ func (r *accountPoolSource) ListAccountPoolPage(ctx context.Context, page, pageS
 	if err != nil {
 		return nil, 0, err
 	}
+	order := dbent.Asc(dbaccount.FieldID)
+	if sortOrder == service.AccountPoolSortDesc {
+		order = dbent.Desc(dbaccount.FieldID)
+	}
 	accounts, err := selectAccountPoolFields(query).
-		Order(dbent.Asc(dbaccount.FieldID)).
+		Order(order).
 		Offset((page - 1) * pageSize).
 		Limit(pageSize).
 		All(ctx)
@@ -206,10 +211,11 @@ func accountPoolSourceRecords(accounts []*dbent.Account) []service.AccountPoolSo
 type accountPoolSnapshotCache struct{ rdb *redis.Client }
 
 type accountPoolGenerationMeta struct {
-	SchemaVersion int     `json:"schema_version"`
-	Generation    string  `json:"generation"`
-	EnabledEpoch  string  `json:"enabled_epoch"`
-	AccountIDs    []int64 `json:"account_ids"`
+	SchemaVersion    int                `json:"schema_version"`
+	Generation       string             `json:"generation"`
+	EnabledEpoch     string             `json:"enabled_epoch"`
+	AccountIDs       []int64            `json:"account_ids"`
+	StatusAccountIDs map[string][]int64 `json:"status_account_ids"`
 }
 
 // NewAccountPoolSnapshotCache 创建独立版本键空间的公开快照缓存。
@@ -313,6 +319,7 @@ func (c *accountPoolSnapshotCache) ReadAccountPoolPreviousCapacities(ctx context
 
 func (c *accountPoolSnapshotCache) WriteAccountPoolGeneration(ctx context.Context, generation, enabledEpoch string, items []service.PublicAccountPoolAccount, ttl time.Duration) error {
 	ids := make([]int64, 0, len(items))
+	statusIDs := make(map[string][]int64)
 	for start := 0; start < len(items); start += 500 {
 		end := start + 500
 		if end > len(items) {
@@ -325,6 +332,7 @@ func (c *accountPoolSnapshotCache) WriteAccountPoolGeneration(ctx context.Contex
 					return marshalErr
 				}
 				ids = append(ids, item.ID)
+				statusIDs[item.Status.Code] = append(statusIDs[item.Status.Code], item.ID)
 				pipe.Set(ctx, accountPoolItemKey(generation, item.ID), payload, ttl)
 			}
 			return nil
@@ -333,7 +341,10 @@ func (c *accountPoolSnapshotCache) WriteAccountPoolGeneration(ctx context.Contex
 			return err
 		}
 	}
-	meta := accountPoolGenerationMeta{SchemaVersion: service.AccountPoolSchemaVersion, Generation: generation, EnabledEpoch: enabledEpoch, AccountIDs: ids}
+	meta := accountPoolGenerationMeta{
+		SchemaVersion: service.AccountPoolSchemaVersion, Generation: generation, EnabledEpoch: enabledEpoch,
+		AccountIDs: ids, StatusAccountIDs: statusIDs,
+	}
 	metaJSON, err := json.Marshal(meta)
 	if err != nil {
 		return err
@@ -359,7 +370,7 @@ return 1`
 	return nil
 }
 
-func (c *accountPoolSnapshotCache) ReadAccountPoolPage(ctx context.Context, enabledEpoch string, page, pageSize int, accountID *int64) ([]service.PublicAccountPoolAccount, int64, error) {
+func (c *accountPoolSnapshotCache) ReadAccountPoolPage(ctx context.Context, enabledEpoch string, page, pageSize int, query service.AccountPoolListQuery) ([]service.PublicAccountPoolAccount, int64, error) {
 	generation, err := c.rdb.Get(ctx, accountPoolCurrentKey).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
@@ -378,18 +389,21 @@ func (c *accountPoolSnapshotCache) ReadAccountPoolPage(ctx context.Context, enab
 	if err := json.Unmarshal([]byte(fmt.Sprint(values[0])), &meta); err != nil || meta.SchemaVersion != service.AccountPoolSchemaVersion || meta.Generation != generation || meta.EnabledEpoch != enabledEpoch {
 		return nil, 0, service.ErrAccountPoolSnapshotNotReady
 	}
-	ids := meta.AccountIDs
-	if accountID != nil {
-		idx := sort.Search(len(ids), func(i int) bool { return ids[i] >= *accountID })
-		if idx >= len(ids) || ids[idx] != *accountID {
+	ids := accountPoolMetaIDs(meta, query)
+	total := int64(len(ids))
+	if query.AccountID != nil {
+		idx := sort.Search(len(meta.AccountIDs), func(i int) bool { return meta.AccountIDs[i] >= *query.AccountID })
+		if idx >= len(meta.AccountIDs) || meta.AccountIDs[idx] != *query.AccountID ||
+			(query.Status != "" && !accountPoolIDInSortedList(meta.StatusAccountIDs[query.Status], *query.AccountID)) {
 			return []service.PublicAccountPoolAccount{}, 0, nil
 		}
-		ids = ids[idx : idx+1]
+		ids = []int64{*query.AccountID}
+		total = 1
 		page = 1
 	} else {
 		start := (page - 1) * pageSize
 		if start >= len(ids) {
-			return []service.PublicAccountPoolAccount{}, int64(len(meta.AccountIDs)), nil
+			return []service.PublicAccountPoolAccount{}, total, nil
 		}
 		end := start + pageSize
 		if end > len(ids) {
@@ -402,7 +416,7 @@ func (c *accountPoolSnapshotCache) ReadAccountPoolPage(ctx context.Context, enab
 		keys[i] = accountPoolItemKey(generation, id)
 	}
 	if len(keys) == 0 {
-		return []service.PublicAccountPoolAccount{}, int64(len(meta.AccountIDs)), nil
+		return []service.PublicAccountPoolAccount{}, total, nil
 	}
 	payloads, err := c.rdb.MGet(ctx, keys...).Result()
 	if err != nil {
@@ -419,11 +433,49 @@ func (c *accountPoolSnapshotCache) ReadAccountPoolPage(ctx context.Context, enab
 		}
 		items = append(items, item)
 	}
-	total := int64(len(meta.AccountIDs))
-	if accountID != nil {
+	if query.AccountID != nil {
 		total = int64(len(items))
 	}
 	return items, total, nil
+}
+
+// accountPoolMetaIDs 只在 generation 元数据上完成排序和筛选，再批量读取当前页账号。
+func accountPoolMetaIDs(meta accountPoolGenerationMeta, query service.AccountPoolListQuery) []int64 {
+	if query.AccountID != nil {
+		return nil
+	}
+	if query.SortBy == service.AccountPoolSortByStatus && query.Status == "" {
+		statuses := make([]string, 0, len(meta.StatusAccountIDs))
+		for status := range meta.StatusAccountIDs {
+			statuses = append(statuses, status)
+		}
+		sort.Strings(statuses)
+		if query.SortOrder == service.AccountPoolSortDesc {
+			slices.Reverse(statuses)
+		}
+		ids := make([]int64, 0, len(meta.AccountIDs))
+		for _, status := range statuses {
+			bucket := append([]int64(nil), meta.StatusAccountIDs[status]...)
+			if query.SortOrder == service.AccountPoolSortDesc {
+				slices.Reverse(bucket)
+			}
+			ids = append(ids, bucket...)
+		}
+		return ids
+	}
+	ids := append([]int64(nil), meta.AccountIDs...)
+	if query.Status != "" {
+		ids = append([]int64(nil), meta.StatusAccountIDs[query.Status]...)
+	}
+	if query.SortOrder == service.AccountPoolSortDesc {
+		slices.Reverse(ids)
+	}
+	return ids
+}
+
+func accountPoolIDInSortedList(ids []int64, accountID int64) bool {
+	idx := sort.Search(len(ids), func(i int) bool { return ids[i] >= accountID })
+	return idx < len(ids) && ids[idx] == accountID
 }
 
 func accountPoolMetaKey(generation string) string {

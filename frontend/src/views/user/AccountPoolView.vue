@@ -2,21 +2,30 @@
   <AppLayout>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div class="w-full sm:w-80">
-            <label for="account-pool-id" class="sr-only">{{ t('accountPool.search') }}</label>
-            <input
-              id="account-pool-id"
-              :value="searchInput"
-              inputmode="numeric"
-              pattern="[0-9]*"
-              class="input"
-              :class="{ 'border-red-500': invalidSearch }"
-              :placeholder="t('accountPool.searchPlaceholder')"
-              @input="handleInput"
-              @keydown.enter.prevent="submitSearch"
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-start">
+            <div class="w-full sm:w-80">
+              <label for="account-pool-id" class="sr-only">{{ t('accountPool.search') }}</label>
+              <input
+                id="account-pool-id"
+                :value="searchInput"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                class="input"
+                :class="{ 'border-red-500': invalidSearch }"
+                :placeholder="t('accountPool.searchPlaceholder')"
+                @input="handleInput"
+                @keydown.enter.prevent="submitSearch"
+              />
+              <p v-if="invalidSearch" class="mt-1 text-sm text-red-600">{{ t('accountPool.invalidId') }}</p>
+            </div>
+            <Select
+              :model-value="statusFilter"
+              class="w-full sm:w-44"
+              :options="statusOptions"
+              :aria-label="t('accountPool.statusFilter')"
+              @update:model-value="changeStatus"
             />
-            <p v-if="invalidSearch" class="mt-1 text-sm text-red-600">{{ t('accountPool.invalidId') }}</p>
           </div>
           <button class="btn btn-secondary" :disabled="loading || retryUntil > Date.now()" :title="t('common.refresh')" @click="load(true)">
             <Icon name="refresh" size="md" :class="{ 'animate-spin': loading }" />
@@ -29,7 +38,25 @@
           <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
             <thead class="bg-gray-50 dark:bg-dark-800">
               <tr>
-                <th v-for="column in columns" :key="column" class="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">{{ column }}</th>
+                <th
+                  v-for="column in columns"
+                  :key="column.key"
+                  class="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500"
+                  :aria-sort="column.sortable ? columnAriaSort(column.key) : undefined"
+                >
+                  <button
+                    v-if="column.sortable"
+                    :data-test="`sort-${column.key}`"
+                    type="button"
+                    class="flex items-center gap-1 font-semibold uppercase hover:text-gray-700 dark:hover:text-gray-300"
+                    :title="sortTitle(column.key)"
+                    @click="toggleSort(column.key)"
+                  >
+                    <span>{{ column.label }}</span>
+                    <Icon v-if="sortBy === column.key" :name="sortOrder === 'asc' ? 'arrowUp' : 'arrowDown'" size="xs" />
+                  </button>
+                  <span v-else>{{ column.label }}</span>
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-700 dark:bg-dark-900">
@@ -85,12 +112,18 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import Pagination from '@/components/common/Pagination.vue'
+import Select from '@/components/common/Select.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import AccountPoolCapacityCell from '@/components/account/AccountPoolCapacityCell.vue'
 import AccountPoolStatusCell from '@/components/account/AccountPoolStatusCell.vue'
 import AccountPoolUsageCell from '@/components/account/AccountPoolUsageCell.vue'
 import AccountPoolPersonalUsageCell from '@/components/account/AccountPoolPersonalUsageCell.vue'
-import accountPoolAPI, { type AccountPoolPage } from '@/api/accountPool'
+import accountPoolAPI, {
+  type AccountPoolPage,
+  type AccountPoolSortBy,
+  type AccountPoolSortOrder,
+  type AccountPoolStatusCode,
+} from '@/api/accountPool'
 import type { AccountPlatform, AccountType } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -104,6 +137,9 @@ const page = ref<AccountPoolPage>({ items: [], total: 0, page: 1, page_size: get
 const loading = ref(false)
 const searchInput = ref('')
 const submittedId = ref('')
+const statusFilter = ref<AccountPoolStatusCode | ''>('')
+const sortBy = ref<AccountPoolSortBy>('id')
+const sortOrder = ref<AccountPoolSortOrder>('desc')
 const etag = ref('')
 const lastLoadedAt = ref(0)
 const retryUntil = ref(0)
@@ -114,7 +150,20 @@ let retryTimer: ReturnType<typeof setTimeout> | undefined
 let sequence = 0
 
 const invalidSearch = computed(() => searchInput.value !== '' && /^0+$/.test(searchInput.value))
-const columns = computed(() => [t('accountPool.columns.id'), t('accountPool.columns.platformType'), t('accountPool.columns.capacity'), t('accountPool.columns.usageWindow'), t('accountPool.columns.personalUsage'), t('accountPool.columns.resetCount'), t('accountPool.columns.status')])
+const columns = computed(() => [
+  { key: 'id' as const, label: t('accountPool.columns.id'), sortable: true },
+  { key: 'platformType' as const, label: t('accountPool.columns.platformType'), sortable: false },
+  { key: 'capacity' as const, label: t('accountPool.columns.capacity'), sortable: false },
+  { key: 'usageWindow' as const, label: t('accountPool.columns.usageWindow'), sortable: false },
+  { key: 'personalUsage' as const, label: t('accountPool.columns.personalUsage'), sortable: false },
+  { key: 'resetCount' as const, label: t('accountPool.columns.resetCount'), sortable: false },
+  { key: 'status' as const, label: t('accountPool.columns.status'), sortable: true },
+])
+const statusOptions = computed(() => [
+  { value: '', label: t('accountPool.allStatus') },
+  ...(['active', 'disabled', 'error', 'temporarily_unavailable', 'overloaded', 'rate_limited', 'paused', 'quota_exceeded'] as AccountPoolStatusCode[])
+    .map(status => ({ value: status, label: t(`accountPool.status.${status}`) })),
+])
 
 function platformOf(account: AccountPoolPage['items'][number]): AccountPlatform {
   return account.platform as AccountPlatform
@@ -200,7 +249,16 @@ async function load(force = false, targetPage = page.value.page) {
   const current = ++sequence
   loading.value = true
   try {
-    const result = await accountPoolAPI.list({ page: submittedId.value ? 1 : targetPage, pageSize: page.value.page_size, accountId: submittedId.value || undefined, etag: force ? undefined : etag.value || undefined, signal: controller.signal })
+    const result = await accountPoolAPI.list({
+      page: submittedId.value ? 1 : targetPage,
+      pageSize: page.value.page_size,
+      accountId: submittedId.value || undefined,
+      status: statusFilter.value,
+      sortBy: sortBy.value,
+      sortOrder: sortOrder.value,
+      etag: force ? undefined : etag.value || undefined,
+      signal: controller.signal,
+    })
     if (current !== sequence) return
     if (result.data) page.value = result.data
     if (result.etag) etag.value = result.etag
@@ -228,6 +286,36 @@ function changePageSize(size: number) {
   page.value = { ...page.value, page: 1, page_size: size }
   etag.value = ''
   void load(true, 1)
+}
+
+function changeStatus(value: string | number | boolean | null) {
+  statusFilter.value = String(value ?? '') as AccountPoolStatusCode | ''
+  page.value = { ...page.value, page: 1 }
+  etag.value = ''
+  void load(true, 1)
+}
+
+function toggleSort(key: string) {
+  if (key !== 'id' && key !== 'status') return
+  if (sortBy.value === key) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortBy.value = key
+    sortOrder.value = 'asc'
+  }
+  page.value = { ...page.value, page: 1 }
+  etag.value = ''
+  void load(true, 1)
+}
+
+function columnAriaSort(key: string): 'ascending' | 'descending' | 'none' {
+  if (sortBy.value !== key) return 'none'
+  return sortOrder.value === 'asc' ? 'ascending' : 'descending'
+}
+
+function sortTitle(key: string): string {
+  const nextOrder = sortBy.value === key && sortOrder.value === 'asc' ? 'desc' : 'asc'
+  return t(nextOrder === 'asc' ? 'accountPool.sortAscending' : 'accountPool.sortDescending')
 }
 
 // scheduleRetry 遵守服务端 Retry-After，并在到期后仅补发一次请求。

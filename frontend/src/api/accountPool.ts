@@ -1,6 +1,9 @@
 import { apiClient } from './client'
 
 export type AccountPoolFreshness = 'fresh' | 'stale' | 'unavailable'
+export type AccountPoolStatusCode = 'active' | 'disabled' | 'error' | 'temporarily_unavailable' | 'overloaded' | 'rate_limited' | 'paused' | 'quota_exceeded'
+export type AccountPoolSortBy = 'id' | 'status'
+export type AccountPoolSortOrder = 'asc' | 'desc'
 
 export interface AccountPoolAccount {
   id: number
@@ -27,7 +30,7 @@ export interface AccountPoolAccount {
   reset_count: number | null
   reset_count_state: string
   status: {
-    code: string
+    code: AccountPoolStatusCode
     category?: string
     resume_at: string | null
     models: Array<{ kind: string; model: string; resume_at: string | null }>
@@ -62,6 +65,9 @@ export async function listAccountPool(options: {
   page: number
   pageSize: number
   accountId?: string
+  status?: AccountPoolStatusCode | ''
+  sortBy: AccountPoolSortBy
+  sortOrder: AccountPoolSortOrder
   etag?: string
   signal?: AbortSignal
 }): Promise<{ data?: AccountPoolPage; etag?: string; notModified: boolean }> {
@@ -70,6 +76,9 @@ export async function listAccountPool(options: {
       page: options.page,
       page_size: options.pageSize,
       ...(options.accountId ? { account_id: options.accountId } : {}),
+      ...(options.status ? { status: options.status } : {}),
+      sort_by: options.sortBy,
+      sort_order: options.sortOrder,
     },
     headers: options.etag ? { 'If-None-Match': options.etag } : undefined,
     signal: options.signal,

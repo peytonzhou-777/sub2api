@@ -30,12 +30,12 @@ func (h *AccountPoolHandler) List(c *gin.Context) {
 		response.NotFound(c, "Not found")
 		return
 	}
-	page, pageSize, accountID, ok := parseAccountPoolQuery(c)
+	page, pageSize, query, ok := parseAccountPoolQuery(c)
 	if !ok {
 		response.BadRequest(c, "Invalid query parameters")
 		return
 	}
-	result, err := h.pool.List(c.Request.Context(), h.settings.GetAccountPoolEnabledEpoch(c.Request.Context()), page, pageSize, accountID)
+	result, err := h.pool.List(c.Request.Context(), h.settings.GetAccountPoolEnabledEpoch(c.Request.Context()), page, pageSize, query)
 	if err != nil {
 		response.Error(c, http.StatusServiceUnavailable, "Account pool temporarily unavailable")
 		return
@@ -96,39 +96,59 @@ func (h *AccountPoolHandler) PersonalUsage(c *gin.Context) {
 	response.Success(c, result)
 }
 
-func parseAccountPoolQuery(c *gin.Context) (int, int, *int64, bool) {
+func parseAccountPoolQuery(c *gin.Context) (int, int, service.AccountPoolListQuery, bool) {
 	query := c.Request.URL.Query()
-	allowed := map[string]struct{}{"page": {}, "page_size": {}, "account_id": {}}
+	allowed := map[string]struct{}{
+		"page": {}, "page_size": {}, "account_id": {}, "status": {}, "sort_by": {}, "sort_order": {},
+	}
 	for key, values := range query {
 		if _, exists := allowed[key]; !exists || len(values) != 1 {
-			return 0, 0, nil, false
+			return 0, 0, service.AccountPoolListQuery{}, false
 		}
 	}
 	page, pageSize := 1, 20
 	if raw, exists := query["page"]; exists {
 		value, ok := parsePositiveASCIIInt(raw[0], 0)
 		if !ok {
-			return 0, 0, nil, false
+			return 0, 0, service.AccountPoolListQuery{}, false
 		}
 		page = int(value)
 	}
 	if raw, exists := query["page_size"]; exists {
 		value, ok := parsePositiveASCIIInt(raw[0], 1000)
 		if !ok {
-			return 0, 0, nil, false
+			return 0, 0, service.AccountPoolListQuery{}, false
 		}
 		pageSize = int(value)
 	}
-	var accountID *int64
+	result := service.AccountPoolListQuery{SortBy: service.AccountPoolSortByID, SortOrder: service.AccountPoolSortDesc}
 	if raw, exists := query["account_id"]; exists {
 		value, ok := parsePositiveASCIIInt(raw[0], 0)
 		if !ok {
-			return 0, 0, nil, false
+			return 0, 0, service.AccountPoolListQuery{}, false
 		}
-		accountID = &value
+		result.AccountID = &value
 		page = 1
 	}
-	return page, pageSize, accountID, true
+	if raw, exists := query["status"]; exists {
+		if raw[0] != "" && !service.IsPublicAccountPoolStatus(raw[0]) {
+			return 0, 0, service.AccountPoolListQuery{}, false
+		}
+		result.Status = raw[0]
+	}
+	if raw, exists := query["sort_by"]; exists {
+		if raw[0] != service.AccountPoolSortByID && raw[0] != service.AccountPoolSortByStatus {
+			return 0, 0, service.AccountPoolListQuery{}, false
+		}
+		result.SortBy = raw[0]
+	}
+	if raw, exists := query["sort_order"]; exists {
+		if raw[0] != service.AccountPoolSortAsc && raw[0] != service.AccountPoolSortDesc {
+			return 0, 0, service.AccountPoolListQuery{}, false
+		}
+		result.SortOrder = raw[0]
+	}
+	return page, pageSize, result, true
 }
 
 func parsePositiveASCIIInt(raw string, max int64) (int64, bool) {

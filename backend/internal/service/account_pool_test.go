@@ -69,7 +69,7 @@ func (accountPoolNotReadyCache) ReadAccountPoolPreviousCapacities(context.Contex
 func (accountPoolNotReadyCache) WriteAccountPoolGeneration(context.Context, string, string, []PublicAccountPoolAccount, time.Duration) error {
 	return nil
 }
-func (accountPoolNotReadyCache) ReadAccountPoolPage(context.Context, string, int, int, *int64) ([]PublicAccountPoolAccount, int64, error) {
+func (accountPoolNotReadyCache) ReadAccountPoolPage(context.Context, string, int, int, AccountPoolListQuery) ([]PublicAccountPoolAccount, int64, error) {
 	return nil, 0, ErrAccountPoolSnapshotNotReady
 }
 
@@ -97,7 +97,7 @@ func (s *accountPoolBuildSource) ListAccountPoolBuildBatch(ctx context.Context, 
 	}
 	return s.records, false, s.err
 }
-func (*accountPoolBuildSource) ListAccountPoolPage(context.Context, int, int, *int64) ([]AccountPoolSourceRecord, int64, error) {
+func (*accountPoolBuildSource) ListAccountPoolPage(context.Context, int, int, *int64, string) ([]AccountPoolSourceRecord, int64, error) {
 	return nil, 0, nil
 }
 
@@ -146,8 +146,8 @@ func (c *accountPoolPersonalUsageCacheStub) ReadAccountPoolPreviousCapacities(co
 func (c *accountPoolPersonalUsageCacheStub) WriteAccountPoolGeneration(context.Context, string, string, []PublicAccountPoolAccount, time.Duration) error {
 	return nil
 }
-func (c *accountPoolPersonalUsageCacheStub) ReadAccountPoolPage(_ context.Context, _ string, _ int, _ int, accountID *int64) ([]PublicAccountPoolAccount, int64, error) {
-	if accountID == nil || *accountID != c.item.ID {
+func (c *accountPoolPersonalUsageCacheStub) ReadAccountPoolPage(_ context.Context, _ string, _ int, _ int, query AccountPoolListQuery) ([]PublicAccountPoolAccount, int64, error) {
+	if query.AccountID == nil || *query.AccountID != c.item.ID {
 		return []PublicAccountPoolAccount{}, 0, nil
 	}
 	return []PublicAccountPoolAccount{c.item}, 1, nil
@@ -193,10 +193,10 @@ func (c *accountPoolBuildCache) WriteAccountPoolGeneration(_ context.Context, _,
 	c.written = append([]PublicAccountPoolAccount(nil), items...)
 	return nil
 }
-func (*accountPoolBuildCache) ReadAccountPoolPage(context.Context, string, int, int, *int64) ([]PublicAccountPoolAccount, int64, error) {
+func (*accountPoolBuildCache) ReadAccountPoolPage(context.Context, string, int, int, AccountPoolListQuery) ([]PublicAccountPoolAccount, int64, error) {
 	return nil, 0, ErrAccountPoolSnapshotNotReady
 }
-func (s *accountPoolCountingSource) ListAccountPoolPage(context.Context, int, int, *int64) ([]AccountPoolSourceRecord, int64, error) {
+func (s *accountPoolCountingSource) ListAccountPoolPage(context.Context, int, int, *int64, string) ([]AccountPoolSourceRecord, int64, error) {
 	s.pageCalls++
 	return nil, 0, nil
 }
@@ -204,7 +204,7 @@ func (s *accountPoolCountingSource) ListAccountPoolPage(context.Context, int, in
 func TestAccountPoolNotReadyDoesNotFallbackToDatabase(t *testing.T) {
 	source := &accountPoolCountingSource{}
 	svc := NewAccountPoolService(source, accountPoolNotReadyCache{}, nil, AccountPoolOptions{})
-	_, err := svc.List(context.Background(), "new-epoch", 1, 20, nil)
+	_, err := svc.List(context.Background(), "new-epoch", 1, 20, AccountPoolListQuery{SortBy: AccountPoolSortByID, SortOrder: AccountPoolSortDesc})
 	if !errors.Is(err, ErrAccountPoolSnapshotNotReady) {
 		t.Fatalf("期望 not ready，实际: %v", err)
 	}
@@ -266,6 +266,33 @@ func TestAccountPoolResetCountFreshness(t *testing.T) {
 	item = svc.mapPublicAccount(AccountPoolSourceRecord{Platform: PlatformOpenAI, Type: AccountTypeOAuth, ResetCount: &negative, ResetCountObservedAt: &freshAt}, nil, now)
 	if item.ResetCount != nil || item.ResetCountState != string(AccountPoolFreshnessUnavailable) {
 		t.Fatalf("负数观测应不可用，得到 count=%v state=%s", item.ResetCount, item.ResetCountState)
+	}
+}
+
+func TestAccountPoolUsageWindowKeepsLastObservationAfterRetention(t *testing.T) {
+	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	svc := NewAccountPoolService(nil, nil, nil, AccountPoolOptions{
+		UsageFresh: 15 * time.Minute, UsageRetention: time.Hour,
+	})
+	observedAt := now.Add(-48 * time.Hour)
+	window := svc.mapWindow("5h", "5h", 42.0, nil, &observedAt, now, false)
+	if window.State != AccountPoolFreshnessStale || window.UsedPercent == nil || *window.UsedPercent != 42 {
+		t.Fatalf("超过保留期后仍应展示最后用量并标记 stale，得到 %+v", window)
+	}
+}
+
+func TestAccountPoolDatabaseFallbackPreservesStatusFilterAndOrder(t *testing.T) {
+	source := &accountPoolBuildSource{records: []AccountPoolSourceRecord{
+		{ID: 1, Status: StatusActive, Schedulable: true},
+		{ID: 2, Status: StatusError, Schedulable: true},
+		{ID: 3, Status: StatusActive, Schedulable: true},
+	}}
+	svc := NewAccountPoolService(source, nil, nil, AccountPoolOptions{})
+	page, err := svc.listAccountPoolDatabaseFallback(context.Background(), 1, 1, AccountPoolListQuery{
+		Status: "active", SortBy: AccountPoolSortByStatus, SortOrder: AccountPoolSortDesc,
+	})
+	if err != nil || page.Total != 2 || len(page.Items) != 1 || page.Items[0].ID != 3 {
+		t.Fatalf("数据库降级应保留状态筛选、总数和稳定排序: page=%+v err=%v", page, err)
 	}
 }
 

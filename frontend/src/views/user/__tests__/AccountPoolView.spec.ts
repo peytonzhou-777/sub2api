@@ -50,6 +50,12 @@ const PaginationStub = {
   template: '<button data-test="page-size" @click="$emit(\'update:pageSize\', 50)">50</button>',
 }
 
+const SelectStub = {
+  props: ['modelValue', 'options'],
+  emits: ['update:modelValue'],
+  template: '<button data-test="status-filter" @click="$emit(\'update:modelValue\', \'error\')">status</button>',
+}
+
 function mountView() {
   return mount(AccountPoolView, {
     global: {
@@ -58,6 +64,7 @@ function mountView() {
         TablePageLayout: { template: '<div><slot name="filters"/><slot name="table"/><slot name="pagination"/></div>' },
         Icon: true,
         Pagination: PaginationStub,
+        Select: SelectStub,
       },
     },
   })
@@ -105,6 +112,30 @@ describe('AccountPoolView', () => {
 
     expect(localStorage.getItem('table-page-size')).toBe('50')
     expect(listAccountPool.mock.calls[1][0]).toMatchObject({ page: 1, pageSize: 50 })
+    wrapper.unmount()
+  })
+
+  it('默认按账号 ID 倒序，并支持 ID、状态排序及状态筛选', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(listAccountPool.mock.calls[0][0]).toMatchObject({
+      sortBy: 'id',
+      sortOrder: 'desc',
+      status: '',
+    })
+
+    await wrapper.get('[data-test="sort-id"]').trigger('click')
+    await flushPromises()
+    expect(listAccountPool.mock.calls[1][0]).toMatchObject({ page: 1, sortBy: 'id', sortOrder: 'asc' })
+
+    await wrapper.get('[data-test="sort-status"]').trigger('click')
+    await flushPromises()
+    expect(listAccountPool.mock.calls[2][0]).toMatchObject({ page: 1, sortBy: 'status', sortOrder: 'asc' })
+
+    await wrapper.get('[data-test="status-filter"]').trigger('click')
+    await flushPromises()
+    expect(listAccountPool.mock.calls[3][0]).toMatchObject({ page: 1, status: 'error', sortBy: 'status', sortOrder: 'asc' })
     wrapper.unmount()
   })
 

@@ -13,7 +13,14 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-const AccountPoolSchemaVersion = 2
+const AccountPoolSchemaVersion = 3
+
+const (
+	AccountPoolSortByID     = "id"
+	AccountPoolSortByStatus = "status"
+	AccountPoolSortAsc      = "asc"
+	AccountPoolSortDesc     = "desc"
+)
 
 var (
 	ErrAccountPoolSnapshotUnavailable      = errors.New("account pool snapshot unavailable")
@@ -90,6 +97,25 @@ type AccountPoolPage struct {
 	Pages    int                        `json:"pages"`
 }
 
+// AccountPoolListQuery 是号池快照与数据库降级共用的只读查询条件。
+type AccountPoolListQuery struct {
+	AccountID *int64
+	Status    string
+	SortBy    string
+	SortOrder string
+}
+
+var publicAccountPoolStatusCodes = map[string]struct{}{
+	"active": {}, "disabled": {}, "error": {}, "temporarily_unavailable": {},
+	"overloaded": {}, "rate_limited": {}, "paused": {}, "quota_exceeded": {},
+}
+
+// IsPublicAccountPoolStatus 判断状态筛选值是否属于公开白名单。
+func IsPublicAccountPoolStatus(status string) bool {
+	_, ok := publicAccountPoolStatusCodes[status]
+	return ok
+}
+
 // AccountPoolPersonalUsageWindow 是当前用户在账号窗口内的本地用量汇总。
 type AccountPoolPersonalUsageWindow struct {
 	Code       string    `json:"code"`
@@ -144,7 +170,7 @@ type AccountPoolSourceRecord struct {
 
 type AccountPoolSource interface {
 	ListAccountPoolBuildBatch(ctx context.Context, afterID int64, limit int) ([]AccountPoolSourceRecord, bool, error)
-	ListAccountPoolPage(ctx context.Context, page, pageSize int, accountID *int64) ([]AccountPoolSourceRecord, int64, error)
+	ListAccountPoolPage(ctx context.Context, page, pageSize int, accountID *int64, sortOrder string) ([]AccountPoolSourceRecord, int64, error)
 }
 
 // AccountPoolConcurrencyReader 为号池提供只读的批量并发观测。
@@ -158,7 +184,7 @@ type AccountPoolSnapshotCache interface {
 	ReleaseAccountPoolBuildLock(ctx context.Context, owner string) error
 	ReadAccountPoolPreviousCapacities(ctx context.Context, enabledEpoch string, accountIDs []int64) (map[int64]PublicAccountPoolCapacity, error)
 	WriteAccountPoolGeneration(ctx context.Context, generation, enabledEpoch string, items []PublicAccountPoolAccount, ttl time.Duration) error
-	ReadAccountPoolPage(ctx context.Context, enabledEpoch string, page, pageSize int, accountID *int64) ([]PublicAccountPoolAccount, int64, error)
+	ReadAccountPoolPage(ctx context.Context, enabledEpoch string, page, pageSize int, query AccountPoolListQuery) ([]PublicAccountPoolAccount, int64, error)
 }
 
 // AccountPoolPersonalUsageCache 是 Redis 私有短缓存的可选能力。
@@ -308,12 +334,12 @@ func (s *AccountPoolService) Reconcile(ctx context.Context, generation, enabledE
 }
 
 // List 优先读取完整 Redis 代次，失败时只从数据库重建基础降级视图。
-func (s *AccountPoolService) List(ctx context.Context, enabledEpoch string, page, pageSize int, accountID *int64) (*AccountPoolPage, error) {
+func (s *AccountPoolService) List(ctx context.Context, enabledEpoch string, page, pageSize int, query AccountPoolListQuery) (*AccountPoolPage, error) {
 	if enabledEpoch == "" {
 		return nil, ErrAccountPoolSnapshotNotReady
 	}
 	if s.cache != nil {
-		items, total, err := s.cache.ReadAccountPoolPage(ctx, enabledEpoch, page, pageSize, accountID)
+		items, total, err := s.cache.ReadAccountPoolPage(ctx, enabledEpoch, page, pageSize, query)
 		if err == nil {
 			return newAccountPoolPage(items, total, page, pageSize), nil
 		}
@@ -324,10 +350,52 @@ func (s *AccountPoolService) List(ctx context.Context, enabledEpoch string, page
 	if s.source == nil {
 		return nil, ErrAccountPoolSnapshotUnavailable
 	}
-	records, total, err := s.source.ListAccountPoolPage(ctx, page, pageSize, accountID)
-	if err != nil {
-		return nil, fmt.Errorf("account pool database fallback: %w", err)
+	return s.listAccountPoolDatabaseFallback(ctx, page, pageSize, query)
+}
+
+func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context, page, pageSize int, query AccountPoolListQuery) (*AccountPoolPage, error) {
+	// ID 查询及普通 ID 排序仍使用数据库分页；状态条件需要按公开派生状态统一计算。
+	if query.AccountID != nil || (query.Status == "" && query.SortBy == AccountPoolSortByID) {
+		records, total, err := s.source.ListAccountPoolPage(ctx, page, pageSize, query.AccountID, query.SortOrder)
+		if err != nil {
+			return nil, fmt.Errorf("account pool database fallback: %w", err)
+		}
+		items := s.mapAccountPoolFallbackRecords(records)
+		if query.Status != "" {
+			items = filterAccountPoolItemsByStatus(items, query.Status)
+			total = int64(len(items))
+		}
+		return newAccountPoolPage(items, total, page, pageSize), nil
 	}
+
+	items := make([]PublicAccountPoolAccount, 0, s.options.BuildBatchSize)
+	afterID := int64(0)
+	for {
+		records, hasMore, err := s.source.ListAccountPoolBuildBatch(ctx, afterID, s.options.BuildBatchSize)
+		if err != nil {
+			return nil, fmt.Errorf("account pool database fallback: %w", err)
+		}
+		if len(records) == 0 {
+			break
+		}
+		items = append(items, s.mapAccountPoolFallbackRecords(records)...)
+		afterID = records[len(records)-1].ID
+		if !hasMore {
+			break
+		}
+	}
+	items = filterAccountPoolItemsByStatus(items, query.Status)
+	sortAccountPoolItems(items, query.SortBy, query.SortOrder)
+	total := int64(len(items))
+	start := (page - 1) * pageSize
+	if start >= len(items) {
+		return newAccountPoolPage([]PublicAccountPoolAccount{}, total, page, pageSize), nil
+	}
+	end := min(start+pageSize, len(items))
+	return newAccountPoolPage(items[start:end], total, page, pageSize), nil
+}
+
+func (s *AccountPoolService) mapAccountPoolFallbackRecords(records []AccountPoolSourceRecord) []PublicAccountPoolAccount {
 	items := make([]PublicAccountPoolAccount, 0, len(records))
 	now := s.now().UTC()
 	for _, record := range records {
@@ -340,7 +408,36 @@ func (s *AccountPoolService) List(ctx context.Context, enabledEpoch string, page
 		}
 		items = append(items, item)
 	}
-	return newAccountPoolPage(items, total, page, pageSize), nil
+	return items
+}
+
+func filterAccountPoolItemsByStatus(items []PublicAccountPoolAccount, status string) []PublicAccountPoolAccount {
+	if status == "" {
+		return items
+	}
+	filtered := make([]PublicAccountPoolAccount, 0, len(items))
+	for _, item := range items {
+		if item.Status.Code == status {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func sortAccountPoolItems(items []PublicAccountPoolAccount, sortBy, sortOrder string) {
+	desc := sortOrder == AccountPoolSortDesc
+	sort.SliceStable(items, func(i, j int) bool {
+		if sortBy == AccountPoolSortByStatus && items[i].Status.Code != items[j].Status.Code {
+			if desc {
+				return items[i].Status.Code > items[j].Status.Code
+			}
+			return items[i].Status.Code < items[j].Status.Code
+		}
+		if desc {
+			return items[i].ID > items[j].ID
+		}
+		return items[i].ID < items[j].ID
+	})
 }
 
 const accountPoolPersonalUsageCacheTTL = 30 * time.Second
@@ -351,7 +448,9 @@ func (s *AccountPoolService) GetPersonalUsage(ctx context.Context, enabledEpoch 
 	if s == nil || enabledEpoch == "" || userID <= 0 || accountID <= 0 {
 		return nil, ErrAccountPoolPersonalUsageNotFound
 	}
-	page, err := s.List(ctx, enabledEpoch, 1, 1, &accountID)
+	page, err := s.List(ctx, enabledEpoch, 1, 1, AccountPoolListQuery{
+		AccountID: &accountID, SortBy: AccountPoolSortByID, SortOrder: AccountPoolSortDesc,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -655,7 +754,7 @@ func (s *AccountPoolService) mapUsageWindows(record AccountPoolSourceRecord, now
 }
 
 func (s *AccountPoolService) mapWindow(code, label string, usedRaw, resetRaw any, observed *time.Time, now time.Time, ratio bool) PublicAccountPoolUsageWindow {
-	state := s.observationState(observed, now)
+	state := s.usageWindowState(observed, now)
 	window := PublicAccountPoolUsageWindow{Code: code, Label: label, ObservedAt: observed, State: state}
 	if state == AccountPoolFreshnessUnavailable || usedRaw == nil {
 		window.State = AccountPoolFreshnessUnavailable
@@ -669,6 +768,17 @@ func (s *AccountPoolService) mapWindow(code, label string, usedRaw, resetRaw any
 	window.UsedPercent = &used
 	window.ResetsAt = parseAccountPoolTime(resetRaw)
 	return window
+}
+
+// usageWindowState 保留最后一次有效账号用量；超过新鲜期后只标记 stale，不再因时间变成 unavailable。
+func (s *AccountPoolService) usageWindowState(observed *time.Time, now time.Time) AccountPoolFreshness {
+	if observed == nil || observed.After(now.Add(time.Minute)) {
+		return AccountPoolFreshnessUnavailable
+	}
+	if now.Sub(*observed) <= s.options.UsageFresh {
+		return AccountPoolFreshnessFresh
+	}
+	return AccountPoolFreshnessStale
 }
 
 func (s *AccountPoolService) observationState(observed *time.Time, now time.Time) AccountPoolFreshness {
