@@ -98,8 +98,14 @@
       </div>
     </div>
 
-    <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="closeForm">
-      <form class="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-lg bg-white shadow-xl dark:bg-dark-800" @submit.prevent="saveCampaign">
+    <Teleport to="body">
+      <div
+        v-if="showForm"
+        data-test="campaign-form-overlay"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        @click.self="closeForm"
+      >
+        <form class="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-lg bg-white shadow-xl dark:bg-dark-800" @submit.prevent="saveCampaign">
         <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-dark-600">
           <h2 class="text-base font-semibold text-gray-900 dark:text-white">
             {{ editingId ? t('payment.rechargeActivities.edit') : t('payment.rechargeActivities.create') }}
@@ -227,8 +233,9 @@
             {{ saving ? t('common.processing') : t('common.save') }}
           </button>
         </div>
-      </form>
-    </div>
+        </form>
+      </div>
+    </Teleport>
   </AppLayout>
 </template>
 

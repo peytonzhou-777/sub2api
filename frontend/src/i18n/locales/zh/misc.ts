@@ -297,6 +297,8 @@ export default {
     amountLabel: '充值金额',
     paymentAmount: '支付金额',
     creditedBalance: '到账余额',
+    permanentCreditSuffix: '（永久额度）',
+    creditDeductionOrderHint: '所有调用优先抵扣最先到期额度',
     quickAmounts: '快捷金额',
     customAmount: '自定义金额',
     enterAmount: '输入金额',

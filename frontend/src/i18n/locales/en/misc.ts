@@ -273,6 +273,8 @@ export default {
     amountLabel: 'Amount',
     paymentAmount: 'Payment Amount',
     creditedBalance: 'Credited Balance',
+    permanentCreditSuffix: ' (Permanent credit)',
+    creditDeductionOrderHint: 'All usage deducts the credit that expires first.',
     quickAmounts: 'Quick Amounts',
     customAmount: 'Custom Amount',
     enterAmount: 'Enter amount',

@@ -53,6 +53,7 @@ function mountView() {
       stubs: {
         AppLayout: { template: '<div><slot /></div>' },
         Icon: { template: '<span />' },
+        Teleport: true,
       },
     },
   })
@@ -102,6 +103,16 @@ describe('AdminRechargeActivitiesView', () => {
       participation_limit: 3,
       tiers: [{ min_amount: 10, max_amount: 100, min_rate: 5, max_rate: 10 }],
     })
+  })
+
+  it('teleports the campaign form overlay outside the workbench stacking context', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="create-campaign"]').trigger('click')
+
+    const teleport = wrapper.get('teleport-stub')
+    expect(teleport.attributes('to')).toBe('body')
+    expect(teleport.get('[data-test="campaign-form-overlay"]').exists()).toBe(true)
   })
 
   it('supports adding and deleting tier rows', async () => {

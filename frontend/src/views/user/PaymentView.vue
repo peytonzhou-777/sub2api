@@ -84,7 +84,9 @@
                 <div data-test="credited-amount-row" class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
                   <span class="text-gray-500 dark:text-gray-400">{{ t('payment.creditedBalance') }}</span>
                   <span class="flex flex-wrap justify-end gap-x-2 text-right">
-                    <span class="text-gray-900 dark:text-white">${{ creditedAmount.toFixed(2) }}</span>
+                    <span class="text-gray-900 dark:text-white">
+                      ${{ creditedAmount.toFixed(2) }}<span class="text-xs text-[var(--codex-text-muted)]">{{ t('payment.permanentCreditSuffix') }}</span>
+                    </span>
                     <span v-if="rechargeBonusAmount > 0" class="font-semibold text-red-600 dark:text-red-400">
                       +${{ formatLimitedCreditAmount(rechargeBonusAmount) }} {{ t('payment.rechargeBonus.limitedCreditWithDays', { days: rechargeBonusValidityDays }) }}
                     </span>
@@ -104,6 +106,9 @@
                   <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('payment.actualPay') }}</span>
                   <span class="text-lg font-bold text-primary-600 dark:text-primary-400">{{ formatSelectedPaymentAmount(totalAmount) }}</span>
                 </div>
+                <p data-test="credit-deduction-order-hint" class="text-right leading-5 text-[var(--codex-text-muted)]">
+                  {{ t('payment.creditDeductionOrderHint') }}
+                </p>
               </div>
             </div>
             <div v-if="enabledMethods.length >= 1" data-test="payment-method-panel" class="card p-6">
@@ -272,6 +277,15 @@
                   </p>
                 </div>
               </div>
+              <div
+                v-if="limitedCreditBalance > 0"
+                data-test="account-credit-deduction-hint"
+                class="account-credit-deduction-hint mt-3 flex items-start gap-2 rounded-md px-3 py-2 text-sm leading-5"
+                role="note"
+              >
+                <Icon name="infoCircle" size="sm" class="mt-0.5 shrink-0 text-[var(--codex-accent-blue)]" aria-hidden="true" />
+                <span>{{ t('payment.creditDeductionOrderHint') }}</span>
+              </div>
             </section>
 
             <section data-test="limited-credit-details">
@@ -312,10 +326,17 @@
                         {{ formatAccountMoney(credit.used_amount) }} / {{ formatAccountMoney(credit.initial_amount) }}
                       </span>
                     </div>
-                    <div data-test="limited-credit-progress-track" class="h-2 overflow-hidden rounded-full bg-[#444444]">
+                    <div
+                      data-test="limited-credit-progress-track"
+                      class="limited-credit-progress-track h-2 overflow-hidden rounded-full"
+                      role="progressbar"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                      :aria-valuenow="limitedCreditUsagePercentage(credit)"
+                    >
                       <div
                         data-test="limited-credit-progress-fill"
-                        class="h-full rounded-full bg-[#f4f4f4] transition-all duration-300"
+                        class="limited-credit-progress-fill h-full rounded-full transition-[width] duration-300"
                         :style="{ width: limitedCreditProgressWidth(credit) }"
                       />
                     </div>
@@ -696,9 +717,8 @@ const checkout = ref<CheckoutInfoResponse>({
 })
 
 const tabs = computed(() => {
-  const result: { key: 'recharge' | 'subscription' | 'account'; label: string }[] = []
+  const result: { key: 'recharge' | 'account'; label: string }[] = []
   if (!checkout.value.balance_disabled) result.push({ key: 'recharge', label: t('payment.tabTopUp') })
-  result.push({ key: 'subscription', label: t('payment.tabSubscribe') })
   result.push({ key: 'account', label: t('payment.tabAccount') })
   return result
 })
@@ -1424,3 +1444,26 @@ onBeforeUnmount(() => {
   stopRechargeBonusCountdown()
 })
 </script>
+
+<style scoped>
+.limited-credit-progress-track {
+  background: var(--codex-panel-hover);
+  box-shadow: inset 0 0 0 1px var(--codex-line);
+}
+
+.limited-credit-progress-fill {
+  background: var(--codex-accent-blue);
+}
+
+.account-credit-deduction-hint {
+  border: 1px solid color-mix(in srgb, var(--codex-accent-blue) 24%, var(--codex-line));
+  background: color-mix(in srgb, var(--codex-accent-blue) 8%, var(--codex-panel));
+  color: var(--codex-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .limited-credit-progress-fill {
+    transition-duration: 0ms;
+  }
+}
+</style>

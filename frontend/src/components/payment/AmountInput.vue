@@ -208,7 +208,7 @@ watch(() => props.modelValue, (value) => {
 .amount-slider::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 999px;
-  background: #444;
+  background: var(--codex-line-strong);
 }
 
 .amount-slider::-webkit-slider-thumb {
@@ -216,34 +216,34 @@ watch(() => props.modelValue, (value) => {
   height: 18px;
   margin-top: -6px;
   appearance: none;
-  border: 2px solid #f4f4f4;
+  border: 2px solid var(--codex-panel);
   border-radius: 50%;
-  background: #2f9cff;
-  box-shadow: 0 1px 5px rgb(0 0 0 / 0.4);
+  background: var(--codex-accent-blue);
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--codex-text) 28%, transparent);
 }
 
 .amount-slider::-moz-range-track {
   height: 6px;
   border-radius: 999px;
-  background: #444;
+  background: var(--codex-line-strong);
 }
 
 .amount-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;
-  border: 2px solid #f4f4f4;
+  border: 2px solid var(--codex-panel);
   border-radius: 50%;
-  background: #2f9cff;
-  box-shadow: 0 1px 5px rgb(0 0 0 / 0.4);
+  background: var(--codex-accent-blue);
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--codex-text) 28%, transparent);
 }
 
 .quick-amount-button {
-  min-height: 34px;
-  border: 1px solid #343434;
+  min-height: var(--codex-control-sm);
+  border: 1px solid var(--codex-line);
   border-radius: 8px;
   padding: 6px 8px;
-  background: #202020;
-  color: #b7b7b7;
+  background: var(--codex-panel-raised);
+  color: var(--codex-text-muted);
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
@@ -251,19 +251,20 @@ watch(() => props.modelValue, (value) => {
 }
 
 .quick-amount-button:hover:not(:disabled) {
-  border-color: #505050;
-  background: #2a2a2a;
-  color: #fff;
+  border-color: var(--codex-line-strong);
+  background: var(--codex-panel-hover);
+  color: var(--codex-text);
 }
 
 .quick-amount-button--active {
-  border-color: rgb(47 156 255 / 0.7);
-  background: rgb(47 156 255 / 0.14);
-  color: #78baff;
+  border-color: color-mix(in srgb, var(--codex-accent-blue) 70%, transparent);
+  background: color-mix(in srgb, var(--codex-accent-blue) 14%, transparent);
+  color: var(--codex-accent-blue);
 }
 
-.quick-amount-button:focus-visible {
-  outline: 2px solid rgb(47 156 255 / 0.75);
+.quick-amount-button:focus-visible,
+.amount-adjustment-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--codex-accent-blue) 75%, transparent);
   outline-offset: 2px;
 }
 
@@ -274,24 +275,39 @@ watch(() => props.modelValue, (value) => {
 
 .amount-adjustment-button {
   min-width: 40px;
-  border: 1px solid #343434;
+  min-height: var(--codex-control-sm);
+  border: 1px solid var(--codex-line);
   border-radius: 8px;
   padding: 8px 9px;
-  background: #202020;
-  color: #d4d4d4;
+  background: var(--codex-panel-raised);
+  color: var(--codex-text-muted);
   font-size: 12px;
   font-weight: 500;
   transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease, opacity 150ms ease;
 }
 
 .amount-adjustment-button:hover:not(:disabled) {
-  border-color: #505050;
-  background: #2a2a2a;
-  color: #fff;
+  border-color: var(--codex-line-strong);
+  background: var(--codex-panel-hover);
+  color: var(--codex-text);
 }
 
 .amount-adjustment-button:disabled {
   cursor: not-allowed;
-  opacity: 0.32;
+  opacity: 0.48;
+}
+
+@media (max-width: 767px) {
+  .quick-amount-button,
+  .amount-adjustment-button {
+    min-height: var(--codex-control);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-amount-button,
+  .amount-adjustment-button {
+    transition: none;
+  }
 }
 </style>
