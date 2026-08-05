@@ -348,6 +348,9 @@ func mapCreditGrantEventTriggerError(err error) error {
 
 // attachCreditGrantEventCounts 批量补充用户列表的赠额事件领取进度。
 func (s *adminServiceImpl) attachCreditGrantEventCounts(ctx context.Context, users []AdminCreditUser) error {
+	if len(users) == 0 {
+		return nil
+	}
 	events, err := s.entClient.CreditGrantEvent.Query().Select(dbevent.FieldID).All(ctx)
 	if err != nil {
 		return err
@@ -355,7 +358,7 @@ func (s *adminServiceImpl) attachCreditGrantEventCounts(ctx context.Context, use
 	for i := range users {
 		users[i].ActiveEventCount = len(events)
 	}
-	if len(users) == 0 || len(events) == 0 {
+	if len(events) == 0 {
 		return nil
 	}
 	userIDs := make([]int64, 0, len(users))

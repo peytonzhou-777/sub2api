@@ -5,6 +5,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -372,6 +373,50 @@ func (s *UserRepoSuite) TestListWithFilters_SearchByUsername() {
 	s.Require().NoError(err)
 	s.Require().Len(users, 1)
 	s.Require().Equal("JohnDoe", users[0].Username)
+}
+
+func (s *UserRepoSuite) TestListWithFilters_RankedIdentitySearch_PrioritizesIDBeforeNumericUsername() {
+	idMatch := s.mustCreateUser(&service.User{Email: "rank-id@test.com", Username: "rank-id"})
+	search := strconv.FormatInt(idMatch.ID, 10)
+	usernameMatch := s.mustCreateUser(&service.User{Email: "rank-username@test.com", Username: search})
+	fuzzyMatch := s.mustCreateUser(&service.User{Email: "rank-fuzzy@test.com", Username: "prefix-" + search})
+
+	users, page, err := s.repo.ListWithFilters(
+		s.ctx,
+		pagination.PaginationParams{Page: 1, PageSize: 1},
+		service.UserListFilters{Search: search, SearchMode: service.UserSearchModeRankedIdentity},
+	)
+	s.Require().NoError(err)
+	s.Require().Equal(int64(3), page.Total)
+	s.Require().Len(users, 1)
+	s.Require().Equal(idMatch.ID, users[0].ID)
+
+	users, _, err = s.repo.ListWithFilters(
+		s.ctx,
+		pagination.PaginationParams{Page: 2, PageSize: 1},
+		service.UserListFilters{Search: search, SearchMode: service.UserSearchModeRankedIdentity},
+	)
+	s.Require().NoError(err)
+	s.Require().Len(users, 1)
+	s.Require().Equal(usernameMatch.ID, users[0].ID)
+	s.Require().NotEqual(fuzzyMatch.ID, users[0].ID)
+}
+
+func (s *UserRepoSuite) TestListWithFilters_RankedIdentitySearch_PrioritizesEmailAndUsernameExactMatches() {
+	const search = "ranked-identity@test.com"
+	emailMatch := s.mustCreateUser(&service.User{Email: search, Username: "email-owner"})
+	usernameMatch := s.mustCreateUser(&service.User{Email: "username-owner@test.com", Username: search})
+	fuzzyMatch := s.mustCreateUser(&service.User{Email: "fuzzy-owner@test.com", Username: "prefix-" + search})
+
+	users, page, err := s.repo.ListWithFilters(
+		s.ctx,
+		pagination.PaginationParams{Page: 1, PageSize: 10},
+		service.UserListFilters{Search: strings.ToUpper(search), SearchMode: service.UserSearchModeRankedIdentity},
+	)
+	s.Require().NoError(err)
+	s.Require().Equal(int64(3), page.Total)
+	s.Require().Len(users, 3)
+	s.Require().Equal([]int64{emailMatch.ID, usernameMatch.ID, fuzzyMatch.ID}, []int64{users[0].ID, users[1].ID, users[2].ID})
 }
 
 func (s *UserRepoSuite) TestListWithFilters_LoadsActiveSubscriptions() {

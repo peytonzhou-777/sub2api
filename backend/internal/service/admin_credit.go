@@ -4,7 +4,6 @@ import (
 	"context"
 	"math"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -125,18 +124,13 @@ func adminLimitedCreditFromEntity(row *dbent.UserLimitedCreditGrant) *LimitedCre
 // ListCreditUsers 分页返回用户及有效限时额度汇总。
 func (s *adminServiceImpl) ListCreditUsers(ctx context.Context, page, pageSize int, search string) ([]AdminCreditUser, int64, error) {
 	search = strings.TrimSpace(search)
-	if id, parseErr := strconv.ParseInt(search, 10, 64); parseErr == nil && id > 0 {
-		user, err := s.GetUser(ctx, id)
-		if err != nil {
-			return []AdminCreditUser{}, 0, nil
-		}
-		detail, err := s.GetCreditUserDetail(ctx, user.ID)
-		if err != nil {
-			return nil, 0, err
-		}
-		return []AdminCreditUser{detail.AdminCreditUser}, 1, nil
+	if search == "" {
+		return []AdminCreditUser{}, 0, nil
 	}
-	users, total, err := s.ListUsers(ctx, page, pageSize, UserListFilters{Search: search}, "id", "desc")
+	users, total, err := s.ListUsers(ctx, page, pageSize, UserListFilters{
+		Search:     search,
+		SearchMode: UserSearchModeRankedIdentity,
+	}, "id", "desc")
 	if err != nil {
 		return nil, 0, err
 	}

@@ -20,6 +20,7 @@ const {
   showError,
   showWarning,
   replace,
+  currentRoute,
 } = vi.hoisted(() => ({
   listCreditUsers: vi.fn(),
   getCreditUser: vi.fn(),
@@ -35,6 +36,7 @@ const {
   showError: vi.fn(),
   showWarning: vi.fn(),
   replace: vi.fn(),
+  currentRoute: { query: {} as Record<string, string> },
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -61,7 +63,7 @@ vi.mock('@/stores/app', () => ({
 }))
 
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ query: {} }),
+  useRoute: () => currentRoute,
   useRouter: () => ({ replace }),
 }))
 
@@ -127,7 +129,8 @@ function createGrantEvent(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function mountView() {
+function mountView(query: Record<string, string> = {}) {
+  currentRoute.query = query
   return mount(CreditsView, {
     global: {
       stubs: {
@@ -139,6 +142,23 @@ function mountView() {
       },
     },
   })
+}
+
+async function searchUsers(wrapper: VueWrapper, query = 'credit-user') {
+  const input = wrapper.get('input[type="search"]')
+  await input.setValue(query)
+  await input.trigger('keyup.enter')
+  await flushPromises()
+}
+
+async function openFirstUser(wrapper: VueWrapper) {
+  if (!wrapper.find('[data-test="grant-event-details"]').exists()) {
+    if (!wrapper.find('[data-test="credit-user-row"]').exists()) {
+      await searchUsers(wrapper)
+    }
+    await findButtonByText(wrapper, 'admin.credits.manage').trigger('click')
+    await flushPromises()
+  }
 }
 
 function findButtonByText(wrapper: VueWrapper, text: string) {
@@ -157,8 +177,7 @@ async function openBalanceForm(
   wrapper: VueWrapper,
   options: { amount?: number; notes?: string } = {},
 ) {
-  await findButtonByText(wrapper, 'admin.credits.manage').trigger('click')
-  await flushPromises()
+  await openFirstUser(wrapper)
 
   await findButtonByText(wrapper, 'admin.credits.add').trigger('click')
   await wrapper.vm.$nextTick()
@@ -180,6 +199,7 @@ async function submitPermanentBalance(
 
 describe('额度管理永久额度冲突处理', () => {
   beforeEach(() => {
+    currentRoute.query = {}
     for (const fn of [
       listCreditUsers,
       getCreditUser,
@@ -216,6 +236,59 @@ describe('额度管理永久额度冲突处理', () => {
     triggerCreditGrantEvent.mockResolvedValue({})
     getUserBalanceHistory.mockResolvedValue({ items: [] })
     replace.mockResolvedValue(undefined)
+  })
+
+  it('普通进入页面时不加载默认用户列表', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(listCreditUsers).not.toHaveBeenCalled()
+    expect(getCreditUser).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-test="credit-search-idle"]').text()).toBe('admin.credits.searchIdle')
+    wrapper.unmount()
+  })
+
+  it('搜索结果支持切换分页', async () => {
+    listCreditUsers
+      .mockResolvedValueOnce({
+        items: [createCreditUser({ id: 25, username: '12345' })],
+        total: 21,
+        page: 1,
+        page_size: 20,
+        pages: 2,
+      })
+      .mockResolvedValueOnce({
+        items: [createCreditUser({ id: 3, username: 'prefix-12345' })],
+        total: 21,
+        page: 2,
+        page_size: 20,
+        pages: 2,
+      })
+
+    const wrapper = mountView()
+    await searchUsers(wrapper, '12345')
+
+    expect(listCreditUsers).toHaveBeenNthCalledWith(1, 1, 20, '12345')
+    await wrapper.get('button[aria-label="pagination.next"]').trigger('click')
+    await flushPromises()
+    expect(listCreditUsers).toHaveBeenNthCalledWith(2, 2, 20, '12345')
+    expect(wrapper.get('[data-test="credit-user-row"]').text()).toContain('prefix-12345')
+    wrapper.unmount()
+  })
+
+  it('从用户管理进入时只读取并展示指定用户', async () => {
+    getCreditUser.mockResolvedValueOnce(createDetail({ id: 42, email: 'managed@example.com', username: 'managed-user' }))
+
+    const wrapper = mountView({ user: '42' })
+    await flushPromises()
+
+    expect(listCreditUsers).not.toHaveBeenCalled()
+    expect(getCreditUser).toHaveBeenCalledTimes(1)
+    expect(getCreditUser).toHaveBeenCalledWith(42)
+    expect(wrapper.findAll('[data-test="credit-user-row"]')).toHaveLength(1)
+    expect(wrapper.get('[data-test="credit-user-row"]').text()).toContain('managed@example.com')
+    expect(wrapper.find('input[type="search"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('首次 409 会刷新用户详情并显示确认弹窗，不会自动提交第二次请求', async () => {
@@ -457,7 +530,7 @@ describe('额度管理永久额度冲突处理', () => {
     })
 
     const wrapper = mountView()
-    await flushPromises()
+    await searchUsers(wrapper)
 
     expect(wrapper.get('[data-test="grant-event-progress"]').text()).toBe('1/3')
     wrapper.unmount()
@@ -481,9 +554,7 @@ describe('额度管理永久额度冲突处理', () => {
     }))
 
     const wrapper = mountView()
-    await flushPromises()
-    await findButtonByText(wrapper, 'admin.credits.manage').trigger('click')
-    await flushPromises()
+    await openFirstUser(wrapper)
 
     expect(wrapper.find('[data-test="trigger-grant-event-11"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="trigger-grant-event-12"]').exists()).toBe(false)
@@ -505,9 +576,7 @@ describe('额度管理永久额度冲突处理', () => {
     triggerCreditGrantEvent.mockResolvedValueOnce(triggeredEvent)
 
     const wrapper = mountView()
-    await flushPromises()
-    await findButtonByText(wrapper, 'admin.credits.manage').trigger('click')
-    await flushPromises()
+    await openFirstUser(wrapper)
     await findButtonByText(wrapper, 'admin.credits.balanceHistory').trigger('click')
     await flushPromises()
     await wrapper.get('[data-test="trigger-grant-event-11"]').trigger('click')
@@ -536,9 +605,7 @@ describe('额度管理永久额度冲突处理', () => {
     triggerCreditGrantEvent.mockRejectedValueOnce({ status: 409, message: 'already triggered' })
 
     const wrapper = mountView()
-    await flushPromises()
-    await findButtonByText(wrapper, 'admin.credits.manage').trigger('click')
-    await flushPromises()
+    await openFirstUser(wrapper)
     await wrapper.get('[data-test="trigger-grant-event-11"]').trigger('click')
     await flushPromises()
 

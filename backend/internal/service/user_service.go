@@ -64,12 +64,21 @@ var (
 	avatarQualitySteps = []int{88, 80, 72, 64, 56, 48, 40, 32}
 )
 
+// UserSearchMode 定义用户列表的搜索与排序策略。
+type UserSearchMode string
+
+const (
+	// UserSearchModeRankedIdentity 按 ID、邮箱、用户名的匹配精度排序。
+	UserSearchModeRankedIdentity UserSearchMode = "ranked_identity"
+)
+
 // UserListFilters contains all filter options for listing users
 type UserListFilters struct {
-	Status    string // User status filter
-	Role      string // User role filter
-	Search    string // Search in email, username
-	GroupName string // Filter by allowed group name (fuzzy match)
+	Status     string         // User status filter
+	Role       string         // User role filter
+	Search     string         // Search in email, username
+	SearchMode UserSearchMode // 可选的搜索匹配与排序策略
+	GroupName  string         // Filter by allowed group name (fuzzy match)
 	// APIKeyGroupID filters users who own at least one non-soft-deleted API key
 	// bound to this group (api_keys.group_id). 0 = no filter. Covers all three
 	// group types since it matches the key's group directly, not allowed_groups.

@@ -637,7 +637,7 @@ func (s *AccountPoolService) mapPublicAccount(record AccountPoolSourceRecord, co
 	capacity := PublicAccountPoolCapacity{MaxConcurrency: record.Concurrency, State: AccountPoolFreshnessUnavailable}
 	if current, ok := counts[record.ID]; ok {
 		capacity.CurrentConcurrency = &current
-		capacity.ObservedAt = timePtr(now)
+		capacity.ObservedAt = accountPoolTimePtr(now)
 		capacity.State = AccountPoolFreshnessFresh
 	}
 	resetState := "not_applicable"
@@ -894,4 +894,4 @@ func parseAccountPoolTime(raw any) *time.Time {
 	}
 }
 
-func timePtr(value time.Time) *time.Time { return &value }
+func accountPoolTimePtr(value time.Time) *time.Time { return &value }

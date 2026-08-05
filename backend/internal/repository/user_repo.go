@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -518,6 +519,10 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 	if filters.IncludeDeleted {
 		userCtx = mixins.SkipSoftDelete(ctx)
 	}
+	search := strings.TrimSpace(filters.Search)
+	if search != "" && filters.SearchMode == service.UserSearchModeRankedIdentity {
+		return r.listWithRankedIdentitySearch(ctx, userCtx, params, filters, search)
+	}
 
 	q := r.client.User.Query()
 
@@ -587,9 +592,107 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 		return nil, nil, err
 	}
 
+	return r.hydrateUserList(ctx, users, int64(total), params, filters)
+}
+
+// listWithRankedIdentitySearch 先按相关性取得当前页 ID，再用 Ent 装载用户实体与关联。
+func (r *userRepository) listWithRankedIdentitySearch(ctx, userCtx context.Context, params pagination.PaginationParams, filters service.UserListFilters, search string) ([]service.User, *pagination.PaginationResult, error) {
+	if r.sql == nil {
+		return nil, nil, fmt.Errorf("sql executor is not configured")
+	}
+	if filters.Status != "" || filters.Role != "" || filters.GroupName != "" || filters.APIKeyGroupID > 0 || len(filters.Attributes) > 0 || filters.IncludeDeleted {
+		return nil, nil, fmt.Errorf("ranked identity search does not support additional user filters")
+	}
+
+	const textMatch = `STRPOS(LOWER(email), LOWER($1)) > 0 OR STRPOS(LOWER(username), LOWER($1)) > 0`
+	countQuery := `SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND (` + textMatch + `)`
+	pageQuery := `SELECT id FROM users WHERE deleted_at IS NULL AND (` + textMatch + `)
+ORDER BY CASE WHEN LOWER(email) = LOWER($1) THEN 1 WHEN LOWER(username) = LOWER($1) THEN 2 ELSE 3 END, id DESC
+LIMIT $2 OFFSET $3`
+	countArgs := []any{search}
+	pageArgs := []any{search, params.Limit(), params.Offset()}
+
+	if id, err := strconv.ParseInt(search, 10, 64); err == nil && id > 0 {
+		countQuery = `SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND (id = $1 OR STRPOS(LOWER(email), LOWER($2)) > 0 OR STRPOS(LOWER(username), LOWER($2)) > 0)`
+		pageQuery = `SELECT id FROM users WHERE deleted_at IS NULL AND (id = $1 OR STRPOS(LOWER(email), LOWER($2)) > 0 OR STRPOS(LOWER(username), LOWER($2)) > 0)
+ORDER BY CASE WHEN id = $1 THEN 0 WHEN LOWER(email) = LOWER($2) THEN 1 WHEN LOWER(username) = LOWER($2) THEN 2 ELSE 3 END, id DESC
+LIMIT $3 OFFSET $4`
+		countArgs = []any{id, search}
+		pageArgs = []any{id, search, params.Limit(), params.Offset()}
+	}
+
+	total, err := querySingleInt64(ctx, r.sql, countQuery, countArgs...)
+	if err != nil {
+		return nil, nil, err
+	}
+	ids, err := queryInt64Slice(ctx, r.sql, pageQuery, pageArgs...)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(ids) == 0 {
+		return []service.User{}, paginationResultFromTotal(total, params), nil
+	}
+
+	entities, err := r.client.User.Query().Where(dbuser.IDIn(ids...)).All(userCtx)
+	if err != nil {
+		return nil, nil, err
+	}
+	byID := make(map[int64]*dbent.User, len(entities))
+	for _, entity := range entities {
+		byID[entity.ID] = entity
+	}
+	ordered := make([]*dbent.User, 0, len(ids))
+	for _, id := range ids {
+		if entity, ok := byID[id]; ok {
+			ordered = append(ordered, entity)
+		}
+	}
+	return r.hydrateUserList(ctx, ordered, total, params, filters)
+}
+
+func querySingleInt64(ctx context.Context, executor sqlExecutor, query string, args ...any) (int64, error) {
+	rows, err := executor.QueryContext(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, err
+		}
+		return 0, sql.ErrNoRows
+	}
+	var value int64
+	if err := rows.Scan(&value); err != nil {
+		return 0, err
+	}
+	return value, rows.Err()
+}
+
+func queryInt64Slice(ctx context.Context, executor sqlExecutor, query string, args ...any) ([]int64, error) {
+	rows, err := executor.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	values := make([]int64, 0)
+	for rows.Next() {
+		var value int64
+		if err := rows.Scan(&value); err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
+func (r *userRepository) hydrateUserList(ctx context.Context, users []*dbent.User, total int64, params pagination.PaginationParams, filters service.UserListFilters) ([]service.User, *pagination.PaginationResult, error) {
 	outUsers := make([]service.User, 0, len(users))
 	if len(users) == 0 {
-		return outUsers, paginationResultFromTotal(int64(total), params), nil
+		return outUsers, paginationResultFromTotal(total, params), nil
 	}
 
 	userIDs := make([]int64, 0, len(users))
@@ -632,7 +735,7 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 		}
 	}
 
-	return outUsers, paginationResultFromTotal(int64(total), params), nil
+	return outUsers, paginationResultFromTotal(total, params), nil
 }
 
 func userListOrder(params pagination.PaginationParams) []func(*entsql.Selector) {

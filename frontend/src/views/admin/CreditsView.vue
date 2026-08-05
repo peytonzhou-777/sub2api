@@ -1,19 +1,19 @@
 <template>
   <AppLayout>
     <div class="space-y-4">
-      <div class="flex flex-wrap items-center gap-3">
+      <div v-if="!isDirectUserMode" class="flex flex-wrap items-center gap-3">
         <div class="relative w-full max-w-sm">
           <Icon name="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input v-model="search" class="input pl-10" :placeholder="t('admin.credits.search')" @keyup.enter="loadUsers(1)" />
+          <input v-model="search" type="search" class="input pl-10" :placeholder="t('admin.credits.search')" @keyup.enter="submitSearch" />
         </div>
-        <button class="btn btn-secondary" :disabled="loading" @click="loadUsers(1)"><Icon name="refresh" size="sm" />{{ t('common.refresh') }}</button>
+        <button class="btn btn-primary" :disabled="loading" @click="submitSearch"><Icon name="search" size="sm" />{{ t('common.search') }}</button>
       </div>
 
       <div class="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800">
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-50 text-gray-500 dark:bg-dark-700 dark:text-dark-300"><tr><th class="px-4 py-3">{{ t('admin.credits.user') }}</th><th class="px-4 py-3">{{ t('admin.credits.permanent') }}</th><th class="px-4 py-3">{{ t('admin.credits.limited') }}</th><th class="px-4 py-3">{{ t('admin.credits.total') }}</th><th class="px-4 py-3">{{ t('admin.credits.eventProgress') }}</th><th class="px-4 py-3 text-right">{{ t('common.actions') }}</th></tr></thead>
           <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
-            <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50 dark:hover:bg-dark-700/60">
+            <tr v-for="user in users" :key="user.id" data-test="credit-user-row" class="hover:bg-gray-50 dark:hover:bg-dark-700/60">
               <td class="px-4 py-3"><p class="font-medium text-gray-900 dark:text-white">{{ user.email }}</p><p class="text-xs text-gray-500">#{{ user.id }} · {{ user.username || '-' }}</p></td>
               <td class="px-4 py-3 font-medium">${{ money(user.balance) }}</td>
               <td class="px-4 py-3"><span class="font-medium text-red-600 dark:text-red-400">${{ money(user.limited_remaining_amount) }}</span><span class="ml-2 text-xs text-gray-500">{{ user.limited_active_count }} {{ t('admin.credits.items') }}</span></td>
@@ -21,9 +21,17 @@
               <td class="px-4 py-3 font-medium" data-test="grant-event-progress">{{ user.triggered_event_count }}/{{ user.active_event_count }}</td>
               <td class="px-4 py-3 text-right"><button class="btn btn-secondary btn-sm" @click="openUser(user.id)">{{ t('admin.credits.manage') }}</button></td>
             </tr>
-            <tr v-if="!loading && users.length === 0"><td colspan="6" class="px-4 py-12 text-center text-gray-500">{{ t('admin.credits.empty') }}</td></tr>
+            <tr v-if="!loading && users.length === 0"><td colspan="6" class="px-4 py-12 text-center text-gray-500"><span v-if="hasSearched">{{ t('admin.credits.empty') }}</span><span v-else data-test="credit-search-idle">{{ t('admin.credits.searchIdle') }}</span></td></tr>
           </tbody>
         </table>
+        <Pagination
+          v-if="!isDirectUserMode && total > pageSize"
+          :page="page"
+          :total="total"
+          :page-size="pageSize"
+          :show-page-size-selector="false"
+          @update:page="loadSearchPage"
+        />
       </div>
     </div>
 
@@ -115,6 +123,7 @@ import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores/app'
@@ -125,6 +134,7 @@ import { extractApiErrorStatus } from '@/utils/apiError'
 
 const { t } = useI18n(); const route = useRoute(); const router = useRouter(); const appStore = useAppStore()
 const users = ref<CreditUser[]>([]); const detail = ref<CreditUserDetail | null>(null); const search = ref(''); const loading = ref(false); const submitting = ref(false)
+const page = ref(1); const pageSize = 20; const total = ref(0); const activeSearch = ref(''); const hasSearched = ref(false); const isDirectUserMode = ref(false)
 const expandedLedger = ref<number | null>(null); const ledger = ref<LimitedCreditLedgerEntry[]>([])
 const showBalanceHistory = ref(false); const balanceHistory = ref<BalanceHistoryItem[]>([])
 const triggeringEventId = ref<number | null>(null)
@@ -150,13 +160,69 @@ const formatLedgerAmount=(entry:LimitedCreditLedgerEntry)=>['admin_extend_expiry
 const actionTitle=computed(()=>t(`admin.credits.actions.${action.value || 'none'}`))
 const displayedCredits=computed(()=>limitedFilter.value==='all'?(detail.value?.limited_credits||[]):(detail.value?.limited_credits||[]).filter(item=>item.status==='active'&&new Date(item.expires_at)>new Date()))
 const previewText=computed(()=>{ if(!detail.value)return ''; if(action.value.startsWith('balance')) { const next=detail.value.balance+(action.value==='balance-add'?form.value:-form.value); return t('admin.credits.balancePreview',{before:precise(detail.value.balance),after:precise(next)}) } if(action.value==='limited-create')return t('admin.credits.createPreview',{amount:precise(form.amount),days:form.value}); if(!selectedGrant.value)return ''; if(action.value==='limited-limit'){const next=selectedGrant.value.initial_amount+(form.operation==='add'?form.value:-form.value);return t('admin.credits.limitPreview',{before:precise(selectedGrant.value.initial_amount),after:precise(next)})} if(action.value==='limited-used'){const next=selectedGrant.value.used_amount+(form.operation==='add'?form.value:-form.value);return t('admin.credits.usedPreview',{before:precise(selectedGrant.value.used_amount),after:precise(next)})} if(action.value==='limited-expiry'){const d=new Date(selectedGrant.value.expires_at);d.setDate(d.getDate()+(form.operation==='add'?form.value:-form.value));return t('admin.credits.expiryPreview',{date:d.toLocaleString()})} if(action.value==='limited-reset')return selectedGrant.value.validity_days?t('admin.credits.resetWithExpiryPreview',{days:selectedGrant.value.validity_days}):t('admin.credits.resetPreview'); return t('admin.credits.revokePreview') })
-async function loadUsers(page=1){loading.value=true;try{const r=await creditsAPI.listCreditUsers(page,20,search.value);users.value=r.items||[]}finally{loading.value=false}}
+
+function creditUserFromDetail(user: CreditUserDetail): CreditUser {
+  return {
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    status: user.status,
+    balance: user.balance,
+    frozen_balance: user.frozen_balance,
+    limited_remaining_amount: user.limited_remaining_amount,
+    limited_active_count: user.limited_active_count,
+    triggered_event_count: user.triggered_event_count,
+    active_event_count: user.active_event_count,
+    updated_at: user.updated_at,
+  }
+}
+
+function clearSearchResults() {
+  users.value = []
+  total.value = 0
+  page.value = 1
+  activeSearch.value = ''
+  hasSearched.value = false
+}
+
+/** 使用已提交的搜索词加载指定页，避免输入框编辑影响翻页。 */
+async function loadSearchPage(requestedPage: number) {
+  if (loading.value || isDirectUserMode.value || activeSearch.value === '') return
+  loading.value = true
+  try {
+    const result = await creditsAPI.listCreditUsers(requestedPage, pageSize, activeSearch.value)
+    users.value = result.items || []
+    total.value = result.total || 0
+    page.value = result.page || requestedPage
+  } finally {
+    loading.value = false
+  }
+}
+
+async function submitSearch() {
+  if (loading.value) return
+  const query = search.value.trim()
+  if (query === '') {
+    clearSearchResults()
+    return
+  }
+  activeSearch.value = query
+  hasSearched.value = true
+  await loadSearchPage(1)
+}
+
 async function openUser(id: number) {
   resetBalanceConflictState()
   activeDetailId.value = id
   const user = await creditsAPI.getCreditUser(id)
   if (activeDetailId.value !== id) return
   detail.value = user
+  if (isDirectUserMode.value) {
+    users.value = [creditUserFromDetail(user)]
+    total.value = 1
+    page.value = 1
+    hasSearched.value = true
+  }
   await router.replace({ query: { ...route.query, user: String(id) } })
 }
 function closeDetail() {
@@ -194,7 +260,7 @@ async function triggerCreditEvent(event:CreditGrantEventUserStatus){
     if(eventIndex>=0)currentDetail.credit_grant_events[eventIndex]=triggered
     try{
       await refreshUserDetail(currentDetail.id)
-      await loadUsers()
+      await refreshVisibleUsers()
       if(showBalanceHistory.value)await loadBalanceHistory(currentDetail.id)
       appStore.showSuccess(t('admin.credits.grantEventSuccess'))
     }catch(refreshError:unknown){
@@ -205,7 +271,7 @@ async function triggerCreditEvent(event:CreditGrantEventUserStatus){
     if(extractApiErrorStatus(error)===409){
       try{
         await refreshUserDetail(currentDetail.id)
-        await loadUsers()
+        await refreshVisibleUsers()
         if(showBalanceHistory.value)await loadBalanceHistory(currentDetail.id)
       }catch(refreshError:unknown){
         appStore.showError(extractCreditActionErrorMessage(refreshError))
@@ -240,13 +306,21 @@ async function refreshUserDetail(id: number, conflictSession?: number) {
     (conflictSession === undefined || conflictSession === balanceConflictSession.value)
   ) {
     detail.value = refreshed
+    const index = users.value.findIndex(user => user.id === id)
+    if (index >= 0) users.value[index] = creditUserFromDetail(refreshed)
+    if (isDirectUserMode.value && index < 0) users.value = [creditUserFromDetail(refreshed)]
   }
   return refreshed
 }
 
+async function refreshVisibleUsers() {
+  if (isDirectUserMode.value || activeSearch.value === '') return
+  await loadSearchPage(page.value)
+}
+
 async function finishSuccessfulAction(userId: number) {
   await refreshUserDetail(userId)
-  await loadUsers()
+  await refreshVisibleUsers()
   resetAction()
   appStore.showSuccess(t('common.success'))
 }
@@ -403,5 +477,13 @@ async function submitAction() {
     submitting.value = false
   }
 }
-onMounted(async()=>{await loadUsers();const id=Number(route.query.user);if(id>0){await openUser(id);const requested=String(route.query.action||'');if(['balance-add','balance-subtract'].includes(requested))startAction(requested)}})
+onMounted(async () => {
+  const id = Number(route.query.user)
+  if (!Number.isSafeInteger(id) || id <= 0) return
+
+  isDirectUserMode.value = true
+  await openUser(id)
+  const requested = String(route.query.action || '')
+  if (['balance-add', 'balance-subtract'].includes(requested)) startAction(requested)
+})
 </script>
