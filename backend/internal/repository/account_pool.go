@@ -399,7 +399,6 @@ func (c *accountPoolSnapshotCache) ReadAccountPoolPage(ctx context.Context, enab
 		}
 		ids = []int64{*query.AccountID}
 		total = 1
-		page = 1
 	} else {
 		start := (page - 1) * pageSize
 		if start >= len(ids) {
