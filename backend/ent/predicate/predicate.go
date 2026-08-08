@@ -15,6 +15,9 @@ type Account func(*sql.Selector)
 // AccountGroup is the predicate function for accountgroup builders.
 type AccountGroup func(*sql.Selector)
 
+// AccountUsageWindowHistory is the predicate function for accountusagewindowhistory builders.
+type AccountUsageWindowHistory func(*sql.Selector)
+
 // Announcement is the predicate function for announcement builders.
 type Announcement func(*sql.Selector)
 
@@ -107,6 +110,21 @@ type RecurringCreditUserItem func(*sql.Selector)
 
 // RedeemCode is the predicate function for redeemcode builders.
 type RedeemCode func(*sql.Selector)
+
+// ResetRebateAccountItem is the predicate function for resetrebateaccountitem builders.
+type ResetRebateAccountItem func(*sql.Selector)
+
+// ResetRebateBatch is the predicate function for resetrebatebatch builders.
+type ResetRebateBatch func(*sql.Selector)
+
+// ResetRebateUserAccountItem is the predicate function for resetrebateuseraccountitem builders.
+type ResetRebateUserAccountItem func(*sql.Selector)
+
+// ResetRebateUserAttempt is the predicate function for resetrebateuserattempt builders.
+type ResetRebateUserAttempt func(*sql.Selector)
+
+// ResetRebateUserItem is the predicate function for resetrebateuseritem builders.
+type ResetRebateUserItem func(*sql.Selector)
 
 // SecuritySecret is the predicate function for securitysecret builders.
 type SecuritySecret func(*sql.Selector)

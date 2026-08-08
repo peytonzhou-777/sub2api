@@ -17,6 +17,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
+	"github.com/Wei-Shaw/sub2api/ent/accountusagewindowhistory"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
@@ -51,6 +52,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateaccountitem"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebatebatch"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseraccountitem"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateuserattempt"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseritem"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
@@ -82,6 +85,8 @@ type Client struct {
 	Account *AccountClient
 	// AccountGroup is the client for interacting with the AccountGroup builders.
 	AccountGroup *AccountGroupClient
+	// AccountUsageWindowHistory is the client for interacting with the AccountUsageWindowHistory builders.
+	AccountUsageWindowHistory *AccountUsageWindowHistoryClient
 	// Announcement is the client for interacting with the Announcement builders.
 	Announcement *AnnouncementClient
 	// AnnouncementRead is the client for interacting with the AnnouncementRead builders.
@@ -148,6 +153,10 @@ type Client struct {
 	ResetRebateAccountItem *ResetRebateAccountItemClient
 	// ResetRebateBatch is the client for interacting with the ResetRebateBatch builders.
 	ResetRebateBatch *ResetRebateBatchClient
+	// ResetRebateUserAccountItem is the client for interacting with the ResetRebateUserAccountItem builders.
+	ResetRebateUserAccountItem *ResetRebateUserAccountItemClient
+	// ResetRebateUserAttempt is the client for interacting with the ResetRebateUserAttempt builders.
+	ResetRebateUserAttempt *ResetRebateUserAttemptClient
 	// ResetRebateUserItem is the client for interacting with the ResetRebateUserItem builders.
 	ResetRebateUserItem *ResetRebateUserItemClient
 	// SecuritySecret is the client for interacting with the SecuritySecret builders.
@@ -194,6 +203,7 @@ func (c *Client) init() {
 	c.APIKey = NewAPIKeyClient(c.config)
 	c.Account = NewAccountClient(c.config)
 	c.AccountGroup = NewAccountGroupClient(c.config)
+	c.AccountUsageWindowHistory = NewAccountUsageWindowHistoryClient(c.config)
 	c.Announcement = NewAnnouncementClient(c.config)
 	c.AnnouncementRead = NewAnnouncementReadClient(c.config)
 	c.AuthIdentity = NewAuthIdentityClient(c.config)
@@ -227,6 +237,8 @@ func (c *Client) init() {
 	c.RedeemCode = NewRedeemCodeClient(c.config)
 	c.ResetRebateAccountItem = NewResetRebateAccountItemClient(c.config)
 	c.ResetRebateBatch = NewResetRebateBatchClient(c.config)
+	c.ResetRebateUserAccountItem = NewResetRebateUserAccountItemClient(c.config)
+	c.ResetRebateUserAttempt = NewResetRebateUserAttemptClient(c.config)
 	c.ResetRebateUserItem = NewResetRebateUserItemClient(c.config)
 	c.SecuritySecret = NewSecuritySecretClient(c.config)
 	c.Setting = NewSettingClient(c.config)
@@ -338,6 +350,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		APIKey:                        NewAPIKeyClient(cfg),
 		Account:                       NewAccountClient(cfg),
 		AccountGroup:                  NewAccountGroupClient(cfg),
+		AccountUsageWindowHistory:     NewAccountUsageWindowHistoryClient(cfg),
 		Announcement:                  NewAnnouncementClient(cfg),
 		AnnouncementRead:              NewAnnouncementReadClient(cfg),
 		AuthIdentity:                  NewAuthIdentityClient(cfg),
@@ -371,6 +384,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		RedeemCode:                    NewRedeemCodeClient(cfg),
 		ResetRebateAccountItem:        NewResetRebateAccountItemClient(cfg),
 		ResetRebateBatch:              NewResetRebateBatchClient(cfg),
+		ResetRebateUserAccountItem:    NewResetRebateUserAccountItemClient(cfg),
+		ResetRebateUserAttempt:        NewResetRebateUserAttemptClient(cfg),
 		ResetRebateUserItem:           NewResetRebateUserItemClient(cfg),
 		SecuritySecret:                NewSecuritySecretClient(cfg),
 		Setting:                       NewSettingClient(cfg),
@@ -409,6 +424,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		APIKey:                        NewAPIKeyClient(cfg),
 		Account:                       NewAccountClient(cfg),
 		AccountGroup:                  NewAccountGroupClient(cfg),
+		AccountUsageWindowHistory:     NewAccountUsageWindowHistoryClient(cfg),
 		Announcement:                  NewAnnouncementClient(cfg),
 		AnnouncementRead:              NewAnnouncementReadClient(cfg),
 		AuthIdentity:                  NewAuthIdentityClient(cfg),
@@ -442,6 +458,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		RedeemCode:                    NewRedeemCodeClient(cfg),
 		ResetRebateAccountItem:        NewResetRebateAccountItemClient(cfg),
 		ResetRebateBatch:              NewResetRebateBatchClient(cfg),
+		ResetRebateUserAccountItem:    NewResetRebateUserAccountItemClient(cfg),
+		ResetRebateUserAttempt:        NewResetRebateUserAttemptClient(cfg),
 		ResetRebateUserItem:           NewResetRebateUserItemClient(cfg),
 		SecuritySecret:                NewSecuritySecretClient(cfg),
 		Setting:                       NewSettingClient(cfg),
@@ -487,22 +505,23 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.APIKey, c.Account, c.AccountGroup, c.Announcement, c.AnnouncementRead,
-		c.AuthIdentity, c.AuthIdentityChannel, c.BatchImageEvent, c.BatchImageItem,
-		c.BatchImageJob, c.ChannelMonitor, c.ChannelMonitorDailyRollup,
-		c.ChannelMonitorHistory, c.ChannelMonitorRequestTemplate,
-		c.CompositeModelRoute, c.CreditGrantEvent, c.ErrorPassthroughRule, c.Group,
-		c.IdempotencyRecord, c.IdentityAdoptionDecision, c.PaymentAuditLog,
-		c.PaymentOrder, c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode,
-		c.PromoCodeUsage, c.Proxy, c.RechargeBonusCampaign,
-		c.RechargeBonusParticipation, c.RecurringCreditBatch, c.RecurringCreditTask,
-		c.RecurringCreditTaskAudit, c.RecurringCreditUserItem, c.RedeemCode,
-		c.ResetRebateAccountItem, c.ResetRebateBatch, c.ResetRebateUserItem,
-		c.SecuritySecret, c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile,
-		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
-		c.UserAttributeDefinition, c.UserAttributeValue, c.UserCreditGrantEventTrigger,
-		c.UserLimitedCreditGrant, c.UserLimitedCreditLedger, c.UserPlatformQuota,
-		c.UserSubscription,
+		c.APIKey, c.Account, c.AccountGroup, c.AccountUsageWindowHistory,
+		c.Announcement, c.AnnouncementRead, c.AuthIdentity, c.AuthIdentityChannel,
+		c.BatchImageEvent, c.BatchImageItem, c.BatchImageJob, c.ChannelMonitor,
+		c.ChannelMonitorDailyRollup, c.ChannelMonitorHistory,
+		c.ChannelMonitorRequestTemplate, c.CompositeModelRoute, c.CreditGrantEvent,
+		c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
+		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
+		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
+		c.Proxy, c.RechargeBonusCampaign, c.RechargeBonusParticipation,
+		c.RecurringCreditBatch, c.RecurringCreditTask, c.RecurringCreditTaskAudit,
+		c.RecurringCreditUserItem, c.RedeemCode, c.ResetRebateAccountItem,
+		c.ResetRebateBatch, c.ResetRebateUserAccountItem, c.ResetRebateUserAttempt,
+		c.ResetRebateUserItem, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
+		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
+		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
+		c.UserCreditGrantEventTrigger, c.UserLimitedCreditGrant,
+		c.UserLimitedCreditLedger, c.UserPlatformQuota, c.UserSubscription,
 	} {
 		n.Use(hooks...)
 	}
@@ -512,22 +531,23 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.APIKey, c.Account, c.AccountGroup, c.Announcement, c.AnnouncementRead,
-		c.AuthIdentity, c.AuthIdentityChannel, c.BatchImageEvent, c.BatchImageItem,
-		c.BatchImageJob, c.ChannelMonitor, c.ChannelMonitorDailyRollup,
-		c.ChannelMonitorHistory, c.ChannelMonitorRequestTemplate,
-		c.CompositeModelRoute, c.CreditGrantEvent, c.ErrorPassthroughRule, c.Group,
-		c.IdempotencyRecord, c.IdentityAdoptionDecision, c.PaymentAuditLog,
-		c.PaymentOrder, c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode,
-		c.PromoCodeUsage, c.Proxy, c.RechargeBonusCampaign,
-		c.RechargeBonusParticipation, c.RecurringCreditBatch, c.RecurringCreditTask,
-		c.RecurringCreditTaskAudit, c.RecurringCreditUserItem, c.RedeemCode,
-		c.ResetRebateAccountItem, c.ResetRebateBatch, c.ResetRebateUserItem,
-		c.SecuritySecret, c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile,
-		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
-		c.UserAttributeDefinition, c.UserAttributeValue, c.UserCreditGrantEventTrigger,
-		c.UserLimitedCreditGrant, c.UserLimitedCreditLedger, c.UserPlatformQuota,
-		c.UserSubscription,
+		c.APIKey, c.Account, c.AccountGroup, c.AccountUsageWindowHistory,
+		c.Announcement, c.AnnouncementRead, c.AuthIdentity, c.AuthIdentityChannel,
+		c.BatchImageEvent, c.BatchImageItem, c.BatchImageJob, c.ChannelMonitor,
+		c.ChannelMonitorDailyRollup, c.ChannelMonitorHistory,
+		c.ChannelMonitorRequestTemplate, c.CompositeModelRoute, c.CreditGrantEvent,
+		c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
+		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
+		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
+		c.Proxy, c.RechargeBonusCampaign, c.RechargeBonusParticipation,
+		c.RecurringCreditBatch, c.RecurringCreditTask, c.RecurringCreditTaskAudit,
+		c.RecurringCreditUserItem, c.RedeemCode, c.ResetRebateAccountItem,
+		c.ResetRebateBatch, c.ResetRebateUserAccountItem, c.ResetRebateUserAttempt,
+		c.ResetRebateUserItem, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
+		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
+		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
+		c.UserCreditGrantEventTrigger, c.UserLimitedCreditGrant,
+		c.UserLimitedCreditLedger, c.UserPlatformQuota, c.UserSubscription,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -542,6 +562,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Account.mutate(ctx, m)
 	case *AccountGroupMutation:
 		return c.AccountGroup.mutate(ctx, m)
+	case *AccountUsageWindowHistoryMutation:
+		return c.AccountUsageWindowHistory.mutate(ctx, m)
 	case *AnnouncementMutation:
 		return c.Announcement.mutate(ctx, m)
 	case *AnnouncementReadMutation:
@@ -608,6 +630,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ResetRebateAccountItem.mutate(ctx, m)
 	case *ResetRebateBatchMutation:
 		return c.ResetRebateBatch.mutate(ctx, m)
+	case *ResetRebateUserAccountItemMutation:
+		return c.ResetRebateUserAccountItem.mutate(ctx, m)
+	case *ResetRebateUserAttemptMutation:
+		return c.ResetRebateUserAttempt.mutate(ctx, m)
 	case *ResetRebateUserItemMutation:
 		return c.ResetRebateUserItem.mutate(ctx, m)
 	case *SecuritySecretMutation:
@@ -1172,6 +1198,139 @@ func (c *AccountGroupClient) mutate(ctx context.Context, m *AccountGroupMutation
 		return (&AccountGroupDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown AccountGroup mutation op: %q", m.Op())
+	}
+}
+
+// AccountUsageWindowHistoryClient is a client for the AccountUsageWindowHistory schema.
+type AccountUsageWindowHistoryClient struct {
+	config
+}
+
+// NewAccountUsageWindowHistoryClient returns a client for the AccountUsageWindowHistory from the given config.
+func NewAccountUsageWindowHistoryClient(c config) *AccountUsageWindowHistoryClient {
+	return &AccountUsageWindowHistoryClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `accountusagewindowhistory.Hooks(f(g(h())))`.
+func (c *AccountUsageWindowHistoryClient) Use(hooks ...Hook) {
+	c.hooks.AccountUsageWindowHistory = append(c.hooks.AccountUsageWindowHistory, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `accountusagewindowhistory.Intercept(f(g(h())))`.
+func (c *AccountUsageWindowHistoryClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AccountUsageWindowHistory = append(c.inters.AccountUsageWindowHistory, interceptors...)
+}
+
+// Create returns a builder for creating a AccountUsageWindowHistory entity.
+func (c *AccountUsageWindowHistoryClient) Create() *AccountUsageWindowHistoryCreate {
+	mutation := newAccountUsageWindowHistoryMutation(c.config, OpCreate)
+	return &AccountUsageWindowHistoryCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AccountUsageWindowHistory entities.
+func (c *AccountUsageWindowHistoryClient) CreateBulk(builders ...*AccountUsageWindowHistoryCreate) *AccountUsageWindowHistoryCreateBulk {
+	return &AccountUsageWindowHistoryCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AccountUsageWindowHistoryClient) MapCreateBulk(slice any, setFunc func(*AccountUsageWindowHistoryCreate, int)) *AccountUsageWindowHistoryCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AccountUsageWindowHistoryCreateBulk{err: fmt.Errorf("calling to AccountUsageWindowHistoryClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AccountUsageWindowHistoryCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AccountUsageWindowHistoryCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AccountUsageWindowHistory.
+func (c *AccountUsageWindowHistoryClient) Update() *AccountUsageWindowHistoryUpdate {
+	mutation := newAccountUsageWindowHistoryMutation(c.config, OpUpdate)
+	return &AccountUsageWindowHistoryUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AccountUsageWindowHistoryClient) UpdateOne(_m *AccountUsageWindowHistory) *AccountUsageWindowHistoryUpdateOne {
+	mutation := newAccountUsageWindowHistoryMutation(c.config, OpUpdateOne, withAccountUsageWindowHistory(_m))
+	return &AccountUsageWindowHistoryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AccountUsageWindowHistoryClient) UpdateOneID(id int64) *AccountUsageWindowHistoryUpdateOne {
+	mutation := newAccountUsageWindowHistoryMutation(c.config, OpUpdateOne, withAccountUsageWindowHistoryID(id))
+	return &AccountUsageWindowHistoryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AccountUsageWindowHistory.
+func (c *AccountUsageWindowHistoryClient) Delete() *AccountUsageWindowHistoryDelete {
+	mutation := newAccountUsageWindowHistoryMutation(c.config, OpDelete)
+	return &AccountUsageWindowHistoryDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AccountUsageWindowHistoryClient) DeleteOne(_m *AccountUsageWindowHistory) *AccountUsageWindowHistoryDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AccountUsageWindowHistoryClient) DeleteOneID(id int64) *AccountUsageWindowHistoryDeleteOne {
+	builder := c.Delete().Where(accountusagewindowhistory.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AccountUsageWindowHistoryDeleteOne{builder}
+}
+
+// Query returns a query builder for AccountUsageWindowHistory.
+func (c *AccountUsageWindowHistoryClient) Query() *AccountUsageWindowHistoryQuery {
+	return &AccountUsageWindowHistoryQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAccountUsageWindowHistory},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AccountUsageWindowHistory entity by its id.
+func (c *AccountUsageWindowHistoryClient) Get(ctx context.Context, id int64) (*AccountUsageWindowHistory, error) {
+	return c.Query().Where(accountusagewindowhistory.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AccountUsageWindowHistoryClient) GetX(ctx context.Context, id int64) *AccountUsageWindowHistory {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AccountUsageWindowHistoryClient) Hooks() []Hook {
+	return c.hooks.AccountUsageWindowHistory
+}
+
+// Interceptors returns the client interceptors.
+func (c *AccountUsageWindowHistoryClient) Interceptors() []Interceptor {
+	return c.inters.AccountUsageWindowHistory
+}
+
+func (c *AccountUsageWindowHistoryClient) mutate(ctx context.Context, m *AccountUsageWindowHistoryMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AccountUsageWindowHistoryCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AccountUsageWindowHistoryUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AccountUsageWindowHistoryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AccountUsageWindowHistoryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AccountUsageWindowHistory mutation op: %q", m.Op())
 	}
 }
 
@@ -6116,6 +6275,272 @@ func (c *ResetRebateBatchClient) mutate(ctx context.Context, m *ResetRebateBatch
 	}
 }
 
+// ResetRebateUserAccountItemClient is a client for the ResetRebateUserAccountItem schema.
+type ResetRebateUserAccountItemClient struct {
+	config
+}
+
+// NewResetRebateUserAccountItemClient returns a client for the ResetRebateUserAccountItem from the given config.
+func NewResetRebateUserAccountItemClient(c config) *ResetRebateUserAccountItemClient {
+	return &ResetRebateUserAccountItemClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `resetrebateuseraccountitem.Hooks(f(g(h())))`.
+func (c *ResetRebateUserAccountItemClient) Use(hooks ...Hook) {
+	c.hooks.ResetRebateUserAccountItem = append(c.hooks.ResetRebateUserAccountItem, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `resetrebateuseraccountitem.Intercept(f(g(h())))`.
+func (c *ResetRebateUserAccountItemClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ResetRebateUserAccountItem = append(c.inters.ResetRebateUserAccountItem, interceptors...)
+}
+
+// Create returns a builder for creating a ResetRebateUserAccountItem entity.
+func (c *ResetRebateUserAccountItemClient) Create() *ResetRebateUserAccountItemCreate {
+	mutation := newResetRebateUserAccountItemMutation(c.config, OpCreate)
+	return &ResetRebateUserAccountItemCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ResetRebateUserAccountItem entities.
+func (c *ResetRebateUserAccountItemClient) CreateBulk(builders ...*ResetRebateUserAccountItemCreate) *ResetRebateUserAccountItemCreateBulk {
+	return &ResetRebateUserAccountItemCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ResetRebateUserAccountItemClient) MapCreateBulk(slice any, setFunc func(*ResetRebateUserAccountItemCreate, int)) *ResetRebateUserAccountItemCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ResetRebateUserAccountItemCreateBulk{err: fmt.Errorf("calling to ResetRebateUserAccountItemClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ResetRebateUserAccountItemCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ResetRebateUserAccountItemCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ResetRebateUserAccountItem.
+func (c *ResetRebateUserAccountItemClient) Update() *ResetRebateUserAccountItemUpdate {
+	mutation := newResetRebateUserAccountItemMutation(c.config, OpUpdate)
+	return &ResetRebateUserAccountItemUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ResetRebateUserAccountItemClient) UpdateOne(_m *ResetRebateUserAccountItem) *ResetRebateUserAccountItemUpdateOne {
+	mutation := newResetRebateUserAccountItemMutation(c.config, OpUpdateOne, withResetRebateUserAccountItem(_m))
+	return &ResetRebateUserAccountItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ResetRebateUserAccountItemClient) UpdateOneID(id int64) *ResetRebateUserAccountItemUpdateOne {
+	mutation := newResetRebateUserAccountItemMutation(c.config, OpUpdateOne, withResetRebateUserAccountItemID(id))
+	return &ResetRebateUserAccountItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ResetRebateUserAccountItem.
+func (c *ResetRebateUserAccountItemClient) Delete() *ResetRebateUserAccountItemDelete {
+	mutation := newResetRebateUserAccountItemMutation(c.config, OpDelete)
+	return &ResetRebateUserAccountItemDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ResetRebateUserAccountItemClient) DeleteOne(_m *ResetRebateUserAccountItem) *ResetRebateUserAccountItemDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ResetRebateUserAccountItemClient) DeleteOneID(id int64) *ResetRebateUserAccountItemDeleteOne {
+	builder := c.Delete().Where(resetrebateuseraccountitem.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ResetRebateUserAccountItemDeleteOne{builder}
+}
+
+// Query returns a query builder for ResetRebateUserAccountItem.
+func (c *ResetRebateUserAccountItemClient) Query() *ResetRebateUserAccountItemQuery {
+	return &ResetRebateUserAccountItemQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeResetRebateUserAccountItem},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ResetRebateUserAccountItem entity by its id.
+func (c *ResetRebateUserAccountItemClient) Get(ctx context.Context, id int64) (*ResetRebateUserAccountItem, error) {
+	return c.Query().Where(resetrebateuseraccountitem.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ResetRebateUserAccountItemClient) GetX(ctx context.Context, id int64) *ResetRebateUserAccountItem {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ResetRebateUserAccountItemClient) Hooks() []Hook {
+	return c.hooks.ResetRebateUserAccountItem
+}
+
+// Interceptors returns the client interceptors.
+func (c *ResetRebateUserAccountItemClient) Interceptors() []Interceptor {
+	return c.inters.ResetRebateUserAccountItem
+}
+
+func (c *ResetRebateUserAccountItemClient) mutate(ctx context.Context, m *ResetRebateUserAccountItemMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ResetRebateUserAccountItemCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ResetRebateUserAccountItemUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ResetRebateUserAccountItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ResetRebateUserAccountItemDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ResetRebateUserAccountItem mutation op: %q", m.Op())
+	}
+}
+
+// ResetRebateUserAttemptClient is a client for the ResetRebateUserAttempt schema.
+type ResetRebateUserAttemptClient struct {
+	config
+}
+
+// NewResetRebateUserAttemptClient returns a client for the ResetRebateUserAttempt from the given config.
+func NewResetRebateUserAttemptClient(c config) *ResetRebateUserAttemptClient {
+	return &ResetRebateUserAttemptClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `resetrebateuserattempt.Hooks(f(g(h())))`.
+func (c *ResetRebateUserAttemptClient) Use(hooks ...Hook) {
+	c.hooks.ResetRebateUserAttempt = append(c.hooks.ResetRebateUserAttempt, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `resetrebateuserattempt.Intercept(f(g(h())))`.
+func (c *ResetRebateUserAttemptClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ResetRebateUserAttempt = append(c.inters.ResetRebateUserAttempt, interceptors...)
+}
+
+// Create returns a builder for creating a ResetRebateUserAttempt entity.
+func (c *ResetRebateUserAttemptClient) Create() *ResetRebateUserAttemptCreate {
+	mutation := newResetRebateUserAttemptMutation(c.config, OpCreate)
+	return &ResetRebateUserAttemptCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ResetRebateUserAttempt entities.
+func (c *ResetRebateUserAttemptClient) CreateBulk(builders ...*ResetRebateUserAttemptCreate) *ResetRebateUserAttemptCreateBulk {
+	return &ResetRebateUserAttemptCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ResetRebateUserAttemptClient) MapCreateBulk(slice any, setFunc func(*ResetRebateUserAttemptCreate, int)) *ResetRebateUserAttemptCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ResetRebateUserAttemptCreateBulk{err: fmt.Errorf("calling to ResetRebateUserAttemptClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ResetRebateUserAttemptCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ResetRebateUserAttemptCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ResetRebateUserAttempt.
+func (c *ResetRebateUserAttemptClient) Update() *ResetRebateUserAttemptUpdate {
+	mutation := newResetRebateUserAttemptMutation(c.config, OpUpdate)
+	return &ResetRebateUserAttemptUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ResetRebateUserAttemptClient) UpdateOne(_m *ResetRebateUserAttempt) *ResetRebateUserAttemptUpdateOne {
+	mutation := newResetRebateUserAttemptMutation(c.config, OpUpdateOne, withResetRebateUserAttempt(_m))
+	return &ResetRebateUserAttemptUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ResetRebateUserAttemptClient) UpdateOneID(id int64) *ResetRebateUserAttemptUpdateOne {
+	mutation := newResetRebateUserAttemptMutation(c.config, OpUpdateOne, withResetRebateUserAttemptID(id))
+	return &ResetRebateUserAttemptUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ResetRebateUserAttempt.
+func (c *ResetRebateUserAttemptClient) Delete() *ResetRebateUserAttemptDelete {
+	mutation := newResetRebateUserAttemptMutation(c.config, OpDelete)
+	return &ResetRebateUserAttemptDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ResetRebateUserAttemptClient) DeleteOne(_m *ResetRebateUserAttempt) *ResetRebateUserAttemptDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ResetRebateUserAttemptClient) DeleteOneID(id int64) *ResetRebateUserAttemptDeleteOne {
+	builder := c.Delete().Where(resetrebateuserattempt.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ResetRebateUserAttemptDeleteOne{builder}
+}
+
+// Query returns a query builder for ResetRebateUserAttempt.
+func (c *ResetRebateUserAttemptClient) Query() *ResetRebateUserAttemptQuery {
+	return &ResetRebateUserAttemptQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeResetRebateUserAttempt},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ResetRebateUserAttempt entity by its id.
+func (c *ResetRebateUserAttemptClient) Get(ctx context.Context, id int64) (*ResetRebateUserAttempt, error) {
+	return c.Query().Where(resetrebateuserattempt.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ResetRebateUserAttemptClient) GetX(ctx context.Context, id int64) *ResetRebateUserAttempt {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ResetRebateUserAttemptClient) Hooks() []Hook {
+	return c.hooks.ResetRebateUserAttempt
+}
+
+// Interceptors returns the client interceptors.
+func (c *ResetRebateUserAttemptClient) Interceptors() []Interceptor {
+	return c.inters.ResetRebateUserAttempt
+}
+
+func (c *ResetRebateUserAttemptClient) mutate(ctx context.Context, m *ResetRebateUserAttemptMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ResetRebateUserAttemptCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ResetRebateUserAttemptUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ResetRebateUserAttemptUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ResetRebateUserAttemptDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ResetRebateUserAttempt mutation op: %q", m.Op())
+	}
+}
+
 // ResetRebateUserItemClient is a client for the ResetRebateUserItem schema.
 type ResetRebateUserItemClient struct {
 	config
@@ -8830,36 +9255,38 @@ func (c *UserSubscriptionClient) mutate(ctx context.Context, m *UserSubscription
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
-		AuthIdentityChannel, BatchImageEvent, BatchImageItem, BatchImageJob,
-		ChannelMonitor, ChannelMonitorDailyRollup, ChannelMonitorHistory,
-		ChannelMonitorRequestTemplate, CompositeModelRoute, CreditGrantEvent,
-		ErrorPassthroughRule, Group, IdempotencyRecord, IdentityAdoptionDecision,
-		PaymentAuditLog, PaymentOrder, PaymentProviderInstance, PendingAuthSession,
-		PromoCode, PromoCodeUsage, Proxy, RechargeBonusCampaign,
-		RechargeBonusParticipation, RecurringCreditBatch, RecurringCreditTask,
-		RecurringCreditTaskAudit, RecurringCreditUserItem, RedeemCode,
-		ResetRebateAccountItem, ResetRebateBatch, ResetRebateUserItem, SecuritySecret,
-		Setting, SubscriptionPlan, TLSFingerprintProfile, UsageCleanupTask, UsageLog,
-		User, UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserCreditGrantEventTrigger, UserLimitedCreditGrant, UserLimitedCreditLedger,
-		UserPlatformQuota, UserSubscription []ent.Hook
+		APIKey, Account, AccountGroup, AccountUsageWindowHistory, Announcement,
+		AnnouncementRead, AuthIdentity, AuthIdentityChannel, BatchImageEvent,
+		BatchImageItem, BatchImageJob, ChannelMonitor, ChannelMonitorDailyRollup,
+		ChannelMonitorHistory, ChannelMonitorRequestTemplate, CompositeModelRoute,
+		CreditGrantEvent, ErrorPassthroughRule, Group, IdempotencyRecord,
+		IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
+		PaymentProviderInstance, PendingAuthSession, PromoCode, PromoCodeUsage, Proxy,
+		RechargeBonusCampaign, RechargeBonusParticipation, RecurringCreditBatch,
+		RecurringCreditTask, RecurringCreditTaskAudit, RecurringCreditUserItem,
+		RedeemCode, ResetRebateAccountItem, ResetRebateBatch,
+		ResetRebateUserAccountItem, ResetRebateUserAttempt, ResetRebateUserItem,
+		SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
+		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
+		UserAttributeValue, UserCreditGrantEventTrigger, UserLimitedCreditGrant,
+		UserLimitedCreditLedger, UserPlatformQuota, UserSubscription []ent.Hook
 	}
 	inters struct {
-		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
-		AuthIdentityChannel, BatchImageEvent, BatchImageItem, BatchImageJob,
-		ChannelMonitor, ChannelMonitorDailyRollup, ChannelMonitorHistory,
-		ChannelMonitorRequestTemplate, CompositeModelRoute, CreditGrantEvent,
-		ErrorPassthroughRule, Group, IdempotencyRecord, IdentityAdoptionDecision,
-		PaymentAuditLog, PaymentOrder, PaymentProviderInstance, PendingAuthSession,
-		PromoCode, PromoCodeUsage, Proxy, RechargeBonusCampaign,
-		RechargeBonusParticipation, RecurringCreditBatch, RecurringCreditTask,
-		RecurringCreditTaskAudit, RecurringCreditUserItem, RedeemCode,
-		ResetRebateAccountItem, ResetRebateBatch, ResetRebateUserItem, SecuritySecret,
-		Setting, SubscriptionPlan, TLSFingerprintProfile, UsageCleanupTask, UsageLog,
-		User, UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserCreditGrantEventTrigger, UserLimitedCreditGrant, UserLimitedCreditLedger,
-		UserPlatformQuota, UserSubscription []ent.Interceptor
+		APIKey, Account, AccountGroup, AccountUsageWindowHistory, Announcement,
+		AnnouncementRead, AuthIdentity, AuthIdentityChannel, BatchImageEvent,
+		BatchImageItem, BatchImageJob, ChannelMonitor, ChannelMonitorDailyRollup,
+		ChannelMonitorHistory, ChannelMonitorRequestTemplate, CompositeModelRoute,
+		CreditGrantEvent, ErrorPassthroughRule, Group, IdempotencyRecord,
+		IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
+		PaymentProviderInstance, PendingAuthSession, PromoCode, PromoCodeUsage, Proxy,
+		RechargeBonusCampaign, RechargeBonusParticipation, RecurringCreditBatch,
+		RecurringCreditTask, RecurringCreditTaskAudit, RecurringCreditUserItem,
+		RedeemCode, ResetRebateAccountItem, ResetRebateBatch,
+		ResetRebateUserAccountItem, ResetRebateUserAttempt, ResetRebateUserItem,
+		SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
+		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
+		UserAttributeValue, UserCreditGrantEventTrigger, UserLimitedCreditGrant,
+		UserLimitedCreditLedger, UserPlatformQuota, UserSubscription []ent.Interceptor
 	}
 )
 

@@ -2532,11 +2532,14 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 
 	clearProbeSnapshot := upstreamBillingProbeExplicitlyDisabled(updates) || upstreamBillingProbeSnapshotClearRequested(updates)
 	durableSchedulerChange := shouldEnqueueSchedulerOutboxForExtraUpdates(updates) || clearProbeSnapshot
+	_, has7DResetAt := updates["codex_7d_reset_at"]
+	_, has7DWindowMinutes := updates["codex_7d_window_minutes"]
+	requiresTransaction := durableSchedulerChange || (has7DResetAt && has7DWindowMinutes)
 	baseCtx := ctx
 	contextTx := dbent.TxFromContext(ctx)
 	client := clientFromContext(ctx, r.client)
 	var tx *dbent.Tx
-	if durableSchedulerChange && contextTx == nil {
+	if requiresTransaction && contextTx == nil {
 		var txErr error
 		tx, txErr = r.client.Tx(ctx)
 		if txErr != nil && !errors.Is(txErr, dbent.ErrTxStarted) {
@@ -2569,27 +2572,85 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 	if affected == 0 {
 		return service.ErrAccountNotFound
 	}
+	if err := appendCodex7DWindowHistory(ctx, client, id, updates); err != nil {
+		return err
+	}
 	if durableSchedulerChange {
 		if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
 			return err
 		}
-		if tx != nil {
-			if err := tx.Commit(); err != nil {
-				return err
-			}
-		}
-		if contextTx == nil {
-			r.syncSchedulerAccountSnapshot(baseCtx, id)
-		}
-	} else {
-		// 观测型 extra 字段不需要触发 bucket 重建，但仍同步单账号快照，
-		// 让 sticky session / GetAccount 命中缓存时也能读到最新数据，
-		// 同时避免缓存局部 patch 覆盖掉并发写入的其它账号字段。
-		if dbent.TxFromContext(ctx) == nil {
-			r.syncSchedulerAccountSnapshot(ctx, id)
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
 		}
 	}
+	// 事务提交后同步单账号快照，让调度和 sticky session 读取完整最新 extra。
+	if contextTx == nil {
+		r.syncSchedulerAccountSnapshot(baseCtx, id)
+	}
 	return nil
+}
+
+// appendCodex7DWindowHistory 将实际观察到的 7d 窗口开始时间追加到独立审计表。
+func appendCodex7DWindowHistory(ctx context.Context, executor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}, accountID int64, updates map[string]any) error {
+	resetAt, ok := parseResetRebateObservationTime(updates["codex_7d_reset_at"])
+	if !ok {
+		return nil
+	}
+	windowMinutes, ok := parsePositiveInt64(updates["codex_7d_window_minutes"])
+	if !ok {
+		return nil
+	}
+	observedAt, observed := parseResetRebateObservationTime(updates["codex_usage_updated_at"])
+	if !observed {
+		observedAt = time.Now().UTC()
+	}
+	windowStartedAt := resetAt.UTC().Add(-time.Duration(windowMinutes) * time.Minute).Truncate(time.Minute)
+	_, err := executor.ExecContext(ctx, `
+		INSERT INTO account_usage_window_histories(
+			account_id, window_kind, window_started_at, first_observed_at, last_observed_at, source_type
+		) VALUES($1, 'codex_7d', $2, $3, $3, 'usage_refresh')
+		ON CONFLICT(account_id, window_kind, window_started_at)
+		DO UPDATE SET last_observed_at = GREATEST(account_usage_window_histories.last_observed_at, EXCLUDED.last_observed_at)
+	`, accountID, windowStartedAt, observedAt.UTC())
+	return err
+}
+
+func parseResetRebateObservationTime(value any) (time.Time, bool) {
+	switch typed := value.(type) {
+	case time.Time:
+		return typed.UTC(), !typed.IsZero()
+	case *time.Time:
+		if typed != nil && !typed.IsZero() {
+			return typed.UTC(), true
+		}
+	case string:
+		parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(typed))
+		if err == nil && !parsed.IsZero() {
+			return parsed.UTC(), true
+		}
+	}
+	return time.Time{}, false
+}
+
+func parsePositiveInt64(value any) (int64, bool) {
+	var parsed int64
+	switch typed := value.(type) {
+	case int:
+		parsed = int64(typed)
+	case int64:
+		parsed = typed
+	case float64:
+		parsed = int64(typed)
+	case json.Number:
+		parsed, _ = typed.Int64()
+	case string:
+		parsed, _ = strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
+	}
+	return parsed, parsed > 0
 }
 
 // UpdateUpstreamBillingProbeSnapshot stores a probe result only while the

@@ -45,6 +45,18 @@ func (f AccountGroupFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccountGroupMutation", m)
 }
 
+// The AccountUsageWindowHistoryFunc type is an adapter to allow the use of ordinary
+// function as AccountUsageWindowHistory mutator.
+type AccountUsageWindowHistoryFunc func(context.Context, *ent.AccountUsageWindowHistoryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AccountUsageWindowHistoryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AccountUsageWindowHistoryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccountUsageWindowHistoryMutation", m)
+}
+
 // The AnnouncementFunc type is an adapter to allow the use of ordinary
 // function as Announcement mutator.
 type AnnouncementFunc func(context.Context, *ent.AnnouncementMutation) (ent.Value, error)
@@ -415,6 +427,66 @@ func (f RedeemCodeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RedeemCodeMutation", m)
+}
+
+// The ResetRebateAccountItemFunc type is an adapter to allow the use of ordinary
+// function as ResetRebateAccountItem mutator.
+type ResetRebateAccountItemFunc func(context.Context, *ent.ResetRebateAccountItemMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ResetRebateAccountItemFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ResetRebateAccountItemMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ResetRebateAccountItemMutation", m)
+}
+
+// The ResetRebateBatchFunc type is an adapter to allow the use of ordinary
+// function as ResetRebateBatch mutator.
+type ResetRebateBatchFunc func(context.Context, *ent.ResetRebateBatchMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ResetRebateBatchFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ResetRebateBatchMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ResetRebateBatchMutation", m)
+}
+
+// The ResetRebateUserAccountItemFunc type is an adapter to allow the use of ordinary
+// function as ResetRebateUserAccountItem mutator.
+type ResetRebateUserAccountItemFunc func(context.Context, *ent.ResetRebateUserAccountItemMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ResetRebateUserAccountItemFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ResetRebateUserAccountItemMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ResetRebateUserAccountItemMutation", m)
+}
+
+// The ResetRebateUserAttemptFunc type is an adapter to allow the use of ordinary
+// function as ResetRebateUserAttempt mutator.
+type ResetRebateUserAttemptFunc func(context.Context, *ent.ResetRebateUserAttemptMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ResetRebateUserAttemptFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ResetRebateUserAttemptMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ResetRebateUserAttemptMutation", m)
+}
+
+// The ResetRebateUserItemFunc type is an adapter to allow the use of ordinary
+// function as ResetRebateUserItem mutator.
+type ResetRebateUserItemFunc func(context.Context, *ent.ResetRebateUserItemMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ResetRebateUserItemFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ResetRebateUserItemMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ResetRebateUserItemMutation", m)
 }
 
 // The SecuritySecretFunc type is an adapter to allow the use of ordinary

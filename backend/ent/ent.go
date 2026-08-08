@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
+	"github.com/Wei-Shaw/sub2api/ent/accountusagewindowhistory"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
@@ -46,6 +47,11 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/recurringcredittaskaudit"
 	"github.com/Wei-Shaw/sub2api/ent/recurringcredituseritem"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateaccountitem"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebatebatch"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseraccountitem"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateuserattempt"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseritem"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -124,6 +130,7 @@ func checkColumn(t, c string) error {
 			apikey.Table:                        apikey.ValidColumn,
 			account.Table:                       account.ValidColumn,
 			accountgroup.Table:                  accountgroup.ValidColumn,
+			accountusagewindowhistory.Table:     accountusagewindowhistory.ValidColumn,
 			announcement.Table:                  announcement.ValidColumn,
 			announcementread.Table:              announcementread.ValidColumn,
 			authidentity.Table:                  authidentity.ValidColumn,
@@ -155,6 +162,11 @@ func checkColumn(t, c string) error {
 			recurringcredittaskaudit.Table:      recurringcredittaskaudit.ValidColumn,
 			recurringcredituseritem.Table:       recurringcredituseritem.ValidColumn,
 			redeemcode.Table:                    redeemcode.ValidColumn,
+			resetrebateaccountitem.Table:        resetrebateaccountitem.ValidColumn,
+			resetrebatebatch.Table:              resetrebatebatch.ValidColumn,
+			resetrebateuseraccountitem.Table:    resetrebateuseraccountitem.ValidColumn,
+			resetrebateuserattempt.Table:        resetrebateuserattempt.ValidColumn,
+			resetrebateuseritem.Table:           resetrebateuseritem.ValidColumn,
 			securitysecret.Table:                securitysecret.ValidColumn,
 			setting.Table:                       setting.ValidColumn,
 			subscriptionplan.Table:              subscriptionplan.ValidColumn,

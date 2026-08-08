@@ -279,7 +279,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	auditLogRepository := repository.NewAuditLogRepository(db)
 	auditLogService := service.ProvideAuditLogService(auditLogRepository, settingService)
 	auditLogHandler := admin.NewAuditLogHandler(auditLogService, totpService)
-	resetRebateService := service.NewResetRebateService(client, db, openAIQuotaService, apiKeyAuthCacheInvalidator, billingCacheService)
+	resetRebateService := service.NewResetRebateService(db, apiKeyAuthCacheInvalidator, billingCacheService)
 	resetRebateHandler := admin.NewResetRebateHandler(resetRebateService)
 	recurringCreditService := service.NewRecurringCreditService(db, configConfig, apiKeyAuthCacheInvalidator, billingCacheService)
 	recurringCreditHandler := admin.NewRecurringCreditHandler(recurringCreditService)

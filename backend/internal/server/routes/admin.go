@@ -186,12 +186,17 @@ func registerResetRebateRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		rebates.GET("", h.Admin.ResetRebate.List)
 		rebates.POST("", h.Admin.ResetRebate.Create)
-		rebates.GET("/latest-executed-period-end", h.Admin.ResetRebate.LatestExecutedPeriodEnd)
+		rebates.POST("/account-window-defaults", h.Admin.ResetRebate.AccountWindowDefaults)
 		rebates.GET("/:id", h.Admin.ResetRebate.Get)
 		rebates.GET("/:id/accounts", h.Admin.ResetRebate.ListAccounts)
-		rebates.GET("/:id/preview", h.Admin.ResetRebate.Preview)
+		rebates.GET("/:id/users", h.Admin.ResetRebate.ListUsers)
+		rebates.GET("/:id/users/:user_id/contributions", h.Admin.ResetRebate.ListContributions)
+		rebates.POST("/:id/preview", h.Admin.ResetRebate.Preview)
 		rebates.GET("/:id/users.csv", h.Admin.ResetRebate.ExportUsers)
+		rebates.GET("/:id/user-account-contributions.csv", h.Admin.ResetRebate.ExportContributions)
+		rebates.GET("/:id/failed-users.csv", h.Admin.ResetRebate.ExportFailedUsers)
 		rebates.POST("/:id/execute", h.Admin.ResetRebate.Execute)
+		rebates.POST("/:id/retry-failures", h.Admin.ResetRebate.RetryFailures)
 		rebates.DELETE("/:id", h.Admin.ResetRebate.Delete)
 	}
 }

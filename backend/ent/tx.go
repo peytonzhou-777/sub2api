@@ -20,6 +20,8 @@ type Tx struct {
 	Account *AccountClient
 	// AccountGroup is the client for interacting with the AccountGroup builders.
 	AccountGroup *AccountGroupClient
+	// AccountUsageWindowHistory is the client for interacting with the AccountUsageWindowHistory builders.
+	AccountUsageWindowHistory *AccountUsageWindowHistoryClient
 	// Announcement is the client for interacting with the Announcement builders.
 	Announcement *AnnouncementClient
 	// AnnouncementRead is the client for interacting with the AnnouncementRead builders.
@@ -82,6 +84,16 @@ type Tx struct {
 	RecurringCreditUserItem *RecurringCreditUserItemClient
 	// RedeemCode is the client for interacting with the RedeemCode builders.
 	RedeemCode *RedeemCodeClient
+	// ResetRebateAccountItem is the client for interacting with the ResetRebateAccountItem builders.
+	ResetRebateAccountItem *ResetRebateAccountItemClient
+	// ResetRebateBatch is the client for interacting with the ResetRebateBatch builders.
+	ResetRebateBatch *ResetRebateBatchClient
+	// ResetRebateUserAccountItem is the client for interacting with the ResetRebateUserAccountItem builders.
+	ResetRebateUserAccountItem *ResetRebateUserAccountItemClient
+	// ResetRebateUserAttempt is the client for interacting with the ResetRebateUserAttempt builders.
+	ResetRebateUserAttempt *ResetRebateUserAttemptClient
+	// ResetRebateUserItem is the client for interacting with the ResetRebateUserItem builders.
+	ResetRebateUserItem *ResetRebateUserItemClient
 	// SecuritySecret is the client for interacting with the SecuritySecret builders.
 	SecuritySecret *SecuritySecretClient
 	// Setting is the client for interacting with the Setting builders.
@@ -246,6 +258,7 @@ func (tx *Tx) init() {
 	tx.APIKey = NewAPIKeyClient(tx.config)
 	tx.Account = NewAccountClient(tx.config)
 	tx.AccountGroup = NewAccountGroupClient(tx.config)
+	tx.AccountUsageWindowHistory = NewAccountUsageWindowHistoryClient(tx.config)
 	tx.Announcement = NewAnnouncementClient(tx.config)
 	tx.AnnouncementRead = NewAnnouncementReadClient(tx.config)
 	tx.AuthIdentity = NewAuthIdentityClient(tx.config)
@@ -277,6 +290,11 @@ func (tx *Tx) init() {
 	tx.RecurringCreditTaskAudit = NewRecurringCreditTaskAuditClient(tx.config)
 	tx.RecurringCreditUserItem = NewRecurringCreditUserItemClient(tx.config)
 	tx.RedeemCode = NewRedeemCodeClient(tx.config)
+	tx.ResetRebateAccountItem = NewResetRebateAccountItemClient(tx.config)
+	tx.ResetRebateBatch = NewResetRebateBatchClient(tx.config)
+	tx.ResetRebateUserAccountItem = NewResetRebateUserAccountItemClient(tx.config)
+	tx.ResetRebateUserAttempt = NewResetRebateUserAttemptClient(tx.config)
+	tx.ResetRebateUserItem = NewResetRebateUserItemClient(tx.config)
 	tx.SecuritySecret = NewSecuritySecretClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)
 	tx.SubscriptionPlan = NewSubscriptionPlanClient(tx.config)

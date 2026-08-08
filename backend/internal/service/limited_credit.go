@@ -15,6 +15,7 @@ const (
 	LimitedCreditSourceAffiliateRebate    = "affiliate_rebate"
 	LimitedCreditSourceRechargeBonus      = "recharge_bonus"
 	LimitedCreditSourceCreditGrantEvent   = "credit_grant_event"
+	LimitedCreditSourceResetRebate        = "reset_rebate"
 	LimitedCreditStatusActive             = "active"
 	LimitedCreditSourcePromoCode          = "promo_code"
 	LimitedCreditStatusDepleted           = "depleted"
@@ -37,6 +38,7 @@ type LimitedCreditGrant struct {
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 	ValidityDays  *int      `json:"validity_days,omitempty"`
+	SourceReason  string    `json:"source_reason,omitempty"`
 }
 
 // RemainingAmount 返回未使用完的总剩余额度，包含已冻结部分。

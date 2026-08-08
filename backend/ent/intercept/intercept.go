@@ -10,6 +10,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
+	"github.com/Wei-Shaw/sub2api/ent/accountusagewindowhistory"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
@@ -43,6 +44,11 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/recurringcredittaskaudit"
 	"github.com/Wei-Shaw/sub2api/ent/recurringcredituseritem"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateaccountitem"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebatebatch"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseraccountitem"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateuserattempt"
+	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseritem"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -195,6 +201,33 @@ func (f TraverseAccountGroup) Traverse(ctx context.Context, q ent.Query) error {
 		return f(ctx, q)
 	}
 	return fmt.Errorf("unexpected query type %T. expect *ent.AccountGroupQuery", q)
+}
+
+// The AccountUsageWindowHistoryFunc type is an adapter to allow the use of ordinary function as a Querier.
+type AccountUsageWindowHistoryFunc func(context.Context, *ent.AccountUsageWindowHistoryQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f AccountUsageWindowHistoryFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.AccountUsageWindowHistoryQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.AccountUsageWindowHistoryQuery", q)
+}
+
+// The TraverseAccountUsageWindowHistory type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseAccountUsageWindowHistory func(context.Context, *ent.AccountUsageWindowHistoryQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseAccountUsageWindowHistory) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseAccountUsageWindowHistory) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.AccountUsageWindowHistoryQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.AccountUsageWindowHistoryQuery", q)
 }
 
 // The AnnouncementFunc type is an adapter to allow the use of ordinary function as a Querier.
@@ -1034,6 +1067,141 @@ func (f TraverseRedeemCode) Traverse(ctx context.Context, q ent.Query) error {
 	return fmt.Errorf("unexpected query type %T. expect *ent.RedeemCodeQuery", q)
 }
 
+// The ResetRebateAccountItemFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ResetRebateAccountItemFunc func(context.Context, *ent.ResetRebateAccountItemQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ResetRebateAccountItemFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ResetRebateAccountItemQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateAccountItemQuery", q)
+}
+
+// The TraverseResetRebateAccountItem type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseResetRebateAccountItem func(context.Context, *ent.ResetRebateAccountItemQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseResetRebateAccountItem) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseResetRebateAccountItem) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ResetRebateAccountItemQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateAccountItemQuery", q)
+}
+
+// The ResetRebateBatchFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ResetRebateBatchFunc func(context.Context, *ent.ResetRebateBatchQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ResetRebateBatchFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ResetRebateBatchQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateBatchQuery", q)
+}
+
+// The TraverseResetRebateBatch type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseResetRebateBatch func(context.Context, *ent.ResetRebateBatchQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseResetRebateBatch) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseResetRebateBatch) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ResetRebateBatchQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateBatchQuery", q)
+}
+
+// The ResetRebateUserAccountItemFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ResetRebateUserAccountItemFunc func(context.Context, *ent.ResetRebateUserAccountItemQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ResetRebateUserAccountItemFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ResetRebateUserAccountItemQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateUserAccountItemQuery", q)
+}
+
+// The TraverseResetRebateUserAccountItem type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseResetRebateUserAccountItem func(context.Context, *ent.ResetRebateUserAccountItemQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseResetRebateUserAccountItem) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseResetRebateUserAccountItem) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ResetRebateUserAccountItemQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateUserAccountItemQuery", q)
+}
+
+// The ResetRebateUserAttemptFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ResetRebateUserAttemptFunc func(context.Context, *ent.ResetRebateUserAttemptQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ResetRebateUserAttemptFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ResetRebateUserAttemptQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateUserAttemptQuery", q)
+}
+
+// The TraverseResetRebateUserAttempt type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseResetRebateUserAttempt func(context.Context, *ent.ResetRebateUserAttemptQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseResetRebateUserAttempt) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseResetRebateUserAttempt) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ResetRebateUserAttemptQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateUserAttemptQuery", q)
+}
+
+// The ResetRebateUserItemFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ResetRebateUserItemFunc func(context.Context, *ent.ResetRebateUserItemQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ResetRebateUserItemFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ResetRebateUserItemQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateUserItemQuery", q)
+}
+
+// The TraverseResetRebateUserItem type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseResetRebateUserItem func(context.Context, *ent.ResetRebateUserItemQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseResetRebateUserItem) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseResetRebateUserItem) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ResetRebateUserItemQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateUserItemQuery", q)
+}
+
 // The SecuritySecretFunc type is an adapter to allow the use of ordinary function as a Querier.
 type SecuritySecretFunc func(context.Context, *ent.SecuritySecretQuery) (ent.Value, error)
 
@@ -1448,6 +1616,8 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.AccountQuery, predicate.Account, account.OrderOption]{typ: ent.TypeAccount, tq: q}, nil
 	case *ent.AccountGroupQuery:
 		return &query[*ent.AccountGroupQuery, predicate.AccountGroup, accountgroup.OrderOption]{typ: ent.TypeAccountGroup, tq: q}, nil
+	case *ent.AccountUsageWindowHistoryQuery:
+		return &query[*ent.AccountUsageWindowHistoryQuery, predicate.AccountUsageWindowHistory, accountusagewindowhistory.OrderOption]{typ: ent.TypeAccountUsageWindowHistory, tq: q}, nil
 	case *ent.AnnouncementQuery:
 		return &query[*ent.AnnouncementQuery, predicate.Announcement, announcement.OrderOption]{typ: ent.TypeAnnouncement, tq: q}, nil
 	case *ent.AnnouncementReadQuery:
@@ -1510,6 +1680,16 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.RecurringCreditUserItemQuery, predicate.RecurringCreditUserItem, recurringcredituseritem.OrderOption]{typ: ent.TypeRecurringCreditUserItem, tq: q}, nil
 	case *ent.RedeemCodeQuery:
 		return &query[*ent.RedeemCodeQuery, predicate.RedeemCode, redeemcode.OrderOption]{typ: ent.TypeRedeemCode, tq: q}, nil
+	case *ent.ResetRebateAccountItemQuery:
+		return &query[*ent.ResetRebateAccountItemQuery, predicate.ResetRebateAccountItem, resetrebateaccountitem.OrderOption]{typ: ent.TypeResetRebateAccountItem, tq: q}, nil
+	case *ent.ResetRebateBatchQuery:
+		return &query[*ent.ResetRebateBatchQuery, predicate.ResetRebateBatch, resetrebatebatch.OrderOption]{typ: ent.TypeResetRebateBatch, tq: q}, nil
+	case *ent.ResetRebateUserAccountItemQuery:
+		return &query[*ent.ResetRebateUserAccountItemQuery, predicate.ResetRebateUserAccountItem, resetrebateuseraccountitem.OrderOption]{typ: ent.TypeResetRebateUserAccountItem, tq: q}, nil
+	case *ent.ResetRebateUserAttemptQuery:
+		return &query[*ent.ResetRebateUserAttemptQuery, predicate.ResetRebateUserAttempt, resetrebateuserattempt.OrderOption]{typ: ent.TypeResetRebateUserAttempt, tq: q}, nil
+	case *ent.ResetRebateUserItemQuery:
+		return &query[*ent.ResetRebateUserItemQuery, predicate.ResetRebateUserItem, resetrebateuseritem.OrderOption]{typ: ent.TypeResetRebateUserItem, tq: q}, nil
 	case *ent.SecuritySecretQuery:
 		return &query[*ent.SecuritySecretQuery, predicate.SecuritySecret, securitysecret.OrderOption]{typ: ent.TypeSecuritySecret, tq: q}, nil
 	case *ent.SettingQuery:

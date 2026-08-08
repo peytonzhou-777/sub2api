@@ -12,7 +12,6 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	dbaccount "github.com/Wei-Shaw/sub2api/ent/account"
-	dbresetitem "github.com/Wei-Shaw/sub2api/ent/resetrebateaccountitem"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/redis/go-redis/v9"
 )
@@ -55,9 +54,6 @@ func (r *accountPoolSource) ListAccountPoolBuildBatch(ctx context.Context, after
 	if err := r.attachParentPresentation(ctx, records); err != nil {
 		return nil, false, err
 	}
-	if err := r.attachLatestResetCounts(ctx, records); err != nil {
-		return nil, false, err
-	}
 	return records, hasMore, nil
 }
 
@@ -86,9 +82,6 @@ func (r *accountPoolSource) ListAccountPoolPage(ctx context.Context, page, pageS
 	}
 	records := accountPoolSourceRecords(accounts)
 	if err := r.attachParentPresentation(ctx, records); err != nil {
-		return nil, 0, err
-	}
-	if err := r.attachLatestResetCounts(ctx, records); err != nil {
 		return nil, 0, err
 	}
 	return records, int64(total), nil
@@ -132,44 +125,6 @@ func (r *accountPoolSource) attachParentPresentation(ctx context.Context, record
 		}
 		records[i].ParentCredentials = parent.Credentials
 		records[i].ParentExtra = parent.Extra
-	}
-	return nil
-}
-
-// attachLatestResetCounts 批量附加既有配额流程持久化的最新次数观测，不发起上游请求。
-func (r *accountPoolSource) attachLatestResetCounts(ctx context.Context, records []service.AccountPoolSourceRecord) error {
-	ids := make([]int64, 0, len(records))
-	for i := range records {
-		if records[i].Platform == service.PlatformOpenAI && records[i].Type == service.AccountTypeOAuth && records[i].ParentAccountID == nil {
-			ids = append(ids, records[i].ID)
-		}
-	}
-	if len(ids) == 0 {
-		return nil
-	}
-	items, err := r.client.ResetRebateAccountItem.Query().
-		Where(
-			dbresetitem.AccountIDIn(ids...),
-			dbresetitem.AvailableCountNotNil(),
-			dbresetitem.FetchedAtNotNil(),
-		).
-		Order(dbent.Desc(dbresetitem.FieldFetchedAt), dbent.Desc(dbresetitem.FieldID)).
-		Select(dbresetitem.FieldAccountID, dbresetitem.FieldAvailableCount, dbresetitem.FieldFetchedAt).
-		All(ctx)
-	if err != nil {
-		return fmt.Errorf("list latest account reset counts: %w", err)
-	}
-	latest := make(map[int64]*dbent.ResetRebateAccountItem, len(ids))
-	for _, item := range items {
-		if _, exists := latest[item.AccountID]; !exists {
-			latest[item.AccountID] = item
-		}
-	}
-	for i := range records {
-		if item := latest[records[i].ID]; item != nil {
-			records[i].ResetCount = item.AvailableCount
-			records[i].ResetCountObservedAt = item.FetchedAt
-		}
 	}
 	return nil
 }
