@@ -556,7 +556,11 @@ func joinInt64s(values []int64) string {
 
 func (s *ResetRebateService) batchMutex(batchID int64) *sync.Mutex {
 	value, _ := s.batchLocks.LoadOrStore(batchID, &sync.Mutex{})
-	return value.(*sync.Mutex)
+	mutex, ok := value.(*sync.Mutex)
+	if !ok {
+		panic("reset rebate batch lock has unexpected type")
+	}
+	return mutex
 }
 
 func (s *ResetRebateService) runStatisticsBackground(batchID int64) {

@@ -28,9 +28,11 @@ describe('channel-monitor-v2 design system structure', () => {
     expect(src).toContain('clearFilters')
     expect(src).toContain('healthModeOptions')
     expect(src).toContain("'cache'")
-    // Ops elevation: rounded-3xl + ring surfaces
-    expect(src).toContain('rounded-3xl')
-    expect(src).toContain('ring-1 ring-gray-900/5')
+    // 本地工作台使用紧凑圆角、实边框与无浮层阴影。
+    expect(src).toContain('rounded-lg')
+    expect(src).toContain('!shadow-none')
+    expect(src).not.toContain('rounded-3xl')
+    expect(src).not.toContain('ring-1 ring-gray-900/5')
     // Overview-first KPI strip before primary viz
     expect(src.indexOf('summaryAria')).toBeLessThan(src.indexOf('MonitorTrendChart'))
     // No page-level fixed min-width that forces viewport horizontal scroll
@@ -54,8 +56,8 @@ describe('channel-monitor-v2 design system structure', () => {
     expect(src).toMatch(/max-h-\[min\(42vh/)
     expect(src).toContain('overflow-auto')
     expect(src).toContain('pulse-tooltip')
-    expect(src).toContain('rounded-3xl')
-    expect(src).toContain('ring-1 ring-gray-900/5')
+    expect(src).toContain('rounded-lg')
+    expect(src).toContain('!shadow-none')
     expect(src).not.toContain('modal-overlay')
     expect(src).not.toContain('modal-content')
   })
@@ -65,21 +67,21 @@ describe('channel-monitor-v2 design system structure', () => {
     expect(src).toContain('stat-card')
     expect(src).toContain('stat-label')
     expect(src).toContain('stat-value')
-    expect(src).toContain('rounded-3xl')
+    expect(src).toContain('rounded-lg')
   })
 
-  it('MonitorTrendChart uses Ops chart shell tokens', () => {
+  it('MonitorTrendChart uses workbench chart shell tokens', () => {
     const src = read('features/channel-monitor-v2/MonitorTrendChart.vue')
     expect(src).toContain('class="card')
-    expect(src).toContain('rounded-3xl')
-    expect(src).toContain('ring-1 ring-gray-900/5')
+    expect(src).toContain('rounded-lg')
+    expect(src).toContain('!shadow-none')
     expect(src).toContain('EmptyState')
     expect(src).toContain('min-h-[360px]')
   })
 
-  it('FilterMultiSelect uses rounded-xl input chrome and dropdown utility', () => {
+  it('FilterMultiSelect uses compact input chrome and dropdown utility', () => {
     const src = read('features/channel-monitor-v2/FilterMultiSelect.vue')
-    expect(src).toContain('rounded-xl')
+    expect(src).toContain('rounded-lg')
     expect(src).toContain('dropdown')
     expect(src).toContain('dropdown-item')
   })

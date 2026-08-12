@@ -170,7 +170,7 @@ func (s *ResetRebateService) claimResetRebateExecution(ctx context.Context, batc
 		return nil, infraerrors.New(http.StatusConflict, "LEGACY_RESET_REBATE_READ_ONLY", "legacy reset rebate batches are read-only")
 	}
 	if retry {
-		if status != ResetRebateStatusPartial && !(status == ResetRebateStatusFailed && failureStage == ResetRebateFailureExecution) {
+		if status != ResetRebateStatusPartial && (status != ResetRebateStatusFailed || failureStage != ResetRebateFailureExecution) {
 			return nil, infraerrors.New(http.StatusConflict, "RESET_REBATE_NOT_RETRYABLE", "batch has no retryable failed users")
 		}
 	} else {
