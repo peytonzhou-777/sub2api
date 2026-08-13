@@ -156,6 +156,65 @@ export interface PaymentOrder {
   recharge_bonus?: RechargeBonusOrderSnapshot
 }
 
+export interface AccountRefundOrder {
+  order_id: number
+  completed_at: string
+  payment_type: string
+  provider_instance_id: string
+  currency: string
+  original_credit: number
+  original_paid: number
+  bonus_rate: number
+  bonus_initial: number
+  bonus_remaining: number
+  eligible_credit: number
+  refund_credit: number
+  gateway_refund: number
+  allocation_confidence: 'exact' | 'inferred'
+  gateway_status?: string
+  gateway_refund_id?: string
+  gateway_error?: string
+}
+
+export interface AccountRefundQuote {
+  eligible: boolean
+  block_reason?: string
+  donation_eligible: boolean
+  donation_block_reason?: string
+  donation_amount: number
+  total_confidence: 'reconciled' | 'manual_review'
+  allocation_confidence: 'exact' | 'inferred'
+  permanent_balance: number
+  recharge_bonus_balance: number
+  other_limited_to_clear: number
+  eligible_credit_total: number
+  refund_credit_total: number
+  gateway_totals: Record<string, number>
+  orders: AccountRefundOrder[]
+  quote_hash: string
+}
+
+export interface AccountRefundRecord {
+  refund_id?: string
+  user_id: number
+  state: string
+  previous_user_status?: string
+  quote?: AccountRefundQuote
+  created_at?: string
+  updated_at: string
+  message?: string
+  session_token?: string
+  donation_requested?: boolean
+  donation?: AccountRefundDonation
+}
+
+export interface AccountRefundDonation {
+  username: string
+  masked_email: string
+  amount: number
+  donated_at: string
+}
+
 // ==================== Plans & Channels ====================
 
 export interface SubscriptionPlan {

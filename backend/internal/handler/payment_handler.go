@@ -411,36 +411,175 @@ func (h *PaymentHandler) CancelOrder(c *gin.Context) {
 	response.Success(c, gin.H{"message": msg})
 }
 
-// RefundRequestBody is the request body for requesting a refund.
-type RefundRequestBody struct {
-	Reason string `json:"reason"`
+type accountRefundLockRequest struct {
+	QuoteHash string `json:"quote_hash" binding:"required"`
 }
 
-// RequestRefund submits a refund request for a completed order.
-// POST /api/v1/payment/orders/:id/refund-request
-func (h *PaymentHandler) RequestRefund(c *gin.Context) {
+type accountRefundConfirmRequest struct {
+	QuoteHash string `json:"quote_hash" binding:"required"`
+}
+
+type accountRefundSessionRestoreRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required"`
+	TOTPCode string `json:"totp_code"`
+}
+
+// GetAccountRefundOverview 返回账户全额清退试算或当前流程状态。
+func (h *PaymentHandler) GetAccountRefundOverview(c *gin.Context) {
 	subject, ok := requireAuth(c)
 	if !ok {
 		return
 	}
-
-	orderID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	record, err := h.paymentService.GetAccountRefundOverview(c.Request.Context(), subject.UserID)
 	if err != nil {
-		response.BadRequest(c, "Invalid order ID")
-		return
-	}
-
-	var req RefundRequestBody
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
-	if err := h.paymentService.RequestRefund(c.Request.Context(), orderID, subject.UserID, req.Reason); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, gin.H{"message": "refund requested"})
+	response.Success(c, record)
+}
+
+// LockAccountRefund 封禁账户并等待所有可能产生计费的请求收敛。
+func (h *PaymentHandler) LockAccountRefund(c *gin.Context) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
+	var req accountRefundLockRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_INPUT", "quote_hash is required"))
+		return
+	}
+	record, err := h.paymentService.LockAccountRefund(c.Request.Context(), subject.UserID, req.QuoteHash)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
+// DonateAccountRefund 二次确认后锁定账户并在排空完成时放弃退款。
+func (h *PaymentHandler) DonateAccountRefund(c *gin.Context) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
+	var req accountRefundLockRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_INPUT", "quote_hash is required"))
+		return
+	}
+	record, err := h.paymentService.DonateAccountRefund(c.Request.Context(), subject.UserID, req.QuoteHash)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
+// ListAccountRefundDonations 返回公开打赏名单。
+func (h *PaymentHandler) ListAccountRefundDonations(c *gin.Context) {
+	donations, err := h.paymentService.ListAccountRefundDonations(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, donations)
+}
+
+// RestoreAccountRefundSession 强身份验证后只补发当前清退的专用会话。
+func (h *PaymentHandler) RestoreAccountRefundSession(c *gin.Context) {
+	var req accountRefundSessionRestoreRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_INPUT", "email and password are required"))
+		return
+	}
+	record, err := h.paymentService.RestoreAccountRefundSession(c.Request.Context(), req.Email, req.Password, req.TOTPCode)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
+// GetAccountRefund 通过专用退款会话查询锁定后的流程状态。
+func (h *PaymentHandler) GetAccountRefund(c *gin.Context) {
+	claims, ok := h.requireAccountRefundSession(c)
+	if !ok {
+		return
+	}
+	record, err := h.paymentService.GetAccountRefund(c.Request.Context(), claims.RefundID, claims.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
+// ConfirmAccountRefund 二次确认账户级全额清退。
+func (h *PaymentHandler) ConfirmAccountRefund(c *gin.Context) {
+	claims, ok := h.requireAccountRefundSession(c)
+	if !ok {
+		return
+	}
+	var req accountRefundConfirmRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_INPUT", "quote_hash is required"))
+		return
+	}
+	record, err := h.paymentService.ConfirmAccountRefund(c.Request.Context(), claims.RefundID, claims.UserID, req.QuoteHash)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
+// DonateLockedAccountRefund 通过退款专用会话确认放弃退款。
+func (h *PaymentHandler) DonateLockedAccountRefund(c *gin.Context) {
+	claims, ok := h.requireAccountRefundSession(c)
+	if !ok {
+		return
+	}
+	var req accountRefundConfirmRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_INPUT", "quote_hash is required"))
+		return
+	}
+	record, err := h.paymentService.DonateLockedAccountRefund(c.Request.Context(), claims.RefundID, claims.UserID, req.QuoteHash)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
+// CancelAccountRefund 在尚未调用网关时取消清退并恢复账户状态。
+func (h *PaymentHandler) CancelAccountRefund(c *gin.Context) {
+	claims, ok := h.requireAccountRefundSession(c)
+	if !ok {
+		return
+	}
+	record, err := h.paymentService.CancelAccountRefund(c.Request.Context(), claims.RefundID, claims.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
+func (h *PaymentHandler) requireAccountRefundSession(c *gin.Context) (*service.AccountRefundSessionClaims, bool) {
+	token := strings.TrimSpace(c.GetHeader("X-Refund-Session"))
+	claims, err := h.paymentService.ParseAccountRefundSession(token)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return nil, false
+	}
+	if claims.RefundID != strings.TrimSpace(c.Param("refund_id")) {
+		response.ErrorFrom(c, infraerrors.Forbidden("REFUND_SESSION_MISMATCH", "refund session does not match this request"))
+		return nil, false
+	}
+	return claims, true
 }
 
 // GetRefundEligibleProviders returns provider instance IDs that allow user refund.

@@ -11,8 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent/dialect"
+
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	entuser "github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/payment/provider"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -155,6 +158,19 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	txCtx := dbent.NewTxContext(ctx, tx)
+	// 与账户清退使用相同的用户行锁顺序，避免已封禁账户在竞态窗口内新建支付订单。
+	userQuery := tx.User.Query().Where(entuser.IDEQ(req.UserID))
+	if tx.Client().Driver().Dialect() == dialect.Postgres {
+		userQuery = userQuery.ForUpdate()
+	}
+	lockedUser, err := userQuery.Only(txCtx)
+	if err != nil {
+		return nil, fmt.Errorf("lock payment user: %w", err)
+	}
+	if lockedUser.Status != payment.EntityStatusActive {
+		return nil, infraerrors.Forbidden("USER_INACTIVE", "user account is disabled")
+	}
 	if err := s.checkPendingLimit(ctx, tx, req.UserID, cfg.MaxPendingOrders); err != nil {
 		return nil, err
 	}
@@ -180,7 +196,6 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	}
 	var rechargeBonus *RechargeBonusOrderSnapshot
 	if req.OrderType == payment.OrderTypeBalance && s.rechargeBonusService != nil {
-		txCtx := dbent.NewTxContext(ctx, tx)
 		rechargeBonus, err = s.rechargeBonusService.QuoteOrder(txCtx, req.UserID, orderAmount, createdAt)
 		if err != nil {
 			return nil, fmt.Errorf("quote recharge bonus: %w", err)

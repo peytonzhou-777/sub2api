@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -17,6 +18,7 @@ const (
 	apiKeyRateLimitDuration    = 24 * time.Hour
 	apiKeyAuthCachePrefix      = "apikey:auth:"
 	authCacheInvalidateChannel = "auth:cache:invalidate"
+	refundBillingLockTTL       = 7 * 24 * time.Hour
 )
 
 // apiKeyRateLimitKey generates the Redis key for API key creation rate limiting.
@@ -30,6 +32,62 @@ func apiKeyAuthCacheKey(key string) string {
 
 type apiKeyCache struct {
 	rdb *redis.Client
+}
+
+func refundBillingLockKey(userID int64) string {
+	return fmt.Sprintf("refund:billing_lock:user:%d", userID)
+}
+
+var releaseRefundBillingLockScript = redis.NewScript(`
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+end
+return 0
+`)
+
+var acquireRefundBillingLockScript = redis.NewScript(`
+local owner = redis.call("GET", KEYS[1])
+if not owner then
+  redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
+  return 1
+end
+if owner == ARGV[1] then
+  redis.call("PEXPIRE", KEYS[1], ARGV[2])
+  return 1
+end
+return 0
+`)
+
+// AcquireRefundBillingLock 建立或续期退款计费栅栏；TTL 只用于进程崩溃后的孤儿锁恢复。
+func (c *apiKeyCache) AcquireRefundBillingLock(ctx context.Context, userID int64, refundID string) error {
+	if userID <= 0 || strings.TrimSpace(refundID) == "" {
+		return fmt.Errorf("refund billing lock requires user id and refund id")
+	}
+	acquired, err := acquireRefundBillingLockScript.Run(
+		ctx,
+		c.rdb,
+		[]string{refundBillingLockKey(userID)},
+		strings.TrimSpace(refundID),
+		refundBillingLockTTL.Milliseconds(),
+	).Int()
+	if err != nil {
+		return err
+	}
+	if acquired != 1 {
+		return fmt.Errorf("refund billing lock is owned by another request")
+	}
+	return nil
+}
+
+// ReleaseRefundBillingLock 使用比较删除，避免旧流程误删新流程栅栏。
+func (c *apiKeyCache) ReleaseRefundBillingLock(ctx context.Context, userID int64, refundID string) error {
+	return releaseRefundBillingLockScript.Run(ctx, c.rdb, []string{refundBillingLockKey(userID)}, strings.TrimSpace(refundID)).Err()
+}
+
+// IsRefundBillingLocked 查询退款计费栅栏；Redis 错误由鉴权层按失败关闭处理。
+func (c *apiKeyCache) IsRefundBillingLocked(ctx context.Context, userID int64) (bool, error) {
+	count, err := c.rdb.Exists(ctx, refundBillingLockKey(userID)).Result()
+	return count > 0, err
 }
 
 func NewAPIKeyCache(rdb *redis.Client) service.APIKeyCache {

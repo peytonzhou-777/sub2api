@@ -16,6 +16,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	entuser "github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
@@ -148,11 +149,40 @@ func expectedNotificationProviderKey(registry *payment.Registry, orderPaymentTyp
 }
 
 func (s *PaymentService) toPaid(ctx context.Context, o *dbent.PaymentOrder, tradeNo string, paid float64, pk string) error {
-	previousStatus := o.Status
+	tx, err := s.entClient.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("begin payment confirmation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	txCtx := dbent.NewTxContext(ctx, tx)
+	// 先锁用户再锁订单，与账户清退保持一致，确保到账和清退只能有一方先完成状态迁移。
+	userQuery := tx.User.Query().Where(entuser.IDEQ(o.UserID))
+	if tx.Client().Driver().Dialect() == dialect.Postgres {
+		userQuery = userQuery.ForUpdate()
+	}
+	lockedUser, err := userQuery.Only(txCtx)
+	if err != nil {
+		return fmt.Errorf("lock payment user: %w", err)
+	}
+	orderQuery := tx.PaymentOrder.Query().Where(paymentorder.IDEQ(o.ID))
+	if tx.Client().Driver().Dialect() == dialect.Postgres {
+		orderQuery = orderQuery.ForUpdate()
+	}
+	currentOrder, err := orderQuery.Only(txCtx)
+	if err != nil {
+		return fmt.Errorf("lock payment order: %w", err)
+	}
+	previousStatus := currentOrder.Status
 	now := time.Now()
 	grace := now.Add(-paymentGraceMinutes * time.Minute)
-	c, err := s.entClient.PaymentOrder.Update().Where(
-		paymentorder.IDEQ(o.ID),
+	isPayable := previousStatus == OrderStatusPending || previousStatus == OrderStatusCancelled ||
+		(previousStatus == OrderStatusExpired && !currentOrder.UpdatedAt.Before(grace))
+	if !isPayable {
+		_ = tx.Rollback()
+		return s.alreadyProcessed(ctx, currentOrder)
+	}
+	c, err := tx.PaymentOrder.Update().Where(
+		paymentorder.IDEQ(currentOrder.ID),
 		paymentorder.Or(
 			paymentorder.StatusEQ(OrderStatusPending),
 			paymentorder.StatusEQ(OrderStatusCancelled),
@@ -161,12 +191,24 @@ func (s *PaymentService) toPaid(ctx context.Context, o *dbent.PaymentOrder, trad
 				paymentorder.UpdatedAtGTE(grace),
 			),
 		),
-	).SetStatus(OrderStatusPaid).SetPayAmount(paid).SetPaymentTradeNo(tradeNo).SetPaidAt(now).ClearFailedAt().ClearFailedReason().Save(ctx)
+	).SetStatus(OrderStatusPaid).SetPayAmount(paid).SetPaymentTradeNo(tradeNo).SetPaidAt(now).ClearFailedAt().ClearFailedReason().Save(txCtx)
 	if err != nil {
 		return fmt.Errorf("update to PAID: %w", err)
 	}
 	if c == 0 {
-		return s.alreadyProcessed(ctx, o)
+		return infraerrors.Conflict("CONFLICT", "payment order changed while confirming")
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit payment confirmation: %w", err)
+	}
+	if lockedUser.Status == StatusRefundLocked {
+		// 平台已收款但账户正处于清退锁：保留 PAID 供人工核对，绝不继续兑换充值码。
+		s.writeAuditLog(ctx, o.ID, "PAYMENT_HELD_BY_ACCOUNT_REFUND", pk, map[string]any{
+			"status":  lockedUser.Status,
+			"tradeNo": tradeNo,
+			"paid":    paid,
+		})
+		return nil
 	}
 	if previousStatus == OrderStatusCancelled || previousStatus == OrderStatusExpired {
 		slog.Info("order recovered from webhook payment success",

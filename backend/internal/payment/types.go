@@ -179,10 +179,11 @@ type PaymentNotification struct {
 
 // RefundRequest contains the parameters for requesting a refund.
 type RefundRequest struct {
-	TradeNo string
-	OrderID string
-	Amount  string // Refund amount formatted to 2 decimal places
-	Reason  string
+	TradeNo   string
+	OrderID   string
+	RequestID string // Stable idempotency key for one refund route.
+	Amount    string // Refund amount formatted to 2 decimal places
+	Reason    string
 }
 
 // RefundQueryRequest contains identifiers needed to query a previously

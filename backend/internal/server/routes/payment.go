@@ -1,12 +1,16 @@
 package routes
 
 import (
+	"time"
+
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
+	basemiddleware "github.com/Wei-Shaw/sub2api/internal/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 // RegisterPaymentRoutes registers all payment-related routes:
@@ -21,6 +25,7 @@ func RegisterPaymentRoutes(
 	auditLog middleware.AuditLogMiddleware,
 	settingService *service.SettingService,
 	panelRateLimiter *middleware.PanelRateLimiter,
+	redisClient *redis.Client,
 ) {
 	// --- User-facing payment endpoints (authenticated) ---
 	authenticated := v1.Group("/payment")
@@ -33,6 +38,9 @@ func RegisterPaymentRoutes(
 		authenticated.GET("/checkout-info", paymentHandler.GetCheckoutInfo)
 		authenticated.GET("/plans", paymentHandler.GetPlans)
 		authenticated.GET("/limits", paymentHandler.GetLimits)
+		authenticated.GET("/refunds/overview", paymentHandler.GetAccountRefundOverview)
+		authenticated.POST("/refunds/lock", paymentHandler.LockAccountRefund)
+		authenticated.POST("/refunds/donate", paymentHandler.DonateAccountRefund)
 
 		orders := authenticated.Group("/orders")
 		{
@@ -41,7 +49,6 @@ func RegisterPaymentRoutes(
 			orders.GET("/my", paymentHandler.GetMyOrders)
 			orders.GET("/:id", paymentHandler.GetOrder)
 			orders.POST("/:id/cancel", paymentHandler.CancelOrder)
-			orders.POST("/:id/refund-request", paymentHandler.RequestRefund)
 			orders.GET("/refund-eligible-providers", paymentHandler.GetRefundEligibleProviders)
 		}
 	}
@@ -54,6 +61,22 @@ func RegisterPaymentRoutes(
 	{
 		public.POST("/orders/verify", paymentHandler.VerifyOrderPublic)
 		public.POST("/orders/resolve", paymentHandler.ResolveOrderPublicByResumeToken)
+		public.GET("/refund-donations", paymentHandler.ListAccountRefundDonations)
+	}
+
+	// 账户被锁定后普通 JWT 会失效，退款专用会话只能访问当前清退流程。
+	refundSession := v1.Group("/payment/refunds")
+	refundSession.Use(panelRateLimiter.Global())
+	{
+		// 恢复入口与登录同级失败关闭限流，防止成为密码爆破旁路。
+		rateLimiter := basemiddleware.NewRateLimiter(redisClient)
+		refundSession.POST("/session/restore", rateLimiter.LimitWithOptions("account-refund-session-restore", 10, time.Minute, basemiddleware.RateLimitOptions{
+			FailureMode: basemiddleware.RateLimitFailClose,
+		}), gin.HandlerFunc(auditLog), paymentHandler.RestoreAccountRefundSession)
+		refundSession.GET("/:refund_id", paymentHandler.GetAccountRefund)
+		refundSession.POST("/:refund_id/confirm", paymentHandler.ConfirmAccountRefund)
+		refundSession.POST("/:refund_id/donate", paymentHandler.DonateLockedAccountRefund)
+		refundSession.POST("/:refund_id/cancel", paymentHandler.CancelAccountRefund)
 	}
 
 	// --- Webhook endpoints (no auth) ---

@@ -125,6 +125,7 @@ type OrderListParams struct {
 type RefundPlan struct {
 	OrderID         int64
 	Order           *dbent.PaymentOrder
+	RequestID       string
 	RefundAmount    float64
 	GatewayAmount   float64
 	Reason          string
@@ -200,6 +201,9 @@ type PaymentService struct {
 	affiliateService         *AffiliateService
 	notificationEmailService *NotificationEmailService
 	rechargeBonusService     *RechargeBonusService
+	authCacheInvalidator     APIKeyAuthCacheInvalidator
+	concurrencyCache         ConcurrencyCache
+	totpService              *TotpService
 }
 
 func NewPaymentService(entClient *dbent.Client, registry *payment.Registry, loadBalancer payment.LoadBalancer, redeemService *RedeemService, subscriptionSvc *SubscriptionService, configService *PaymentConfigService, userRepo UserRepository, groupRepo GroupRepository, affiliateService *AffiliateService) *PaymentService {

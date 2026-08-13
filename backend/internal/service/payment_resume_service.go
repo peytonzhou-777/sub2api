@@ -34,13 +34,15 @@ const (
 	VisibleMethodSourceOfficialWechat = "official_wxpay"
 	VisibleMethodSourceEasyPayWechat  = "easypay_wxpay"
 
-	wechatPaymentResumeTokenType = "wechat_payment_resume"
+	wechatPaymentResumeTokenType  = "wechat_payment_resume"
+	accountRefundSessionTokenType = "account_refund_session"
 
 	paymentResumeNotConfiguredCode    = "PAYMENT_RESUME_NOT_CONFIGURED"
 	paymentResumeNotConfiguredMessage = "payment resume tokens require a configured signing key"
 
-	paymentResumeTokenTTL       = 24 * time.Hour
-	wechatPaymentResumeTokenTTL = 15 * time.Minute
+	paymentResumeTokenTTL        = 24 * time.Hour
+	wechatPaymentResumeTokenTTL  = 15 * time.Minute
+	accountRefundSessionTokenTTL = 30 * time.Minute
 )
 
 type ResumeTokenClaims struct {
@@ -65,6 +67,15 @@ type WeChatPaymentResumeClaims struct {
 	Scope       string `json:"scp,omitempty"`
 	IssuedAt    int64  `json:"iat"`
 	ExpiresAt   int64  `json:"exp,omitempty"`
+}
+
+// AccountRefundSessionClaims 仅授权一笔账户清退的状态查询、确认和取消。
+type AccountRefundSessionClaims struct {
+	TokenType string `json:"tk"`
+	RefundID  string `json:"rid"`
+	UserID    int64  `json:"uid"`
+	IssuedAt  int64  `json:"iat"`
+	ExpiresAt int64  `json:"exp"`
 }
 
 type PaymentResumeService struct {
@@ -415,6 +426,43 @@ func (s *PaymentResumeService) ParseWeChatPaymentResumeToken(token string) (*WeC
 	}
 	if claims.OrderType == "" {
 		claims.OrderType = payment.OrderTypeBalance
+	}
+	return &claims, nil
+}
+
+// CreateAccountRefundSessionToken 签发退款锁定后仍可使用的最小权限会话。
+func (s *PaymentResumeService) CreateAccountRefundSessionToken(refundID string, userID int64) (string, error) {
+	if err := s.ensureSigningKey(); err != nil {
+		return "", err
+	}
+	refundID = strings.TrimSpace(refundID)
+	if refundID == "" || userID <= 0 {
+		return "", fmt.Errorf("refund session requires refund id and user id")
+	}
+	now := time.Now()
+	return s.createSignedToken(AccountRefundSessionClaims{
+		TokenType: accountRefundSessionTokenType,
+		RefundID:  refundID,
+		UserID:    userID,
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(accountRefundSessionTokenTTL).Unix(),
+	})
+}
+
+// ParseAccountRefundSessionToken 校验退款专用会话且拒绝跨流程复用。
+func (s *PaymentResumeService) ParseAccountRefundSessionToken(token string) (*AccountRefundSessionClaims, error) {
+	if err := s.ensureSigningKey(); err != nil {
+		return nil, err
+	}
+	var claims AccountRefundSessionClaims
+	if err := s.parseSignedToken(token, &claims); err != nil {
+		return nil, infraerrors.BadRequest("INVALID_REFUND_SESSION", "refund session payload is invalid")
+	}
+	if claims.TokenType != accountRefundSessionTokenType || strings.TrimSpace(claims.RefundID) == "" || claims.UserID <= 0 {
+		return nil, infraerrors.BadRequest("INVALID_REFUND_SESSION", "refund session claims are invalid")
+	}
+	if err := validatePaymentResumeExpiry(claims.ExpiresAt, "REFUND_SESSION_EXPIRED", "refund session has expired"); err != nil {
+		return nil, err
 	}
 	return &claims, nil
 }

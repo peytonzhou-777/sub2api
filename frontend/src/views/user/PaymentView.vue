@@ -253,12 +253,25 @@
           <!-- Account Tab -->
           <template v-else>
             <section data-test="account-balance-panel" class="card p-6">
-              <p class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                {{ t('payment.account.balanceTitle') }}
-              </p>
-              <p data-test="account-total-balance" class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
-                {{ formatAccountMoney(accountTotalBalance) }}
-              </p>
+              <div data-test="account-balance-header" class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p class="text-sm font-medium text-gray-500 dark:text-gray-400">
+                    {{ t('payment.account.balanceTitle') }}
+                  </p>
+                  <p data-test="account-total-balance" class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
+                    {{ formatAccountMoney(accountTotalBalance) }}
+                  </p>
+                </div>
+                <button
+                  v-if="accountRefundEnabled"
+                  data-test="account-full-refund"
+                  class="btn btn-secondary inline-flex shrink-0 items-center gap-2"
+                  @click="router.push('/refunds')"
+                >
+                  <Icon name="dollar" size="sm" />
+                  <span>{{ t('payment.account.fullRefund') }}</span>
+                </button>
+              </div>
               <div class="mt-5 grid gap-3 sm:grid-cols-2">
                 <div data-test="permanent-balance-card" class="rounded-lg bg-gray-50 px-4 py-3 dark:bg-dark-700/60">
                   <p class="text-xs text-gray-500 dark:text-gray-400">
@@ -530,6 +543,7 @@ function limitedCreditExpiryClass(expiresAt: string): string {
 
 const loading = ref(true)
 const submitting = ref(false)
+const accountRefundEnabled = ref(false)
 const errorMessage = ref('')
 const errorHintMessage = ref('')
 const activeTab = ref<'recharge' | 'subscription' | 'account'>(route.query.tab === 'account' ? 'account' : route.query.tab === 'subscription' ? 'subscription' : 'recharge')
@@ -1378,6 +1392,16 @@ onMounted(async () => {
   try {
     const res = await paymentAPI.getCheckoutInfo()
     checkout.value = res.data
+    // 退款资格是可选能力，旧后端或探测失败时仅隐藏入口，不中断钱包主流程。
+    if (typeof paymentAPI.getRefundEligibleProviders === 'function') {
+      void paymentAPI.getRefundEligibleProviders()
+        .then((refundEligibility) => {
+          accountRefundEnabled.value = refundEligibility.data.provider_instance_ids.length > 0
+        })
+        .catch(() => {
+          accountRefundEnabled.value = false
+        })
+    }
     startRechargeBonusCountdown()
     if (enabledMethods.value.length) {
       const order: readonly string[] = METHOD_ORDER

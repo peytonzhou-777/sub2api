@@ -155,6 +155,16 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			AbortWithError(c, 401, "USER_NOT_FOUND", "User associated with API key not found")
 			return
 		}
+		refundLocked, fenceErr := apiKeyService.IsRefundBillingLocked(c.Request.Context(), apiKey.User.ID)
+		if fenceErr != nil {
+			AbortWithError(c, http.StatusServiceUnavailable, "REFUND_BILLING_FENCE_UNAVAILABLE", "Cannot verify account refund lock")
+			return
+		}
+		if refundLocked {
+			MarkIngressRejected(c, IngressRejectUserInactive)
+			AbortWithError(c, http.StatusLocked, "USER_REFUND_LOCKED", "User account is locked for refund")
+			return
+		}
 
 		// 检查用户状态
 		if !apiKey.User.IsActive() {

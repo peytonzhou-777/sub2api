@@ -41,6 +41,7 @@ const showError = vi.hoisted(() => vi.fn())
 const showInfo = vi.hoisted(() => vi.fn())
 const showWarning = vi.hoisted(() => vi.fn())
 const getCheckoutInfo = vi.hoisted(() => vi.fn())
+const getRefundEligibleProviders = vi.hoisted(() => vi.fn())
 const bridgeInvoke = vi.hoisted(() => vi.fn())
 
 vi.mock('vue-router', async () => {
@@ -128,6 +129,7 @@ vi.mock('@/stores', () => ({
 vi.mock('@/api/payment', () => ({
   paymentAPI: {
     getCheckoutInfo,
+    getRefundEligibleProviders,
   },
 }))
 
@@ -143,6 +145,9 @@ beforeEach(() => {
   limitedCreditState.fetchActiveLimitedCredits.mockReset().mockResolvedValue(undefined)
   subscriptionState.activeSubscriptions = []
   fetchActiveSubscriptions.mockReset().mockResolvedValue([])
+  getRefundEligibleProviders.mockReset().mockResolvedValue({
+    data: { provider_instance_ids: [] },
+  })
 })
 
 function checkoutInfoFixture(overrides: Partial<CheckoutInfoResponse> = {}) {
@@ -669,6 +674,20 @@ describe('PaymentView account tab', () => {
     expect(wrapper.get('[data-test="limited-credit-progress-fill"]').classes()).toContain(
       'limited-credit-progress-fill',
     )
+  })
+
+  it('shows the balance refund action in the balance header when a refund provider is available', async () => {
+    getRefundEligibleProviders.mockResolvedValue({
+      data: { provider_instance_ids: ['wxpay-default'] },
+    })
+
+    const wrapper = await mountAccount()
+    const header = wrapper.get('[data-test="account-balance-header"]')
+    const refundAction = header.get('[data-test="account-full-refund"]')
+
+    await refundAction.trigger('click')
+
+    expect(routerPush).toHaveBeenCalledWith('/refunds')
   })
 
   it('shows reset rebate batch and reason in limited credit details', async () => {

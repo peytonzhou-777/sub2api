@@ -207,6 +207,13 @@ type APIKeyAuthCacheInvalidator interface {
 	InvalidateAuthCacheByGroupID(ctx context.Context, groupID int64)
 }
 
+// RefundBillingFence 在认证缓存之外提供用户级计费隔离，避免陈旧 active 快照绕过退款锁。
+type RefundBillingFence interface {
+	AcquireRefundBillingLock(ctx context.Context, userID int64, refundID string) error
+	ReleaseRefundBillingLock(ctx context.Context, userID int64, refundID string) error
+	IsRefundBillingLocked(ctx context.Context, userID int64) (bool, error)
+}
+
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
 	Name        string   `json:"name"`
@@ -367,6 +374,33 @@ func (s *APIKeyService) SetRateLimitCacheInvalidator(inv RateLimitCacheInvalidat
 
 func (s *APIKeyService) SetConcurrencyService(concurrencyService *ConcurrencyService) {
 	s.concurrencyService = concurrencyService
+}
+
+// AcquireRefundBillingLock 建立账户退款期间的分布式计费栅栏。
+func (s *APIKeyService) AcquireRefundBillingLock(ctx context.Context, userID int64, refundID string) error {
+	fence, ok := s.cache.(RefundBillingFence)
+	if !ok {
+		return fmt.Errorf("refund billing fence is not supported")
+	}
+	return fence.AcquireRefundBillingLock(ctx, userID, refundID)
+}
+
+// ReleaseRefundBillingLock 仅由持有同一退款 ID 的取消流程释放栅栏。
+func (s *APIKeyService) ReleaseRefundBillingLock(ctx context.Context, userID int64, refundID string) error {
+	fence, ok := s.cache.(RefundBillingFence)
+	if !ok {
+		return fmt.Errorf("refund billing fence is not supported")
+	}
+	return fence.ReleaseRefundBillingLock(ctx, userID, refundID)
+}
+
+// IsRefundBillingLocked 查询用户是否正在账户清退。
+func (s *APIKeyService) IsRefundBillingLocked(ctx context.Context, userID int64) (bool, error) {
+	fence, ok := s.cache.(RefundBillingFence)
+	if !ok {
+		return false, nil
+	}
+	return fence.IsRefundBillingLocked(ctx, userID)
 }
 
 func (s *APIKeyService) compileAPIKeyIPRules(apiKey *APIKey) {

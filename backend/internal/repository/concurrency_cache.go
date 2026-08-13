@@ -909,6 +909,15 @@ func (c *concurrencyCache) DecrementWaitCount(ctx context.Context, userID int64)
 	return err
 }
 
+// GetUserWaitingCount 返回已通过鉴权但尚未占用用户槽位的等待请求数。
+func (c *concurrencyCache) GetUserWaitingCount(ctx context.Context, userID int64) (int, error) {
+	count, err := c.rdb.Get(ctx, waitQueueKey(userID)).Int()
+	if errors.Is(err, redis.Nil) {
+		return 0, nil
+	}
+	return count, err
+}
+
 // Account wait queue operations
 
 func (c *concurrencyCache) IncrementAccountWaitCount(ctx context.Context, accountID int64, maxWait int) (bool, error) {

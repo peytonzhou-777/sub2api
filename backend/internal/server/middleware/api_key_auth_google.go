@@ -113,6 +113,16 @@ func APIKeyAuthWithSubscriptionGoogleAndBillingCache(apiKeyService *service.APIK
 			abortWithGoogleError(c, 401, "User associated with API key not found")
 			return
 		}
+		refundLocked, fenceErr := apiKeyService.IsRefundBillingLocked(c.Request.Context(), apiKey.User.ID)
+		if fenceErr != nil {
+			abortWithGoogleError(c, 503, "Cannot verify account refund lock")
+			return
+		}
+		if refundLocked {
+			MarkIngressRejected(c, IngressRejectUserInactive)
+			abortWithGoogleError(c, 423, "User account is locked for refund")
+			return
+		}
 		if !apiKey.User.IsActive() {
 			MarkIngressRejected(c, IngressRejectUserInactive)
 			abortWithGoogleError(c, 401, "User account is not active")

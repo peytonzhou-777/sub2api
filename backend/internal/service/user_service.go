@@ -1199,6 +1199,9 @@ func (s *UserService) UpdateStatus(ctx context.Context, userID int64, status str
 	if err != nil {
 		return fmt.Errorf("get user: %w", err)
 	}
+	if user.Status == StatusRefundLocked && status != StatusRefundLocked {
+		return infraerrors.Conflict("REFUND_LOCKED_STATUS_PROTECTED", "active account refund must be canceled or reconciled through the refund workflow")
+	}
 
 	user.Status = status
 
