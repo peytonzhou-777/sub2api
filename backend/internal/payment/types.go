@@ -2,7 +2,10 @@
 // registry, load balancing, and shared utilities for the payment subsystem.
 package payment
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // PaymentType represents a supported payment method.
 type PaymentType = string
@@ -199,6 +202,39 @@ type RefundQueryRequest struct {
 type RefundResponse struct {
 	RefundID string
 	Status   string // "success", "pending", "failed"
+}
+
+// RefundOutcomeUnknownError 表示退款请求可能已到达网关，但本地无法确认最终结果。
+type RefundOutcomeUnknownError struct {
+	Err error
+}
+
+func (e *RefundOutcomeUnknownError) Error() string {
+	if e == nil || e.Err == nil {
+		return "payment refund outcome is unknown"
+	}
+	return e.Err.Error()
+}
+
+func (e *RefundOutcomeUnknownError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+// MarkRefundOutcomeUnknown 标记不可安全自动重试的退款错误。
+func MarkRefundOutcomeUnknown(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &RefundOutcomeUnknownError{Err: err}
+}
+
+// IsRefundOutcomeUnknown 判断退款失败是否必须人工核验后再处理。
+func IsRefundOutcomeUnknown(err error) bool {
+	var target *RefundOutcomeUnknownError
+	return errors.As(err, &target)
 }
 
 // InstanceSelection holds the selected provider instance and its decrypted config.

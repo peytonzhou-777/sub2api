@@ -367,7 +367,7 @@ func (e *EasyPay) Refund(ctx context.Context, req payment.RefundRequest) (*payme
 	for i, attempt := range attempts {
 		body, status, err := e.postRaw(ctx, e.apiBase()+"/api.php?act=refund", attempt.params)
 		if err != nil {
-			return nil, fmt.Errorf("easypay refund request: %w", err)
+			return nil, payment.MarkRefundOutcomeUnknown(fmt.Errorf("easypay refund request: %w", err))
 		}
 		if err := parseEasyPayRefundResponse(status, body); err != nil {
 			if firstErr == nil {
@@ -376,7 +376,7 @@ func (e *EasyPay) Refund(ctx context.Context, req payment.RefundRequest) (*payme
 			if i+1 < len(attempts) && isEasyPayRefundOrderNotFound(err) {
 				continue
 			}
-			return nil, err
+			return nil, payment.MarkRefundOutcomeUnknown(err)
 		}
 		return &payment.RefundResponse{RefundID: attempt.refundID, Status: payment.ProviderStatusSuccess}, nil
 	}

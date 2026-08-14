@@ -12,6 +12,7 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
+	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -156,6 +157,39 @@ func TestExecuteRefundUsesActualAvailableBalanceDeduction(t *testing.T) {
 		Only(ctx)
 	require.NoError(t, err)
 	require.Contains(t, audit.Detail, `"balanceDeducted":25`)
+}
+
+func TestExecuteRefundUnknownOutcomeCannotBeBlindlyRetried(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	user, err := client.User.Create().SetEmail("refund-unknown@example.com").SetPasswordHash("hash").SetUsername("refund-unknown").Save(ctx)
+	require.NoError(t, err)
+	providerRow, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("refund-unknown-provider").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).Save(ctx)
+	require.NoError(t, err)
+	orderID := createAccountRefundTestOrder(t, ctx, client, user.ID, user.Email, providerRow.ID, 100, 100, 0, paymentorder.RechargeBonusStatusNone)
+	order, err := client.PaymentOrder.Get(ctx, orderID)
+	require.NoError(t, err)
+	provider := &unknownOutcomeRefundProvider{}
+	restoreFactory := replacePaymentProviderFactoryForTest(t, provider)
+	defer restoreFactory()
+	svc := &PaymentService{entClient: client, loadBalancer: &captureLoadBalancer{}}
+	plan := &RefundPlan{OrderID: order.ID, Order: order, RequestID: "unknown-outcome", RefundAmount: 100, GatewayAmount: 100, Reason: "unknown outcome", Force: true}
+
+	result, err := svc.ExecuteRefund(ctx, plan)
+	require.Nil(t, result)
+	require.Error(t, err)
+	require.Equal(t, "REFUND_OUTCOME_UNKNOWN", infraerrors.Reason(err))
+	require.Equal(t, 1, provider.refundCalls)
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusRefundPending, reloaded.Status)
+
+	retryPlan, retryResult, retryErr := svc.PrepareRefund(ctx, order.ID, 100, "retry", true, false)
+	require.Nil(t, retryPlan)
+	require.Nil(t, retryResult)
+	require.Error(t, retryErr)
+	require.Equal(t, "INVALID_STATUS", infraerrors.Reason(retryErr))
+	require.Equal(t, 1, provider.refundCalls)
 }
 
 func TestGwRefundRejectsAlipayMerchantIdentitySnapshotMismatch(t *testing.T) {
@@ -654,6 +688,18 @@ func (refundProviderTestDouble) Refund(context.Context, payment.RefundRequest) (
 type refundQueryProviderTestDouble struct {
 	refundProviderTestDouble
 	refundResponse *payment.RefundResponse
+}
+
+type unknownOutcomeRefundProvider struct {
+	refundProviderTestDouble
+	refundCalls int
+}
+
+func (p *unknownOutcomeRefundProvider) ProviderKey() string { return payment.TypeAlipay }
+
+func (p *unknownOutcomeRefundProvider) Refund(context.Context, payment.RefundRequest) (*payment.RefundResponse, error) {
+	p.refundCalls++
+	return nil, payment.MarkRefundOutcomeUnknown(errors.New("connection closed after submission"))
 }
 
 func (p *refundQueryProviderTestDouble) QueryRefund(context.Context, payment.RefundQueryRequest) (*payment.RefundResponse, error) {

@@ -168,6 +168,27 @@
             <button class="btn btn-secondary" :disabled="submitting" @click="cancelRefund">{{ t('common.cancel') }}</button>
           </div>
         </section>
+
+        <section v-else-if="['submitting', 'pending'].includes(record.state)" class="card flex items-center gap-4 p-5">
+          <div class="h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />
+          <div>
+            <p class="font-medium text-gray-900 dark:text-white">{{ t('payment.refunds.reconciling') }}</p>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ record.message }}</p>
+          </div>
+        </section>
+
+        <section v-else-if="canRecover" data-test="refund-recovery-actions" class="card p-5">
+          <p class="text-sm leading-6 text-gray-600 dark:text-gray-300">{{ t('payment.refunds.recoveryHelp') }}</p>
+          <div class="mt-4 flex flex-wrap gap-3">
+            <button v-if="canContinue" data-test="refund-continue" class="btn btn-primary" :disabled="submitting" @click="confirmRefund">
+              <Icon name="refresh" size="sm" />
+              <span>{{ submitting ? t('common.processing') : t('payment.refunds.continue') }}</span>
+            </button>
+            <button v-if="canCancelRecovery" data-test="refund-cancel-recovery" class="btn btn-secondary" :disabled="submitting" @click="cancelRefund">
+              {{ t('payment.refunds.cancelAndUnlock') }}
+            </button>
+          </div>
+        </section>
       </template>
 
       <section v-if="canDonate || donations.length > 0" class="ml-auto w-full max-w-xl text-right">
@@ -246,6 +267,14 @@ const quote = computed(() => record.value?.quote || null)
 const contactInfo = computed(() => appStore.contactInfo.trim())
 const isLocked = computed(() => !!record.value?.refund_id && !['estimate', 'canceled'].includes(record.value.state))
 const canStart = computed(() => record.value?.state === 'estimate' && !!quote.value?.eligible)
+const hasSubmittedRoute = computed(() => quote.value?.orders.some(order =>
+  ['success', 'refunded', 'pending', 'submitting', 'unknown'].includes(order.gateway_status || ''),
+) || false)
+const canContinue = computed(() => ['failed', 'partial_external_success'].includes(record.value?.state || ''))
+const canCancelRecovery = computed(() =>
+  ['failed', 'manual_review'].includes(record.value?.state || '') && !hasSubmittedRoute.value,
+)
+const canRecover = computed(() => canContinue.value || canCancelRecovery.value || record.value?.state === 'manual_review')
 const canDonate = computed(() => {
   if (!quote.value?.donation_eligible || Number(quote.value.donation_amount) <= 0) return false
   return ['estimate', 'draining', 'ready_to_confirm', 'manual_review'].includes(record.value?.state || '')

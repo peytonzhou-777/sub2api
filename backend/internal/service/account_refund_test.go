@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -26,7 +27,7 @@ func TestBuildAccountRefundQuoteAppliesCampaignAndOriginalPriceRules(t *testing.
 	provider, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("refund-provider").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
 	require.NoError(t, err)
 
-	activityOrder := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 0.2, paymentorder.RechargeBonusStatusGranted)
+	activityOrder := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 20, paymentorder.RechargeBonusStatusGranted)
 	createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 50, 50, 0, paymentorder.RechargeBonusStatusNone)
 	_, err = client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceRechargeBonus).SetSourceID(activityOrder).SetInitialAmount(20).SetUsedAmount(0).SetFrozenAmount(0).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
 	require.NoError(t, err)
@@ -46,6 +47,177 @@ func TestBuildAccountRefundQuoteAppliesCampaignAndOriginalPriceRules(t *testing.
 	require.InDelta(t, 50, quote.Orders[1].GatewayRefund, 1e-8)
 }
 
+func TestRechargeBonusRateToFractionUsesProductionPercentages(t *testing.T) {
+	rate20, ok := rechargeBonusRateToFraction(20)
+	require.True(t, ok)
+	require.InDelta(t, 0.2, rate20, 1e-12)
+
+	rate25, ok := rechargeBonusRateToFraction(25)
+	require.True(t, ok)
+	require.InDelta(t, 0.25, rate25, 1e-12)
+}
+
+func TestBuildAccountRefundQuoteCampaignRate20RefundsUnconsumedOrderToPrincipal(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-rate20@example.com").SetPasswordHash("hash").SetUsername("rate20").SetBalance(100).SetTotalRecharged(100).Save(ctx)
+	require.NoError(t, err)
+	provider, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("refund-rate20").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 20, paymentorder.RechargeBonusStatusGranted)
+	_, err = client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceRechargeBonus).SetSourceID(orderID).SetInitialAmount(20).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
+	require.NoError(t, err)
+
+	svc := &PaymentService{entClient: client, userRepo: &mockUserRepo{getByIDUser: &User{ID: userRow.ID, Balance: 100, TotalRecharged: 100}}}
+	quote, err := svc.buildAccountRefundQuote(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.True(t, quote.Eligible)
+	require.InDelta(t, 100, quote.RefundCreditTotal, 1e-8)
+	require.InDelta(t, 100, quote.Orders[0].GatewayRefund, 1e-8)
+}
+
+func TestBuildAccountRefundQuoteCampaignRate25StillUsesFixedFactor(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-rate25@example.com").SetPasswordHash("hash").SetUsername("rate25").SetBalance(75).SetTotalRecharged(100).Save(ctx)
+	require.NoError(t, err)
+	provider, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("refund-rate25").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 25, paymentorder.RechargeBonusStatusGranted)
+	_, err = client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceRechargeBonus).SetSourceID(orderID).SetInitialAmount(25).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
+	require.NoError(t, err)
+
+	svc := &PaymentService{entClient: client, userRepo: &mockUserRepo{getByIDUser: &User{ID: userRow.ID, Balance: 75, TotalRecharged: 100}}}
+	quote, err := svc.buildAccountRefundQuote(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.True(t, quote.Eligible)
+	require.InDelta(t, 83.33, quote.RefundCreditTotal, 1e-8)
+	require.NotEqual(t, 80.0, quote.RefundCreditTotal)
+}
+
+func TestBuildAccountRefundQuotePreservesFullPricePoolAfterCampaignConsumption(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-two-pools@example.com").SetPasswordHash("hash").SetUsername("two-pools").SetBalance(120).SetTotalRecharged(150).Save(ctx)
+	require.NoError(t, err)
+	provider, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("refund-two-pools").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	campaignOrder := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 20, paymentorder.RechargeBonusStatusGranted)
+	createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 50, 50, 0, paymentorder.RechargeBonusStatusNone)
+	_, err = client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceRechargeBonus).SetSourceID(campaignOrder).SetInitialAmount(20).SetUsedAmount(10).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
+	require.NoError(t, err)
+
+	svc := &PaymentService{entClient: client, userRepo: &mockUserRepo{getByIDUser: &User{ID: userRow.ID, Balance: 120, TotalRecharged: 150}}}
+	quote, err := svc.buildAccountRefundQuote(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.True(t, quote.Eligible)
+	// 原价池保留 50，剩余活动永久池 70 与赠额 10 统一乘 0.8333。
+	require.InDelta(t, 116.66, quote.RefundCreditTotal, 1e-8)
+}
+
+func TestBuildAccountRefundQuoteExcludesExpiredAndPostCampaignBonus(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-bonus-scope@example.com").SetPasswordHash("hash").SetUsername("bonus-scope").SetBalance(150).SetTotalRecharged(150).Save(ctx)
+	require.NoError(t, err)
+	provider, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("refund-bonus-scope").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	campaignOrder := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 20, paymentorder.RechargeBonusStatusGranted)
+	plainOrder := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 50, 50, 0, paymentorder.RechargeBonusStatusNone)
+	_, err = client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceRechargeBonus).SetSourceID(campaignOrder).SetInitialAmount(20).SetUsedAmount(5).SetExpiresAt(time.Now().Add(-time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
+	require.NoError(t, err)
+	_, err = client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceRechargeBonus).SetSourceID(plainOrder).SetInitialAmount(10).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
+	require.NoError(t, err)
+
+	svc := &PaymentService{entClient: client, userRepo: &mockUserRepo{getByIDUser: &User{ID: userRow.ID, Balance: 150, TotalRecharged: 150}}}
+	quote, err := svc.buildAccountRefundQuote(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.True(t, quote.Eligible)
+	require.Zero(t, quote.RechargeBonusBalance)
+	require.InDelta(t, 10, quote.OtherLimitedToClear, 1e-8)
+	require.InDelta(t, 133.33, quote.RefundCreditTotal, 1e-8)
+}
+
+func TestBuildAccountRefundQuoteIncludesPartiallyRefundedAndRefundedHistory(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-history@example.com").SetPasswordHash("hash").SetUsername("history").SetBalance(60).SetTotalRecharged(150).Save(ctx)
+	require.NoError(t, err)
+	provider, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("refund-history").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	partialID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 0, paymentorder.RechargeBonusStatusNone)
+	_, err = client.PaymentOrder.UpdateOneID(partialID).SetStatus(OrderStatusPartiallyRefunded).SetRefundAmount(40).Save(ctx)
+	require.NoError(t, err)
+	refundedCampaignID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 50, 50, 20, paymentorder.RechargeBonusStatusGranted)
+	_, err = client.PaymentOrder.UpdateOneID(refundedCampaignID).SetStatus(OrderStatusRefunded).SetRefundAmount(50).Save(ctx)
+	require.NoError(t, err)
+	_, err = client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceRechargeBonus).SetSourceID(refundedCampaignID).SetInitialAmount(10).SetUsedAmount(10).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusDepleted).Save(ctx)
+	require.NoError(t, err)
+
+	svc := &PaymentService{entClient: client, userRepo: &mockUserRepo{getByIDUser: &User{ID: userRow.ID, Balance: 60, TotalRecharged: 150}}}
+	quote, err := svc.buildAccountRefundQuote(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.True(t, quote.Eligible)
+	require.Len(t, quote.Orders, 2)
+	require.InDelta(t, 40, quote.Orders[0].PreviouslyRefunded, 1e-8)
+	require.InDelta(t, 60, quote.RefundCreditTotal, 1e-8)
+	require.InDelta(t, 60, quote.Orders[0].GatewayRefund, 1e-8)
+	require.Zero(t, quote.Orders[1].GatewayRefund)
+}
+
+func TestAccountRefundOrderWritesCumulativeRefundAmount(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-cumulative@example.com").SetPasswordHash("hash").SetUsername("cumulative").Save(ctx)
+	require.NoError(t, err)
+	provider, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("refund-cumulative").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 0, paymentorder.RechargeBonusStatusNone)
+	_, err = client.PaymentOrder.UpdateOneID(orderID).SetStatus(OrderStatusPartiallyRefunded).SetRefundAmount(40).Save(ctx)
+	require.NoError(t, err)
+	order, err := client.PaymentOrder.Get(ctx, orderID)
+	require.NoError(t, err)
+	route := &AccountRefundOrder{OrderID: orderID, PreviouslyRefunded: 40, RefundCredit: 60, GatewayRefund: 60}
+	plan := &RefundPlan{OrderID: orderID, Order: order, RefundAmount: 60, GatewayAmount: 60, Reason: accountRefundReason, Force: true}
+	svc := &PaymentService{entClient: client}
+
+	require.NoError(t, svc.markAccountRefundOrderPending(ctx, route, plan, &payment.RefundResponse{Status: payment.ProviderStatusPending}))
+	pendingOrder, err := client.PaymentOrder.Get(ctx, orderID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusRefundPending, pendingOrder.Status)
+	require.InDelta(t, 100, pendingOrder.RefundAmount, 1e-8)
+
+	require.NoError(t, svc.markAccountRefundOrderSucceeded(ctx, route, plan))
+	refundedOrder, err := client.PaymentOrder.Get(ctx, orderID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusRefunded, refundedOrder.Status)
+	require.InDelta(t, 100, refundedOrder.RefundAmount, 1e-8)
+}
+
+func TestBuildAccountRefundQuoteConservesRoundedCentsAcrossOrders(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-cents@example.com").SetPasswordHash("hash").SetUsername("cents").SetBalance(0.05).SetTotalRecharged(3).Save(ctx)
+	require.NoError(t, err)
+	provider, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("refund-cents").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	for i := 0; i < 3; i++ {
+		createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 1, 1, 0, paymentorder.RechargeBonusStatusNone)
+	}
+
+	svc := &PaymentService{entClient: client, userRepo: &mockUserRepo{getByIDUser: &User{ID: userRow.ID, Balance: 0.05, TotalRecharged: 3}}}
+	quote, err := svc.buildAccountRefundQuote(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.True(t, quote.Eligible)
+	routeTotal := 0.0
+	for _, order := range quote.Orders {
+		routeTotal += order.RefundCredit
+		require.LessOrEqual(t, order.GatewayRefund, 1.0)
+	}
+	require.InDelta(t, 0.05, quote.RefundCreditTotal, 1e-8)
+	require.InDelta(t, quote.RefundCreditTotal, routeTotal, 1e-8)
+}
+
 func TestBuildAccountRefundQuoteInfersConsumedPermanentBalance(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
@@ -60,13 +232,13 @@ func TestBuildAccountRefundQuoteInfersConsumedPermanentBalance(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, quote.Eligible)
 	require.Equal(t, "reconciled", quote.TotalConfidence)
-	require.Equal(t, "inferred", quote.AllocationConfidence)
+	require.Equal(t, "deterministic", quote.AllocationConfidence)
 	require.InDelta(t, 99, quote.RefundCreditTotal, 1e-8)
 	require.InDelta(t, 99, quote.GatewayTotals["CNY"], 1e-8)
 	require.InDelta(t, quote.RefundCreditTotal, quote.Orders[0].RefundCredit, 1e-8)
 }
 
-func TestBuildAccountRefundQuoteBlocksUnreconciledRechargeTotal(t *testing.T) {
+func TestBuildAccountRefundQuoteUsesTotalRechargedOnlyAsHistoricalCounter(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 	userRow, err := client.User.Create().SetEmail("account-refund-unreconciled@example.com").SetPasswordHash("hash").SetUsername("refund-unreconciled").SetBalance(99).SetTotalRecharged(125).Save(ctx)
@@ -78,9 +250,9 @@ func TestBuildAccountRefundQuoteBlocksUnreconciledRechargeTotal(t *testing.T) {
 	svc := &PaymentService{entClient: client, userRepo: &mockUserRepo{getByIDUser: &User{ID: userRow.ID, Balance: 99, TotalRecharged: 125, Status: StatusActive}}}
 	quote, err := svc.buildAccountRefundQuote(ctx, userRow.ID)
 	require.NoError(t, err)
-	require.False(t, quote.Eligible)
-	require.Equal(t, "manual_review", quote.TotalConfidence)
-	require.Contains(t, quote.BlockReason, "cumulative recharge total")
+	require.True(t, quote.Eligible)
+	require.Equal(t, "reconciled", quote.TotalConfidence)
+	require.Empty(t, quote.BlockReason)
 	require.True(t, quote.DonationEligible)
 	require.InDelta(t, 99, quote.DonationAmount, 1e-8)
 }
@@ -92,7 +264,7 @@ func TestBuildAccountRefundQuoteUsesAccountPoolBonusRatio(t *testing.T) {
 	require.NoError(t, err)
 	provider, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("refund-provider-pool").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
 	require.NoError(t, err)
-	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 0.2, paymentorder.RechargeBonusStatusGranted)
+	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 20, paymentorder.RechargeBonusStatusGranted)
 	_, err = client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceRechargeBonus).SetSourceID(orderID).SetInitialAmount(20).SetUsedAmount(10).SetFrozenAmount(0).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
 	require.NoError(t, err)
 
@@ -100,7 +272,7 @@ func TestBuildAccountRefundQuoteUsesAccountPoolBonusRatio(t *testing.T) {
 	quote, err := svc.buildAccountRefundQuote(ctx, userRow.ID)
 	require.NoError(t, err)
 	require.True(t, quote.Eligible)
-	require.Equal(t, "inferred", quote.AllocationConfidence)
+	require.Equal(t, "deterministic", quote.AllocationConfidence)
 	require.InDelta(t, 60, quote.EligibleCreditTotal, 1e-8)
 	require.InDelta(t, 50, quote.RefundCreditTotal, 1e-8)
 	require.InDelta(t, 50, quote.GatewayTotals["CNY"], 1e-8)
@@ -113,7 +285,7 @@ func TestBuildAccountRefundQuoteUsesAccountPoolWhenOnlyBonusWasConsumed(t *testi
 	require.NoError(t, err)
 	provider, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("refund-provider-mixed-pool").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
 	require.NoError(t, err)
-	activityOrder := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 0.2, paymentorder.RechargeBonusStatusGranted)
+	activityOrder := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 20, paymentorder.RechargeBonusStatusGranted)
 	createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 50, 50, 0, paymentorder.RechargeBonusStatusNone)
 	_, err = client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceRechargeBonus).SetSourceID(activityOrder).SetInitialAmount(20).SetUsedAmount(10).SetFrozenAmount(0).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
 	require.NoError(t, err)
@@ -122,9 +294,9 @@ func TestBuildAccountRefundQuoteUsesAccountPoolWhenOnlyBonusWasConsumed(t *testi
 	quote, err := svc.buildAccountRefundQuote(ctx, userRow.ID)
 	require.NoError(t, err)
 	require.True(t, quote.Eligible)
-	require.Equal(t, "inferred", quote.AllocationConfidence)
-	require.InDelta(t, 141.17647059, quote.RefundCreditTotal, 1e-8)
-	require.InDelta(t, 141.18, quote.GatewayTotals["CNY"], 1e-8)
+	require.Equal(t, "deterministic", quote.AllocationConfidence)
+	require.InDelta(t, 141.66, quote.RefundCreditTotal, 1e-8)
+	require.InDelta(t, 141.66, quote.GatewayTotals["CNY"], 1e-8)
 }
 
 func TestBuildAccountRefundQuoteBlocksMissingOriginalTradeNumber(t *testing.T) {
@@ -287,6 +459,170 @@ func TestAllocateRefundUnitsConservesTotalAndCapacity(t *testing.T) {
 	require.LessOrEqual(t, rounded[2], int64(100))
 }
 
+func TestAccountRefundCanCancelOnlyBeforeUnknownOrSuccessfulGatewaySubmission(t *testing.T) {
+	record := &AccountRefundRecord{State: AccountRefundStateFailed, Quote: &AccountRefundQuote{Orders: []AccountRefundOrder{{GatewayStatus: payment.ProviderStatusFailed}}}}
+	require.True(t, accountRefundCanCancel(record))
+
+	record.State = AccountRefundStateManualReview
+	record.Quote.Orders[0].GatewayStatus = accountRefundGatewayUnknown
+	require.False(t, accountRefundCanCancel(record))
+
+	record.State = AccountRefundStatePartialExternalSuccess
+	record.Quote.Orders[0].GatewayStatus = payment.ProviderStatusSuccess
+	require.False(t, accountRefundCanCancel(record))
+}
+
+func TestGetAccountRefundSubmittingQueriesGatewayWithoutResubmitting(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-resume-query@example.com").SetPasswordHash("hash").SetUsername("resume-query").SetStatus(StatusRefundLocked).SetBalance(100).SetTotalRecharged(100).Save(ctx)
+	require.NoError(t, err)
+	providerRow, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("resume-query-provider").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, providerRow.ID, 100, 100, 0, paymentorder.RechargeBonusStatusNone)
+	record := &AccountRefundRecord{
+		RefundID: "resume-query-refund", UserID: userRow.ID, State: AccountRefundStateSubmitting, PreviousUserStatus: StatusActive,
+		Quote:     &AccountRefundQuote{PermanentBalance: 100, RefundCreditTotal: 100, Orders: []AccountRefundOrder{{OrderID: orderID, Currency: "CNY", RefundCredit: 100, GatewayRefund: 100, GatewayStatus: AccountRefundStateSubmitting}}},
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	require.NoError(t, writeAccountRefundAudit(ctx, client, record))
+	provider := &accountRefundRecoveryProvider{queryResponse: &payment.RefundResponse{RefundID: "gateway-refund-1", Status: payment.ProviderStatusSuccess}}
+	restoreFactory := replacePaymentProviderFactoryForTest(t, provider)
+	defer restoreFactory()
+	svc := &PaymentService{entClient: client, loadBalancer: &captureLoadBalancer{}}
+
+	resumed, err := svc.GetAccountRefund(ctx, record.RefundID, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateSucceeded, resumed.State)
+	require.Equal(t, 1, provider.queryCalls)
+	require.Zero(t, provider.refundCalls)
+}
+
+func TestGetAccountRefundSubmittingEasyPayMovesToManualReviewWithoutRetry(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-resume-easypay@example.com").SetPasswordHash("hash").SetUsername("resume-easypay").SetStatus(StatusRefundLocked).SetBalance(100).SetTotalRecharged(100).Save(ctx)
+	require.NoError(t, err)
+	providerRow, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeEasyPay).SetName("resume-easypay-provider").SetConfig("{}").SetSupportedTypes("easypay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, providerRow.ID, 100, 100, 0, paymentorder.RechargeBonusStatusNone)
+	record := &AccountRefundRecord{
+		RefundID: "resume-easypay-refund", UserID: userRow.ID, State: AccountRefundStateSubmitting, PreviousUserStatus: StatusActive,
+		Quote:     &AccountRefundQuote{PermanentBalance: 100, RefundCreditTotal: 100, Orders: []AccountRefundOrder{{OrderID: orderID, Currency: "CNY", RefundCredit: 100, GatewayRefund: 100, GatewayStatus: AccountRefundStateSubmitting}}},
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	require.NoError(t, writeAccountRefundAudit(ctx, client, record))
+	provider := &accountRefundNoQueryProvider{}
+	restoreFactory := replacePaymentProviderFactoryForTest(t, provider)
+	defer restoreFactory()
+	svc := &PaymentService{entClient: client, loadBalancer: &captureLoadBalancer{}}
+
+	resumed, err := svc.GetAccountRefund(ctx, record.RefundID, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateManualReview, resumed.State)
+	require.Equal(t, accountRefundGatewayUnknown, resumed.Quote.Orders[0].GatewayStatus)
+	require.Zero(t, provider.refundCalls)
+}
+
+func TestExecuteAccountRefundFirstFailureCanContinue(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-first-failure@example.com").SetPasswordHash("hash").SetUsername("first-failure").SetStatus(StatusRefundLocked).SetBalance(100).Save(ctx)
+	require.NoError(t, err)
+	providerRow, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("first-failure-provider").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, providerRow.ID, 100, 100, 0, paymentorder.RechargeBonusStatusNone)
+	record := &AccountRefundRecord{
+		RefundID: "first-failure-refund", UserID: userRow.ID, State: AccountRefundStateSubmitting, PreviousUserStatus: StatusActive,
+		Quote:     &AccountRefundQuote{PermanentBalance: 100, RefundCreditTotal: 100, Orders: []AccountRefundOrder{{OrderID: orderID, Currency: "CNY", RefundCredit: 100, GatewayRefund: 100}}},
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	provider := &accountRefundSequenceProvider{results: []accountRefundProviderResult{{err: errors.New("gateway rejected")}, {response: &payment.RefundResponse{Status: payment.ProviderStatusSuccess}}}}
+	restoreFactory := replacePaymentProviderFactoryForTest(t, provider)
+	defer restoreFactory()
+	svc := &PaymentService{entClient: client, loadBalancer: &captureLoadBalancer{}}
+
+	failed, err := svc.executeAccountRefundRoutes(ctx, record)
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateFailed, failed.State)
+	require.Equal(t, 1, provider.refundCalls)
+
+	completed, err := svc.executeAccountRefundRoutes(ctx, failed)
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateSucceeded, completed.State)
+	require.Equal(t, 2, provider.refundCalls)
+}
+
+func TestExecuteAccountRefundPartialSuccessRetriesOnlyFailedRoute(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-partial-success@example.com").SetPasswordHash("hash").SetUsername("partial-success").SetStatus(StatusRefundLocked).SetBalance(100).Save(ctx)
+	require.NoError(t, err)
+	providerRow, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("partial-success-provider").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	firstOrderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, providerRow.ID, 50, 50, 0, paymentorder.RechargeBonusStatusNone)
+	secondOrderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, providerRow.ID, 50, 50, 0, paymentorder.RechargeBonusStatusNone)
+	record := &AccountRefundRecord{
+		RefundID: "partial-success-refund", UserID: userRow.ID, State: AccountRefundStateSubmitting, PreviousUserStatus: StatusActive,
+		Quote: &AccountRefundQuote{PermanentBalance: 100, RefundCreditTotal: 100, Orders: []AccountRefundOrder{
+			{OrderID: firstOrderID, Currency: "CNY", RefundCredit: 50, GatewayRefund: 50},
+			{OrderID: secondOrderID, Currency: "CNY", RefundCredit: 50, GatewayRefund: 50},
+		}},
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	provider := &accountRefundSequenceProvider{results: []accountRefundProviderResult{
+		{response: &payment.RefundResponse{Status: payment.ProviderStatusSuccess}},
+		{err: errors.New("second route rejected")},
+		{response: &payment.RefundResponse{Status: payment.ProviderStatusSuccess}},
+	}}
+	restoreFactory := replacePaymentProviderFactoryForTest(t, provider)
+	defer restoreFactory()
+	svc := &PaymentService{entClient: client, loadBalancer: &captureLoadBalancer{}}
+
+	partial, err := svc.executeAccountRefundRoutes(ctx, record)
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStatePartialExternalSuccess, partial.State)
+	require.Equal(t, 2, provider.refundCalls)
+
+	completed, err := svc.executeAccountRefundRoutes(ctx, partial)
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateSucceeded, completed.State)
+	require.Equal(t, 3, provider.refundCalls)
+}
+
+func TestExecuteAccountRefundUnknownOutcomeMovesOrderToPendingWithoutRetry(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-unknown@example.com").SetPasswordHash("hash").SetUsername("unknown").SetStatus(StatusRefundLocked).SetBalance(100).Save(ctx)
+	require.NoError(t, err)
+	providerRow, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("unknown-provider").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, providerRow.ID, 100, 100, 0, paymentorder.RechargeBonusStatusNone)
+	record := &AccountRefundRecord{
+		RefundID: "unknown-outcome-refund", UserID: userRow.ID, State: AccountRefundStateSubmitting, PreviousUserStatus: StatusActive,
+		Quote:     &AccountRefundQuote{PermanentBalance: 100, RefundCreditTotal: 100, Orders: []AccountRefundOrder{{OrderID: orderID, Currency: "CNY", RefundCredit: 100, GatewayRefund: 100}}},
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	provider := &accountRefundSequenceProvider{results: []accountRefundProviderResult{{err: payment.MarkRefundOutcomeUnknown(errors.New("connection closed after submission"))}}}
+	restoreFactory := replacePaymentProviderFactoryForTest(t, provider)
+	defer restoreFactory()
+	svc := &PaymentService{entClient: client, loadBalancer: &captureLoadBalancer{}}
+
+	manual, err := svc.executeAccountRefundRoutes(ctx, record)
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateManualReview, manual.State)
+	require.Equal(t, accountRefundGatewayUnknown, manual.Quote.Orders[0].GatewayStatus)
+	require.Equal(t, 1, provider.refundCalls)
+	updatedOrder, err := client.PaymentOrder.Get(ctx, orderID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusRefundPending, updatedOrder.Status)
+
+	reloaded, err := svc.GetAccountRefund(ctx, record.RefundID, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateManualReview, reloaded.State)
+	require.Equal(t, 1, provider.refundCalls)
+}
+
 func TestUpdateStatusProtectsActiveRefundLock(t *testing.T) {
 	repo := &mockUserRepo{getByIDUser: &User{ID: 7, Status: StatusRefundLocked}}
 	svc := NewUserService(repo, nil, nil, nil)
@@ -368,7 +704,7 @@ func createAccountRefundTestOrder(t *testing.T, ctx context.Context, client *dbe
 	sequence := accountRefundTestOrderSequence.Add(1)
 	providerIDText := fmt.Sprintf("%d", providerID)
 	now := time.Now().UTC()
-	order, err := client.PaymentOrder.Create().
+	builder := client.PaymentOrder.Create().
 		SetUserID(userID).
 		SetUserEmail(email).
 		SetUserName("refund-user").
@@ -384,15 +720,21 @@ func createAccountRefundTestOrder(t *testing.T, ctx context.Context, client *dbe
 		SetProviderKey(payment.TypeAlipay).
 		SetProviderSnapshot(map[string]any{"currency": "CNY"}).
 		SetRechargeBonusRate(bonusRate).
-		SetRechargeBonusAmount(amount * bonusRate).
 		SetRechargeBonusStatus(bonusStatus).
 		SetStatus(OrderStatusCompleted).
 		SetExpiresAt(now.Add(time.Hour)).
 		SetPaidAt(now).
 		SetCompletedAt(now).
 		SetClientIP("127.0.0.1").
-		SetSrcHost("example.com").
-		Save(ctx)
+		SetSrcHost("example.com")
+	if bonusStatus == paymentorder.RechargeBonusStatusGranted {
+		fraction, ok := rechargeBonusRateToFraction(bonusRate)
+		require.True(t, ok)
+		builder.SetRechargeBonusCampaignID(sequence).
+			SetRechargeBonusCampaignName(fmt.Sprintf("campaign-%d", sequence)).
+			SetRechargeBonusAmount(amount * fraction)
+	}
+	order, err := builder.Save(ctx)
 	require.NoError(t, err)
 	return order.ID
 }
@@ -415,4 +757,44 @@ func (f *accountRefundFenceStub) ReleaseRefundBillingLock(context.Context, int64
 }
 func (f *accountRefundFenceStub) IsRefundBillingLocked(context.Context, int64) (bool, error) {
 	return true, nil
+}
+
+type accountRefundNoQueryProvider struct {
+	refundProviderTestDouble
+	refundCalls int
+}
+
+func (p *accountRefundNoQueryProvider) Refund(context.Context, payment.RefundRequest) (*payment.RefundResponse, error) {
+	p.refundCalls++
+	return &payment.RefundResponse{Status: payment.ProviderStatusSuccess}, nil
+}
+
+type accountRefundRecoveryProvider struct {
+	accountRefundNoQueryProvider
+	queryCalls    int
+	queryResponse *payment.RefundResponse
+}
+
+type accountRefundProviderResult struct {
+	response *payment.RefundResponse
+	err      error
+}
+
+type accountRefundSequenceProvider struct {
+	refundProviderTestDouble
+	refundCalls int
+	results     []accountRefundProviderResult
+}
+
+func (p *accountRefundSequenceProvider) ProviderKey() string { return payment.TypeAlipay }
+
+func (p *accountRefundSequenceProvider) Refund(context.Context, payment.RefundRequest) (*payment.RefundResponse, error) {
+	result := p.results[p.refundCalls]
+	p.refundCalls++
+	return result.response, result.err
+}
+
+func (p *accountRefundRecoveryProvider) QueryRefund(context.Context, payment.RefundQueryRequest) (*payment.RefundResponse, error) {
+	p.queryCalls++
+	return p.queryResponse, nil
 }

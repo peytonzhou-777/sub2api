@@ -42,34 +42,41 @@ const (
 	accountRefundReason         = "account full clearance"
 	accountRefundTolerance      = 0.00000001
 	accountRefundDonationAction = "ACCOUNT_REFUND_DONATED"
+	accountRefundCampaignFactor = 0.8333
+	accountRefundGatewayUnknown = "unknown"
 )
 
 func accountRefundInFlightOrderPredicate() predicate.PaymentOrder {
 	return paymentorder.Or(
-		paymentorder.StatusIn(OrderStatusPending, OrderStatusPaid, OrderStatusRecharging),
+		paymentorder.StatusIn(OrderStatusPending, OrderStatusPaid, OrderStatusRecharging, OrderStatusRefundRequested, OrderStatusRefunding, OrderStatusRefundPending),
 		paymentorder.And(paymentorder.StatusEQ(OrderStatusFailed), paymentorder.PaidAtNotNil()),
 	)
 }
 
+func accountRefundHistoricalOrderPredicate() predicate.PaymentOrder {
+	return paymentorder.StatusIn(OrderStatusCompleted, OrderStatusPartiallyRefunded, OrderStatusRefunded)
+}
+
 // AccountRefundOrder 展示账户清退中一条只读支付路由。
 type AccountRefundOrder struct {
-	OrderID          int64     `json:"order_id"`
-	CompletedAt      time.Time `json:"completed_at"`
-	PaymentType      string    `json:"payment_type"`
-	ProviderInstance string    `json:"provider_instance_id"`
-	Currency         string    `json:"currency"`
-	OriginalCredit   float64   `json:"original_credit"`
-	OriginalPaid     float64   `json:"original_paid"`
-	BonusRate        float64   `json:"bonus_rate"`
-	BonusInitial     float64   `json:"bonus_initial"`
-	BonusRemaining   float64   `json:"bonus_remaining"`
-	EligibleCredit   float64   `json:"eligible_credit"`
-	RefundCredit     float64   `json:"refund_credit"`
-	GatewayRefund    float64   `json:"gateway_refund"`
-	Allocation       string    `json:"allocation_confidence"`
-	GatewayStatus    string    `json:"gateway_status,omitempty"`
-	GatewayRefundID  string    `json:"gateway_refund_id,omitempty"`
-	GatewayError     string    `json:"gateway_error,omitempty"`
+	OrderID            int64     `json:"order_id"`
+	CompletedAt        time.Time `json:"completed_at"`
+	PaymentType        string    `json:"payment_type"`
+	ProviderInstance   string    `json:"provider_instance_id"`
+	Currency           string    `json:"currency"`
+	OriginalCredit     float64   `json:"original_credit"`
+	OriginalPaid       float64   `json:"original_paid"`
+	PreviouslyRefunded float64   `json:"previously_refunded"`
+	BonusRate          float64   `json:"bonus_rate"`
+	BonusInitial       float64   `json:"bonus_initial"`
+	BonusRemaining     float64   `json:"bonus_remaining"`
+	EligibleCredit     float64   `json:"eligible_credit"`
+	RefundCredit       float64   `json:"refund_credit"`
+	GatewayRefund      float64   `json:"gateway_refund"`
+	Allocation         string    `json:"allocation_confidence"`
+	GatewayStatus      string    `json:"gateway_status,omitempty"`
+	GatewayRefundID    string    `json:"gateway_refund_id,omitempty"`
+	GatewayError       string    `json:"gateway_error,omitempty"`
 }
 
 // AccountRefundQuote 是账户级权威试算结果；不同币种始终独立汇总。
@@ -186,7 +193,7 @@ func (s *PaymentService) GetAccountRefundOverview(ctx context.Context, userID in
 	if current, err := s.latestAccountRefundForUser(ctx, userID); err != nil {
 		return nil, err
 	} else if current != nil && !accountRefundTerminal(current.State) {
-		return s.refreshAccountRefundDrain(ctx, current)
+		return s.advanceAccountRefund(ctx, current)
 	}
 	quote, err := s.buildAccountRefundQuote(ctx, userID)
 	if err != nil {
@@ -315,19 +322,30 @@ func (s *PaymentService) GetAccountRefund(ctx context.Context, refundID string, 
 	if record == nil {
 		return nil, infraerrors.NotFound("REFUND_NOT_FOUND", "account refund not found")
 	}
-	if record.State == AccountRefundStatePending {
-		return s.reconcileAccountRefundPending(ctx, record)
-	}
-	return s.refreshAccountRefundDrain(ctx, record)
+	return s.advanceAccountRefund(ctx, record)
 }
 
-// ConfirmAccountRefund 执行账户级全额清退；已成功的支付路由不会在本次循环内重试。
+func (s *PaymentService) advanceAccountRefund(ctx context.Context, record *AccountRefundRecord) (*AccountRefundRecord, error) {
+	if record == nil {
+		return nil, nil
+	}
+	switch record.State {
+	case AccountRefundStateDraining:
+		return s.refreshAccountRefundDrain(ctx, record)
+	case AccountRefundStatePending, AccountRefundStateSubmitting:
+		return s.reconcileAccountRefundPending(ctx, record)
+	default:
+		return record, nil
+	}
+}
+
+// ConfirmAccountRefund 执行账户级余额清退；已成功的支付路由不会在本次循环内重试。
 func (s *PaymentService) ConfirmAccountRefund(ctx context.Context, refundID string, userID int64, quoteHash string) (*AccountRefundRecord, error) {
 	record, err := s.GetAccountRefund(ctx, refundID, userID)
 	if err != nil {
 		return nil, err
 	}
-	if record.State != AccountRefundStateReadyToConfirm {
+	if record.State != AccountRefundStateReadyToConfirm && record.State != AccountRefundStateFailed && record.State != AccountRefundStatePartialExternalSuccess {
 		return nil, infraerrors.Conflict("REFUND_NOT_READY_TO_CONFIRM", "refund billing is not fully drained")
 	}
 	if record.Quote == nil || quoteHash != record.Quote.QuoteHash {
@@ -380,15 +398,15 @@ func (s *PaymentService) claimAccountRefundSubmission(ctx context.Context, recor
 	if err != nil {
 		return nil, infraerrors.Conflict("REFUND_LOCK_LOST", "refund no longer owns the account lock")
 	}
-	completedOrderQuery := tx.PaymentOrder.Query().Where(
+	historicalOrderQuery := tx.PaymentOrder.Query().Where(
 		paymentorder.UserIDEQ(record.UserID),
 		paymentorder.OrderTypeEQ(payment.OrderTypeBalance),
-		paymentorder.StatusEQ(OrderStatusCompleted),
+		accountRefundHistoricalOrderPredicate(),
 	)
 	if tx.Client().Driver().Dialect() == dialect.Postgres {
-		completedOrderQuery = completedOrderQuery.ForUpdate()
+		historicalOrderQuery = historicalOrderQuery.ForUpdate()
 	}
-	if _, err = completedOrderQuery.All(txCtx); err != nil {
+	if _, err = historicalOrderQuery.All(txCtx); err != nil {
 		return nil, fmt.Errorf("lock refund orders: %w", err)
 	}
 	inFlightQuery := tx.PaymentOrder.Query().Where(
@@ -427,16 +445,22 @@ func (s *PaymentService) claimAccountRefundSubmission(ctx context.Context, recor
 	if err != nil {
 		return nil, err
 	}
-	if latest.State != AccountRefundStateReadyToConfirm {
+	resumeSubmission := latest.State == AccountRefundStateFailed || latest.State == AccountRefundStatePartialExternalSuccess
+	if latest.State != AccountRefundStateReadyToConfirm && !resumeSubmission {
 		return nil, infraerrors.Conflict("REFUND_NOT_READY_TO_CONFIRM", "refund confirmation was already claimed or is not ready")
 	}
 	account := &User{ID: lockedUser.ID, Balance: lockedUser.Balance, FrozenBalance: lockedUser.FrozenBalance, TotalRecharged: lockedUser.TotalRecharged, Status: lockedUser.Status}
-	currentQuote, err := s.buildAccountRefundQuoteWithClient(txCtx, tx.Client(), account)
-	if err != nil {
-		return nil, err
-	}
-	if latest.Quote == nil || !currentQuote.Eligible || currentQuote.QuoteHash != latest.Quote.QuoteHash {
+	if latest.Quote == nil || math.Abs(account.Balance-latest.Quote.PermanentBalance) > accountRefundTolerance {
 		return nil, infraerrors.Conflict("REFUND_QUOTE_CHANGED", "balance changed after lock; manual review is required")
+	}
+	if !resumeSubmission {
+		currentQuote, quoteErr := s.buildAccountRefundQuoteWithClient(txCtx, tx.Client(), account)
+		if quoteErr != nil {
+			return nil, quoteErr
+		}
+		if !currentQuote.Eligible || currentQuote.QuoteHash != latest.Quote.QuoteHash {
+			return nil, infraerrors.Conflict("REFUND_QUOTE_CHANGED", "balance changed after lock; manual review is required")
+		}
 	}
 	latest.State = AccountRefundStateSubmitting
 	latest.UpdatedAt = time.Now().UTC()
@@ -454,12 +478,24 @@ func (s *PaymentService) executeAccountRefundRoutes(ctx context.Context, record 
 	for i := range record.Quote.Orders {
 		route := &record.Quote.Orders[i]
 		if route.GatewayStatus == payment.ProviderStatusSuccess || route.GatewayStatus == payment.ProviderStatusRefunded {
+			order, err := s.entClient.PaymentOrder.Get(ctx, route.OrderID)
+			if err != nil {
+				return s.failAccountRefund(ctx, record, succeeded, "load completed refund order: "+err.Error())
+			}
+			if !accountRefundOrderReachedTarget(order, route) {
+				plan := &RefundPlan{OrderID: order.ID, Order: order, RequestID: accountRefundRouteRequestID(record.RefundID, order.ID), RefundAmount: route.RefundCredit, GatewayAmount: route.GatewayRefund, Reason: accountRefundReason, Force: true}
+				if err := s.markAccountRefundOrderSucceeded(ctx, route, plan); err != nil {
+					return s.failAccountRefund(ctx, record, succeeded+1, "finalize confirmed gateway refund: "+err.Error())
+				}
+			}
 			succeeded++
 			continue
 		}
-		if route.GatewayStatus == payment.ProviderStatusPending {
-			record.State = AccountRefundStatePending
-			return record, nil
+		if route.GatewayStatus == payment.ProviderStatusPending || route.GatewayStatus == AccountRefundStateSubmitting || route.GatewayStatus == accountRefundGatewayUnknown {
+			return s.reconcileAccountRefundPending(ctx, record)
+		}
+		if route.RefundCredit <= accountRefundTolerance || route.GatewayRefund <= accountRefundTolerance {
+			continue
 		}
 		order, err := s.entClient.PaymentOrder.Get(ctx, route.OrderID)
 		if err != nil {
@@ -467,15 +503,37 @@ func (s *PaymentService) executeAccountRefundRoutes(ctx context.Context, record 
 			return s.failAccountRefund(ctx, record, succeeded, "load refund order: "+err.Error())
 		}
 		plan := &RefundPlan{OrderID: order.ID, Order: order, RequestID: accountRefundRouteRequestID(record.RefundID, order.ID), RefundAmount: route.RefundCredit, GatewayAmount: route.GatewayRefund, Reason: accountRefundReason, Force: true}
+		route.GatewayStatus = AccountRefundStateSubmitting
+		route.GatewayError = ""
+		record.State = AccountRefundStateSubmitting
+		record.Message = "submitting refund route to original payment provider"
+		record.UpdatedAt = time.Now().UTC()
+		if err := s.writeAccountRefundAudit(ctx, record); err != nil {
+			return nil, err
+		}
 		resp, callErr := s.gwRefund(ctx, plan)
 		if callErr != nil {
 			route.GatewayError = callErr.Error()
+			if payment.IsRefundOutcomeUnknown(callErr) {
+				route.GatewayStatus = accountRefundGatewayUnknown
+				if pendingErr := s.markAccountRefundOrderPending(ctx, route, plan, nil); pendingErr != nil {
+					route.GatewayError += "; mark order pending: " + pendingErr.Error()
+				}
+				record.State = AccountRefundStateManualReview
+				record.Message = "gateway refund outcome is unknown; manual reconciliation is required before any retry"
+				record.UpdatedAt = time.Now().UTC()
+				if err := s.writeAccountRefundAudit(ctx, record); err != nil {
+					return nil, err
+				}
+				return record, nil
+			}
+			route.GatewayStatus = payment.ProviderStatusFailed
 			return s.failAccountRefund(ctx, record, succeeded, callErr.Error())
 		}
 		route.GatewayStatus = strings.TrimSpace(resp.Status)
 		route.GatewayRefundID = refundResponseID(resp)
 		if route.GatewayStatus == payment.ProviderStatusPending {
-			_ = s.markAccountRefundOrderPending(ctx, plan, resp)
+			_ = s.markAccountRefundOrderPending(ctx, route, plan, resp)
 			record.State = AccountRefundStatePending
 			record.Message = "gateway refund is pending confirmation"
 			record.UpdatedAt = time.Now().UTC()
@@ -484,7 +542,7 @@ func (s *PaymentService) executeAccountRefundRoutes(ctx context.Context, record 
 			}
 			return record, nil
 		}
-		if _, err := s.markRefundOk(ctx, plan); err != nil {
+		if err := s.markAccountRefundOrderSucceeded(ctx, route, plan); err != nil {
 			route.GatewayError = err.Error()
 			return s.failAccountRefund(ctx, record, succeeded+1, "gateway succeeded but local order update failed: "+err.Error())
 		}
@@ -509,7 +567,7 @@ func (s *PaymentService) CancelAccountRefund(ctx context.Context, refundID strin
 	if err != nil {
 		return nil, err
 	}
-	if record.State != AccountRefundStateDraining && record.State != AccountRefundStateReadyToConfirm {
+	if !accountRefundCanCancel(record) {
 		return nil, infraerrors.Conflict("REFUND_CANNOT_CANCEL_AFTER_SUBMISSION", "refund cannot be canceled after gateway submission")
 	}
 	restore := record.PreviousUserStatus
@@ -560,6 +618,29 @@ func (s *PaymentService) buildAccountRefundQuote(ctx context.Context, userID int
 type accountRefundBonusAggregate struct {
 	initial   decimal.Decimal
 	remaining decimal.Decimal
+	hasGrant  bool
+}
+
+type accountRefundOrderPool struct {
+	order             *dbent.PaymentOrder
+	campaign          bool
+	principalCapacity decimal.Decimal
+	gatewayCapacity   decimal.Decimal
+	bonusInitial      decimal.Decimal
+	bonusRemaining    decimal.Decimal
+	bonusRate         float64
+}
+
+// rechargeBonusRateToFraction 将订单快照中的百分数统一转换为小数比例。
+func rechargeBonusRateToFraction(percent float64) (float64, bool) {
+	if math.IsNaN(percent) || math.IsInf(percent, 0) || percent <= 0 {
+		return 0, false
+	}
+	fraction := decimal.NewFromFloat(percent).Div(decimal.NewFromInt(100))
+	if !fraction.GreaterThan(decimal.Zero) {
+		return 0, false
+	}
+	return fraction.InexactFloat64(), true
 }
 
 // buildAccountRefundQuoteWithClient 允许确认事务在已锁定资金行上复算同一份权威试算。
@@ -575,7 +656,7 @@ func (s *PaymentService) buildAccountRefundQuoteWithClient(ctx context.Context, 
 	orders, err := client.PaymentOrder.Query().Where(
 		paymentorder.UserIDEQ(account.ID),
 		paymentorder.OrderTypeEQ(payment.OrderTypeBalance),
-		paymentorder.StatusEQ(OrderStatusCompleted),
+		accountRefundHistoricalOrderPredicate(),
 	).Order(dbent.Asc(paymentorder.FieldCompletedAt), dbent.Asc(paymentorder.FieldID)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list refundable orders: %w", err)
@@ -585,11 +666,18 @@ func (s *PaymentService) buildAccountRefundQuoteWithClient(ctx context.Context, 
 		return nil, fmt.Errorf("list refund credits: %w", err)
 	}
 
-	quote := &AccountRefundQuote{TotalConfidence: "manual_review", AllocationConfidence: "exact", PermanentBalance: normalizeRefundFloat(account.Balance), GatewayTotals: map[string]float64{}, Orders: make([]AccountRefundOrder, 0, len(orders))}
+	quote := &AccountRefundQuote{TotalConfidence: "manual_review", AllocationConfidence: "deterministic", PermanentBalance: normalizeRefundFloat(account.Balance), GatewayTotals: map[string]float64{}, Orders: make([]AccountRefundOrder, 0, len(orders))}
 	donationBlockReason := ""
+	setBlockReason := func(reason string, blocksDonation bool) {
+		if quote.BlockReason == "" {
+			quote.BlockReason = reason
+		}
+		if blocksDonation && donationBlockReason == "" {
+			donationBlockReason = reason
+		}
+	}
 	if inFlight > 0 {
-		quote.BlockReason = "a balance recharge order is still pending or being fulfilled"
-		donationBlockReason = quote.BlockReason
+		setBlockReason("a balance recharge order is still pending, being fulfilled, or being refunded", true)
 	}
 	orderByID := make(map[int64]*dbent.PaymentOrder, len(orders))
 	for _, order := range orders {
@@ -598,151 +686,198 @@ func (s *PaymentService) buildAccountRefundQuoteWithClient(ctx context.Context, 
 	bonusByOrder := make(map[int64]accountRefundBonusAggregate)
 	now := time.Now().UTC()
 	for _, grant := range grants {
-		if grant.SourceType == LimitedCreditSourceRechargeBonus && grant.SourceID != nil {
-			if _, exists := orderByID[*grant.SourceID]; !exists {
-				quote.BlockReason = "a recharge bonus cannot be matched to a completed recharge order"
-				donationBlockReason = quote.BlockReason
+		remaining := math.Max(0, grant.InitialAmount-grant.UsedAmount-grant.FrozenAmount)
+		activeRemaining := decimal.Zero
+		if grant.Status == LimitedCreditStatusActive && grant.ExpiresAt.After(now) {
+			activeRemaining = decimal.NewFromFloat(remaining)
+		}
+		if grant.SourceType == LimitedCreditSourceRechargeBonus {
+			if grant.SourceID == nil {
+				quote.OtherLimitedToClear += activeRemaining.InexactFloat64()
+				setBlockReason("a recharge bonus grant has no source order", true)
 				continue
 			}
 			aggregate := bonusByOrder[*grant.SourceID]
+			aggregate.hasGrant = true
 			aggregate.initial = aggregate.initial.Add(decimal.NewFromFloat(grant.InitialAmount))
-			if grant.Status == LimitedCreditStatusActive && grant.ExpiresAt.After(now) {
-				remaining := math.Max(0, grant.InitialAmount-grant.UsedAmount-grant.FrozenAmount)
-				aggregate.remaining = aggregate.remaining.Add(decimal.NewFromFloat(remaining))
-				quote.RechargeBonusBalance += remaining
-			}
+			aggregate.remaining = aggregate.remaining.Add(activeRemaining)
 			bonusByOrder[*grant.SourceID] = aggregate
-		} else if grant.Status == LimitedCreditStatusActive && grant.ExpiresAt.After(now) {
-			quote.OtherLimitedToClear += math.Max(0, grant.InitialAmount-grant.UsedAmount-grant.FrozenAmount)
+			if _, exists := orderByID[*grant.SourceID]; !exists {
+				quote.OtherLimitedToClear += activeRemaining.InexactFloat64()
+				setBlockReason("a recharge bonus cannot be matched to a historical recharge order", true)
+			}
+		} else {
+			quote.OtherLimitedToClear += activeRemaining.InexactFloat64()
 		}
 		if grant.FrozenAmount > accountRefundTolerance {
-			quote.BlockReason = "limited credits are still frozen"
-			donationBlockReason = quote.BlockReason
+			setBlockReason("limited credits are still frozen", true)
 		}
 	}
 	if account.FrozenBalance > accountRefundTolerance {
-		quote.BlockReason = "permanent balance is still frozen"
-		donationBlockReason = quote.BlockReason
+		setBlockReason("permanent balance is still frozen", true)
 	}
 	if len(orders) == 0 && quote.BlockReason == "" {
-		quote.BlockReason = "no completed balance recharge order is refundable"
+		setBlockReason("no historical balance recharge order is refundable", true)
 	}
 	if len(orders) == 0 {
-		donationBlockReason = "no completed balance recharge order can support the donation amount"
+		donationBlockReason = "no historical balance recharge order can support the donation amount"
 	}
 
-	totalOriginal := decimal.Zero
-	totalBonusInitial := decimal.Zero
+	positiveBalance := decimal.NewFromFloat(math.Max(account.Balance, 0))
+	if account.Balance < -accountRefundTolerance {
+		setBlockReason("permanent balance is negative and requires manual reconciliation", true)
+	}
+	fullPriceCapacity := decimal.Zero
+	campaignCapacity := decimal.Zero
+	campaignBonusRemaining := decimal.Zero
 	currencies := make(map[string]struct{})
+	pools := make([]accountRefundOrderPool, 0, len(orders))
 	for _, order := range orders {
-		totalOriginal = totalOriginal.Add(decimal.NewFromFloat(order.Amount))
 		bonus := bonusByOrder[order.ID]
-		bonusInitial := bonus.initial.InexactFloat64()
-		bonusRemaining := bonus.remaining.InexactFloat64()
-		totalBonusInitial = totalBonusInitial.Add(bonus.initial)
-		hasActualBonus := bonus.initial.GreaterThan(decimal.Zero)
-		if hasActualBonus != (order.RechargeBonusStatus == paymentorder.RechargeBonusStatusGranted) {
-			quote.BlockReason = "recharge bonus history cannot be reconciled to its order snapshot"
-			donationBlockReason = quote.BlockReason
-		}
-		if strings.TrimSpace(order.PaymentTradeNo) == "" {
-			quote.BlockReason = "a historical order has no original payment trade number"
-			continue
-		}
-		if order.ProviderInstanceID == nil || strings.TrimSpace(*order.ProviderInstanceID) == "" {
-			quote.BlockReason = "a historical order has no original payment provider"
-			continue
-		}
-		instanceID, parseErr := strconv.ParseInt(strings.TrimSpace(*order.ProviderInstanceID), 10, 64)
-		if parseErr != nil {
-			quote.BlockReason = "a historical order has an invalid payment provider"
-			continue
-		}
-		provider, providerErr := client.PaymentProviderInstance.Query().Where(
-			paymentproviderinstance.IDEQ(instanceID),
-			paymentproviderinstance.RefundEnabledEQ(true),
-			paymentproviderinstance.AllowUserRefundEQ(true),
-		).Only(ctx)
-		if providerErr != nil || provider == nil {
-			quote.BlockReason = "an original payment provider does not allow user refunds"
-			continue
-		}
-		credit := decimal.NewFromFloat(order.Amount).Add(decimal.NewFromFloat(bonusRemaining))
-		refundCredit := decimal.NewFromFloat(order.Amount)
-		if hasActualBonus {
-			if order.RechargeBonusRate <= 0 {
-				quote.BlockReason = "a recharge bonus order has no valid bonus ratio snapshot"
+		hasCampaignSnapshot := order.RechargeBonusCampaignID != nil
+		isCampaign := hasCampaignSnapshot && bonus.hasGrant
+		bonusRate := 0.0
+		if isCampaign {
+			var valid bool
+			bonusRate, valid = rechargeBonusRateToFraction(order.RechargeBonusRate)
+			if !valid {
+				setBlockReason("a recharge bonus order has no valid percentage snapshot", true)
 			}
-			refundCredit = credit.Div(decimal.NewFromInt(1).Add(decimal.NewFromFloat(order.RechargeBonusRate)))
+			if decimal.NewFromFloat(order.RechargeBonusAmount).Sub(bonus.initial).Abs().GreaterThan(decimal.NewFromFloat(accountRefundTolerance)) {
+				setBlockReason("recharge bonus grant cannot be reconciled to its order snapshot", true)
+			}
+			campaignBonusRemaining = campaignBonusRemaining.Add(bonus.remaining)
+			quote.RechargeBonusBalance += bonus.remaining.InexactFloat64()
+		} else if bonus.hasGrant {
+			// 活动快照缺失的异常赠额不参与退款，仍会在清退终态被清空。
+			quote.OtherLimitedToClear += bonus.remaining.InexactFloat64()
+		} else if hasCampaignSnapshot && order.RechargeBonusStatus == paymentorder.RechargeBonusStatusGranted {
+			setBlockReason("a granted campaign order has no recharge bonus grant", true)
 		}
-		if refundCredit.GreaterThan(decimal.NewFromFloat(order.Amount)) {
-			refundCredit = decimal.NewFromFloat(order.Amount)
+
+		principalCapacity := decimal.NewFromFloat(order.Amount).Sub(decimal.NewFromFloat(order.RefundAmount))
+		if principalCapacity.IsNegative() {
+			setBlockReason("a historical order refund exceeds its original credited amount", true)
+			principalCapacity = decimal.Zero
+		}
+		if order.Status == OrderStatusRefunded && principalCapacity.GreaterThan(decimal.NewFromFloat(accountRefundTolerance)) {
+			setBlockReason("a refunded historical order has inconsistent remaining principal", true)
 		}
 		currency := PaymentOrderCurrency(order)
-		currencies[currency] = struct{}{}
-		gateway := calculateGatewayRefundAmount(order.Amount, order.PayAmount, refundCredit.InexactFloat64(), currency)
+		gatewayRefunded := calculateGatewayRefundAmount(order.Amount, order.PayAmount, math.Min(math.Max(order.RefundAmount, 0), order.Amount), currency)
+		gatewayCapacity := decimal.NewFromFloat(order.PayAmount).Sub(decimal.NewFromFloat(gatewayRefunded))
+		if gatewayCapacity.IsNegative() {
+			setBlockReason("a historical order exceeds its original gateway refund capacity", true)
+			gatewayCapacity = decimal.Zero
+		}
+		if principalCapacity.GreaterThan(decimal.NewFromFloat(accountRefundTolerance)) || (isCampaign && bonus.remaining.GreaterThan(decimal.Zero)) {
+			currencies[currency] = struct{}{}
+			if strings.TrimSpace(order.PaymentTradeNo) == "" {
+				setBlockReason("a refundable historical order has no original payment trade number", false)
+			}
+			if order.ProviderInstanceID == nil || strings.TrimSpace(*order.ProviderInstanceID) == "" {
+				setBlockReason("a refundable historical order has no original payment provider", false)
+			} else {
+				instanceID, parseErr := strconv.ParseInt(strings.TrimSpace(*order.ProviderInstanceID), 10, 64)
+				if parseErr != nil {
+					setBlockReason("a refundable historical order has an invalid payment provider", false)
+				} else {
+					provider, providerErr := client.PaymentProviderInstance.Query().Where(
+						paymentproviderinstance.IDEQ(instanceID),
+						paymentproviderinstance.RefundEnabledEQ(true),
+						paymentproviderinstance.AllowUserRefundEQ(true),
+					).Only(ctx)
+					if providerErr != nil || provider == nil {
+						setBlockReason("an original payment provider does not allow user refunds", false)
+					}
+				}
+			}
+		}
+		if isCampaign {
+			campaignCapacity = campaignCapacity.Add(principalCapacity)
+		} else {
+			fullPriceCapacity = fullPriceCapacity.Add(principalCapacity)
+		}
+		pools = append(pools, accountRefundOrderPool{
+			order: order, campaign: isCampaign, principalCapacity: principalCapacity, gatewayCapacity: gatewayCapacity,
+			bonusInitial: bonus.initial, bonusRemaining: bonus.remaining, bonusRate: bonusRate,
+		})
+	}
+	if len(currencies) > 1 {
+		setBlockReason("multiple payment currencies require manual refund allocation", false)
+	}
+
+	totalPrincipalCapacity := fullPriceCapacity.Add(campaignCapacity)
+	if positiveBalance.GreaterThan(totalPrincipalCapacity.Add(decimal.NewFromFloat(accountRefundTolerance))) {
+		setBlockReason("permanent balance exceeds historical remaining principal capacity", true)
+	}
+	fullPriceRemaining := decimal.Min(positiveBalance, fullPriceCapacity)
+	campaignPermanentRemaining := positiveBalance.Sub(fullPriceRemaining)
+	if campaignPermanentRemaining.GreaterThan(campaignCapacity.Add(decimal.NewFromFloat(accountRefundTolerance))) {
+		setBlockReason("campaign permanent balance exceeds campaign order capacity", true)
+	}
+
+	fullPriceWeights := make([]decimal.Decimal, len(pools))
+	campaignWeights := make([]decimal.Decimal, len(pools))
+	for i := range pools {
+		if pools[i].campaign {
+			campaignWeights[i] = pools[i].principalCapacity
+		} else {
+			fullPriceWeights[i] = pools[i].principalCapacity
+		}
+	}
+	fullPriceUnits := allocateRefundUnits(fullPriceRemaining, fullPriceWeights, 8)
+	campaignUnits := allocateRefundUnits(campaignPermanentRemaining, campaignWeights, 8)
+	rawRefundWeights := make([]decimal.Decimal, len(pools))
+	creditCapacities := make([]decimal.Decimal, len(pools))
+	for i := range pools {
+		principalAllocation := decimal.NewFromInt(fullPriceUnits[i] + campaignUnits[i]).Shift(-8)
+		eligibleCredit := principalAllocation
+		refundCredit := principalAllocation
+		if pools[i].campaign {
+			eligibleCredit = eligibleCredit.Add(pools[i].bonusRemaining)
+			refundCredit = eligibleCredit.Mul(decimal.NewFromFloat(accountRefundCampaignFactor))
+		}
+		rawRefundWeights[i] = refundCredit
+		creditCapacities[i] = pools[i].principalCapacity
+		order := pools[i].order
 		completedAt := order.CreatedAt
 		if order.CompletedAt != nil {
 			completedAt = *order.CompletedAt
 		}
 		quote.Orders = append(quote.Orders, AccountRefundOrder{
 			OrderID: order.ID, CompletedAt: completedAt, PaymentType: order.PaymentType,
-			ProviderInstance: *order.ProviderInstanceID, Currency: currency,
+			ProviderInstance: psStringValue(order.ProviderInstanceID), Currency: PaymentOrderCurrency(order),
 			OriginalCredit: normalizeRefundFloat(order.Amount), OriginalPaid: normalizeRefundFloat(order.PayAmount),
-			BonusRate: normalizeRefundFloat(order.RechargeBonusRate), BonusInitial: normalizeRefundFloat(bonusInitial), BonusRemaining: normalizeRefundFloat(bonusRemaining),
-			EligibleCredit: normalizeRefundFloat(credit.InexactFloat64()), RefundCredit: normalizeRefundFloat(refundCredit.InexactFloat64()),
-			GatewayRefund: gateway, Allocation: "exact",
+			PreviouslyRefunded: normalizeRefundFloat(math.Max(order.RefundAmount, 0)),
+			BonusRate:          normalizeRefundFloat(pools[i].bonusRate), BonusInitial: normalizeRefundFloat(pools[i].bonusInitial.InexactFloat64()), BonusRemaining: normalizeRefundFloat(pools[i].bonusRemaining.InexactFloat64()),
+			EligibleCredit: normalizeRefundFloat(eligibleCredit.InexactFloat64()), Allocation: "deterministic",
 		})
-		quote.EligibleCreditTotal += credit.InexactFloat64()
-		quote.RefundCreditTotal += refundCredit.InexactFloat64()
-		quote.GatewayTotals[currency] += gateway
-	}
-	if len(currencies) > 1 {
-		quote.BlockReason = "multiple payment currencies require manual refund allocation"
 	}
 
-	// 打赏不依赖原支付通道，仅按账户池总额和历史充值/赠额比例计算用户放弃的退款权益。
-	donationDenominator := totalOriginal.Add(totalBonusInitial)
-	donationPool := decimal.NewFromFloat(account.Balance).Add(decimal.NewFromFloat(quote.RechargeBonusBalance))
-	donationAmount := decimal.Zero
-	if donationDenominator.GreaterThan(decimal.Zero) {
-		donationAmount = donationPool.Mul(totalOriginal).Div(donationDenominator)
+	rawRefundTotal := fullPriceRemaining.Add(campaignPermanentRemaining.Add(campaignBonusRemaining).Mul(decimal.NewFromFloat(accountRefundCampaignFactor)))
+	refundTotal := rawRefundTotal.Round(2)
+	refundUnits, allocationClosed := allocateRefundUnitsWithCapacities(refundTotal, rawRefundWeights, creditCapacities, 2)
+	if !allocationClosed {
+		setBlockReason("refund total exceeds historical order remaining capacity", true)
 	}
-	if donationAmount.GreaterThan(totalOriginal) {
-		donationAmount = totalOriginal
-	}
-	if decimal.NewFromFloat(account.Balance).LessThan(decimal.Zero) || decimal.NewFromFloat(account.Balance).GreaterThan(totalOriginal) {
-		donationBlockReason = "permanent balance cannot be reconciled to completed recharge orders"
-	}
-	quote.DonationAmount = normalizeRefundFloat(donationAmount.InexactFloat64())
-	if donationBlockReason == "" && quote.DonationAmount > accountRefundTolerance {
-		quote.DonationEligible = true
-	} else {
-		if donationBlockReason == "" {
-			donationBlockReason = "no refundable amount remains to donate"
+	allocatedRefundTotal := decimal.Zero
+	for i := range quote.Orders {
+		refundCredit := decimal.NewFromInt(refundUnits[i]).Shift(-2)
+		quote.Orders[i].RefundCredit = refundCredit.InexactFloat64()
+		allocatedRefundTotal = allocatedRefundTotal.Add(refundCredit)
+		order := pools[i].order
+		gateway := decimal.NewFromFloat(calculateGatewayRefundAmount(order.Amount, order.PayAmount, refundCredit.InexactFloat64(), PaymentOrderCurrency(order)))
+		if gateway.GreaterThan(pools[i].gatewayCapacity.Add(decimal.NewFromFloat(accountRefundTolerance))) {
+			setBlockReason("an order route exceeds its remaining gateway refund capacity", true)
 		}
-		quote.DonationBlockReason = donationBlockReason
+		quote.Orders[i].GatewayRefund = gateway.InexactFloat64()
+		quote.GatewayTotals[PaymentOrderCurrency(order)] += gateway.InexactFloat64()
 	}
-
-	// 任一永久额度或充值赠额发生消耗后，订单归属已不可证明，改用账户池权威总额和确定性路由分摊。
-	permanentConsumed := totalOriginal.Sub(decimal.NewFromFloat(account.Balance)).Abs().GreaterThan(decimal.NewFromFloat(accountRefundTolerance))
-	bonusConsumed := totalBonusInitial.Sub(decimal.NewFromFloat(quote.RechargeBonusBalance)).GreaterThan(decimal.NewFromFloat(accountRefundTolerance))
-	if quote.BlockReason == "" && (permanentConsumed || bonusConsumed) {
-		if decimal.NewFromFloat(account.Balance).LessThan(decimal.Zero) || decimal.NewFromFloat(account.Balance).GreaterThan(totalOriginal) {
-			quote.BlockReason = "permanent balance cannot be reconciled to completed recharge orders"
-		} else {
-			quote.AllocationConfidence = "inferred"
-			remainingPool := decimal.NewFromFloat(account.Balance).Add(decimal.NewFromFloat(quote.RechargeBonusBalance))
-			denominator := totalOriginal.Add(totalBonusInitial)
-			refundTotal := decimal.Zero
-			if denominator.GreaterThan(decimal.Zero) {
-				refundTotal = remainingPool.Mul(totalOriginal).Div(denominator)
-			}
-			if refundTotal.GreaterThan(totalOriginal) {
-				refundTotal = totalOriginal
-			}
-			applyInferredAccountRefundAllocation(quote, refundTotal)
-		}
+	quote.EligibleCreditTotal = normalizeRefundFloat(positiveBalance.Add(campaignBonusRemaining).InexactFloat64())
+	quote.RefundCreditTotal = normalizeRefundFloat(allocatedRefundTotal.InexactFloat64())
+	if allocatedRefundTotal.Sub(refundTotal).Abs().GreaterThan(decimal.NewFromFloat(accountRefundTolerance)) {
+		setBlockReason("order route allocation does not conserve the user refund total", true)
 	}
 	for currency, amount := range quote.GatewayTotals {
 		quote.GatewayTotals[currency] = normalizeRefundFloat(amount)
@@ -752,54 +887,80 @@ func (s *PaymentService) buildAccountRefundQuoteWithClient(ctx context.Context, 
 	quote.EligibleCreditTotal = normalizeRefundFloat(quote.EligibleCreditTotal)
 	quote.RefundCreditTotal = normalizeRefundFloat(quote.RefundCreditTotal)
 
-	if quote.BlockReason == "" && totalOriginal.Sub(decimal.NewFromFloat(account.TotalRecharged)).Abs().GreaterThan(decimal.NewFromFloat(accountRefundTolerance)) {
-		quote.BlockReason = "cumulative recharge total cannot be reconciled to completed recharge orders"
-	}
 	if quote.BlockReason == "" && quote.RefundCreditTotal <= accountRefundTolerance {
-		quote.BlockReason = "no refundable amount remains"
+		setBlockReason("no refundable amount remains", true)
 	}
 	if quote.BlockReason == "" {
 		quote.Eligible = true
 		quote.TotalConfidence = "reconciled"
 	}
+	quote.DonationAmount = quote.RefundCreditTotal
+	if donationBlockReason == "" && quote.DonationAmount > accountRefundTolerance {
+		quote.DonationEligible = true
+	} else {
+		if donationBlockReason == "" {
+			donationBlockReason = "no refundable amount remains to donate"
+		}
+		quote.DonationBlockReason = donationBlockReason
+	}
 	quote.QuoteHash = accountRefundQuoteHash(quote)
 	return quote, nil
 }
 
-// applyInferredAccountRefundAllocation 先固定账户池总额，再按历史订单权重分配，分摊不会反向改变总额。
-func applyInferredAccountRefundAllocation(quote *AccountRefundQuote, refundTotal decimal.Decimal) {
-	if quote == nil || len(quote.Orders) == 0 {
-		return
+// allocateRefundUnitsWithCapacities 按权重分配最小单位，并确保每条订单路由不超过剩余容量。
+func allocateRefundUnitsWithCapacities(total decimal.Decimal, weights, capacities []decimal.Decimal, fractionDigits int) ([]int64, bool) {
+	allocated := make([]int64, len(capacities))
+	if len(weights) != len(capacities) || len(capacities) == 0 {
+		return allocated, !total.GreaterThan(decimal.Zero)
 	}
-	creditWeights := make([]decimal.Decimal, len(quote.Orders))
-	gatewayWeights := make([]decimal.Decimal, len(quote.Orders))
-	for i := range quote.Orders {
-		creditWeights[i] = decimal.NewFromFloat(quote.Orders[i].OriginalCredit)
-		gatewayWeights[i] = decimal.NewFromFloat(quote.Orders[i].OriginalPaid)
+	factor := decimal.New(1, int32(fractionDigits))
+	totalUnits := total.Mul(factor).Round(0).IntPart()
+	capacityUnits := make([]int64, len(capacities))
+	capacityTotal := int64(0)
+	weightTotal := decimal.Zero
+	for i := range capacities {
+		capacityUnits[i] = capacities[i].Mul(factor).Floor().IntPart()
+		if capacityUnits[i] < 0 {
+			capacityUnits[i] = 0
+		}
+		capacityTotal += capacityUnits[i]
+		if weights[i].GreaterThan(decimal.Zero) {
+			weightTotal = weightTotal.Add(weights[i])
+		}
 	}
-	creditUnits := allocateRefundUnits(refundTotal, creditWeights, 8)
-	eligibleUnits := allocateRefundUnits(decimal.NewFromFloat(quote.PermanentBalance+quote.RechargeBonusBalance), creditWeights, 8)
-	currency := quote.Orders[0].Currency
-	totalOriginal := decimal.Zero
-	totalPaid := decimal.Zero
-	for i := range creditWeights {
-		totalOriginal = totalOriginal.Add(creditWeights[i])
-		totalPaid = totalPaid.Add(gatewayWeights[i])
+	if totalUnits <= 0 {
+		return allocated, true
 	}
-	gatewayTotal := decimal.Zero
-	if totalOriginal.GreaterThan(decimal.Zero) {
-		gatewayTotal = totalPaid.Mul(refundTotal).Div(totalOriginal).Round(int32(payment.CurrencyMaxFractionDigits(currency)))
+	if capacityTotal < totalUnits || !weightTotal.GreaterThan(decimal.Zero) {
+		return allocated, false
 	}
-	gatewayUnits := allocateRefundUnits(gatewayTotal, gatewayWeights, payment.CurrencyMaxFractionDigits(currency))
-	quote.GatewayTotals = map[string]float64{currency: gatewayTotal.InexactFloat64()}
-	quote.EligibleCreditTotal = normalizeRefundFloat(quote.PermanentBalance + quote.RechargeBonusBalance)
-	quote.RefundCreditTotal = normalizeRefundFloat(refundTotal.InexactFloat64())
-	for i := range quote.Orders {
-		quote.Orders[i].EligibleCredit = normalizeRefundFloat(decimal.NewFromInt(eligibleUnits[i]).Shift(-8).InexactFloat64())
-		quote.Orders[i].RefundCredit = normalizeRefundFloat(decimal.NewFromInt(creditUnits[i]).Shift(-8).InexactFloat64())
-		quote.Orders[i].GatewayRefund = decimal.NewFromInt(gatewayUnits[i]).Shift(int32(-payment.CurrencyMaxFractionDigits(currency))).InexactFloat64()
-		quote.Orders[i].Allocation = "inferred"
+	used := int64(0)
+	for i := range weights {
+		if !weights[i].GreaterThan(decimal.Zero) || capacityUnits[i] == 0 {
+			continue
+		}
+		share := decimal.NewFromInt(totalUnits).Mul(weights[i]).Div(weightTotal).Floor().IntPart()
+		if share > capacityUnits[i] {
+			share = capacityUnits[i]
+		}
+		allocated[i] = share
+		used += share
 	}
+	for used < totalUnits {
+		progressed := false
+		for i := len(allocated) - 1; i >= 0 && used < totalUnits; i-- {
+			if allocated[i] >= capacityUnits[i] {
+				continue
+			}
+			allocated[i]++
+			used++
+			progressed = true
+		}
+		if !progressed {
+			return allocated, false
+		}
+	}
+	return allocated, true
 }
 
 // allocateRefundUnits 按权重分配最小单位；余数从末笔开始补齐，结果严格守恒且不超过各自权重上限。
@@ -973,15 +1134,15 @@ func (s *PaymentService) finalizeAccountRefundDonation(ctx context.Context, reco
 	if len(inFlightOrders) > 0 {
 		return nil, infraerrors.Conflict("REFUND_RECHARGE_IN_FLIGHT", "a balance recharge is still being processed")
 	}
-	completedOrderQuery := tx.PaymentOrder.Query().Where(
+	historicalOrderQuery := tx.PaymentOrder.Query().Where(
 		paymentorder.UserIDEQ(record.UserID),
 		paymentorder.OrderTypeEQ(payment.OrderTypeBalance),
-		paymentorder.StatusEQ(OrderStatusCompleted),
+		accountRefundHistoricalOrderPredicate(),
 	)
 	if tx.Client().Driver().Dialect() == dialect.Postgres {
-		completedOrderQuery = completedOrderQuery.ForUpdate()
+		historicalOrderQuery = historicalOrderQuery.ForUpdate()
 	}
-	if _, err := completedOrderQuery.All(txCtx); err != nil {
+	if _, err := historicalOrderQuery.All(txCtx); err != nil {
 		return nil, fmt.Errorf("lock donation recharge orders: %w", err)
 	}
 
@@ -1130,10 +1291,47 @@ func (s *PaymentService) finalizeAccountRefundCredits(ctx context.Context, recor
 	return tx.Commit()
 }
 
-func (s *PaymentService) markAccountRefundOrderPending(ctx context.Context, plan *RefundPlan, resp *payment.RefundResponse) error {
-	_, err := s.entClient.PaymentOrder.UpdateOneID(plan.OrderID).SetStatus(OrderStatusRefundPending).SetRefundAmount(plan.RefundAmount).SetRefundReason(plan.Reason).SetForceRefund(true).Save(ctx)
+func accountRefundRouteCumulativeCredit(route *AccountRefundOrder) float64 {
+	return normalizeRefundFloat(route.PreviouslyRefunded + route.RefundCredit)
+}
+
+func accountRefundOrderReachedTarget(order *dbent.PaymentOrder, route *AccountRefundOrder) bool {
+	if order.Status != OrderStatusPartiallyRefunded && order.Status != OrderStatusRefunded {
+		return false
+	}
+	return math.Abs(order.RefundAmount-accountRefundRouteCumulativeCredit(route)) <= accountRefundTolerance
+}
+
+// markAccountRefundOrderSucceeded 按历史已退额度加本次路由额度写入累计退款值。
+func (s *PaymentService) markAccountRefundOrderSucceeded(ctx context.Context, route *AccountRefundOrder, plan *RefundPlan) error {
+	cumulativeRefund := accountRefundRouteCumulativeCredit(route)
+	status := OrderStatusPartiallyRefunded
+	if cumulativeRefund >= plan.Order.Amount-accountRefundTolerance {
+		status = OrderStatusRefunded
+	}
+	_, err := s.entClient.PaymentOrder.UpdateOneID(plan.OrderID).
+		SetStatus(status).
+		SetRefundAmount(cumulativeRefund).
+		SetRefundReason(plan.Reason).
+		SetRefundAt(time.Now()).
+		SetForceRefund(true).
+		ClearFailedAt().
+		ClearFailedReason().
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("mark account refund route: %w", err)
+	}
+	s.writeAuditLog(ctx, plan.OrderID, "ACCOUNT_REFUND_SUCCESS", "user", map[string]any{
+		"refundAmount": plan.RefundAmount, "cumulativeRefundAmount": cumulativeRefund, "reason": plan.Reason,
+	})
+	return nil
+}
+
+func (s *PaymentService) markAccountRefundOrderPending(ctx context.Context, route *AccountRefundOrder, plan *RefundPlan, resp *payment.RefundResponse) error {
+	cumulativeRefund := accountRefundRouteCumulativeCredit(route)
+	_, err := s.entClient.PaymentOrder.UpdateOneID(plan.OrderID).SetStatus(OrderStatusRefundPending).SetRefundAmount(cumulativeRefund).SetRefundReason(plan.Reason).SetForceRefund(true).Save(ctx)
 	if err == nil {
-		s.writeAuditLog(ctx, plan.OrderID, "ACCOUNT_REFUND_PENDING", "user", map[string]any{"refundID": refundResponseID(resp), "refundAmount": plan.RefundAmount})
+		s.writeAuditLog(ctx, plan.OrderID, "ACCOUNT_REFUND_PENDING", "user", map[string]any{"refundID": refundResponseID(resp), "refundAmount": plan.RefundAmount, "cumulativeRefundAmount": cumulativeRefund})
 	}
 	return err
 }
@@ -1145,20 +1343,34 @@ func (s *PaymentService) reconcileAccountRefundPending(ctx context.Context, reco
 	}
 	for i := range record.Quote.Orders {
 		route := &record.Quote.Orders[i]
-		if route.GatewayStatus != payment.ProviderStatusPending {
+		if route.GatewayStatus != payment.ProviderStatusPending && route.GatewayStatus != AccountRefundStateSubmitting && route.GatewayStatus != accountRefundGatewayUnknown {
 			continue
 		}
 		order, err := s.entClient.PaymentOrder.Get(ctx, route.OrderID)
 		if err != nil {
 			return nil, err
 		}
+		if accountRefundOrderReachedTarget(order, route) {
+			route.GatewayStatus = payment.ProviderStatusSuccess
+			route.GatewayError = ""
+			continue
+		}
 		provider, err := s.getRefundProvider(ctx, order)
 		if err != nil {
-			return s.failAccountRefund(ctx, record, completedAccountRefundRoutes(record), err.Error())
+			route.GatewayError = err.Error()
+			record.State = AccountRefundStateManualReview
+			record.Message = "submitted refund provider is unavailable; manual reconciliation is required"
+			record.UpdatedAt = time.Now().UTC()
+			if auditErr := s.writeAccountRefundAudit(ctx, record); auditErr != nil {
+				return nil, auditErr
+			}
+			return record, nil
 		}
 		queryProvider, ok := provider.(payment.RefundQueryProvider)
 		if !ok {
-			record.Message = "payment provider requires manual refund reconciliation"
+			route.GatewayStatus = accountRefundGatewayUnknown
+			record.State = AccountRefundStateManualReview
+			record.Message = "payment provider cannot query submitted refunds; manual reconciliation is required before any retry"
 			record.UpdatedAt = time.Now().UTC()
 			if err := s.writeAccountRefundAudit(ctx, record); err != nil {
 				return nil, err
@@ -1170,7 +1382,9 @@ func (s *PaymentService) reconcileAccountRefundPending(ctx context.Context, reco
 			Amount: formatGatewayRefundAmount(route.GatewayRefund, order),
 		})
 		if err != nil {
-			record.Message = "refund status query failed: " + err.Error()
+			route.GatewayError = err.Error()
+			record.State = AccountRefundStateManualReview
+			record.Message = "refund status query failed; manual reconciliation is required: " + err.Error()
 			record.UpdatedAt = time.Now().UTC()
 			if auditErr := s.writeAccountRefundAudit(ctx, record); auditErr != nil {
 				return nil, auditErr
@@ -1179,6 +1393,7 @@ func (s *PaymentService) reconcileAccountRefundPending(ctx context.Context, reco
 		}
 		if err := validateRefundProviderResponse(resp); err != nil {
 			route.GatewayError = err.Error()
+			route.GatewayStatus = payment.ProviderStatusFailed
 			return s.failAccountRefund(ctx, record, completedAccountRefundRoutes(record), err.Error())
 		}
 		route.GatewayStatus = strings.TrimSpace(resp.Status)
@@ -1186,6 +1401,7 @@ func (s *PaymentService) reconcileAccountRefundPending(ctx context.Context, reco
 			route.GatewayRefundID = id
 		}
 		if route.GatewayStatus == payment.ProviderStatusPending {
+			record.State = AccountRefundStatePending
 			record.Message = "gateway refund is pending confirmation"
 			record.UpdatedAt = time.Now().UTC()
 			if err := s.writeAccountRefundAudit(ctx, record); err != nil {
@@ -1194,7 +1410,7 @@ func (s *PaymentService) reconcileAccountRefundPending(ctx context.Context, reco
 			return record, nil
 		}
 		plan := &RefundPlan{OrderID: order.ID, Order: order, RequestID: accountRefundRouteRequestID(record.RefundID, order.ID), RefundAmount: route.RefundCredit, GatewayAmount: route.GatewayRefund, Reason: accountRefundReason, Force: true}
-		if _, err := s.markRefundOk(ctx, plan); err != nil {
+		if err := s.markAccountRefundOrderSucceeded(ctx, route, plan); err != nil {
 			route.GatewayError = err.Error()
 			return s.failAccountRefund(ctx, record, completedAccountRefundRoutes(record)+1, err.Error())
 		}
@@ -1335,11 +1551,32 @@ func normalizeRefundFloat(value float64) float64 {
 
 func accountRefundTerminal(state string) bool {
 	switch state {
-	case AccountRefundStateSucceeded, AccountRefundStateFailed, AccountRefundStatePartialExternalSuccess, AccountRefundStateCanceled, AccountRefundStateManualReview, AccountRefundStateDonated:
+	case AccountRefundStateSucceeded, AccountRefundStateCanceled, AccountRefundStateDonated:
 		return true
 	default:
 		return false
 	}
+}
+
+func accountRefundCanCancel(record *AccountRefundRecord) bool {
+	if record == nil {
+		return false
+	}
+	switch record.State {
+	case AccountRefundStateDraining, AccountRefundStateReadyToConfirm, AccountRefundStateFailed, AccountRefundStateManualReview:
+	default:
+		return false
+	}
+	if record.Quote == nil {
+		return true
+	}
+	for _, route := range record.Quote.Orders {
+		switch route.GatewayStatus {
+		case payment.ProviderStatusSuccess, payment.ProviderStatusRefunded, payment.ProviderStatusPending, AccountRefundStateSubmitting, accountRefundGatewayUnknown:
+			return false
+		}
+	}
+	return true
 }
 
 func completedAccountRefundRoutes(record *AccountRefundRecord) int {

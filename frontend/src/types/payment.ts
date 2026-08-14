@@ -164,13 +164,14 @@ export interface AccountRefundOrder {
   currency: string
   original_credit: number
   original_paid: number
+  previously_refunded: number
   bonus_rate: number
   bonus_initial: number
   bonus_remaining: number
   eligible_credit: number
   refund_credit: number
   gateway_refund: number
-  allocation_confidence: 'exact' | 'inferred'
+  allocation_confidence: 'exact' | 'inferred' | 'deterministic'
   gateway_status?: string
   gateway_refund_id?: string
   gateway_error?: string
@@ -183,7 +184,7 @@ export interface AccountRefundQuote {
   donation_block_reason?: string
   donation_amount: number
   total_confidence: 'reconciled' | 'manual_review'
-  allocation_confidence: 'exact' | 'inferred'
+  allocation_confidence: 'exact' | 'inferred' | 'deterministic'
   permanent_balance: number
   recharge_bonus_balance: number
   other_limited_to_clear: number

@@ -167,4 +167,59 @@ describe('UserRefundsView', () => {
     const list = wrapper.get('[data-test="refund-donation-list"]')
     expect(trigger.element.compareDocumentPosition(list.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
+
+  it('shows a continue action after a confirmed gateway failure', async () => {
+    const fixture = refundOverviewFixture()
+    getAccountRefundOverview.mockResolvedValue({
+      data: {
+        ...fixture.data,
+        refund_id: 'refund-failed-1',
+        state: 'failed',
+        quote: {
+          ...fixture.data.quote,
+          orders: [{
+            order_id: 1,
+            completed_at: '2026-08-14T00:00:00Z',
+            payment_type: 'alipay',
+            provider_instance_id: '1',
+            currency: 'CNY',
+            original_credit: 100,
+            original_paid: 100,
+            bonus_rate: 0,
+            bonus_initial: 0,
+            bonus_remaining: 0,
+            eligible_credit: 100,
+            refund_credit: 100,
+            gateway_refund: 100,
+            allocation_confidence: 'deterministic',
+            gateway_status: 'failed',
+          }],
+        },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="refund-recovery-actions"]').exists()).toBe(true)
+    expect(wrapper.get('[data-test="refund-continue"]').exists()).toBe(true)
+  })
+
+  it('only offers cancellation for manual review before any gateway submission', async () => {
+    const fixture = refundOverviewFixture()
+    getAccountRefundOverview.mockResolvedValue({
+      data: {
+        ...fixture.data,
+        refund_id: 'refund-manual-1',
+        state: 'manual_review',
+        quote: { ...fixture.data.quote, orders: [] },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="refund-cancel-recovery"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="refund-continue"]').exists()).toBe(false)
+  })
 })

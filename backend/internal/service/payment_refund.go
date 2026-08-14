@@ -159,7 +159,7 @@ func (s *PaymentService) PrepareRefund(ctx context.Context, oid int64, amt float
 	if err != nil {
 		return nil, nil, infraerrors.NotFound("NOT_FOUND", "order not found")
 	}
-	ok := []string{OrderStatusCompleted, OrderStatusRefundRequested, OrderStatusRefundPending, OrderStatusRefundFailed}
+	ok := []string{OrderStatusCompleted, OrderStatusRefundRequested, OrderStatusRefundFailed}
 	if !psSliceContains(ok, o.Status) {
 		return nil, nil, infraerrors.BadRequest("INVALID_STATUS", "order status does not allow refund")
 	}
@@ -245,7 +245,7 @@ func (s *PaymentService) deductAvailableBalance(ctx context.Context, userID int6
 }
 
 func (s *PaymentService) ExecuteRefund(ctx context.Context, p *RefundPlan) (*RefundResult, error) {
-	c, err := s.entClient.PaymentOrder.Update().Where(paymentorder.IDEQ(p.OrderID), paymentorder.StatusIn(OrderStatusCompleted, OrderStatusRefundRequested, OrderStatusRefundPending, OrderStatusRefundFailed)).SetStatus(OrderStatusRefunding).Save(ctx)
+	c, err := s.entClient.PaymentOrder.Update().Where(paymentorder.IDEQ(p.OrderID), paymentorder.StatusIn(OrderStatusCompleted, OrderStatusRefundRequested, OrderStatusRefundFailed)).SetStatus(OrderStatusRefunding).Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("lock: %w", err)
 	}
@@ -291,6 +291,9 @@ func (s *PaymentService) ExecuteRefund(ctx context.Context, p *RefundPlan) (*Ref
 	}
 	resp, err := s.gwRefund(ctx, p)
 	if err != nil {
+		if payment.IsRefundOutcomeUnknown(err) {
+			return s.markRefundOutcomeUnknown(ctx, p, err)
+		}
 		return s.handleGwFail(ctx, p, err)
 	}
 	return s.finishRefund(ctx, p, resp)
@@ -634,6 +637,26 @@ func (s *PaymentService) markRefundPending(ctx context.Context, p *RefundPlan, r
 		warning += "; refund deduction rollback failed"
 	}
 	return &RefundResult{Success: false, Warning: warning}, nil
+}
+
+// markRefundOutcomeUnknown 保留已扣额度并冻结普通重试入口，等待网关人工核验。
+func (s *PaymentService) markRefundOutcomeUnknown(ctx context.Context, p *RefundPlan, gatewayErr error) (*RefundResult, error) {
+	_, err := s.entClient.PaymentOrder.UpdateOneID(p.OrderID).
+		SetStatus(OrderStatusRefundPending).
+		SetRefundAmount(p.RefundAmount).
+		SetRefundReason(p.Reason).
+		ClearRefundAt().
+		SetForceRefund(p.Force).
+		ClearFailedAt().
+		ClearFailedReason().
+		Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("mark unknown refund outcome: %w", err)
+	}
+	s.writeAuditLog(ctx, p.OrderID, "REFUND_OUTCOME_UNKNOWN", "admin", map[string]any{
+		"detail": gatewayErr.Error(), "refundAmount": p.RefundAmount, "manualReviewRequired": true,
+	})
+	return nil, infraerrors.Conflict("REFUND_OUTCOME_UNKNOWN", "payment provider refund outcome is unknown; manual reconciliation is required before any retry")
 }
 
 func refundResponseID(resp *payment.RefundResponse) string {

@@ -176,6 +176,9 @@ func TestEasyPayRefundResponseErrors(t *testing.T) {
 			if !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("Refund error = %q, want substring %q", err.Error(), tt.want)
 			}
+			if !payment.IsRefundOutcomeUnknown(err) {
+				t.Fatalf("Refund error = %T, want unknown outcome marker", err)
+			}
 		})
 	}
 }
