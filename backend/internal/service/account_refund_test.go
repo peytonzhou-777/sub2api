@@ -682,6 +682,12 @@ func TestDonateLockedAccountRefundClearsCreditsWithoutGatewayRefund(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, OrderStatusCompleted, updatedOrder.Status)
 
+	acquireCallsAfterDonation := fence.acquireCalls
+	loadedDonation, err := svc.GetAccountRefund(ctx, record.RefundID, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateDonated, loadedDonation.State)
+	require.Equal(t, acquireCallsAfterDonation, fence.acquireCalls, "打赏终态查询不得重新获取退款计费锁")
+
 	donations, err := svc.ListAccountRefundDonations(ctx)
 	require.NoError(t, err)
 	require.Len(t, donations, 1)

@@ -310,17 +310,21 @@ func (s *PaymentService) lockAccountRefund(ctx context.Context, userID int64, qu
 
 // GetAccountRefund 通过退款专用会话读取并推进排空状态。
 func (s *PaymentService) GetAccountRefund(ctx context.Context, refundID string, userID int64) (*AccountRefundRecord, error) {
-	if fence, ok := s.authCacheInvalidator.(RefundBillingFence); ok {
-		if err := fence.AcquireRefundBillingLock(ctx, userID, refundID); err != nil {
-			return nil, infraerrors.ServiceUnavailable("REFUND_BILLING_FENCE_UNAVAILABLE", "cannot renew refund billing fence")
-		}
-	}
 	record, err := s.latestAccountRefund(ctx, refundID, userID)
 	if err != nil {
 		return nil, err
 	}
 	if record == nil {
 		return nil, infraerrors.NotFound("REFUND_NOT_FOUND", "account refund not found")
+	}
+	// 已终结流程只读历史快照，避免打赏或取消后的用户被重新加上计费锁。
+	if accountRefundTerminal(record.State) {
+		return record, nil
+	}
+	if fence, ok := s.authCacheInvalidator.(RefundBillingFence); ok {
+		if err := fence.AcquireRefundBillingLock(ctx, userID, refundID); err != nil {
+			return nil, infraerrors.ServiceUnavailable("REFUND_BILLING_FENCE_UNAVAILABLE", "cannot renew refund billing fence")
+		}
 	}
 	return s.advanceAccountRefund(ctx, record)
 }
