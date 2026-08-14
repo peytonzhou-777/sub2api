@@ -650,7 +650,8 @@ func TestDonateLockedAccountRefundClearsCreditsWithoutGatewayRefund(t *testing.T
 	grant, err := client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceResetRebate).SetInitialAmount(15).SetUsedAmount(0).SetFrozenAmount(0).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
 	require.NoError(t, err)
 
-	svc := &PaymentService{entClient: client, authCacheInvalidator: &accountRefundFenceStub{}}
+	fence := &accountRefundFenceStub{}
+	svc := &PaymentService{entClient: client, authCacheInvalidator: fence}
 	quote, err := svc.buildAccountRefundQuoteWithClient(ctx, client, &User{ID: userRow.ID, Balance: 100, TotalRecharged: 100, Status: StatusRefundLocked})
 	require.NoError(t, err)
 	require.True(t, quote.Eligible)
@@ -663,6 +664,7 @@ func TestDonateLockedAccountRefundClearsCreditsWithoutGatewayRefund(t *testing.T
 	donated, err := svc.DonateLockedAccountRefund(ctx, record.RefundID, userRow.ID, quote.QuoteHash)
 	require.NoError(t, err)
 	require.Equal(t, AccountRefundStateDonated, donated.State)
+	require.Equal(t, 1, fence.releaseCalls)
 	require.NotNil(t, donated.Donation)
 	require.Equal(t, "alice", donated.Donation.Username)
 	require.Equal(t, "a***@example.com", donated.Donation.MaskedEmail)
@@ -671,7 +673,7 @@ func TestDonateLockedAccountRefundClearsCreditsWithoutGatewayRefund(t *testing.T
 	updatedUser, err := client.User.Get(ctx, userRow.ID)
 	require.NoError(t, err)
 	require.Zero(t, updatedUser.Balance)
-	require.Equal(t, StatusRefundLocked, updatedUser.Status)
+	require.Equal(t, StatusActive, updatedUser.Status)
 	updatedGrant, err := client.UserLimitedCreditGrant.Get(ctx, grant.ID)
 	require.NoError(t, err)
 	require.Equal(t, LimitedCreditStatusDepleted, updatedGrant.Status)
@@ -743,6 +745,7 @@ var accountRefundTestOrderSequence atomic.Int64
 
 type accountRefundFenceStub struct {
 	acquireCalls int
+	releaseCalls int
 }
 
 func (f *accountRefundFenceStub) InvalidateAuthCacheByKey(context.Context, string)    {}
@@ -753,6 +756,7 @@ func (f *accountRefundFenceStub) AcquireRefundBillingLock(context.Context, int64
 	return nil
 }
 func (f *accountRefundFenceStub) ReleaseRefundBillingLock(context.Context, int64, string) error {
+	f.releaseCalls++
 	return nil
 }
 func (f *accountRefundFenceStub) IsRefundBillingLocked(context.Context, int64) (bool, error) {

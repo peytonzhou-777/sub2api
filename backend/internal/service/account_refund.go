@@ -1179,7 +1179,7 @@ func (s *PaymentService) finalizeAccountRefundDonation(ctx context.Context, reco
 			}
 		}
 	}
-	if _, err := tx.User.UpdateOne(lockedUser).SetBalance(0).Save(txCtx); err != nil {
+	if _, err := tx.User.UpdateOne(lockedUser).SetBalance(0).SetStatus(StatusActive).Save(txCtx); err != nil {
 		return nil, err
 	}
 
@@ -1203,6 +1203,11 @@ func (s *PaymentService) finalizeAccountRefundDonation(ctx context.Context, reco
 	}
 	if s.authCacheInvalidator != nil {
 		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, record.UserID)
+	}
+	if fence, ok := s.authCacheInvalidator.(RefundBillingFence); ok {
+		if err := fence.ReleaseRefundBillingLock(ctx, record.UserID, record.RefundID); err != nil {
+			return nil, infraerrors.ServiceUnavailable("REFUND_BILLING_FENCE_UNAVAILABLE", "account restored but refund billing fence could not be released")
+		}
 	}
 	return latest, nil
 }
