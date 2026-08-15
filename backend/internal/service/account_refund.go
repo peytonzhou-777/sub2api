@@ -42,7 +42,6 @@ const (
 	accountRefundReason         = "account full clearance"
 	accountRefundTolerance      = 0.00000001
 	accountRefundDonationAction = "ACCOUNT_REFUND_DONATED"
-	accountRefundCampaignFactor = 0.8333
 	accountRefundGatewayUnknown = "unknown"
 )
 
@@ -632,19 +631,25 @@ type accountRefundOrderPool struct {
 	gatewayCapacity   decimal.Decimal
 	bonusInitial      decimal.Decimal
 	bonusRemaining    decimal.Decimal
-	bonusRate         float64
+	bonusRate         decimal.Decimal
+	refundFactor      decimal.Decimal
 }
 
-// rechargeBonusRateToFraction 将订单快照中的百分数统一转换为小数比例。
-func rechargeBonusRateToFraction(percent float64) (float64, bool) {
+// rechargeBonusPercentToFraction 将订单快照中的百分数统一转换为小数比例。
+func rechargeBonusPercentToFraction(percent float64) (decimal.Decimal, bool) {
 	if math.IsNaN(percent) || math.IsInf(percent, 0) || percent <= 0 {
-		return 0, false
+		return decimal.Zero, false
 	}
 	fraction := decimal.NewFromFloat(percent).Div(decimal.NewFromInt(100))
 	if !fraction.GreaterThan(decimal.Zero) {
-		return 0, false
+		return decimal.Zero, false
 	}
-	return fraction.InexactFloat64(), true
+	return fraction, true
+}
+
+// rechargeBonusRefundFactor 按活动赠额小数比例计算本金折算系数。
+func rechargeBonusRefundFactor(rate decimal.Decimal) decimal.Decimal {
+	return decimal.NewFromInt(1).Div(decimal.NewFromInt(1).Add(rate))
 }
 
 // buildAccountRefundQuoteWithClient 允许确认事务在已锁定资金行上复算同一份权威试算。
@@ -740,12 +745,15 @@ func (s *PaymentService) buildAccountRefundQuoteWithClient(ctx context.Context, 
 		bonus := bonusByOrder[order.ID]
 		hasCampaignSnapshot := order.RechargeBonusCampaignID != nil
 		isCampaign := hasCampaignSnapshot && bonus.hasGrant
-		bonusRate := 0.0
+		bonusRate := decimal.Zero
+		refundFactor := decimal.Zero
 		if isCampaign {
 			var valid bool
-			bonusRate, valid = rechargeBonusRateToFraction(order.RechargeBonusRate)
+			bonusRate, valid = rechargeBonusPercentToFraction(order.RechargeBonusRate)
 			if !valid {
 				setBlockReason("a recharge bonus order has no valid percentage snapshot", true)
+			} else {
+				refundFactor = rechargeBonusRefundFactor(bonusRate)
 			}
 			if decimal.NewFromFloat(order.RechargeBonusAmount).Sub(bonus.initial).Abs().GreaterThan(decimal.NewFromFloat(accountRefundTolerance)) {
 				setBlockReason("recharge bonus grant cannot be reconciled to its order snapshot", true)
@@ -804,7 +812,7 @@ func (s *PaymentService) buildAccountRefundQuoteWithClient(ctx context.Context, 
 		}
 		pools = append(pools, accountRefundOrderPool{
 			order: order, campaign: isCampaign, principalCapacity: principalCapacity, gatewayCapacity: gatewayCapacity,
-			bonusInitial: bonus.initial, bonusRemaining: bonus.remaining, bonusRate: bonusRate,
+			bonusInitial: bonus.initial, bonusRemaining: bonus.remaining, bonusRate: bonusRate, refundFactor: refundFactor,
 		})
 	}
 	if len(currencies) > 1 {
@@ -834,15 +842,17 @@ func (s *PaymentService) buildAccountRefundQuoteWithClient(ctx context.Context, 
 	campaignUnits := allocateRefundUnits(campaignPermanentRemaining, campaignWeights, 8)
 	rawRefundWeights := make([]decimal.Decimal, len(pools))
 	creditCapacities := make([]decimal.Decimal, len(pools))
+	rawRefundTotal := decimal.Zero
 	for i := range pools {
 		principalAllocation := decimal.NewFromInt(fullPriceUnits[i] + campaignUnits[i]).Shift(-8)
 		eligibleCredit := principalAllocation
 		refundCredit := principalAllocation
 		if pools[i].campaign {
 			eligibleCredit = eligibleCredit.Add(pools[i].bonusRemaining)
-			refundCredit = eligibleCredit.Mul(decimal.NewFromFloat(accountRefundCampaignFactor))
+			refundCredit = eligibleCredit.Mul(pools[i].refundFactor)
 		}
 		rawRefundWeights[i] = refundCredit
+		rawRefundTotal = rawRefundTotal.Add(refundCredit)
 		creditCapacities[i] = pools[i].principalCapacity
 		order := pools[i].order
 		completedAt := order.CreatedAt
@@ -854,12 +864,11 @@ func (s *PaymentService) buildAccountRefundQuoteWithClient(ctx context.Context, 
 			ProviderInstance: psStringValue(order.ProviderInstanceID), Currency: PaymentOrderCurrency(order),
 			OriginalCredit: normalizeRefundFloat(order.Amount), OriginalPaid: normalizeRefundFloat(order.PayAmount),
 			PreviouslyRefunded: normalizeRefundFloat(math.Max(order.RefundAmount, 0)),
-			BonusRate:          normalizeRefundFloat(pools[i].bonusRate), BonusInitial: normalizeRefundFloat(pools[i].bonusInitial.InexactFloat64()), BonusRemaining: normalizeRefundFloat(pools[i].bonusRemaining.InexactFloat64()),
+			BonusRate:          normalizeRefundFloat(pools[i].bonusRate.InexactFloat64()), BonusInitial: normalizeRefundFloat(pools[i].bonusInitial.InexactFloat64()), BonusRemaining: normalizeRefundFloat(pools[i].bonusRemaining.InexactFloat64()),
 			EligibleCredit: normalizeRefundFloat(eligibleCredit.InexactFloat64()), Allocation: "deterministic",
 		})
 	}
 
-	rawRefundTotal := fullPriceRemaining.Add(campaignPermanentRemaining.Add(campaignBonusRemaining).Mul(decimal.NewFromFloat(accountRefundCampaignFactor)))
 	refundTotal := rawRefundTotal.Round(2)
 	refundUnits, allocationClosed := allocateRefundUnitsWithCapacities(refundTotal, rawRefundWeights, creditCapacities, 2)
 	if !allocationClosed {

@@ -48,13 +48,15 @@ func TestBuildAccountRefundQuoteAppliesCampaignAndOriginalPriceRules(t *testing.
 }
 
 func TestRechargeBonusRateToFractionUsesProductionPercentages(t *testing.T) {
-	rate20, ok := rechargeBonusRateToFraction(20)
+	rate20, ok := rechargeBonusPercentToFraction(20)
 	require.True(t, ok)
-	require.InDelta(t, 0.2, rate20, 1e-12)
+	require.True(t, decimal.NewFromFloat(0.2).Equal(rate20))
 
-	rate25, ok := rechargeBonusRateToFraction(25)
+	rate25, ok := rechargeBonusPercentToFraction(25)
 	require.True(t, ok)
-	require.InDelta(t, 0.25, rate25, 1e-12)
+	require.True(t, decimal.NewFromFloat(0.25).Equal(rate25))
+	require.InDelta(t, 0.833333333333, rechargeBonusRefundFactor(rate20).InexactFloat64(), 1e-12)
+	require.InDelta(t, 0.8, rechargeBonusRefundFactor(rate25).InexactFloat64(), 1e-12)
 }
 
 func TestBuildAccountRefundQuoteCampaignRate20RefundsUnconsumedOrderToPrincipal(t *testing.T) {
@@ -76,7 +78,7 @@ func TestBuildAccountRefundQuoteCampaignRate20RefundsUnconsumedOrderToPrincipal(
 	require.InDelta(t, 100, quote.Orders[0].GatewayRefund, 1e-8)
 }
 
-func TestBuildAccountRefundQuoteCampaignRate25StillUsesFixedFactor(t *testing.T) {
+func TestBuildAccountRefundQuoteCampaignRate25UsesSnapshotRate(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 	userRow, err := client.User.Create().SetEmail("account-refund-rate25@example.com").SetPasswordHash("hash").SetUsername("rate25").SetBalance(75).SetTotalRecharged(100).Save(ctx)
@@ -91,8 +93,33 @@ func TestBuildAccountRefundQuoteCampaignRate25StillUsesFixedFactor(t *testing.T)
 	quote, err := svc.buildAccountRefundQuote(ctx, userRow.ID)
 	require.NoError(t, err)
 	require.True(t, quote.Eligible)
-	require.InDelta(t, 83.33, quote.RefundCreditTotal, 1e-8)
-	require.NotEqual(t, 80.0, quote.RefundCreditTotal)
+	require.InDelta(t, 80, quote.RefundCreditTotal, 1e-8)
+	require.InDelta(t, 80, quote.Orders[0].GatewayRefund, 1e-8)
+}
+
+func TestBuildAccountRefundQuoteUsesEachCampaignSnapshotRate(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-mixed-rates@example.com").SetPasswordHash("hash").SetUsername("mixed-rates").SetBalance(150).SetTotalRecharged(200).Save(ctx)
+	require.NoError(t, err)
+	provider, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("refund-mixed-rates").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	order20 := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 20, paymentorder.RechargeBonusStatusGranted)
+	order25 := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 25, paymentorder.RechargeBonusStatusGranted)
+	_, err = client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceRechargeBonus).SetSourceID(order20).SetInitialAmount(20).SetUsedAmount(10).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
+	require.NoError(t, err)
+	_, err = client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceRechargeBonus).SetSourceID(order25).SetInitialAmount(25).SetUsedAmount(10).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
+	require.NoError(t, err)
+
+	svc := &PaymentService{entClient: client, userRepo: &mockUserRepo{getByIDUser: &User{ID: userRow.ID, Balance: 150, TotalRecharged: 200}}}
+	quote, err := svc.buildAccountRefundQuote(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.True(t, quote.Eligible)
+	// 两笔活动永久余额各归属 75；20% 订单按 (75+10)/1.2，25% 订单按 (75+15)/1.25。
+	require.InDelta(t, 142.83, quote.RefundCreditTotal, 1e-8)
+	require.Len(t, quote.Orders, 2)
+	require.InDelta(t, 70.83, quote.Orders[0].RefundCredit, 1e-8)
+	require.InDelta(t, 72, quote.Orders[1].RefundCredit, 1e-8)
 }
 
 func TestBuildAccountRefundQuotePreservesFullPricePoolAfterCampaignConsumption(t *testing.T) {
@@ -111,8 +138,8 @@ func TestBuildAccountRefundQuotePreservesFullPricePoolAfterCampaignConsumption(t
 	quote, err := svc.buildAccountRefundQuote(ctx, userRow.ID)
 	require.NoError(t, err)
 	require.True(t, quote.Eligible)
-	// 原价池保留 50，剩余活动永久池 70 与赠额 10 统一乘 0.8333。
-	require.InDelta(t, 116.66, quote.RefundCreditTotal, 1e-8)
+	// 原价池保留 50，剩余活动永久池 70 与赠额 10 按 20% 快照比例折算。
+	require.InDelta(t, 116.67, quote.RefundCreditTotal, 1e-8)
 }
 
 func TestBuildAccountRefundQuoteExcludesExpiredAndPostCampaignBonus(t *testing.T) {
@@ -295,8 +322,8 @@ func TestBuildAccountRefundQuoteUsesAccountPoolWhenOnlyBonusWasConsumed(t *testi
 	require.NoError(t, err)
 	require.True(t, quote.Eligible)
 	require.Equal(t, "deterministic", quote.AllocationConfidence)
-	require.InDelta(t, 141.66, quote.RefundCreditTotal, 1e-8)
-	require.InDelta(t, 141.66, quote.GatewayTotals["CNY"], 1e-8)
+	require.InDelta(t, 141.67, quote.RefundCreditTotal, 1e-8)
+	require.InDelta(t, 141.67, quote.GatewayTotals["CNY"], 1e-8)
 }
 
 func TestBuildAccountRefundQuoteBlocksMissingOriginalTradeNumber(t *testing.T) {
@@ -736,11 +763,11 @@ func createAccountRefundTestOrder(t *testing.T, ctx context.Context, client *dbe
 		SetClientIP("127.0.0.1").
 		SetSrcHost("example.com")
 	if bonusStatus == paymentorder.RechargeBonusStatusGranted {
-		fraction, ok := rechargeBonusRateToFraction(bonusRate)
+		fraction, ok := rechargeBonusPercentToFraction(bonusRate)
 		require.True(t, ok)
 		builder.SetRechargeBonusCampaignID(sequence).
 			SetRechargeBonusCampaignName(fmt.Sprintf("campaign-%d", sequence)).
-			SetRechargeBonusAmount(amount * fraction)
+			SetRechargeBonusAmount(amount * fraction.InexactFloat64())
 	}
 	order, err := builder.Save(ctx)
 	require.NoError(t, err)
