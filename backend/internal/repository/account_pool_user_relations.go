@@ -37,7 +37,7 @@ func (r *accountRepository) ListAccountPoolUserRelations(ctx context.Context, us
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	relations := make([]service.AccountPoolUserRelation, 0)
 	for rows.Next() {
 		var relation service.AccountPoolUserRelation

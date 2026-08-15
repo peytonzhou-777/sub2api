@@ -56,7 +56,7 @@ func (r *accountRepository) GetOpenAIUserAffinityCandidateStats(ctx context.Cont
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var candidate service.OpenAIUserAffinityCandidate
@@ -244,9 +244,8 @@ func (r *accountRepository) TouchOpenAIUserAffinity(ctx context.Context, userID,
 	if contactErr != nil && !errors.Is(contactErr, sql.ErrNoRows) {
 		return contactErr
 	}
-	activationKind := "existing_contact"
 	if contactErr != nil || !previousTouchExpiry.Valid || !now.Before(previousTouchExpiry.Time) || !activePeriodID.Valid {
-		activationKind = "new_resident"
+		activationKind := "new_resident"
 		if contactErr == nil {
 			activationKind = "resident_reentry"
 		}

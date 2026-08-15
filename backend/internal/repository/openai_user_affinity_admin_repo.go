@@ -31,7 +31,7 @@ func (r *accountRepository) ListOpenAIUserAffinityResidents(ctx context.Context,
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	items := make([]service.OpenAIUserAffinityResident, 0, limit)
 	var total int64
 	for rows.Next() {
@@ -72,7 +72,7 @@ func (r *accountRepository) GetOpenAIUserAffinityUserDetail(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	events := make([]service.OpenAIUserAffinityAdminEvent, 0, eventLimit)
 	for rows.Next() {
 		var event service.OpenAIUserAffinityAdminEvent
@@ -118,7 +118,7 @@ func (r *accountRepository) listOpenAIUserAffinityPlacements(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	placements := make([]service.OpenAIUserPlacement, 0)
 	for rows.Next() {
 		var placement service.OpenAIUserPlacement
