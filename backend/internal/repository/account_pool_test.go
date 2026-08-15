@@ -84,6 +84,14 @@ func TestAccountPoolSnapshotSortsAndFiltersByPublicStatus(t *testing.T) {
 	if err != nil || total != 4 || len(got) != 4 || got[0].Status.Code != "paused" || got[1].Status.Code != "error" || got[2].ID != 3 {
 		t.Fatalf("状态倒序不正确: total=%d items=%+v err=%v", total, got, err)
 	}
+
+	got, total, err = cache.ReadAccountPoolPage(ctx, "epoch-sort", 1, 1, service.AccountPoolListQuery{
+		Relation: service.AccountPoolRelationSevenDayContact, RelationAccountIDs: []int64{1, 3},
+		SortBy: service.AccountPoolSortByID, SortOrder: service.AccountPoolSortDesc,
+	})
+	if err != nil || total != 2 || len(got) != 1 || got[0].ID != 3 {
+		t.Fatalf("用户关系筛选必须在快照分页前完成: total=%d items=%+v err=%v", total, got, err)
+	}
 }
 
 func TestAccountPoolBuildLockRenewalRequiresOwner(t *testing.T) {

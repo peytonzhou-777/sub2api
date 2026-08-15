@@ -51,9 +51,10 @@ const PaginationStub = {
 }
 
 const SelectStub = {
-  props: ['modelValue', 'options'],
+  inheritAttrs: false,
+  props: ['modelValue', 'options', 'ariaLabel'],
   emits: ['update:modelValue'],
-  template: '<button data-test="status-filter" @click="$emit(\'update:modelValue\', \'error\')">status</button>',
+  template: '<button :data-test="$attrs[\'data-test\'] || \'status-filter\'" @click="$emit(\'update:modelValue\', $attrs[\'data-test\'] ? \'seven_day_contact\' : \'error\')">select</button>',
 }
 
 function mountView() {
@@ -76,6 +77,7 @@ describe('AccountPoolView', () => {
     localStorage.clear()
     route.query = {}
     listAccountPool.mockReset()
+    getPersonalUsage.mockReset()
     replace.mockReset()
     showError.mockReset()
     listAccountPool.mockImplementation(async (options: { pageSize: number }) => ({
@@ -181,6 +183,9 @@ describe('AccountPoolView', () => {
           reset_count: 0,
           reset_count_state: 'fresh',
           status: { code: 'active', resume_at: null, models: [] },
+          is_current_residence: true,
+          is_seven_day_contact: true,
+          is_historical_contact: true,
         }],
         total: 1,
         page: 1,
@@ -196,6 +201,7 @@ describe('AccountPoolView', () => {
     expect(headers).toEqual([
       'accountPool.columns.id',
       'accountPool.columns.platformType',
+      'accountPool.columns.relation',
       'accountPool.columns.capacity',
       'accountPool.columns.usageWindow',
       'accountPool.columns.personalUsage',
@@ -204,11 +210,57 @@ describe('AccountPoolView', () => {
     ])
     expect(wrapper.text()).toContain('OpenAI')
     expect(wrapper.text()).toContain('Plus')
+    expect(wrapper.text()).toContain('accountPool.relations.currentResidence')
+    expect(wrapper.text()).toContain('accountPool.relations.sevenDayContact')
     expect(wrapper.text()).toContain('0%')
     expect(wrapper.text()).not.toContain('admin.accounts.subscriptionExpires')
     expect(wrapper.text()).not.toContain('admin.accounts.openai.compactSupported')
     expect(wrapper.text()).not.toContain('accountPool.actions.query')
     expect(wrapper.text()).not.toContain('accountPool.actions.reset')
+    wrapper.unmount()
+  })
+
+  it('一键查询会先筛选七日触达账号，再错峰加载个人用量', async () => {
+    vi.useFakeTimers()
+    listAccountPool
+      .mockResolvedValueOnce({ data: emptyPage(), notModified: false })
+      .mockResolvedValueOnce({
+        data: {
+          items: [{
+            id: 91,
+            platform: 'openai',
+            type: 'oauth',
+            capacity: { current_concurrency: 0, max_concurrency: 10, observed_at: null, state: 'fresh' },
+            usage_windows: [],
+            reset_count: null,
+            reset_count_state: 'unavailable',
+            status: { code: 'active', resume_at: null, models: [] },
+            is_current_residence: false,
+            is_seven_day_contact: true,
+            is_historical_contact: true,
+          }],
+          total: 1,
+          page: 1,
+          page_size: 20,
+          pages: 1,
+        },
+        notModified: false,
+      })
+    getPersonalUsage.mockResolvedValueOnce({
+      account_id: 91,
+      observed_at: '2026-08-15T00:00:00Z',
+      windows: [],
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-test="query-seven-day-usage"]').trigger('click')
+    await flushPromises()
+    expect(listAccountPool.mock.calls[1][0]).toMatchObject({ relation: 'seven_day_contact', page: 1 })
+
+    await vi.advanceTimersByTimeAsync(1)
+    await flushPromises()
+    expect(getPersonalUsage).toHaveBeenCalledWith(91, expect.objectContaining({ signal: expect.any(AbortSignal) }))
     wrapper.unmount()
   })
 })

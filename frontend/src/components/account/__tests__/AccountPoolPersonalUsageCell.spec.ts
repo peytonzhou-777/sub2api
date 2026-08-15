@@ -29,6 +29,9 @@ const account = (id: number, platform = 'openai', type = 'oauth') => ({
   reset_count: null,
   reset_count_state: 'unavailable',
   status: { code: 'active', resume_at: null, models: [] },
+  is_current_residence: false,
+  is_seven_day_contact: false,
+  is_historical_contact: false,
 })
 
 describe('AccountPoolPersonalUsageCell', () => {

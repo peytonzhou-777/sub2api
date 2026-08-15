@@ -24,7 +24,7 @@ func NewAccountPoolHandler(pool *service.AccountPoolService, settings *service.S
 	return &AccountPoolHandler{pool: pool, settings: settings}
 }
 
-// List 返回当前完整公开快照；不会触发账号写入或上游查询。
+// List 返回当前用户可见的号池快照和私有关系投影；不会触发账号写入或上游查询。
 func (h *AccountPoolHandler) List(c *gin.Context) {
 	if h.settings == nil || !h.settings.IsAccountPoolEnabled(c.Request.Context()) {
 		response.NotFound(c, "Not found")
@@ -35,7 +35,12 @@ func (h *AccountPoolHandler) List(c *gin.Context) {
 		response.BadRequest(c, "Invalid query parameters")
 		return
 	}
-	result, err := h.pool.List(c.Request.Context(), h.settings.GetAccountPoolEnabledEpoch(c.Request.Context()), page, pageSize, query)
+	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Unauthorized(c, "Authentication required")
+		return
+	}
+	result, err := h.pool.ListForUser(c.Request.Context(), h.settings.GetAccountPoolEnabledEpoch(c.Request.Context()), subject.UserID, page, pageSize, query)
 	if err != nil {
 		response.Error(c, http.StatusServiceUnavailable, "Account pool temporarily unavailable")
 		return
@@ -99,7 +104,7 @@ func (h *AccountPoolHandler) PersonalUsage(c *gin.Context) {
 func parseAccountPoolQuery(c *gin.Context) (int, int, service.AccountPoolListQuery, bool) {
 	query := c.Request.URL.Query()
 	allowed := map[string]struct{}{
-		"page": {}, "page_size": {}, "account_id": {}, "status": {}, "sort_by": {}, "sort_order": {},
+		"page": {}, "page_size": {}, "account_id": {}, "status": {}, "sort_by": {}, "sort_order": {}, "relation": {},
 	}
 	for key, values := range query {
 		if _, exists := allowed[key]; !exists || len(values) != 1 {
@@ -135,6 +140,12 @@ func parseAccountPoolQuery(c *gin.Context) (int, int, service.AccountPoolListQue
 			return 0, 0, service.AccountPoolListQuery{}, false
 		}
 		result.Status = raw[0]
+	}
+	if raw, exists := query["relation"]; exists {
+		if raw[0] != "" && !service.IsAccountPoolRelationFilter(raw[0]) {
+			return 0, 0, service.AccountPoolListQuery{}, false
+		}
+		result.Relation = raw[0]
 	}
 	if raw, exists := query["sort_by"]; exists {
 		if raw[0] != service.AccountPoolSortByID && raw[0] != service.AccountPoolSortByStatus {

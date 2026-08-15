@@ -112,6 +112,15 @@ type accountPoolPersonalUsageReaderStub struct {
 	delay time.Duration
 }
 
+type accountPoolUserRelationReaderStub struct {
+	relations []AccountPoolUserRelation
+	err       error
+}
+
+func (r accountPoolUserRelationReaderStub) ListAccountPoolUserRelations(context.Context, int64) ([]AccountPoolUserRelation, error) {
+	return r.relations, r.err
+}
+
 func (r *accountPoolPersonalUsageReaderStub) GetUserAccountPersonalUsage(ctx context.Context, _ int64, _ int64, _, _, _ time.Time) (*AccountPoolPersonalUsageStats, error) {
 	r.calls.Add(1)
 	if r.delay > 0 {
@@ -210,6 +219,42 @@ func TestAccountPoolNotReadyDoesNotFallbackToDatabase(t *testing.T) {
 	}
 	if source.pageCalls != 0 {
 		t.Fatalf("预热期间不应数据库降级，调用次数: %d", source.pageCalls)
+	}
+}
+
+func TestAccountPoolListForUserFiltersBeforePaginationAndProjectsRelations(t *testing.T) {
+	source := &accountPoolBuildSource{records: []AccountPoolSourceRecord{
+		{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeOAuth},
+		{ID: 12, Platform: PlatformOpenAI, Type: AccountTypeOAuth},
+		{ID: 13, Platform: PlatformOpenAI, Type: AccountTypeOAuth},
+	}}
+	svc := NewAccountPoolService(source, nil, nil, AccountPoolOptions{})
+	svc.SetUserRelationReader(accountPoolUserRelationReaderStub{relations: []AccountPoolUserRelation{
+		{AccountID: 11, IsCurrentResidence: true},
+		{AccountID: 12, IsSevenDayContact: true, IsHistoricalContact: true},
+		{AccountID: 13, IsHistoricalContact: true},
+	}})
+
+	page, err := svc.ListForUser(context.Background(), "epoch-a", 42, 1, 1, AccountPoolListQuery{
+		Relation: AccountPoolRelationHistoricalContact,
+		SortBy:   AccountPoolSortByID, SortOrder: AccountPoolSortDesc,
+	})
+	if err != nil {
+		t.Fatalf("按用户关系列出号池: %v", err)
+	}
+	if page.Total != 2 || len(page.Items) != 1 || page.Items[0].ID != 13 || !page.Items[0].IsHistoricalContact {
+		t.Fatalf("关系筛选必须先于分页并投影标记: %+v", page)
+	}
+
+	page, err = svc.ListForUser(context.Background(), "epoch-a", 42, 1, 20, AccountPoolListQuery{
+		Relation: AccountPoolRelationSevenDayContact,
+		SortBy:   AccountPoolSortByID, SortOrder: AccountPoolSortAsc,
+	})
+	if err != nil {
+		t.Fatalf("列出带关系投影的号池: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].ID != 12 || !page.Items[0].IsSevenDayContact || !page.Items[0].IsHistoricalContact {
+		t.Fatalf("用户关系投影不完整: %+v", page.Items)
 	}
 }
 

@@ -26,10 +26,30 @@
               :aria-label="t('accountPool.statusFilter')"
               @update:model-value="changeStatus"
             />
+            <Select
+              :model-value="relationFilter"
+              class="w-full sm:w-48"
+              data-test="relation-filter"
+              :options="relationOptions"
+              :aria-label="t('accountPool.relationFilter')"
+              @update:model-value="changeRelation"
+            />
           </div>
-          <button class="btn btn-secondary" :disabled="loading || retryUntil > Date.now()" :title="t('common.refresh')" @click="load(true)">
-            <Icon name="refresh" size="md" :class="{ 'animate-spin': loading }" />
-          </button>
+          <div class="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              class="btn btn-secondary whitespace-nowrap"
+              data-test="query-seven-day-usage"
+              :disabled="loading || retryUntil > Date.now()"
+              @click="querySevenDayUsage"
+            >
+              <Icon name="search" size="sm" />
+              <span>{{ t('accountPool.querySevenDayUsage') }}</span>
+            </button>
+            <button class="btn btn-secondary" :disabled="loading || retryUntil > Date.now()" :title="t('common.refresh')" @click="load(true)">
+              <Icon name="refresh" size="md" :class="{ 'animate-spin': loading }" />
+            </button>
+          </div>
         </div>
       </template>
 
@@ -60,9 +80,9 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-700 dark:bg-dark-900">
-              <tr v-if="loading && !page.items.length"><td colspan="7" class="px-4 py-12 text-center text-gray-500">{{ t('common.loading') }}</td></tr>
-              <tr v-else-if="!page.items.length"><td colspan="7" class="px-4 py-12 text-center text-gray-500">{{ submittedId ? t('accountPool.deletedOrMissing') : t('common.noData') }}</td></tr>
-              <tr v-for="account in page.items" :key="account.id">
+              <tr v-if="loading && !page.items.length"><td colspan="8" class="px-4 py-12 text-center text-gray-500">{{ t('common.loading') }}</td></tr>
+              <tr v-else-if="!page.items.length"><td colspan="8" class="px-4 py-12 text-center text-gray-500">{{ submittedId ? t('accountPool.deletedOrMissing') : t('common.noData') }}</td></tr>
+              <tr v-for="(account, accountIndex) in page.items" :key="account.id">
                 <td class="whitespace-nowrap px-4 py-3 font-mono text-sm font-medium">#{{ account.id }}</td>
                 <td class="min-w-56 px-4 py-3 text-sm">
                   <div class="flex min-w-0 flex-col gap-1">
@@ -80,9 +100,29 @@
                     </div>
                   </div>
                 </td>
+                <td class="min-w-40 px-4 py-3 text-sm">
+                  <div class="flex flex-wrap gap-1">
+                    <span v-if="account.is_current_residence" class="rounded bg-primary-100 px-1.5 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                      {{ t('accountPool.relations.currentResidence') }}
+                    </span>
+                    <span v-if="account.is_seven_day_contact" class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                      {{ t('accountPool.relations.sevenDayContact') }}
+                    </span>
+                    <span v-else-if="account.is_historical_contact" class="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300">
+                      {{ t('accountPool.relations.historicalContact') }}
+                    </span>
+                    <span v-if="!account.is_current_residence && !account.is_historical_contact" class="text-gray-400 dark:text-gray-500">--</span>
+                  </div>
+                </td>
                 <td class="whitespace-nowrap px-4 py-3 text-sm"><AccountPoolCapacityCell :capacity="account.capacity" /></td>
                 <td class="min-w-64 px-4 py-3 text-sm"><AccountPoolUsageCell :windows="account.usage_windows" /></td>
-                <td class="min-w-72 px-4 py-3 text-sm"><AccountPoolPersonalUsageCell :account="account" /></td>
+                <td class="min-w-72 px-4 py-3 text-sm">
+                  <AccountPoolPersonalUsageCell
+                    :account="account"
+                    :auto-query-token="personalUsageQueryToken"
+                    :auto-query-delay-ms="accountIndex * 150"
+                  />
+                </td>
                 <td class="whitespace-nowrap px-4 py-3 text-sm">{{ account.reset_count_state === 'fresh' && account.reset_count != null ? account.reset_count : '--' }}</td>
                 <td class="min-w-36 px-4 py-3 text-sm"><AccountPoolStatusCell :status="account.status" /></td>
               </tr>
@@ -120,6 +160,7 @@ import AccountPoolUsageCell from '@/components/account/AccountPoolUsageCell.vue'
 import AccountPoolPersonalUsageCell from '@/components/account/AccountPoolPersonalUsageCell.vue'
 import accountPoolAPI, {
   type AccountPoolPage,
+  type AccountPoolRelationFilter,
   type AccountPoolSortBy,
   type AccountPoolSortOrder,
   type AccountPoolStatusCode,
@@ -138,11 +179,13 @@ const loading = ref(false)
 const searchInput = ref('')
 const submittedId = ref('')
 const statusFilter = ref<AccountPoolStatusCode | ''>('')
+const relationFilter = ref<AccountPoolRelationFilter | ''>('')
 const sortBy = ref<AccountPoolSortBy>('id')
 const sortOrder = ref<AccountPoolSortOrder>('desc')
 const etag = ref('')
 const lastLoadedAt = ref(0)
 const retryUntil = ref(0)
+const personalUsageQueryToken = ref(0)
 let controller: AbortController | undefined
 let debounceTimer: ReturnType<typeof setTimeout> | undefined
 let pollTimer: ReturnType<typeof setInterval> | undefined
@@ -153,6 +196,7 @@ const invalidSearch = computed(() => searchInput.value !== '' && /^0+$/.test(sea
 const columns = computed(() => [
   { key: 'id' as const, label: t('accountPool.columns.id'), sortable: true },
   { key: 'platformType' as const, label: t('accountPool.columns.platformType'), sortable: false },
+  { key: 'relation' as const, label: t('accountPool.columns.relation'), sortable: false },
   { key: 'capacity' as const, label: t('accountPool.columns.capacity'), sortable: false },
   { key: 'usageWindow' as const, label: t('accountPool.columns.usageWindow'), sortable: false },
   { key: 'personalUsage' as const, label: t('accountPool.columns.personalUsage'), sortable: false },
@@ -163,6 +207,12 @@ const statusOptions = computed(() => [
   { value: '', label: t('accountPool.allStatus') },
   ...(['active', 'disabled', 'error', 'temporarily_unavailable', 'overloaded', 'rate_limited', 'paused', 'quota_exceeded'] as AccountPoolStatusCode[])
     .map(status => ({ value: status, label: t(`accountPool.status.${status}`) })),
+])
+const relationOptions = computed(() => [
+  { value: '', label: t('accountPool.relations.all') },
+  { value: 'current_residence', label: t('accountPool.relations.currentResidence') },
+  { value: 'seven_day_contact', label: t('accountPool.relations.sevenDayContact') },
+  { value: 'historical_contact', label: t('accountPool.relations.historicalContact') },
 ])
 
 function platformOf(account: AccountPoolPage['items'][number]): AccountPlatform {
@@ -243,7 +293,7 @@ function submitSearch() {
 }
 
 async function load(force = false, targetPage = page.value.page) {
-  if (document.hidden || invalidSearch.value || Date.now() < retryUntil.value) return
+  if (document.hidden || invalidSearch.value || Date.now() < retryUntil.value) return false
   controller?.abort()
   controller = new AbortController()
   const current = ++sequence
@@ -254,6 +304,7 @@ async function load(force = false, targetPage = page.value.page) {
       pageSize: page.value.page_size,
       accountId: submittedId.value || undefined,
       status: statusFilter.value,
+      relation: relationFilter.value,
       sortBy: sortBy.value,
       sortOrder: sortOrder.value,
       etag: force ? undefined : etag.value || undefined,
@@ -263,6 +314,7 @@ async function load(force = false, targetPage = page.value.page) {
     if (result.data) page.value = result.data
     if (result.etag) etag.value = result.etag
     lastLoadedAt.value = Date.now()
+    return true
   } catch (error: unknown) {
     if (current !== sequence) return
     const apiError = error as { code?: string; status?: number; retryAfter?: number }
@@ -271,6 +323,7 @@ async function load(force = false, targetPage = page.value.page) {
     } else if (apiError.code !== 'ERR_CANCELED') {
       appStore.showError(extractApiErrorMessage(error, t('common.error')))
     }
+    return false
   } finally {
     if (current === sequence) loading.value = false
   }
@@ -293,6 +346,21 @@ function changeStatus(value: string | number | boolean | null) {
   page.value = { ...page.value, page: 1 }
   etag.value = ''
   void load(true, 1)
+}
+
+function changeRelation(value: string | number | boolean | null) {
+  relationFilter.value = String(value ?? '') as AccountPoolRelationFilter | ''
+  page.value = { ...page.value, page: 1 }
+  etag.value = ''
+  void load(true, 1)
+}
+
+// 一键查询先切换为七日触达筛选，列表成功返回后再错峰查询各账号个人用量。
+async function querySevenDayUsage() {
+  relationFilter.value = 'seven_day_contact'
+  page.value = { ...page.value, page: 1 }
+  etag.value = ''
+  if (await load(true, 1)) personalUsageQueryToken.value += 1
 }
 
 function toggleSort(key: string) {

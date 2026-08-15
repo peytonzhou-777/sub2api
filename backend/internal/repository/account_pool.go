@@ -349,7 +349,8 @@ func (c *accountPoolSnapshotCache) ReadAccountPoolPage(ctx context.Context, enab
 	if query.AccountID != nil {
 		idx := sort.Search(len(meta.AccountIDs), func(i int) bool { return meta.AccountIDs[i] >= *query.AccountID })
 		if idx >= len(meta.AccountIDs) || meta.AccountIDs[idx] != *query.AccountID ||
-			(query.Status != "" && !accountPoolIDInSortedList(meta.StatusAccountIDs[query.Status], *query.AccountID)) {
+			(query.Status != "" && !accountPoolIDInSortedList(meta.StatusAccountIDs[query.Status], *query.AccountID)) ||
+			(query.Relation != "" && !accountPoolIDInList(query.RelationAccountIDs, *query.AccountID)) {
 			return []service.PublicAccountPoolAccount{}, 0, nil
 		}
 		ids = []int64{*query.AccountID}
@@ -415,7 +416,7 @@ func accountPoolMetaIDs(meta accountPoolGenerationMeta, query service.AccountPoo
 			}
 			ids = append(ids, bucket...)
 		}
-		return ids
+		return filterAccountPoolIDsByRelation(ids, query)
 	}
 	ids := append([]int64(nil), meta.AccountIDs...)
 	if query.Status != "" {
@@ -424,7 +425,7 @@ func accountPoolMetaIDs(meta accountPoolGenerationMeta, query service.AccountPoo
 	if query.SortOrder == service.AccountPoolSortDesc {
 		slices.Reverse(ids)
 	}
-	return ids
+	return filterAccountPoolIDsByRelation(ids, query)
 }
 
 func accountPoolIDInSortedList(ids []int64, accountID int64) bool {

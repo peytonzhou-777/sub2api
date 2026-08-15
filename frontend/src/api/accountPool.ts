@@ -4,6 +4,7 @@ export type AccountPoolFreshness = 'fresh' | 'stale' | 'unavailable'
 export type AccountPoolStatusCode = 'active' | 'disabled' | 'error' | 'temporarily_unavailable' | 'overloaded' | 'rate_limited' | 'paused' | 'quota_exceeded'
 export type AccountPoolSortBy = 'id' | 'status'
 export type AccountPoolSortOrder = 'asc' | 'desc'
+export type AccountPoolRelationFilter = 'current_residence' | 'seven_day_contact' | 'historical_contact'
 
 export interface AccountPoolAccount {
   id: number
@@ -35,6 +36,9 @@ export interface AccountPoolAccount {
     resume_at: string | null
     models: Array<{ kind: string; model: string; resume_at: string | null }>
   }
+  is_current_residence: boolean
+  is_seven_day_contact: boolean
+  is_historical_contact: boolean
 }
 
 export interface AccountPoolPage {
@@ -66,6 +70,7 @@ export async function listAccountPool(options: {
   pageSize: number
   accountId?: string
   status?: AccountPoolStatusCode | ''
+  relation?: AccountPoolRelationFilter | ''
   sortBy: AccountPoolSortBy
   sortOrder: AccountPoolSortOrder
   etag?: string
@@ -77,6 +82,7 @@ export async function listAccountPool(options: {
       page_size: options.pageSize,
       ...(options.accountId ? { account_id: options.accountId } : {}),
       ...(options.status ? { status: options.status } : {}),
+      ...(options.relation ? { relation: options.relation } : {}),
       sort_by: options.sortBy,
       sort_order: options.sortOrder,
     },

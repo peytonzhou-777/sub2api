@@ -32,6 +32,21 @@ func TestParseAccountPoolQueryRejectsUnknownStatus(t *testing.T) {
 	}
 }
 
+func TestParseAccountPoolQueryAcceptsUserRelationFilter(t *testing.T) {
+	c := newAccountPoolQueryContext(t, "/api/v1/account-pool?relation=seven_day_contact")
+	_, _, query, ok := parseAccountPoolQuery(c)
+	if !ok || query.Relation != service.AccountPoolRelationSevenDayContact {
+		t.Fatalf("用户关系筛选参数不正确: query=%+v ok=%v", query, ok)
+	}
+}
+
+func TestParseAccountPoolQueryRejectsUnknownUserRelation(t *testing.T) {
+	c := newAccountPoolQueryContext(t, "/api/v1/account-pool?relation=reserved_only")
+	if _, _, _, ok := parseAccountPoolQuery(c); ok {
+		t.Fatal("未知用户关系不应通过查询参数校验")
+	}
+}
+
 func newAccountPoolQueryContext(t *testing.T, target string) *gin.Context {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

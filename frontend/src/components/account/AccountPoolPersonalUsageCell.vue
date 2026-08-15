@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Icon from '@/components/icons/Icon.vue'
 import accountPoolAPI, { type AccountPoolAccount, type AccountPoolPersonalUsage } from '@/api/accountPool'
 import { formatCompactNumber, formatCurrency } from '@/utils/format'
@@ -63,7 +63,14 @@ import { useI18n } from 'vue-i18n'
 const personalUsageCache = new Map<number, { data: AccountPoolPersonalUsage | null; loadedAt: number; retryUntil: number }>()
 const cacheTTL = 30_000
 
-const props = defineProps<{ account: AccountPoolAccount }>()
+const props = withDefaults(defineProps<{
+  account: AccountPoolAccount
+  autoQueryToken?: number
+  autoQueryDelayMs?: number
+}>(), {
+  autoQueryToken: 0,
+  autoQueryDelayMs: 0,
+})
 const { t } = useI18n()
 const supported = computed(() =>
   (props.account.platform === 'openai' || props.account.platform === 'anthropic') &&
@@ -76,6 +83,7 @@ const error = ref('')
 const retryUntil = ref(cached?.retryUntil ?? 0)
 const clock = ref(Date.now())
 let retryTimer: ReturnType<typeof setTimeout> | undefined
+let autoQueryTimer: ReturnType<typeof setTimeout> | undefined
 let controller: AbortController | undefined
 
 const isCoolingDown = computed(() => retryUntil.value > clock.value)
@@ -137,9 +145,20 @@ async function query() {
   }
 }
 
+// 一键查询按行错峰触发，避免筛选结果同时请求个人用量接口。
+watch(() => props.autoQueryToken, (token) => {
+  if (!token || !supported.value) return
+  if (autoQueryTimer) clearTimeout(autoQueryTimer)
+  autoQueryTimer = setTimeout(() => {
+    autoQueryTimer = undefined
+    void query()
+  }, Math.max(0, props.autoQueryDelayMs))
+}, { immediate: true })
+
 onBeforeUnmount(() => {
   controller?.abort()
   if (retryTimer) clearTimeout(retryTimer)
+  if (autoQueryTimer) clearTimeout(autoQueryTimer)
 })
 
 armRetryTimer()

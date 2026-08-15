@@ -307,7 +307,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	availableChannelHandler := handler.NewAvailableChannelHandler(channelService, apiKeyService, settingService)
 	accountPoolSource := repository.NewAccountPoolSource(client)
 	accountPoolSnapshotCache := repository.NewAccountPoolSnapshotCache(redisClient)
-	accountPoolService := service.ProvideAccountPoolService(accountPoolSource, accountPoolSnapshotCache, concurrencyService, usageLogRepository, configConfig)
+	accountPoolService := service.ProvideAccountPoolService(accountPoolSource, accountPoolSnapshotCache, concurrencyService, usageLogRepository, accountRepository, configConfig)
 	accountPoolHandler := handler.NewAccountPoolHandler(accountPoolService, settingService)
 	modelPlazaHandler := handler.NewModelPlazaHandler(channelService, apiKeyService, settingService)
 	imageTaskStore := repository.NewImageTaskStore(redisClient)

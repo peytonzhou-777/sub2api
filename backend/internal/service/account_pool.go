@@ -87,6 +87,10 @@ type PublicAccountPoolAccount struct {
 	ResetCount      *int                           `json:"reset_count"`
 	ResetCountState string                         `json:"reset_count_state"`
 	Status          PublicAccountPoolStatus        `json:"status"`
+	// 用户关系只在请求响应阶段投影，绝不写入公共号池快照。
+	IsCurrentResidence  bool `json:"is_current_residence"`
+	IsSevenDayContact   bool `json:"is_seven_day_contact"`
+	IsHistoricalContact bool `json:"is_historical_contact"`
 }
 
 type AccountPoolPage struct {
@@ -99,10 +103,12 @@ type AccountPoolPage struct {
 
 // AccountPoolListQuery 是号池快照与数据库降级共用的只读查询条件。
 type AccountPoolListQuery struct {
-	AccountID *int64
-	Status    string
-	SortBy    string
-	SortOrder string
+	AccountID          *int64
+	Status             string
+	SortBy             string
+	SortOrder          string
+	Relation           string
+	RelationAccountIDs []int64
 }
 
 var publicAccountPoolStatusCodes = map[string]struct{}{
@@ -214,6 +220,7 @@ type AccountPoolService struct {
 	options             AccountPoolOptions
 	now                 func() time.Time
 	personalUsageReader AccountPoolPersonalUsageReader
+	userRelationReader  AccountPoolUserRelationReader
 	personalUsageMu     sync.Mutex
 	personalUsageCache  map[string]accountPoolPersonalUsageCacheEntry
 	personalUsageSF     singleflight.Group
@@ -355,7 +362,7 @@ func (s *AccountPoolService) List(ctx context.Context, enabledEpoch string, page
 
 func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context, page, pageSize int, query AccountPoolListQuery) (*AccountPoolPage, error) {
 	// ID 查询及普通 ID 排序仍使用数据库分页；状态条件需要按公开派生状态统一计算。
-	if query.AccountID != nil || (query.Status == "" && query.SortBy == AccountPoolSortByID) {
+	if query.Relation == "" && (query.AccountID != nil || (query.Status == "" && query.SortBy == AccountPoolSortByID)) {
 		records, total, err := s.source.ListAccountPoolPage(ctx, page, pageSize, query.AccountID, query.SortOrder)
 		if err != nil {
 			return nil, fmt.Errorf("account pool database fallback: %w", err)
@@ -385,6 +392,7 @@ func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context
 		}
 	}
 	items = filterAccountPoolItemsByStatus(items, query.Status)
+	items = filterAccountPoolItemsByRelation(items, query)
 	sortAccountPoolItems(items, query.SortBy, query.SortOrder)
 	total := int64(len(items))
 	start := (page - 1) * pageSize
