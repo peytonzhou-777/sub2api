@@ -1,3 +1,5 @@
+import { openAIUserAffinitySettings } from './openAIUserAffinity'
+
 export default {
     settings: {
       title: '系统设置',
@@ -1471,5 +1473,6 @@ export default {
       loadFailed: '加载模板失败',
       saveFailed: '保存模板失败',
       deleteFailed: '删除模板失败'
-    }
+    },
+    openAIUserAffinity: openAIUserAffinitySettings
 }

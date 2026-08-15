@@ -81,6 +81,7 @@ func TestPassthroughIngressNeverCallsBeforeTurn(t *testing.T) {
 
 	var hooksMu sync.Mutex
 	beforeTurnCalls := 0
+	acceptedTurnCalls := 0
 	afterTurnCalls := 0
 	hooks := &OpenAIWSIngressHooks{
 		BeforeTurn: func(int) error {
@@ -88,6 +89,11 @@ func TestPassthroughIngressNeverCallsBeforeTurn(t *testing.T) {
 			beforeTurnCalls++
 			hooksMu.Unlock()
 			return nil
+		},
+		OnTurnAccepted: func(int) {
+			hooksMu.Lock()
+			acceptedTurnCalls++
+			hooksMu.Unlock()
 		},
 		AfterTurn: func(int, *OpenAIForwardResult, error) {
 			hooksMu.Lock()
@@ -120,9 +126,10 @@ func TestPassthroughIngressNeverCallsBeforeTurn(t *testing.T) {
 	}
 
 	hooksMu.Lock()
-	gotBefore, gotAfter := beforeTurnCalls, afterTurnCalls
+	gotBefore, gotAccepted, gotAfter := beforeTurnCalls, acceptedTurnCalls, afterTurnCalls
 	hooksMu.Unlock()
 
 	require.Zero(t, gotBefore, "透传 ingress 没有 turn 起始回调，BeforeTurn 不应被调用")
+	require.Equal(t, 1, gotAccepted, "透传 ingress 的成功 turn 应回调一次 accepted")
 	require.Positive(t, gotAfter, "透传 ingress 仍应回调 AfterTurn 提交用量")
 }

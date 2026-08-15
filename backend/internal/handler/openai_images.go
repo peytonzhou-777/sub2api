@@ -370,6 +370,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		} else {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(requestModel), true, nil)
 		}
+		h.gatewayService.RecordOpenAIUserAffinitySuccess(requestCtx, account.ID)
 
 		userAgent := c.GetHeader("User-Agent")
 		clientIP := ip.GetClientIP(c)

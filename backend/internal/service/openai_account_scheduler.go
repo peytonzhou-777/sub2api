@@ -413,6 +413,10 @@ func (s *defaultOpenAIAccountScheduler) Select(
 		}
 	}
 
+	if selection, found, err := s.selectOpenAIUserAffinity(ctx, req, &decision); err != nil || found {
+		return selection, decision, err
+	}
+
 	if !req.StickyWeighted {
 		selection, escapedSticky, err := s.selectBySessionHash(ctx, req)
 		if err != nil {
@@ -450,6 +454,7 @@ func (s *defaultOpenAIAccountScheduler) Select(
 			}
 		}
 	}
+	s.reserveOpenAIUserAffinitySelection(ctx, req, selection, err)
 	return selection, decision, nil
 }
 
@@ -2163,8 +2168,14 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 	}
 	platform = normalizeOpenAICompatiblePlatform(platform)
 	decision := OpenAIAccountScheduleDecision{}
+	affinityReq := newOpenAIUserAffinityScheduleRequest(groupID, platform, previousResponseID, requestedModel,
+		requiredTransport, requiredCapability, requiredImageCapability, requireCompact, excludedIDs)
+	defer s.observeOpenAIUserAffinityShadow(ctx, affinityReq, &decision)()
 	scheduler := s.getOpenAIAccountScheduler(ctx)
 	if scheduler == nil {
+		if selection, handled, preflightErr := s.selectLegacyOpenAIUserAffinityPreflight(ctx, affinityReq, &decision); preflightErr != nil || handled {
+			return selection, decision, preflightErr
+		}
 		decision.Layer = openAIAccountScheduleLayerLoadBalance
 		if requiredTransport == OpenAIUpstreamTransportAny || requiredTransport == OpenAIUpstreamTransportHTTPSSE {
 			effectiveExcludedIDs := cloneExcludedAccountIDs(excludedIDs)

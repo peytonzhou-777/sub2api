@@ -142,6 +142,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 		writeOpenAIEmbeddingsUpstreamResponse(c, resp, respBody, s.responseHeaderFilter)
 		return nil, fmt.Errorf("upstream returned status %d", resp.StatusCode)
 	}
+	s.RecordOpenAIUserAffinityAccepted(ctx, account.ID)
 
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {

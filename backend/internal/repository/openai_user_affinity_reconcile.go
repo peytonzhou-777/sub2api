@@ -1,0 +1,61 @@
+package repository
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	dbent "github.com/Wei-Shaw/sub2api/ent"
+)
+
+// ReconcileOpenAIUserAffinity 关闭过期暂态并返回修复计数；调用方负责低频触发。
+func (r *accountRepository) ReconcileOpenAIUserAffinity(ctx context.Context, now time.Time) (map[string]int64, error) {
+	if r == nil || r.client == nil {
+		return nil, fmt.Errorf("openai user affinity storage unavailable")
+	}
+	tx, err := r.client.Tx(ctx)
+	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+		return nil, err
+	}
+	exec := r.sql
+	if tx != nil {
+		defer func() { _ = tx.Rollback() }()
+		exec = tx.Client()
+	}
+	statements := []struct {
+		name string
+		sql  string
+	}{
+		{"placements", `UPDATE user_account_placements SET status = 'expired', updated_at = $1
+			WHERE status = 'active' AND expires_at <= $1`},
+		{"contacts", `UPDATE account_user_contacts SET reservation_kind = NULL,
+			reservation_token = NULL, reservation_until = NULL, reentry_batch_token = NULL,
+			reentry_state = CASE WHEN reentry_state IN ('leader_pending', 'stagger_releasing') THEN 'failed' ELSE reentry_state END,
+			leader_token = NULL, leader_lease_until = NULL, updated_at = $1
+			WHERE reservation_until <= $1 AND (touch_expires_at IS NULL OR touch_expires_at <= $1)`},
+		{"contact_periods", `UPDATE account_user_contact_periods SET closed_at = $1, updated_at = $1
+			WHERE closed_at IS NULL AND touch_expires_at <= $1`},
+		{"capacity_incidents", `UPDATE user_account_capacity_incidents SET status = 'expired',
+			closed_at = $1, close_reason = 'window_expired', updated_at = $1
+			WHERE closed_at IS NULL AND status = 'collecting' AND window_expires_at <= $1`},
+	}
+	counts := make(map[string]int64, len(statements))
+	for _, statement := range statements {
+		result, execErr := exec.ExecContext(ctx, statement.sql, now.UTC())
+		if execErr != nil {
+			return nil, fmt.Errorf("reconcile openai user affinity %s: %w", statement.name, execErr)
+		}
+		affected, rowsErr := result.RowsAffected()
+		if rowsErr != nil {
+			return nil, rowsErr
+		}
+		counts[statement.name] = affected
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+	}
+	return counts, nil
+}

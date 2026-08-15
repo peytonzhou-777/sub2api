@@ -834,6 +834,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		eventCount := 0
 		tokenEventCount := 0
 		terminalEventCount := 0
+		turnAccepted := false
 		replayCollector := &openAIWSToolCallReplayCollector{}
 		firstEventType := ""
 		lastEventType := ""
@@ -866,6 +867,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 
 			eventType, eventResponseID, _ := parseOpenAIWSEventEnvelope(upstreamMessage)
+			if !turnAccepted && isOpenAIWSTurnAcceptedEvent(eventType) {
+				turnAccepted = true
+				if hooks != nil && hooks.OnTurnAccepted != nil {
+					hooks.OnTurnAccepted(turn)
+				}
+			}
 			responseModelObserver.ObserveOpenAI(upstreamMessage, eventType)
 			if responseID == "" && eventResponseID != "" {
 				responseID = eventResponseID

@@ -677,6 +677,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				return
 			}
 		}
+		h.gatewayService.RecordOpenAIUserAffinitySuccess(c.Request.Context(), account.ID)
 		if result != nil {
 			// 排除 spark 影子:其 codex_* 仅由 QueryUsage(/wham/usage bengalfox)更新(外审第7轮 P1)。
 			if account.Type == service.AccountTypeOAuth && !account.IsShadow() {
@@ -1213,6 +1214,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 				return
 			}
 		}
+		h.gatewayService.RecordOpenAIUserAffinitySuccess(c.Request.Context(), account.ID)
 		if result != nil {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(currentRoutingModel), true, result.FirstTokenMs)
 		} else {
@@ -1493,6 +1495,7 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlot(
 		return wrapReleaseOnDone(ctx, selection.ReleaseFunc), openAISlotAcquireOK
 	}
 	if selection.WaitPlan == nil {
+		h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID)
 		markOpsRoutingCapacityLimited(c)
 		h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available accounts", *streamStarted)
 		return nil, openAISlotAcquireFailed
@@ -1505,6 +1508,7 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlot(
 	)
 	if err != nil {
 		reqLog.Warn("openai.account_slot_quick_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+		h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID)
 		h.handleConcurrencyError(c, err, "account", *streamStarted)
 		return nil, openAISlotAcquireFailed
 	}
@@ -1535,6 +1539,7 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlot(
 			zap.Int64("account_id", account.ID),
 			zap.Int("max_waiting", selection.WaitPlan.MaxWaiting),
 		)
+		h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID)
 		h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "Too many pending requests, please retry later", *streamStarted)
 		return nil, openAISlotAcquireFailed
 	}
@@ -1558,6 +1563,7 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlot(
 	)
 	if err != nil {
 		reqLog.Warn("openai.account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+		h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID)
 		h.handleConcurrencyError(c, err, "account", *streamStarted)
 		return nil, openAISlotAcquireFailed
 	}
@@ -1827,6 +1833,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		if failoverErr.ShouldReportAccountScheduleFailure() {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(reqModel), false, nil)
 		}
+		if failoverErr.StatusCode == http.StatusTooManyRequests {
+			h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID, "upstream_rpm_or_quota")
+		}
 		releaseAccountSlot()
 		if !failoverErr.ShouldRetryNextAccount() {
 			closeOpenAIWSFailoverExhausted(wsConn, failoverErr)
@@ -1944,6 +1953,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		}
 		if !selection.Acquired {
 			if selection.WaitPlan == nil {
+				h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID, "websocket_concurrency_unavailable")
 				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "account is busy, please retry later")
 				return
 			}
@@ -1958,6 +1968,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return
 			}
 			if !fastAcquired {
+				h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID, "websocket_concurrency_unavailable")
 				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "account is busy, please retry later")
 				return
 			}
@@ -2063,6 +2074,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				turnChannelMapping.Store(&openAIWSTurnChannelMappingSnapshot{turn: turn, mapping: mapping})
 				return mapping.MappedModel, nil
 			},
+			OnTurnAccepted: func(turn int) {
+				h.gatewayService.RecordOpenAIUserAffinityAccepted(ctx, account.ID, "ws-turn-"+strconv.Itoa(turn))
+			},
 			BeforeTurn: func(turn int) error {
 				// turn==1 的会话屏蔽已由握手层检查覆盖；连接内 flag 只拦截后续 turn。
 				if cyberBlockedThisConn {
@@ -2104,6 +2118,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					if userReleaseFunc != nil {
 						userReleaseFunc()
 					}
+					h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID, "websocket_turn_concurrency_unavailable")
 					return service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "account is busy, please retry later", nil)
 				}
 				currentUserRelease = wrapReleaseOnDone(ctx, userReleaseFunc)
@@ -2157,6 +2172,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				if result == nil {
 					return
+				}
+				if turnErr == nil {
+					h.gatewayService.RecordOpenAIUserAffinitySuccess(ctx, account.ID, "ws-turn-"+strconv.Itoa(turn))
 				}
 				result.BillingModel = openAIWSTurnBillingModel(result, turnMapping, turnRequestedModel, turnUpstreamModel)
 				reqLog.Debug("openai.websocket_turn_billing",

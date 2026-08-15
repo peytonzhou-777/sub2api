@@ -4,12 +4,15 @@
  */
 
 import { apiClient } from "../client";
+import { openAIUserAffinitySettingsAPI } from "./openaiUserAffinitySettings";
 import type {
   CustomEndpoint,
   CustomMenuItem,
   LoginAgreementDocument,
   NotifyEmailEntry,
 } from "@/types";
+
+export * from "./openaiUserAffinitySettings";
 
 export interface DefaultSubscriptionSetting {
   group_id: number;
@@ -1638,6 +1641,7 @@ export const settingsAPI = {
   updateWebSearchEmulationConfig,
   testWebSearchEmulation,
   resetWebSearchUsage,
+  ...openAIUserAffinitySettingsAPI,
 };
 
 export default settingsAPI;

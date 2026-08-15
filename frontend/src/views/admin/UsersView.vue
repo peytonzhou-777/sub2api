@@ -694,6 +694,14 @@
                 {{ t('admin.users.groups') }}
               </button>
 
+              <button
+                @click="userAffinityUserID = user.id; closeActionMenu()"
+                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+              >
+                <Icon name="users" size="sm" class="text-gray-400" :stroke-width="2" />
+                {{ t('admin.accounts.userAffinity.title') }}
+              </button>
+
               <div class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
 
               <!-- Deposit -->
@@ -772,6 +780,12 @@
     <UserBalanceHistoryModal :show="showBalanceHistoryModal" :user="balanceHistoryUser" @close="closeBalanceHistoryModal" @deposit="handleDepositFromHistory" @withdraw="handleWithdrawFromHistory" />
     <GroupReplaceModal :show="showGroupReplaceModal" :user="groupReplaceUser" :old-group="groupReplaceOldGroup" :all-groups="allGroups" @close="closeGroupReplaceModal" @success="loadUsers" />
     <UserAttributesConfigModal :show="showAttributesModal" @close="handleAttributesModalClose" />
+    <OpenAIUserAffinityResidentsModal
+      :show="userAffinityUserID !== null"
+      :account="null"
+      :user-id="userAffinityUserID"
+      @close="userAffinityUserID = null"
+    />
   </AppLayout>
 </template>
 
@@ -816,6 +830,7 @@ import UserAllowedGroupsModal from '@/components/admin/user/UserAllowedGroupsMod
 import UserBalanceModal from '@/components/admin/user/UserBalanceModal.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
 import GroupReplaceModal from '@/components/admin/user/GroupReplaceModal.vue'
+import OpenAIUserAffinityResidentsModal from '@/components/admin/account/OpenAIUserAffinityResidentsModal.vue'
 
 const appStore = useAppStore()
 
@@ -1335,6 +1350,7 @@ const editingUser = ref<AdminUser | null>(null)
 const deletingUser = ref<AdminUser | null>(null)
 const viewingUser = ref<AdminUser | null>(null)
 const platformQuotaUser = ref<AdminUser | null>(null)
+const userAffinityUserID = ref<number | null>(null)
 
 const handlePlatformQuota = (user: AdminUser) => {
   platformQuotaUser.value = user

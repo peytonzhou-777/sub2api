@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -264,6 +265,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		_ = writeClientMessage(buildOpenAIWSHTTPBridgeErrorEvent(resp.StatusCode, upstreamMsg))
 		return nil, fmt.Errorf("upstream http bridge error: status=%d message=%s", resp.StatusCode, upstreamMsg)
 	}
+	s.RecordOpenAIUserAffinityAccepted(ctx, account.ID, "ws-turn-"+strconv.Itoa(turn))
 	if account.Platform == PlatformGrok {
 		s.updateGrokUsageFromResponse(ctx, account, resp.Header, resp.StatusCode)
 	}

@@ -667,6 +667,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 		return s.handleOpenAIImagesErrorResponse(upstreamCtx, resp, c, account, upstreamModel)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	s.RecordOpenAIUserAffinityAccepted(ctx, account.ID)
 
 	var usage OpenAIUsage
 	imageCount := parsed.N

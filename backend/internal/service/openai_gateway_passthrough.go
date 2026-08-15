@@ -236,6 +236,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		return nil, s.handleErrorResponsePassthrough(ctx, resp, c, account, body, probeBody)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	s.RecordOpenAIUserAffinityAccepted(ctx, account.ID)
 
 	serviceTier := extractOpenAIServiceTierFromBody(body)
 

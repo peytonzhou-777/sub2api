@@ -4,6 +4,7 @@
  */
 
 import { apiClient } from '../client'
+import { openAIUserAffinityAccountsAPI } from './openaiUserAffinityAccounts'
 import type {
   Account,
   CreateAccountRequest,
@@ -26,6 +27,8 @@ import type {
   OllamaCloudUsageSettings,
   OllamaCloudUsageState
 } from '@/types'
+
+export * from './openaiUserAffinityAccounts'
 
 /**
  * List all accounts with pagination
@@ -1045,7 +1048,8 @@ export const accountsAPI = {
   saveOllamaCloudUsageSession,
   deleteOllamaCloudUsageSession,
   setOllamaCloudUsageAutoRefresh,
-  refreshOllamaCloudUsage
+  refreshOllamaCloudUsage,
+  ...openAIUserAffinityAccountsAPI
 }
 
 export default accountsAPI

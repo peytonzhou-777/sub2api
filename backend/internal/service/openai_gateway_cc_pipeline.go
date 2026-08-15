@@ -224,6 +224,9 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
 	}
+	if resp.StatusCode < http.StatusBadRequest {
+		s.RecordOpenAIUserAffinityAccepted(ctx, account.ID)
+	}
 	return resp, nil
 }
 

@@ -914,6 +914,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	}
 
 	completedTurns := atomic.Int32{}
+	acceptedTurns := atomic.Int32{}
 	turnLifecycle := newOpenAIWSPassthroughTurnLifecycle(true)
 	clientFrameConn := &openAIWSClientFrameConn{
 		conn:                 clientConn,
@@ -1172,6 +1173,18 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					return nil
 				}
 				eventType, _, _ := parseOpenAIWSEventEnvelope(payload)
+				if isOpenAIWSTurnAcceptedEvent(eventType) && hooks != nil && hooks.OnTurnAccepted != nil {
+					turnNo := int(completedTurns.Load()) + 1
+					for {
+						previous := acceptedTurns.Load()
+						if int(previous) >= turnNo || acceptedTurns.CompareAndSwap(previous, int32(turnNo)) {
+							if int(previous) < turnNo {
+								hooks.OnTurnAccepted(turnNo)
+							}
+							break
+						}
+					}
+				}
 				if isOpenAIWSTerminalEvent(eventType) {
 					s.handleOpenAIWSTerminalTransientFailure(ctx, account, capturedSessionModel, handshakeHeaders, payload)
 				}

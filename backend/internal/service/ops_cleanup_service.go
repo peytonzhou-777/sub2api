@@ -332,6 +332,7 @@ func (s *OpsCleanupService) runCleanupOnce(ctx context.Context) (opsCleanupDelet
 			logger.LegacyPrintf("service.ops_cleanup", "[OpsCleanup] channel monitor maintenance failed: %v", err)
 		}
 	}
+	s.maintainOpenAIUserAffinity(ctx, now)
 
 	return out, nil
 }

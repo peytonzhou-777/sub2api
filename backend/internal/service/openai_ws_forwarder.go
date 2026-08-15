@@ -224,6 +224,7 @@ type OpenAIWSIngressHooks struct {
 	// MapRequestModel resolves the current turn's client model to the model
 	// that must be written into the upstream response.create frame.
 	MapRequestModel func(turn int, originalModel string) (string, error)
+	OnTurnAccepted  func(turn int)
 	AfterTurn       func(turn int, result *OpenAIForwardResult, turnErr error)
 }
 

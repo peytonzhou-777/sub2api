@@ -130,6 +130,9 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 		return fmt.Errorf("openai input_tokens upstream request failed: %s", safeErr)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+		s.RecordOpenAIUserAffinityAccepted(ctx, account.ID)
+	}
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -176,7 +179,6 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 		}
 		return fmt.Errorf("input_tokens upstream error: %d message=%s", resp.StatusCode, upstreamMsg)
 	}
-
 	inputTokens := gjson.GetBytes(respBody, "input_tokens")
 	if !inputTokens.Exists() {
 		writeAnthropicCountTokensError(c, http.StatusBadGateway, "upstream_error", "Upstream response missing input_tokens")

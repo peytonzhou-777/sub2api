@@ -1,3 +1,5 @@
+import { openAIUserAffinitySettings } from './openAIUserAffinity'
+
 export default {
     settings: {
       title: 'System Settings',
@@ -1477,5 +1479,6 @@ export default {
       loadFailed: 'Failed to load profiles',
       saveFailed: 'Failed to save profile',
       deleteFailed: 'Failed to delete profile'
-    }
+    },
+    openAIUserAffinity: openAIUserAffinitySettings
 }

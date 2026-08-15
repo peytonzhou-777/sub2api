@@ -80,6 +80,9 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+		s.RecordOpenAIUserAffinityAccepted(ctx, account.ID)
+	}
 
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
@@ -160,6 +163,9 @@ func (s *OpenAIGatewayService) forwardAlphaSearchViaResponsesWebSearch(
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+		s.RecordOpenAIUserAffinityAccepted(ctx, account.ID)
+	}
 
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
@@ -192,7 +198,6 @@ func (s *OpenAIGatewayService) forwardAlphaSearchViaResponsesWebSearch(
 		c.Data(resp.StatusCode, contentType, respBody)
 		return nil, nil
 	}
-
 	if !account.IsShadow() {
 		s.UpdateCodexUsageSnapshotFromHeaders(ctx, account.ID, resp.Header)
 	}

@@ -303,6 +303,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		}
 		return s.handleChatCompletionsErrorResponse(resp, c, account, billingModel)
 	}
+	s.RecordOpenAIUserAffinityAccepted(ctx, account.ID)
 
 	// 9. Handle normal response
 	var result *OpenAIForwardResult

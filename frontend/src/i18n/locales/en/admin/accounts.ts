@@ -1,3 +1,5 @@
+import { openAIUserAffinityAccounts } from './openAIUserAffinity'
+
 export default {
     accounts: {
       title: 'Account Management',
@@ -853,6 +855,7 @@ export default {
           hint: 'When enabled, new sessions prefer accounts previously used by this client to reduce account switching'
         }
       },
+      userAffinity: openAIUserAffinityAccounts,
       affinityNoClients: 'No affinity clients',
       affinityClients: '{count} affinity clients:',
       affinitySection: 'Client Affinity',

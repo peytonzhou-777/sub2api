@@ -342,6 +342,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 				return
 			}
 		}
+		h.gatewayService.RecordOpenAIUserAffinitySuccess(c.Request.Context(), account.ID)
 		if result != nil {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(reqModel), true, result.FirstTokenMs)
 		} else {

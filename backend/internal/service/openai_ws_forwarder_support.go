@@ -204,6 +204,16 @@ func isOpenAIWSTerminalEvent(eventType string) bool {
 	}
 }
 
+// isOpenAIWSTurnAcceptedEvent 判断上游已接受 turn，错误和失败终态不计入。
+func isOpenAIWSTurnAcceptedEvent(eventType string) bool {
+	eventType = strings.TrimSpace(eventType)
+	if eventType == "response.created" || eventType == "response.in_progress" ||
+		eventType == "response.completed" || eventType == "response.done" {
+		return true
+	}
+	return isOpenAIWSTokenEvent(eventType)
+}
+
 func normalizeOpenAIWSTerminalEvent(eventType string) string {
 	switch strings.TrimSpace(eventType) {
 	case "response.completed":
