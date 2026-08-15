@@ -275,6 +275,53 @@ func (h *PaymentHandler) QueryAndFinalizeRefund(c *gin.Context) {
 	response.Success(c, result)
 }
 
+// GetAccountRefund 返回指定用户最近一笔余额清退状态。
+func (h *PaymentHandler) GetAccountRefund(c *gin.Context) {
+	userID, ok := parseIDParam(c, "user_id")
+	if !ok {
+		return
+	}
+	record, err := h.paymentService.GetAdminAccountRefund(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
+// ReconcileAccountRefund 人工确认不可查询退款路由的最终网关结果。
+func (h *PaymentHandler) ReconcileAccountRefund(c *gin.Context) {
+	userID, ok := parseIDParam(c, "user_id")
+	if !ok {
+		return
+	}
+	var req service.AdminAccountRefundReconcileInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	record, err := h.paymentService.AdminReconcileAccountRefund(c.Request.Context(), userID, req)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
+// CancelAccountRefund 在确认没有外部退款成功后取消清退并恢复用户。
+func (h *PaymentHandler) CancelAccountRefund(c *gin.Context) {
+	userID, ok := parseIDParam(c, "user_id")
+	if !ok {
+		return
+	}
+	record, err := h.paymentService.AdminCancelAccountRefund(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
 // --- Subscription Plans ---
 
 // ListPlans returns all subscription plans.

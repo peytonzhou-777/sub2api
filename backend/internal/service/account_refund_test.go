@@ -467,6 +467,34 @@ func TestRestoreAccountRefundSessionOnlyIssuesDedicatedToken(t *testing.T) {
 	require.Equal(t, "INVALID_CREDENTIALS", infraerrors.Reason(err))
 }
 
+func TestRestoreAccountRefundSessionRepairsSucceededLockWithoutReacquiring(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("restore-succeeded-refund@example.com").SetPasswordHash("hash").SetUsername("restore-succeeded").SetStatus(StatusRefundLocked).Save(ctx)
+	require.NoError(t, err)
+	account := &User{ID: userRow.ID, Email: userRow.Email, Status: StatusRefundLocked}
+	require.NoError(t, account.SetPassword("correct-password"))
+	record := &AccountRefundRecord{RefundID: "refund-restore-succeeded", UserID: account.ID, State: AccountRefundStateSucceeded, PreviousUserStatus: StatusActive, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	require.NoError(t, writeAccountRefundAudit(ctx, client, record))
+	fence := &accountRefundFenceStub{}
+	svc := &PaymentService{
+		entClient:            client,
+		userRepo:             &mockUserRepo{getByEmailUser: account},
+		resumeService:        NewPaymentResumeService([]byte("account-refund-terminal-restore-test-key")),
+		authCacheInvalidator: fence,
+	}
+
+	restored, err := svc.RestoreAccountRefundSession(ctx, account.Email, "correct-password", "")
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateSucceeded, restored.State)
+	require.NotEmpty(t, restored.SessionToken)
+	require.Zero(t, fence.acquireCalls)
+	require.Equal(t, 1, fence.releaseCalls)
+	updatedUser, err := client.User.Get(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, StatusActive, updatedUser.Status)
+}
+
 func TestAllocateRefundUnitsConservesTotalAndCapacity(t *testing.T) {
 	allocated := allocateRefundUnits(decimal.RequireFromString("50.00"), []decimal.Decimal{
 		decimal.RequireFromString("60.00"),
@@ -516,13 +544,45 @@ func TestGetAccountRefundSubmittingQueriesGatewayWithoutResubmitting(t *testing.
 	provider := &accountRefundRecoveryProvider{queryResponse: &payment.RefundResponse{RefundID: "gateway-refund-1", Status: payment.ProviderStatusSuccess}}
 	restoreFactory := replacePaymentProviderFactoryForTest(t, provider)
 	defer restoreFactory()
-	svc := &PaymentService{entClient: client, loadBalancer: &captureLoadBalancer{}}
+	fence := &accountRefundFenceStub{}
+	svc := &PaymentService{entClient: client, loadBalancer: &captureLoadBalancer{}, authCacheInvalidator: fence}
 
 	resumed, err := svc.GetAccountRefund(ctx, record.RefundID, userRow.ID)
 	require.NoError(t, err)
 	require.Equal(t, AccountRefundStateSucceeded, resumed.State)
 	require.Equal(t, 1, provider.queryCalls)
 	require.Zero(t, provider.refundCalls)
+	require.Equal(t, 1, fence.releaseCalls)
+	updatedUser, err := client.User.Get(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, StatusActive, updatedUser.Status)
+}
+
+func TestGetAccountRefundRepairsLegacySucceededLock(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().
+		SetEmail("account-refund-legacy-success@example.com").
+		SetPasswordHash("hash").
+		SetUsername("legacy-success").
+		SetStatus(StatusRefundLocked).
+		Save(ctx)
+	require.NoError(t, err)
+	record := &AccountRefundRecord{
+		RefundID: "legacy-success-refund", UserID: userRow.ID, State: AccountRefundStateSucceeded,
+		PreviousUserStatus: StatusActive, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	require.NoError(t, writeAccountRefundAudit(ctx, client, record))
+	fence := &accountRefundFenceStub{}
+	svc := &PaymentService{entClient: client, authCacheInvalidator: fence}
+
+	repaired, err := svc.GetAccountRefund(ctx, record.RefundID, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateSucceeded, repaired.State)
+	require.Equal(t, 1, fence.releaseCalls)
+	updatedUser, err := client.User.Get(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, StatusActive, updatedUser.Status)
 }
 
 func TestGetAccountRefundSubmittingEasyPayMovesToManualReviewWithoutRetry(t *testing.T) {
@@ -648,6 +708,76 @@ func TestExecuteAccountRefundUnknownOutcomeMovesOrderToPendingWithoutRetry(t *te
 	require.NoError(t, err)
 	require.Equal(t, AccountRefundStateManualReview, reloaded.State)
 	require.Equal(t, 1, provider.refundCalls)
+}
+
+func TestAdminReconcileAccountRefundFailureAllowsCancelAndRestoresAccount(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-admin-failed@example.com").SetPasswordHash("hash").SetUsername("admin-failed").SetStatus(StatusRefundLocked).SetBalance(100).Save(ctx)
+	require.NoError(t, err)
+	providerRow, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeEasyPay).SetName("admin-failed-provider").SetConfig("{}").SetSupportedTypes("easypay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, providerRow.ID, 100, 100, 0, paymentorder.RechargeBonusStatusNone)
+	_, err = client.PaymentOrder.UpdateOneID(orderID).SetStatus(OrderStatusRefundPending).SetRefundAmount(100).Save(ctx)
+	require.NoError(t, err)
+	record := &AccountRefundRecord{
+		RefundID: "admin-failed-refund", UserID: userRow.ID, State: AccountRefundStateManualReview, PreviousUserStatus: StatusActive,
+		Quote:     &AccountRefundQuote{PermanentBalance: 100, RefundCreditTotal: 100, Orders: []AccountRefundOrder{{OrderID: orderID, Currency: "CNY", RefundCredit: 100, GatewayRefund: 100, GatewayStatus: accountRefundGatewayUnknown}}},
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	require.NoError(t, writeAccountRefundAudit(ctx, client, record))
+	fence := &accountRefundFenceStub{}
+	svc := &PaymentService{entClient: client, authCacheInvalidator: fence}
+
+	reconciled, err := svc.AdminReconcileAccountRefund(ctx, userRow.ID, AdminAccountRefundReconcileInput{OrderID: orderID, Outcome: AdminAccountRefundOutcomeFailed, Note: "网关后台确认未退款"})
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateFailed, reconciled.State)
+	require.Equal(t, payment.ProviderStatusFailed, reconciled.Quote.Orders[0].GatewayStatus)
+	updatedOrder, err := client.PaymentOrder.Get(ctx, orderID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCompleted, updatedOrder.Status)
+	require.Zero(t, updatedOrder.RefundAmount)
+
+	canceled, err := svc.AdminCancelAccountRefund(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateCanceled, canceled.State)
+	updatedUser, err := client.User.Get(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, StatusActive, updatedUser.Status)
+	require.Equal(t, 1, fence.releaseCalls)
+}
+
+func TestAdminReconcileAccountRefundSuccessCompletesAndUnlocks(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().SetEmail("account-refund-admin-success@example.com").SetPasswordHash("hash").SetUsername("admin-success").SetStatus(StatusRefundLocked).SetBalance(100).Save(ctx)
+	require.NoError(t, err)
+	providerRow, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeEasyPay).SetName("admin-success-provider").SetConfig("{}").SetSupportedTypes("easypay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
+	require.NoError(t, err)
+	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, providerRow.ID, 100, 100, 0, paymentorder.RechargeBonusStatusNone)
+	_, err = client.PaymentOrder.UpdateOneID(orderID).SetStatus(OrderStatusRefundPending).SetRefundAmount(100).Save(ctx)
+	require.NoError(t, err)
+	record := &AccountRefundRecord{
+		RefundID: "admin-success-refund", UserID: userRow.ID, State: AccountRefundStateManualReview, PreviousUserStatus: StatusActive,
+		Quote:     &AccountRefundQuote{PermanentBalance: 100, RefundCreditTotal: 100, Orders: []AccountRefundOrder{{OrderID: orderID, Currency: "CNY", RefundCredit: 100, GatewayRefund: 100, GatewayStatus: accountRefundGatewayUnknown}}},
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	require.NoError(t, writeAccountRefundAudit(ctx, client, record))
+	fence := &accountRefundFenceStub{}
+	svc := &PaymentService{entClient: client, authCacheInvalidator: fence}
+
+	completed, err := svc.AdminReconcileAccountRefund(ctx, userRow.ID, AdminAccountRefundReconcileInput{OrderID: orderID, Outcome: AdminAccountRefundOutcomeSucceeded, Note: "网关后台确认退款成功"})
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateSucceeded, completed.State)
+	require.Equal(t, 1, fence.releaseCalls)
+	updatedUser, err := client.User.Get(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, StatusActive, updatedUser.Status)
+	require.Zero(t, updatedUser.Balance)
+	updatedOrder, err := client.PaymentOrder.Get(ctx, orderID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusRefunded, updatedOrder.Status)
+	require.InDelta(t, 100, updatedOrder.RefundAmount, 1e-8)
 }
 
 func TestUpdateStatusProtectsActiveRefundLock(t *testing.T) {

@@ -115,6 +115,14 @@ func RegisterPaymentRoutes(
 			adminOrders.POST("/:id/refund/query", adminPaymentHandler.QueryAndFinalizeRefund)
 		}
 
+		// 余额清退人工核验
+		accountRefunds := adminGroup.Group("/account-refunds")
+		{
+			accountRefunds.GET("/:user_id", adminPaymentHandler.GetAccountRefund)
+			accountRefunds.POST("/:user_id/reconcile", adminPaymentHandler.ReconcileAccountRefund)
+			accountRefunds.POST("/:user_id/cancel", adminPaymentHandler.CancelAccountRefund)
+		}
+
 		// Subscription Plans
 		plans := adminGroup.Group("/plans")
 		{
