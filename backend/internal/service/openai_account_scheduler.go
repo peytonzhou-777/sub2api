@@ -26,6 +26,9 @@ const (
 	openAIAdvancedSchedulerSettingKey          = "openai_advanced_scheduler_enabled"
 )
 
+// ErrOpenAIPreviousResponseAccountUnavailable 表示不可迁移续链的原账号当前不可用。
+var ErrOpenAIPreviousResponseAccountUnavailable = errors.New("openai previous response account unavailable")
+
 const (
 	openAIAdvancedSchedulerSettingCacheTTL  = 5 * time.Second
 	openAIAdvancedSchedulerSettingDBTimeout = 2 * time.Second
@@ -410,6 +413,9 @@ func (s *defaultOpenAIAccountScheduler) Select(
 				_ = s.service.bindOpenAIStickySessionDuringSelection(ctx, req.GroupID, req.SessionHash, selection.Account.ID)
 			}
 			return selection, decision, nil
+		}
+		if !req.PreviousResponseCanMove {
+			return nil, decision, ErrOpenAIPreviousResponseAccountUnavailable
 		}
 	}
 
@@ -2052,7 +2058,8 @@ func (s *OpenAIGatewayService) SelectAccountWithScheduler(
 	requiredTransport OpenAIUpstreamTransport,
 	requireCompact bool,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
-	return s.selectAccountWithScheduler(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, "", "", requireCompact, PlatformOpenAI, false, true)
+	// 旧入口没有工具续链上下文，不能把 bool 零值解释为“不可迁移”。
+	return s.selectAccountWithScheduler(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, "", "", requireCompact, PlatformOpenAI, true, true)
 }
 
 // SelectAccountWithSchedulerForCapability 按能力要求调度账号。
@@ -2170,6 +2177,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 	decision := OpenAIAccountScheduleDecision{}
 	affinityReq := newOpenAIUserAffinityScheduleRequest(groupID, platform, previousResponseID, requestedModel,
 		requiredTransport, requiredCapability, requiredImageCapability, requireCompact, excludedIDs)
+	affinityReq.PreviousResponseCanMove = previousResponseCanMove
 	defer s.observeOpenAIUserAffinityShadow(ctx, affinityReq, &decision)()
 	scheduler := s.getOpenAIAccountScheduler(ctx)
 	if scheduler == nil {

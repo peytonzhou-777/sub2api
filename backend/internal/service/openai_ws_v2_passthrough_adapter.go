@@ -873,6 +873,16 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	defer func() {
 		_ = upstreamConn.Close()
 	}()
+	handshakeTurnState := strings.TrimSpace(handshakeHeaders.Get(openAIWSTurnStateHeader))
+	var handshakeTurnStateCommitted atomic.Bool
+	commitHandshakeTurnState := func() {
+		if handshakeTurnState == "" || !handshakeTurnStateCommitted.CompareAndSwap(false, true) {
+			return
+		}
+		s.bindOpenAITurnStateProvenance(
+			ctx, c, account.ID, openAITurnStateSessionHash(c), handshakeTurnState, s.openAIWSSessionStickyTTL(),
+		)
+	}
 	logOpenAIWSV2Passthrough(
 		"relay_dial_ok account_id=%d status_code=%d upstream_request_id=%s",
 		account.ID,
@@ -1105,6 +1115,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				)
 			},
 			OnTurnComplete: func(turn openaiwsv2.RelayTurnResult) {
+				// 透传握手状态同样只在首轮成功终态后登记来源。
+				commitHandshakeTurnState()
 				turnNo := int(completedTurns.Add(1))
 				turnRequestModel, turnUpstreamModel := usageMeta.turnModels(turn.RequestModel)
 				turnResult := &OpenAIForwardResult{

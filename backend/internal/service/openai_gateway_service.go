@@ -334,6 +334,8 @@ type OpenAIWSRetryMetricsSnapshot struct {
 	RetryBackoffMsTotal           int64 `json:"retry_backoff_ms_total"`
 	RetryExhaustedTotal           int64 `json:"retry_exhausted_total"`
 	NonRetryableFastFallbackTotal int64 `json:"non_retryable_fast_fallback_total"`
+	TurnStateStrippedTotal        int64 `json:"turn_state_stripped_total"`
+	ContinuationRejectedTotal     int64 `json:"continuation_rejected_total"`
 }
 
 type OpenAICompatibilityFallbackMetricsSnapshot struct {
@@ -356,6 +358,8 @@ type openAIWSRetryMetrics struct {
 	retryBackoffMs           atomic.Int64
 	retryExhausted           atomic.Int64
 	nonRetryableFastFallback atomic.Int64
+	turnStateStripped        atomic.Int64
+	continuationRejected     atomic.Int64
 }
 
 type accountWriteThrottle struct {
@@ -977,6 +981,19 @@ func (s *OpenAIGatewayService) recordOpenAIWSNonRetryableFastFallback() {
 	s.openaiWSRetryMetrics.nonRetryableFastFallback.Add(1)
 }
 
+func (s *OpenAIGatewayService) recordOpenAITurnStateStripped() {
+	if s != nil {
+		s.openaiWSRetryMetrics.turnStateStripped.Add(1)
+	}
+}
+
+// RecordOpenAIContinuationRejected 记录不可迁移续链因原账号不可用而被拒绝。
+func (s *OpenAIGatewayService) RecordOpenAIContinuationRejected() {
+	if s != nil {
+		s.openaiWSRetryMetrics.continuationRejected.Add(1)
+	}
+}
+
 func (s *OpenAIGatewayService) SnapshotOpenAIWSRetryMetrics() OpenAIWSRetryMetricsSnapshot {
 	if s == nil {
 		return OpenAIWSRetryMetricsSnapshot{}
@@ -986,6 +1003,8 @@ func (s *OpenAIGatewayService) SnapshotOpenAIWSRetryMetrics() OpenAIWSRetryMetri
 		RetryBackoffMsTotal:           s.openaiWSRetryMetrics.retryBackoffMs.Load(),
 		RetryExhaustedTotal:           s.openaiWSRetryMetrics.retryExhausted.Load(),
 		NonRetryableFastFallbackTotal: s.openaiWSRetryMetrics.nonRetryableFastFallback.Load(),
+		TurnStateStrippedTotal:        s.openaiWSRetryMetrics.turnStateStripped.Load(),
+		ContinuationRejectedTotal:     s.openaiWSRetryMetrics.continuationRejected.Load(),
 	}
 }
 

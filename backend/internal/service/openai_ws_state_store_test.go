@@ -41,21 +41,50 @@ func TestOpenAIWSStateStore_ResponseConnTTL(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestOpenAIWSStateStore_SessionTurnStateTTL(t *testing.T) {
+func TestOpenAIWSStateStore_TurnStateAccountTTL(t *testing.T) {
 	store := NewOpenAIWSStateStore(nil)
-	store.BindSessionTurnState(9, "session_hash_1", "turn_state_1", 30*time.Millisecond)
+	ctx := context.Background()
+	require.NoError(t, store.BindTurnStateAccount(ctx, 9, 101, "session_hash_1", "turn_state_1", 501, 30*time.Millisecond))
+	require.NoError(t, store.BindTurnStateAccount(ctx, 9, 101, "session_hash_1", "turn_state_2", 502, 30*time.Millisecond))
 
-	state, ok := store.GetSessionTurnState(9, "session_hash_1")
-	require.True(t, ok)
-	require.Equal(t, "turn_state_1", state)
+	accountID, err := store.GetTurnStateAccount(ctx, 9, 101, "session_hash_1", "turn_state_1")
+	require.NoError(t, err)
+	require.Equal(t, int64(501), accountID)
+	accountID, err = store.GetTurnStateAccount(ctx, 9, 101, "session_hash_1", "turn_state_2")
+	require.NoError(t, err)
+	require.Equal(t, int64(502), accountID, "同一 session 的并发状态不能互相覆盖")
 
-	// group 隔离
-	_, ok = store.GetSessionTurnState(10, "session_hash_1")
-	require.False(t, ok)
+	accountID, err = store.GetTurnStateAccount(ctx, 10, 101, "session_hash_1", "turn_state_1")
+	require.NoError(t, err)
+	require.Zero(t, accountID, "group 必须隔离")
+	accountID, err = store.GetTurnStateAccount(ctx, 9, 102, "session_hash_1", "turn_state_1")
+	require.NoError(t, err)
+	require.Zero(t, accountID, "API Key 必须隔离")
+	accountID, err = store.GetTurnStateAccount(ctx, 9, 101, "session_hash_2", "turn_state_1")
+	require.NoError(t, err)
+	require.Zero(t, accountID, "session 必须隔离")
 
 	time.Sleep(60 * time.Millisecond)
-	_, ok = store.GetSessionTurnState(9, "session_hash_1")
-	require.False(t, ok)
+	accountID, err = store.GetTurnStateAccount(ctx, 9, 101, "session_hash_1", "turn_state_1")
+	require.NoError(t, err)
+	require.Zero(t, accountID)
+}
+
+func TestOpenAIWSStateStore_TurnStateProvenanceSharedWithoutRawState(t *testing.T) {
+	cache := &stubGatewayCache{}
+	writer := NewOpenAIWSStateStore(cache)
+	ctx := context.Background()
+
+	require.NoError(t, writer.BindTurnStateAccount(ctx, 7, 31, "session_shared", "sensitive_state_blob", 901, time.Minute))
+	reader := NewOpenAIWSStateStore(cache)
+	accountID, err := reader.GetTurnStateAccount(ctx, 7, 31, "session_shared", "sensitive_state_blob")
+	require.NoError(t, err)
+	require.Equal(t, int64(901), accountID)
+
+	for key := range cache.sessionBindings {
+		require.NotContains(t, key, "sensitive_state_blob")
+		require.NotContains(t, key, "session_shared")
+	}
 }
 
 func TestOpenAIWSStateStore_SessionConnTTL(t *testing.T) {

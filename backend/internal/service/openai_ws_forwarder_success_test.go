@@ -1193,6 +1193,7 @@ func TestOpenAIGatewayService_Forward_WSv2_TurnStateAndMetadataReplayOnReconnect
 	rec1 := httptest.NewRecorder()
 	c1, _ := gin.CreateTestContext(rec1)
 	c1.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	c1.Set("api_key", &APIKey{ID: 7001})
 	c1.Request.Header.Set("session_id", "session_turn_state")
 	c1.Request.Header.Set("x-codex-turn-metadata", "turn_meta_1")
 	result1, err := svc.Forward(context.Background(), c1, account, reqBody)
@@ -1201,9 +1202,10 @@ func TestOpenAIGatewayService_Forward_WSv2_TurnStateAndMetadataReplayOnReconnect
 
 	sessionHash := svc.GenerateSessionHash(c1, reqBody)
 	store := svc.getOpenAIWSStateStore()
-	turnState, ok := store.GetSessionTurnState(0, sessionHash)
-	require.True(t, ok)
-	require.Equal(t, "turn_state_first", turnState)
+	turnStateAccountID, lookupErr := store.GetTurnStateAccount(context.Background(), 0, 7001, sessionHash, "turn_state_first")
+	require.NoError(t, lookupErr)
+	require.Equal(t, account.ID, turnStateAccountID)
+	require.Equal(t, "turn_state_first", rec1.Header().Get("X-Codex-Turn-State"))
 
 	// 主动淘汰连接，模拟下一次请求发生重连。
 	connID, hasConn := store.GetResponseConn(result1.RequestID)
@@ -1213,7 +1215,9 @@ func TestOpenAIGatewayService_Forward_WSv2_TurnStateAndMetadataReplayOnReconnect
 	rec2 := httptest.NewRecorder()
 	c2, _ := gin.CreateTestContext(rec2)
 	c2.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	c2.Set("api_key", &APIKey{ID: 7001})
 	c2.Request.Header.Set("session_id", "session_turn_state")
+	c2.Request.Header.Set("x-codex-turn-state", "turn_state_first")
 	c2.Request.Header.Set("x-codex-turn-metadata", "turn_meta_2")
 	result2, err := svc.Forward(context.Background(), c2, account, reqBody)
 	require.NoError(t, err)

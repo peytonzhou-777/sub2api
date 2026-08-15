@@ -55,6 +55,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	}
 	guardFirstOutput := firstOutputTimeout > 0
 	var attemptResponseHeaders http.Header
+	pendingTurnState := strings.TrimSpace(resp.Header.Get(openAIWSTurnStateHeader))
 	if guardFirstOutput {
 		if s.responseHeaderFilter != nil {
 			attemptResponseHeaders = responseheaders.FilterHeaders(resp.Header, s.responseHeaderFilter)
@@ -62,7 +63,16 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			attemptResponseHeaders = http.Header{"X-Request-Id": []string{requestID}}
 		}
 	} else if s.responseHeaderFilter != nil {
-		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+		immediateHeaders := responseheaders.FilterHeaders(resp.Header, s.responseHeaderFilter)
+		immediateHeaders.Del(openAIWSTurnStateHeader)
+		for key, values := range immediateHeaders {
+			for _, value := range values {
+				c.Writer.Header().Add(key, value)
+			}
+		}
+	}
+	if attemptResponseHeaders != nil {
+		attemptResponseHeaders.Del(openAIWSTurnStateHeader)
 	}
 
 	// Set SSE response headers
@@ -77,13 +87,19 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		c.Header("x-request-id", v)
 	}
 	applyAttemptResponseHeaders := func() {
-		if !guardFirstOutput || len(attemptResponseHeaders) == 0 || c.Writer.Written() {
+		if c.Writer.Written() {
 			return
 		}
-		for key, values := range attemptResponseHeaders {
-			for _, value := range values {
-				c.Writer.Header().Add(key, value)
+		if guardFirstOutput {
+			for key, values := range attemptResponseHeaders {
+				for _, value := range values {
+					c.Writer.Header().Add(key, value)
+				}
 			}
+		}
+		if pendingTurnState != "" {
+			c.Header(http.CanonicalHeaderKey(openAIWSTurnStateHeader), pendingTurnState)
+			s.bindOpenAITurnStateProvenance(ctx, c, account.ID, openAITurnStateSessionHash(c), pendingTurnState, s.openAIWSSessionStickyTTL())
 		}
 		// These headers describe this gateway's SSE stream and are stable across
 		// account attempts. Keep them authoritative over upstream values.

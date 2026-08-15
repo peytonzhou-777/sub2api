@@ -20,6 +20,8 @@ import (
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
 	beginUpstreamResponseModelObservation(c)
+	restoreAttemptRequest := s.isolateOpenAITurnStateAttempt(ctx, c, account, body)
+	defer restoreAttemptRequest()
 	clearGrokResponsesClientToolMapping(c)
 	clearOpenAIResponsesNamespaceNames(c)
 	startTime := time.Now()
@@ -981,6 +983,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			imageCount = nonStreamResult.imageCount
 			imageOutputSizes = nonStreamResult.imageOutputSizes
 			searchCount = nonStreamResult.searchCount
+		}
+		if turnState := strings.TrimSpace(resp.Header.Get(openAIWSTurnStateHeader)); turnState != "" {
+			s.bindOpenAITurnStateProvenance(ctx, c, account.ID, openAITurnStateSessionHash(c), turnState, s.openAIWSSessionStickyTTL())
 		}
 		s.bindHTTPResponseAccount(ctx, c, account, responseID)
 

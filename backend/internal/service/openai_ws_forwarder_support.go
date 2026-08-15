@@ -214,6 +214,19 @@ func isOpenAIWSTurnAcceptedEvent(eventType string) bool {
 	return isOpenAIWSTokenEvent(eventType)
 }
 
+// isOpenAIWSTurnStateCommitEvent 仅在首个业务输出或成功终态后提交握手状态。
+func isOpenAIWSTurnStateCommitEvent(eventType string) bool {
+	eventType = strings.TrimSpace(eventType)
+	return isOpenAIWSTokenEvent(eventType) || eventType == "response.completed" || eventType == "response.done"
+}
+
+func openAIForwardResultAllowsTurnStateCommit(result *OpenAIForwardResult) bool {
+	if result == nil {
+		return false
+	}
+	return result.FirstTokenMs != nil || result.UpstreamTerminalEvent == "response.completed" || result.UpstreamTerminalEvent == "response.done"
+}
+
 func normalizeOpenAIWSTerminalEvent(eventType string) string {
 	switch strings.TrimSpace(eventType) {
 	case "response.completed":

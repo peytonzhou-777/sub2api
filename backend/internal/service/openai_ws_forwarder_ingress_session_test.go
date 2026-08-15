@@ -145,7 +145,6 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 			"responses_websockets_v2_enabled": true,
 		},
 	}
-
 	serverErrCh := make(chan error, 1)
 	turnTerminalCh := make(chan string, 2)
 	turnAcceptedCh := make(chan int, 2)
@@ -1109,6 +1108,8 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughModeR
 
 func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughHeadersUsePromptCacheAndTurnState(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	groupID := int64(73)
+	apiKeyID := int64(7001)
 
 	cfg := &config.Config{}
 	cfg.Security.URLAllowlist.Enabled = false
@@ -1174,6 +1175,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughHeade
 		req.Header.Set(openAIWSTurnStateHeader, "turn-state-1")
 		req.Header.Set(openAIWSTurnMetadataHeader, "turn-meta-1")
 		ginCtx.Request = req
+		ginCtx.Set("api_key", &APIKey{ID: apiKeyID, GroupID: &groupID})
 
 		readCtx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		msgType, firstMessage, readErr := conn.Read(readCtx)
@@ -1184,6 +1186,13 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughHeade
 		}
 		if msgType != coderws.MessageText && msgType != coderws.MessageBinary {
 			serverErrCh <- errors.New("unsupported websocket client message type")
+			return
+		}
+		sessionHash := svc.GenerateSessionHash(ginCtx, firstMessage)
+		if bindErr := svc.getOpenAIWSStateStore().BindTurnStateAccount(
+			r.Context(), groupID, apiKeyID, sessionHash, "turn-state-1", account.ID, time.Minute,
+		); bindErr != nil {
+			serverErrCh <- bindErr
 			return
 		}
 
@@ -1230,7 +1239,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughHeade
 		t.Fatal("等待 passthrough websocket 结束超时")
 	}
 
-	require.Equal(t, isolateOpenAISessionID(0, "pcache_passthrough"), captureDialer.lastHeaders.Get("session_id"))
+	require.Equal(t, isolateOpenAISessionID(apiKeyID, "pcache_passthrough"), captureDialer.lastHeaders.Get("session_id"))
 	require.Equal(t, "turn-state-1", captureDialer.lastHeaders.Get(openAIWSTurnStateHeader))
 	require.Equal(t, "turn-meta-1", captureDialer.lastHeaders.Get(openAIWSTurnMetadataHeader))
 	require.Len(t, upstreamConn.writes, 1)

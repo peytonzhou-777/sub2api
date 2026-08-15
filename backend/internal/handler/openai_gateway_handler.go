@@ -1841,6 +1841,16 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			closeOpenAIWSFailoverExhausted(wsConn, failoverErr)
 			return false
 		}
+		if previousResponseID != "" && !previousResponseCanMove {
+			h.gatewayService.RecordOpenAIContinuationRejected()
+			reqLog.Warn("openai.websocket_continuation_account_unavailable",
+				zap.Int64("account_id", account.ID),
+				zap.String("reason", "non_migratable_previous_response"),
+				zap.Int("upstream_status", failoverErr.StatusCode),
+			)
+			closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "continuation account is unavailable; please retry or restart the conversation")
+			return false
+		}
 		if ctx.Err() != nil {
 			return false
 		}
@@ -1904,6 +1914,15 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			requestPlatform,
 		)
 		if err != nil {
+			if errors.Is(err, service.ErrOpenAIPreviousResponseAccountUnavailable) {
+				h.gatewayService.RecordOpenAIContinuationRejected()
+				reqLog.Warn("openai.websocket_continuation_account_unavailable",
+					zap.String("reason", "bound_account_unavailable"),
+					zap.Int("excluded_account_count", len(failedAccountIDs)),
+				)
+				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "continuation account is unavailable; please retry or restart the conversation")
+				return
+			}
 			reqLog.Warn("openai.websocket_account_select_failed",
 				zap.Error(openAICompatibleSelectionErrorForLog(err, requestPlatform)),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),

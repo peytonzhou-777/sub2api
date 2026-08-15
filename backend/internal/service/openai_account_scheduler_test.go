@@ -217,6 +217,26 @@ func newSchedulerTestSubscriptionPriorityConfig() *config.Config {
 	return cfg
 }
 
+func TestOpenAIAccountScheduler_NonMigratablePreviousResponseFailsClosed(t *testing.T) {
+	groupID := int64(7)
+	svc := &OpenAIGatewayService{
+		cfg:   newSchedulerTestOpenAIWSV2Config(),
+		cache: &schedulerTestGatewayCache{},
+	}
+	scheduler := newDefaultOpenAIAccountScheduler(svc, nil)
+
+	selection, _, err := scheduler.Select(context.Background(), OpenAIAccountScheduleRequest{
+		GroupID:                 &groupID,
+		Platform:                PlatformOpenAI,
+		PreviousResponseID:      "resp_bound_to_unavailable_account",
+		PreviousResponseCanMove: false,
+		RequestedModel:          "gpt-5.1",
+		RequiredTransport:       OpenAIUpstreamTransportResponsesWebsocketV2Ingress,
+	})
+	require.Nil(t, selection)
+	require.ErrorIs(t, err, ErrOpenAIPreviousResponseAccountUnavailable)
+}
+
 type openAIAdvancedSchedulerSettingRepoStub struct {
 	values map[string]string
 }
@@ -603,7 +623,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_DefaultDisabled_Embeddi
 		OpenAIUpstreamTransportHTTPSSE,
 		OpenAIEndpointCapabilityEmbeddings,
 		false,
-		false,
+		true,
 		true,
 	)
 	require.NoError(t, err)
@@ -1430,7 +1450,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_Enabled_EmbeddingsSkips
 		OpenAIUpstreamTransportHTTPSSE,
 		OpenAIEndpointCapabilityEmbeddings,
 		false,
-		false,
+		true,
 		true,
 	)
 	require.NoError(t, err)

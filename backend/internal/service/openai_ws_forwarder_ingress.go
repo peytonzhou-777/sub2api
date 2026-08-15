@@ -64,6 +64,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	if err := validateOpenAIWSBearerToken(account, token); err != nil {
 		return err
 	}
+	restoreAttemptRequest := s.isolateOpenAITurnStateAttempt(ctx, c, account, firstClientMessage)
+	defer restoreAttemptRequest()
 
 	// 预取一次 OpenAI Fast Policy settings，绑定到 ctx，让该 WS session
 	// 内所有帧的 evaluateOpenAIFastPolicy 调用复用同一份快照，避免每帧
@@ -456,11 +458,6 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	storeDisabled := false
 	refreshIngressRouteState := func(payload openAIWSClientPayload) {
 		sessionHash = s.GenerateSessionHash(c, payload.rawForHash)
-		if turnState == "" && stateStore != nil && sessionHash != "" {
-			if savedTurnState, ok := stateStore.GetSessionTurnState(groupID, sessionHash); ok {
-				turnState = savedTurnState
-			}
-		}
 
 		preferredConnID = ""
 		if stateStore != nil && payload.previousResponseID != "" {
@@ -584,11 +581,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				bridgeReplayInput = append(bridgeReplayInput, cloneOpenAIWSRawMessages(result.wsReplayInput)...)
 				bridgeReplayInputExists = true
 			}
-			if bridgeTurnState := strings.TrimSpace(result.ResponseHeaders.Get(openAIWSTurnStateHeader)); bridgeTurnState != "" {
+			if bridgeTurnState := strings.TrimSpace(result.ResponseHeaders.Get(openAIWSTurnStateHeader)); bridgeTurnState != "" && openAIForwardResultAllowsTurnStateCommit(result) {
 				turnState = bridgeTurnState
-				if stateStore != nil && sessionHash != "" {
-					stateStore.BindSessionTurnState(groupID, sessionHash, bridgeTurnState, s.openAIWSSessionStickyTTL())
-				}
+				s.bindOpenAITurnStateProvenance(ctx, c, account.ID, sessionHash, bridgeTurnState, s.openAIWSSessionStickyTTL())
 			}
 			responseID := strings.TrimSpace(result.RequestID)
 			if responseID != "" && stateStore != nil {
@@ -649,6 +644,17 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}(),
 		ForceNewConn: false,
 	}
+	pendingTurnState := ""
+	commitPendingTurnState := func() {
+		state := strings.TrimSpace(pendingTurnState)
+		if state == "" {
+			return
+		}
+		turnState = state
+		baseAcquireReq.Headers = cloneOpenAIAttemptHeaderWithTurnState(baseAcquireReq.Headers, state)
+		s.bindOpenAITurnStateProvenance(ctx, c, account.ID, sessionHash, state, s.openAIWSSessionStickyTTL())
+		pendingTurnState = ""
+	}
 	pool := s.getOpenAIWSConnPool()
 	if pool == nil {
 		return errors.New("openai ws conn pool is nil")
@@ -707,6 +713,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	agentTaskRecoveryTried := false
 	var acquireTurnLease func(int, string, bool) (*openAIWSConnLease, error)
 	acquireTurnLease = func(turn int, preferred string, forcePreferredConn bool) (*openAIWSConnLease, error) {
+		// 上一次未被有效输出确认的握手状态不能进入下一次连接尝试。
+		pendingTurnState = ""
 		req := cloneOpenAIWSAcquireRequest(baseAcquireReq)
 		req.PreferredConnID = strings.TrimSpace(preferred)
 		req.ForcePreferredConn = forcePreferredConn
@@ -773,16 +781,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}
 		connID := strings.TrimSpace(lease.ConnID())
 		if handshakeTurnState := strings.TrimSpace(lease.HandshakeHeader(openAIWSTurnStateHeader)); handshakeTurnState != "" {
-			turnState = handshakeTurnState
-			if stateStore != nil && sessionHash != "" {
-				stateStore.BindSessionTurnState(groupID, sessionHash, handshakeTurnState, s.openAIWSSessionStickyTTL())
-			}
-			updatedHeaders := cloneHeader(baseAcquireReq.Headers)
-			if updatedHeaders == nil {
-				updatedHeaders = make(http.Header)
-			}
-			updatedHeaders.Set(openAIWSTurnStateHeader, handshakeTurnState)
-			baseAcquireReq.Headers = updatedHeaders
+			pendingTurnState = handshakeTurnState
 		}
 		logOpenAIWSModeInfo(
 			"ingress_ws_upstream_connected account_id=%d turn=%d conn_id=%s conn_reused=%v conn_pick_ms=%d queue_wait_ms=%d preferred_conn_id=%s",
@@ -867,6 +866,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 
 			eventType, eventResponseID, _ := parseOpenAIWSEventEnvelope(upstreamMessage)
+			if isOpenAIWSTurnStateCommitEvent(eventType) {
+				commitPendingTurnState()
+			}
 			if !turnAccepted && isOpenAIWSTurnAcceptedEvent(eventType) {
 				turnAccepted = true
 				if hooks != nil && hooks.OnTurnAccepted != nil {

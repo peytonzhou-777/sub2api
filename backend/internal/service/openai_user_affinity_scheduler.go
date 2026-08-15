@@ -83,6 +83,9 @@ func (s *OpenAIGatewayService) selectLegacyOpenAIUserAffinityPreflight(
 		if selection != nil && selection.ReleaseFunc != nil {
 			selection.ReleaseFunc()
 		}
+		if !req.PreviousResponseCanMove {
+			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
+		}
 	}
 	if req.Platform != PlatformOpenAI {
 		return nil, false, nil
