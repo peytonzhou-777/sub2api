@@ -1,0 +1,4 @@
+interface:
+  display_name: "合并 Wei-Shaw 上游"
+  short_description: "合并 Wei-Shaw/main，审查兼容性并安全推送且不携带 tag"
+  default_prompt: "使用 $merge-from-weishaw 合并 Wei-Shaw/main，完成兼容性审查并无 tag 推送到 origin/main。"
