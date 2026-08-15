@@ -7,23 +7,48 @@ export const openAIUserAffinityAccounts = {
 
 export const openAIUserAffinitySettings = {
   title: 'OpenAI 用户粘性调度',
+  description: '将同一用户优先固定到同一 OpenAI 上游账号，并控制新居民装箱、触达容量与搬迁条件。',
   state: '生效状态',
   states: { disabled: '已关闭', shadow: '影子模式', enforce: '强制执行' },
   mode: '运行模式',
+  modeHint: '强制执行会实际改变账号选择；影子模式仅计算并记录决策，不改变现有调度结果。',
+  modes: { enforce: '强制执行', shadow: '影子模式' },
   bestFitStrategy: 'Best Fit 主窗口',
+  bestFitStrategyHint: '新居民装箱时优先比较的额度窗口；主窗口接近时再参考另一窗口与触达用户数。',
+  bestFitStrategies: {
+    sevenDayThenFiveHour: '7 天额度优先，5 小时额度辅助',
+    fiveHourThenSevenDay: '5 小时额度优先，7 天额度辅助'
+  },
   touchSuccessMode: '触达成功口径',
+  touchSuccessModeHint: '决定何时把本次上游调用记为成功，并刷新该用户的 7 天触达 TTL。',
+  touchSuccessModes: {
+    upstreamAccepted: '上游已接受请求',
+    responseCompleted: '响应已完成'
+  },
   maxContactUsers: '默认最大触达用户数',
+  maxContactUsersHint: '账号当前可计入 7 天触达 TTL 的唯一用户上限；新账号默认 10。',
   cooldownSeconds: '新居民冷却（秒）',
+  cooldownSecondsHint: '账号接收一个新居民后，在此期间不再接收其他新居民或迁入用户。',
   failureThreshold: '搬迁失败阈值',
+  failureThresholdHint: '同一用户在失败窗口内经客户端多次重试，达到该次数后才允许持久搬迁。',
   failureWindow: '失败窗口（秒）',
+  failureWindowHint: '统计 5h 暂时耗尽、RPM 错误及并发无法容纳等连续失败的时间窗口。',
   stabilitySeconds: '搬迁稳定期（秒）',
+  stabilitySecondsHint: '用户搬迁成功后，在此期间避免再次持久搬迁。',
   jitterMin: '错峰最小间隔（毫秒）',
+  jitterMinHint: '同用户 leader 成功后，FIFO 释放相邻 follower 请求的最小随机间隔。',
   jitterMax: '错峰最大间隔（毫秒）',
+  jitterMaxHint: '同用户 leader 成功后，FIFO 释放相邻 follower 请求的最大随机间隔。',
   demandQuantile: '冷启动需求分位数',
+  demandQuantileHint: '新居民 Best Fit 时，按该历史用量分位数估算用户的 5h 与 7d 额度需求。',
   reserve5h: '5h 额度保留比例',
+  reserve5hHint: '5h 剩余额度进入该保留区后，账号停止接收新居民，但继续服务已有居民。',
   reserve7d: '7d 额度保留比例',
+  reserve7dHint: '7d 剩余额度进入该保留区后，账号停止接收新居民，但继续服务已有居民。',
   closeTolerance: 'Best Fit 接近容差',
+  closeToleranceHint: '候选账号的分配后剩余额度差距在此比例内时，再优先选择当前触达用户数较少的账号。',
   reentryOvercommit: '居民回流允许短暂超配',
+  reentryOvercommitHint: '已有居民重新触达时可短暂超过账号触达上限；超配期间禁止新居民进入。',
   resetExcludeSource: '手动重置后排除原账号',
-  changeReason: '变更原因'
+  resetExcludeSourceHint: '管理员重置用户归属后，重新 Best Fit 时不立即选回重置前的账号。'
 }

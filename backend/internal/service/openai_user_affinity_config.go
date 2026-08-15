@@ -173,10 +173,7 @@ func (s *SettingService) GetOpenAIUserAffinityConfig(ctx context.Context) (OpenA
 }
 
 // UpdateOpenAIUserAffinityConfig 使用 expectedVersion 防止管理员覆盖较新的配置。
-func (s *SettingService) UpdateOpenAIUserAffinityConfig(ctx context.Context, next OpenAIUserAffinityConfig, expectedVersion int64, reason string) (OpenAIUserAffinityConfig, error) {
-	if strings.TrimSpace(reason) == "" {
-		return next, infraerrors.BadRequest("CONFIG_CHANGE_REASON_REQUIRED", "config change reason is required")
-	}
+func (s *SettingService) UpdateOpenAIUserAffinityConfig(ctx context.Context, next OpenAIUserAffinityConfig, expectedVersion int64) (OpenAIUserAffinityConfig, error) {
 	next, err := ValidateAndNormalizeOpenAIUserAffinityConfig(next)
 	if err != nil {
 		return next, err

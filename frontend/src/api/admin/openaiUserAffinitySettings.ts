@@ -37,12 +37,11 @@ export async function getOpenAIUserAffinityScheduling(): Promise<OpenAIUserAffin
 }
 
 export async function updateOpenAIUserAffinityScheduling(
-  config: OpenAIUserAffinityConfig,
-  reason: string
+  config: OpenAIUserAffinityConfig
 ): Promise<OpenAIUserAffinityConfigResponse> {
   const { data } = await apiClient.put<OpenAIUserAffinityConfigResponse>(
     '/admin/settings/openai-user-affinity-scheduling',
-    { ...config, expected_version: config.config_version, reason }
+    { ...config, expected_version: config.config_version }
   )
   return data
 }

@@ -1339,7 +1339,8 @@ export default {
       failedToLoad: '加载设置失败',
       failedToSave: '保存设置失败',
       failedToTestSmtp: 'SMTP 连接测试失败',
-      failedToSendTestEmail: '发送测试邮件失败'
+      failedToSendTestEmail: '发送测试邮件失败',
+      openAIUserAffinity: openAIUserAffinitySettings
     },
 
     // Error Passthrough Rules
@@ -1473,6 +1474,5 @@ export default {
       loadFailed: '加载模板失败',
       saveFailed: '保存模板失败',
       deleteFailed: '删除模板失败'
-    },
-    openAIUserAffinity: openAIUserAffinitySettings
+    }
 }

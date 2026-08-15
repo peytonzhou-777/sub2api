@@ -11,7 +11,6 @@ import (
 type openAIUserAffinityConfigRequest struct {
 	service.OpenAIUserAffinityConfig
 	ExpectedVersion *int64 `json:"expected_version"`
-	Reason          string `json:"reason"`
 }
 
 // GetOpenAIUserAffinityScheduling 返回当前完整配置和实际生效状态。
@@ -38,7 +37,7 @@ func (h *SettingHandler) UpdateOpenAIUserAffinityScheduling(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "expected_version is required")
 		return
 	}
-	updated, err := h.settingService.UpdateOpenAIUserAffinityConfig(c.Request.Context(), req.OpenAIUserAffinityConfig, *req.ExpectedVersion, req.Reason)
+	updated, err := h.settingService.UpdateOpenAIUserAffinityConfig(c.Request.Context(), req.OpenAIUserAffinityConfig, *req.ExpectedVersion)
 	if response.ErrorFrom(c, err) {
 		return
 	}

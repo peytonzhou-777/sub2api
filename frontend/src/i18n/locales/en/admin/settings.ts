@@ -1345,7 +1345,8 @@ export default {
       failedToLoad: 'Failed to load settings',
       failedToSave: 'Failed to save settings',
       failedToTestSmtp: 'SMTP connection test failed',
-      failedToSendTestEmail: 'Failed to send test email'
+      failedToSendTestEmail: 'Failed to send test email',
+      openAIUserAffinity: openAIUserAffinitySettings
     },
 
     // Error Passthrough Rules
@@ -1479,6 +1480,5 @@ export default {
       loadFailed: 'Failed to load profiles',
       saveFailed: 'Failed to save profile',
       deleteFailed: 'Failed to delete profile'
-    },
-    openAIUserAffinity: openAIUserAffinitySettings
+    }
 }

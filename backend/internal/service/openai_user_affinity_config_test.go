@@ -117,29 +117,20 @@ func TestOpenAIUserAffinityConfigVersionCAS(t *testing.T) {
 	}
 	next := initial
 	next.Enabled = true
-	updated, err := svc.UpdateOpenAIUserAffinityConfig(context.Background(), next, initial.ConfigVersion, "enable affinity scheduling")
+	updated, err := svc.UpdateOpenAIUserAffinityConfig(context.Background(), next, initial.ConfigVersion)
 	if err != nil {
 		t.Fatalf("update config: %v", err)
 	}
 	if updated.ConfigVersion != 1 || !updated.Enabled {
 		t.Fatalf("unexpected update: %+v", updated)
 	}
-	_, err = svc.UpdateOpenAIUserAffinityConfig(context.Background(), next, initial.ConfigVersion, "stale update")
+	_, err = svc.UpdateOpenAIUserAffinityConfig(context.Background(), next, initial.ConfigVersion)
 	if err == nil || !infraerrors.IsConflict(err) {
 		t.Fatal("expected stale version conflict")
 	}
 	loaded, err := svc.GetOpenAIUserAffinityConfig(context.Background())
 	if err != nil || loaded.ConfigVersion != 1 || !loaded.Enabled {
 		t.Fatalf("stored config changed unexpectedly: %+v, %v", loaded, err)
-	}
-}
-
-func TestOpenAIUserAffinityConfigRequiresReason(t *testing.T) {
-	repo := &openAIUserAffinitySettingRepoStub{values: map[string]string{}}
-	svc := NewSettingService(repo, nil)
-	cfg := DefaultOpenAIUserAffinityConfig()
-	if _, err := svc.UpdateOpenAIUserAffinityConfig(context.Background(), cfg, 0, " "); err == nil {
-		t.Fatal("expected reason validation error")
 	}
 }
 
