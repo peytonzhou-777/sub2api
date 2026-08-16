@@ -387,7 +387,7 @@ func (s *APIKeyService) SetSecurityDepositGate(gate SecurityDepositAccessGate) {
 	s.securityDepositGate = gate
 }
 
-// CheckSecurityDepositAccess 供两套 API Key 鉴权中间件执行同一权威准入规则。
+// CheckSecurityDepositAccess 在密钥进入 active 状态前执行统一保证金门槛校验。
 func (s *APIKeyService) CheckSecurityDepositAccess(ctx context.Context, userID, groupID int64) (*SecurityDepositAccessGrant, error) {
 	if s.securityDepositGate == nil || groupID <= 0 {
 		return nil, nil
@@ -555,6 +555,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		}
 	}
 
+	securityDepositSatisfied := true
 	// 验证分组权限（如果指定了分组）
 	if req.GroupID != nil {
 		group, err := s.groupRepo.GetByID(ctx, *req.GroupID)
@@ -567,7 +568,10 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 			return nil, ErrGroupNotAllowed
 		}
 		if _, err := s.CheckSecurityDepositAccess(ctx, userID, *req.GroupID); err != nil {
-			return nil, err
+			if infraerrors.Reason(err) != "SECURITY_DEPOSIT_REQUIRED" {
+				return nil, err
+			}
+			securityDepositSatisfied = false
 		}
 	}
 
@@ -620,6 +624,13 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		RateLimit5h: req.RateLimit5h,
 		RateLimit1d: req.RateLimit1d,
 		RateLimit7d: req.RateLimit7d,
+	}
+	if !securityDepositSatisfied {
+		disabledReason := DisabledReasonSecurityDepositInsufficient
+		disabledAt := time.Now()
+		apiKey.Status = StatusAPIKeyDisabled
+		apiKey.DisabledReason = &disabledReason
+		apiKey.DisabledAt = &disabledAt
 	}
 
 	// Set expiration time if specified
@@ -977,8 +988,8 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		fields.Status = true
 	}
 
-	// 换组和任何形式的 active 恢复都必须经过同一 Gate；其他普通编辑不额外阻断。
-	needsDepositCheck := req.GroupID != nil || (apiKey.Status == StatusActive && originalStatus != StatusActive)
+	// 仅最终状态为 active 时校验。先禁用再换组可落库，随后启用仍必须经过 Gate。
+	needsDepositCheck := apiKey.Status == StatusActive && (req.GroupID != nil || originalStatus != StatusActive)
 	if needsDepositCheck && apiKey.GroupID != nil {
 		if _, err := s.CheckSecurityDepositAccess(ctx, userID, *apiKey.GroupID); err != nil {
 			return nil, err

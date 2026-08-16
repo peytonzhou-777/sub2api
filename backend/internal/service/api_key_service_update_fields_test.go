@@ -180,6 +180,32 @@ func TestAPIKeyUpdate_AutomaticReactivationCannotBypassSecurityDepositGate(t *te
 	require.Len(t, gate.calls, 1)
 }
 
+func TestAPIKeyUpdate_DisabledGroupChangePersistsBeforeDepositCheck(t *testing.T) {
+	oldGroupID := int64(3)
+	newGroupID := int64(9)
+	status := StatusAPIKeyDisabled
+	svc, repo := newUpdateFieldsAPIKeyService(&APIKey{
+		ID: 1, UserID: 7, Key: "sk-test", GroupID: &oldGroupID, Status: StatusActive,
+	})
+	svc.userRepo = &mockUserRepo{getByIDUser: &User{ID: 7}}
+	svc.groupRepo = &groupRepoStubForGroupUpdate{group: &Group{
+		ID: newGroupID, Status: StatusActive, SubscriptionType: SubscriptionTypeStandard,
+	}}
+	gate := &rejectingSecurityDepositGate{}
+	svc.SetSecurityDepositGate(gate)
+
+	updated, err := svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{
+		GroupID: &newGroupID,
+		Status:  &status,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, StatusAPIKeyDisabled, updated.Status)
+	require.Equal(t, newGroupID, *updated.GroupID)
+	require.Equal(t, []APIKeyUpdateFields{{Status: true, GroupID: true}}, repo.updateFields)
+	require.Empty(t, gate.calls)
+}
+
 func TestAPIKeyUpdate_UserCannotUnlockSecurityLockedKey(t *testing.T) {
 	status := StatusAPIKeyActive
 	svc, repo := newUpdateFieldsAPIKeyService(&APIKey{

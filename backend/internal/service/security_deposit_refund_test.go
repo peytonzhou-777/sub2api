@@ -76,6 +76,29 @@ func TestUserSecurityDepositRefundChecksFreezeAndProviderBeforeFinancialFence(t 
 	require.Empty(t, cache.locks)
 }
 
+func TestUserSecurityDepositRefundReplaysKeyReconciliationForExistingRecord(t *testing.T) {
+	repo := &fakeSecurityDepositRepository{refundRecord: &SecurityDepositRefundRecord{
+		ID: 31, RefundID: "sdref-existing", UserID: 7, State: SecurityDepositRefundStateSucceeded,
+		DisabledKeyIDs: []int64{1},
+	}}
+	reconciler := &securityDepositKeyChangeReconcilerStub{
+		disabled: []SecurityDepositKeyReference{{ID: 2}},
+	}
+	svc := NewSecurityDepositService(repo)
+	svc.SetKeyEligibilityReconciler(reconciler)
+
+	result, err := svc.UserAutomaticRefundPaidLot(context.Background(), UserSecurityDepositAutomaticRefundInput{
+		UserID: 7, LotID: 8, IdempotencyKey: "existing-refund",
+	})
+
+	require.NoError(t, err)
+	require.True(t, result.AlreadyProcessed)
+	require.Equal(t, []int64{1, 2}, result.DisabledKeyIDs)
+	require.Equal(t, int64(7), reconciler.userID)
+	require.Equal(t, "user_refund", reconciler.eventType)
+	require.Equal(t, int64(31), reconciler.eventID)
+}
+
 func TestUserSecurityDepositRefundUsesUnlockedReservationAndFinancialFence(t *testing.T) {
 	repo := &fakeSecurityDepositRepository{
 		refundTarget: &SecurityDepositRefundTarget{

@@ -82,8 +82,14 @@ func (s *SecurityDepositService) ApplyCyberPolicyPenalty(ctx context.Context, in
 	if err != nil {
 		return nil, fmt.Errorf("apply security deposit cyber policy penalty: %w", err)
 	}
-	if result != nil && !shadow && s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, input.Grant.UserID)
+	if result != nil && !shadow {
+		result.DisabledKeyIDs, err = s.reconcileKeysAfterBalanceChange(ctx, input.Grant.UserID, "cyber_policy_penalty", result.ViolationID, result.DisabledKeyIDs)
+		if err != nil {
+			return nil, fmt.Errorf("reconcile security deposit keys after cyber policy penalty: %w", err)
+		}
+		if s.authCacheInvalidator != nil {
+			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, input.Grant.UserID)
+		}
 	}
 	return result, nil
 }

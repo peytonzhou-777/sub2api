@@ -58,12 +58,16 @@ func TestSecurityDepositCyberPenalty_EnforceInvalidatesUserCache(t *testing.T) {
 	repo := &fakeSecurityDepositRepository{penaltyResult: &SecurityDepositCyberPenaltyResult{ViolationID: 22, State: "processed"}}
 	cache := &securityDepositPenaltyCacheStub{}
 	svc := newSecurityDepositPenaltyTestService(SecurityDepositPenaltyModeEnforce, true, repo, cache)
+	reconciler := &securityDepositKeyChangeReconcilerStub{}
+	svc.SetKeyEligibilityReconciler(reconciler)
 
 	result, err := svc.ApplyCyberPolicyPenalty(context.Background(), testSecurityDepositCyberPenaltyInput())
 
 	require.NoError(t, err)
 	require.Equal(t, int64(22), result.ViolationID)
 	require.False(t, repo.penaltyShadow)
+	require.Equal(t, "cyber_policy_penalty", reconciler.eventType)
+	require.Equal(t, int64(22), reconciler.eventID)
 	require.Equal(t, []int64{7}, cache.userIDs)
 }
 

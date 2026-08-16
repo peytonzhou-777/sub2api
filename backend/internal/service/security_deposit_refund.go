@@ -251,7 +251,7 @@ func (s *SecurityDepositService) UserAutomaticRefundPaidLot(ctx context.Context,
 		return nil, err
 	} else if existing != nil {
 		existing.AlreadyProcessed = true
-		return existing, nil
+		return s.finishSecurityDepositRefundChange(ctx, existing, "user_refund")
 	}
 	policy, err := s.securityDepositPolicyStrict(ctx)
 	if err != nil {
@@ -312,8 +312,7 @@ func (s *SecurityDepositService) UserAutomaticRefundPaidLot(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	s.invalidateSecurityDepositUser(ctx, input.UserID)
-	return result, nil
+	return s.finishSecurityDepositRefundChange(ctx, result, "user_refund")
 }
 
 // QueryAutomaticSecurityDepositRefund 查询 pending/unknown 网关结果并恢复本地状态机。
@@ -327,8 +326,11 @@ func (s *SecurityDepositService) QueryAutomaticSecurityDepositRefund(ctx context
 		return nil, err
 	}
 	record, previousState, claimed, err := repo.ClaimAutomaticSecurityDepositRefundQuery(ctx, refundID, userID)
-	if err != nil || !claimed {
+	if err != nil {
 		return record, err
+	}
+	if !claimed {
+		return s.finishSecurityDepositRefundChange(ctx, record, "refund_query")
 	}
 	gateway, ok := s.paymentCreator.(securityDepositRefundGateway)
 	if !ok || gateway == nil {
@@ -352,8 +354,7 @@ func (s *SecurityDepositService) QueryAutomaticSecurityDepositRefund(ctx context
 	if err := s.finishAdminAutomaticSecurityDepositRefund(ctx, repo, refundID, response, nil, &result); err != nil {
 		return nil, err
 	}
-	s.invalidateSecurityDepositUser(ctx, userID)
-	return result, nil
+	return s.finishSecurityDepositRefundChange(ctx, result, "refund_query")
 }
 
 // AdminAutomaticRefundPaidLot 对用户实付批次执行一次保证金专用原路退款。
@@ -370,7 +371,7 @@ func (s *SecurityDepositService) AdminAutomaticRefundPaidLot(ctx context.Context
 		return nil, err
 	} else if existing != nil {
 		existing.AlreadyProcessed = true
-		return existing, nil
+		return s.finishSecurityDepositRefundChange(ctx, existing, "admin_automatic_refund")
 	}
 	target, err := repo.GetSecurityDepositRefundTarget(ctx, input.UserID, input.LotID)
 	if err != nil {
@@ -416,8 +417,7 @@ func (s *SecurityDepositService) AdminAutomaticRefundPaidLot(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	s.invalidateSecurityDepositUser(ctx, input.UserID)
-	return result, nil
+	return s.finishSecurityDepositRefundChange(ctx, result, "admin_automatic_refund")
 }
 
 // AdminReserveManualRefundPaidLot 在外部退款前先排空请求并预留实付保证金。
@@ -434,7 +434,7 @@ func (s *SecurityDepositService) AdminReserveManualRefundPaidLot(ctx context.Con
 		return nil, err
 	} else if existing != nil {
 		existing.AlreadyProcessed = true
-		return existing, nil
+		return s.finishSecurityDepositRefundChange(ctx, existing, "admin_manual_refund_reserve")
 	}
 	target, err := repo.GetSecurityDepositRefundTarget(ctx, input.UserID, input.LotID)
 	if err != nil {
@@ -460,8 +460,7 @@ func (s *SecurityDepositService) AdminReserveManualRefundPaidLot(ctx context.Con
 	if err != nil {
 		return nil, err
 	}
-	s.invalidateSecurityDepositUser(ctx, input.UserID)
-	return result, nil
+	return s.finishSecurityDepositRefundChange(ctx, result, "admin_manual_refund_reserve")
 }
 
 // AdminCompleteManualRefund 使用必填外部退款事实核销人工预留。
@@ -494,8 +493,7 @@ func (s *SecurityDepositService) AdminCompleteManualRefund(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	s.invalidateSecurityDepositUser(ctx, input.UserID)
-	return result, nil
+	return s.finishSecurityDepositRefundChange(ctx, result, "admin_manual_refund_complete")
 }
 
 // AdminCancelSecurityDepositRefund 仅释放尚未确认成功的人工预留或明确失败预留。
@@ -515,8 +513,7 @@ func (s *SecurityDepositService) AdminCancelSecurityDepositRefund(ctx context.Co
 	if err != nil {
 		return nil, err
 	}
-	s.invalidateSecurityDepositUser(ctx, input.UserID)
-	return result, nil
+	return s.finishSecurityDepositRefundChange(ctx, result, "admin_refund_cancel")
 }
 
 // AdminFailAutomaticRefundReview 以必填核验凭证确认网关未退款并释放预留。
@@ -536,7 +533,19 @@ func (s *SecurityDepositService) AdminFailAutomaticRefundReview(ctx context.Cont
 	if err != nil {
 		return nil, err
 	}
-	s.invalidateSecurityDepositUser(ctx, input.UserID)
+	return s.finishSecurityDepositRefundChange(ctx, result, "admin_refund_review_failed")
+}
+
+func (s *SecurityDepositService) finishSecurityDepositRefundChange(ctx context.Context, result *SecurityDepositRefundRecord, eventType string) (*SecurityDepositRefundRecord, error) {
+	if result == nil {
+		return nil, nil
+	}
+	disabled, err := s.reconcileKeysAfterBalanceChange(ctx, result.UserID, eventType, result.ID, result.DisabledKeyIDs)
+	if err != nil {
+		return nil, fmt.Errorf("reconcile security deposit keys after refund change: %w", err)
+	}
+	result.DisabledKeyIDs = disabled
+	s.invalidateSecurityDepositUser(ctx, result.UserID)
 	return result, nil
 }
 

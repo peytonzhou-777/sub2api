@@ -15,10 +15,14 @@ const keysViewSource = readFileSync(
 
 const {
   listKeys,
+  createKey,
+  updateKey,
+  toggleKeyStatus,
   getPublicSettings,
   getDashboardApiKeysUsage,
   getAvailableGroups,
   getUserGroupRates,
+  getSecurityDepositEligibility,
   showError,
   showSuccess,
   copyToClipboard,
@@ -26,10 +30,14 @@ const {
   nextStep,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
+  createKey: vi.fn(),
+  updateKey: vi.fn(),
+  toggleKeyStatus: vi.fn(),
   getPublicSettings: vi.fn(),
   getDashboardApiKeysUsage: vi.fn(),
   getAvailableGroups: vi.fn(),
   getUserGroupRates: vi.fn(),
+  getSecurityDepositEligibility: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
   copyToClipboard: vi.fn(),
@@ -66,10 +74,10 @@ const messages: Record<string, string> = {
 vi.mock('@/api', () => ({
   keysAPI: {
     list: listKeys,
-    create: vi.fn(),
-    update: vi.fn(),
+    create: createKey,
+    update: updateKey,
     delete: vi.fn(),
-    toggleStatus: vi.fn(),
+    toggleStatus: toggleKeyStatus,
   },
   authAPI: {
     getPublicSettings,
@@ -80,6 +88,9 @@ vi.mock('@/api', () => ({
   userGroupsAPI: {
     getAvailable: getAvailableGroups,
     getUserGroupRates,
+  },
+  securityDepositsAPI: {
+    getEligibility: getSecurityDepositEligibility,
   },
 }))
 
@@ -223,6 +234,13 @@ const IconStub = {
   template: '<span data-test="icon">{{ name }}</span>',
 }
 
+const SecurityDepositDialogStub = {
+  name: 'SecurityDepositDialog',
+  props: ['show', 'groupId', 'resumeToken', 'resumePaymentType'],
+  emits: ['close', 'success'],
+  template: '<div data-test="security-deposit-dialog"></div>',
+}
+
 const mountView = async () => {
   const wrapper = mount(KeysView, {
     global: {
@@ -241,6 +259,7 @@ const mountView = async () => {
         EndpointPopover: true,
         GroupBadge: true,
         GroupOptionItem: true,
+        SecurityDepositDialog: SecurityDepositDialogStub,
         Teleport: true,
       },
     },
@@ -264,33 +283,65 @@ const getButtonByText = (wrapper: VueWrapper, text: string) => {
   return button
 }
 
+function resetViewMocks(keys: ApiKey[] = [createApiKey()]) {
+  localStorage.clear()
+  sessionStorage.clear()
+  for (const mock of [
+    listKeys,
+    createKey,
+    updateKey,
+    toggleKeyStatus,
+    getPublicSettings,
+    getDashboardApiKeysUsage,
+    getAvailableGroups,
+    getUserGroupRates,
+    getSecurityDepositEligibility,
+    showError,
+    showSuccess,
+    copyToClipboard,
+    isCurrentStep,
+    nextStep,
+  ]) {
+    mock.mockReset()
+  }
+  listKeys.mockResolvedValue({
+    items: keys,
+    total: keys.length,
+    page: 1,
+    page_size: 20,
+    pages: keys.length > 0 ? 1 : 0,
+  })
+  getPublicSettings.mockResolvedValue({})
+  getDashboardApiKeysUsage.mockResolvedValue({ stats: {} })
+  getAvailableGroups.mockResolvedValue([])
+  getUserGroupRates.mockResolvedValue({})
+  getSecurityDepositEligibility.mockResolvedValue({
+    data: {
+      group_id: 9,
+      base_required_cents: 10000,
+      risk_multiplier: 1,
+      required_cents: 10000,
+      effective_balance_cents: 0,
+      shortfall_cents: 10000,
+      eligible: false,
+    },
+  })
+  updateKey.mockImplementation(async (id: number, updates: Record<string, unknown>) => ({
+    ...createApiKey(),
+    id,
+    ...updates,
+  }))
+  toggleKeyStatus.mockImplementation(async (id: number, status: ApiKey['status']) => ({
+    ...createApiKey(),
+    id,
+    status,
+  }))
+  isCurrentStep.mockReturnValue(false)
+}
+
 describe('user KeysView column settings', () => {
   beforeEach(() => {
-    localStorage.clear()
-
-    listKeys.mockReset()
-    getPublicSettings.mockReset()
-    getDashboardApiKeysUsage.mockReset()
-    getAvailableGroups.mockReset()
-    getUserGroupRates.mockReset()
-    showError.mockReset()
-    showSuccess.mockReset()
-    copyToClipboard.mockReset()
-    isCurrentStep.mockReset()
-    nextStep.mockReset()
-
-    listKeys.mockResolvedValue({
-      items: [createApiKey()],
-      total: 1,
-      page: 1,
-      page_size: 20,
-      pages: 1,
-    })
-    getPublicSettings.mockResolvedValue({})
-    getDashboardApiKeysUsage.mockResolvedValue({ stats: {} })
-    getAvailableGroups.mockResolvedValue([])
-    getUserGroupRates.mockResolvedValue({})
-    isCurrentStep.mockReturnValue(false)
+    resetViewMocks()
   })
 
   it('uses the default API key columns with low-frequency columns hidden', async () => {
@@ -464,9 +515,170 @@ describe('user KeysView column settings', () => {
 })
 
 describe('user KeysView create form', () => {
+  beforeEach(() => resetViewMocks())
+
   it('does not expose custom API key creation controls', () => {
     expect(keysViewSource).not.toContain("t('keys.customKeyLabel')")
     expect(keysViewSource).not.toContain('formData.use_custom_key')
     expect(keysViewSource).not.toContain('formData.custom_key')
+  })
+
+  it('creates an insufficient key first and keeps it disabled when deposit is cancelled', async () => {
+    getAvailableGroups.mockResolvedValue([
+      { id: 9, name: 'Deposit Group', rate_multiplier: 1, security_deposit_base_required_cents: 10000 },
+    ])
+    createKey.mockResolvedValue({
+      ...createApiKey(),
+      group_id: 9,
+      status: 'disabled',
+      disabled_reason: 'security_deposit_insufficient',
+    })
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      formData: { name: string; group_id: number | null }
+      handleSubmit: () => Promise<void>
+    }
+    vm.formData.name = 'deposit-key'
+    vm.formData.group_id = 9
+
+    await vm.handleSubmit()
+    await flushPromises()
+
+    expect(createKey).toHaveBeenCalled()
+    expect(toggleKeyStatus).not.toHaveBeenCalled()
+    const dialog = wrapper.findComponent({ name: 'SecurityDepositDialog' })
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('groupId')).toBe(9)
+
+    dialog.vm.$emit('close')
+    await nextTick()
+
+    expect(wrapper.find('[data-test="security-deposit-dialog"]').exists()).toBe(false)
+    expect(toggleKeyStatus).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem('security-deposit-pending-key-enable')).toBeNull()
+  })
+
+  it('continues enabling the created key after deposit succeeds', async () => {
+    getAvailableGroups.mockResolvedValue([
+      { id: 9, name: 'Deposit Group', rate_multiplier: 1, security_deposit_base_required_cents: 10000 },
+    ])
+    createKey.mockResolvedValue({
+      ...createApiKey(),
+      group_id: 9,
+      status: 'disabled',
+      disabled_reason: 'security_deposit_insufficient',
+    })
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      formData: { name: string; group_id: number | null }
+      handleSubmit: () => Promise<void>
+    }
+    vm.formData.name = 'deposit-key'
+    vm.formData.group_id = 9
+    await vm.handleSubmit()
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'SecurityDepositDialog' }).vm.$emit('success', {
+      group_id: 9,
+      eligible: true,
+    })
+    await flushPromises()
+
+    expect(toggleKeyStatus).toHaveBeenCalledWith(1, 'active')
+    expect(sessionStorage.getItem('security-deposit-pending-key-enable')).toBeNull()
+  })
+
+  it('preserves a security-locked key status when editing metadata', async () => {
+    const lockedKey = { ...createApiKey(), group_id: 1, status: 'security_locked' as const }
+    resetViewMocks([lockedKey])
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      formData: { name: string }
+      editKey: (key: ApiKey) => void
+      handleSubmit: () => Promise<void>
+    }
+    vm.editKey(lockedKey)
+    vm.formData.name = 'renamed-locked-key'
+
+    await vm.handleSubmit()
+    await flushPromises()
+
+    expect(updateKey).toHaveBeenCalledTimes(1)
+    expect(updateKey.mock.calls[0]?.[1]).not.toHaveProperty('status')
+    expect(toggleKeyStatus).not.toHaveBeenCalled()
+  })
+
+  it('preserves quota-exhausted status when editing without explicit reactivation', async () => {
+    const exhaustedKey = { ...createApiKey(), group_id: 1, status: 'quota_exhausted' as const }
+    resetViewMocks([exhaustedKey])
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      formData: { name: string }
+      editKey: (key: ApiKey) => void
+      handleSubmit: () => Promise<void>
+    }
+    vm.editKey(exhaustedKey)
+    vm.formData.name = 'renamed-exhausted-key'
+
+    await vm.handleSubmit()
+    await flushPromises()
+
+    expect(updateKey).toHaveBeenCalledTimes(1)
+    expect(updateKey.mock.calls[0]?.[1]).not.toHaveProperty('status')
+    expect(toggleKeyStatus).not.toHaveBeenCalled()
+  })
+})
+
+describe('user KeysView security deposit group flow', () => {
+  beforeEach(() => resetViewMocks([{ ...createApiKey(), group_id: 1 }]))
+
+  it('disables in the new group before automatically enabling a no-deposit key', async () => {
+    getAvailableGroups.mockResolvedValue([
+      { id: 1, name: 'Old Group', rate_multiplier: 1, security_deposit_base_required_cents: 0 },
+      { id: 2, name: 'New Group', rate_multiplier: 1, security_deposit_base_required_cents: 0 },
+    ])
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      changeGroup: (key: ApiKey, groupId: number) => Promise<void>
+    }
+
+    await vm.changeGroup({ ...createApiKey(), group_id: 1 }, 2)
+    await flushPromises()
+
+    expect(updateKey).toHaveBeenCalledWith(1, { group_id: 2, status: 'inactive' })
+    expect(toggleKeyStatus).toHaveBeenCalledWith(1, 'active')
+    expect(wrapper.find('[data-test="security-deposit-dialog"]').exists()).toBe(false)
+  })
+
+  it('keeps the new group disabled and opens deposit dialog when enabling is rejected', async () => {
+    getAvailableGroups.mockResolvedValue([
+      { id: 1, name: 'Old Group', rate_multiplier: 1, security_deposit_base_required_cents: 0 },
+      { id: 9, name: 'Deposit Group', rate_multiplier: 1, security_deposit_base_required_cents: 10000 },
+    ])
+    toggleKeyStatus.mockRejectedValue({ code: 'SECURITY_DEPOSIT_REQUIRED' })
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      changeGroup: (key: ApiKey, groupId: number) => Promise<void>
+    }
+
+    await vm.changeGroup({ ...createApiKey(), group_id: 1 }, 9)
+    await flushPromises()
+
+    expect(updateKey).toHaveBeenCalledTimes(1)
+    expect(updateKey).toHaveBeenCalledWith(1, { group_id: 9, status: 'inactive' })
+    expect(toggleKeyStatus).toHaveBeenCalledWith(1, 'active')
+    expect(wrapper.findComponent({ name: 'SecurityDepositDialog' }).props('groupId')).toBe(9)
+  })
+
+  it('restores a pending target after returning from payment and enables only that key', async () => {
+    sessionStorage.setItem('security-deposit-pending-key-enable', JSON.stringify({
+      type: 'enable', keyId: 41, groupId: 9,
+    }))
+
+    await mountView()
+    await flushPromises()
+
+    expect(toggleKeyStatus).toHaveBeenCalledWith(41, 'active')
+    expect(sessionStorage.getItem('security-deposit-pending-key-enable')).toBeNull()
   })
 })

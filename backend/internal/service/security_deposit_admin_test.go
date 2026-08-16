@@ -19,9 +19,13 @@ func newSecurityDepositAdminTestService(repo *fakeSecurityDepositRepository, enf
 }
 
 func TestSecurityDepositAdminCredit_NormalizesOptionalReasonAndInvalidatesCache(t *testing.T) {
-	repo := &fakeSecurityDepositRepository{adminCreditResult: &AdminSecurityDepositMutationResult{ActionID: 10, UserID: 7}}
+	repo := &fakeSecurityDepositRepository{adminCreditResult: &AdminSecurityDepositMutationResult{
+		ActionID: 10, ActionType: SecurityDepositAdminActionAdd, UserID: 7,
+	}}
 	cache := &securityDepositAdminCacheStub{}
 	svc := newSecurityDepositAdminTestService(repo, true, cache)
+	reconciler := &securityDepositKeyChangeReconcilerStub{disabled: []SecurityDepositKeyReference{{ID: 4}}}
+	svc.SetKeyEligibilityReconciler(reconciler)
 	reason := "   "
 
 	result, err := svc.AdminCreditAdminGrant(context.Background(), AdminSecurityDepositCreditInput{
@@ -33,6 +37,8 @@ func TestSecurityDepositAdminCredit_NormalizesOptionalReasonAndInvalidatesCache(
 	require.Equal(t, int64(10), result.ActionID)
 	require.Nil(t, repo.adminCreditInput.Reason)
 	require.Equal(t, "credit-1", repo.adminCreditInput.IdempotencyKey)
+	require.Equal(t, []int64{4}, result.DisabledKeyIDs)
+	require.Equal(t, SecurityDepositAdminActionAdd, reconciler.eventType)
 	require.Equal(t, []int64{7}, cache.userIDs)
 }
 
@@ -42,6 +48,8 @@ func TestSecurityDepositAdminDeduct_PassesEnforcementAndKeepsPaidBucketOutsideCo
 	}}
 	cache := &securityDepositAdminCacheStub{}
 	svc := newSecurityDepositAdminTestService(repo, true, cache)
+	reconciler := &securityDepositKeyChangeReconcilerStub{}
+	svc.SetKeyEligibilityReconciler(reconciler)
 
 	result, err := svc.AdminDeductAdminGrant(context.Background(), AdminSecurityDepositDeductInput{
 		UserID: 7, OperatorID: 2, AmountCents: 5000, IdempotencyKey: "deduct-1",
@@ -51,6 +59,8 @@ func TestSecurityDepositAdminDeduct_PassesEnforcementAndKeepsPaidBucketOutsideCo
 	require.Equal(t, int64(5000), result.AmountCents)
 	require.True(t, repo.adminDeductEnforcement)
 	require.Equal(t, int64(5000), repo.adminDeductInput.AmountCents)
+	require.Equal(t, SecurityDepositAdminActionDeduct, reconciler.eventType)
+	require.Equal(t, int64(11), reconciler.eventID)
 	require.NotEmpty(t, cache.locks)
 	require.Equal(t, cache.locks, cache.releases)
 	require.Equal(t, []int64{7, 7}, cache.userIDs)
@@ -58,8 +68,12 @@ func TestSecurityDepositAdminDeduct_PassesEnforcementAndKeepsPaidBucketOutsideCo
 
 func TestSecurityDepositAdminRevoke_AllowsMissingReason(t *testing.T) {
 	lotID := int64(33)
-	repo := &fakeSecurityDepositRepository{adminRevokeResult: &AdminSecurityDepositMutationResult{ActionID: 12, UserID: 7, LotID: &lotID}}
+	repo := &fakeSecurityDepositRepository{adminRevokeResult: &AdminSecurityDepositMutationResult{
+		ActionID: 12, ActionType: SecurityDepositAdminActionRevoke, UserID: 7, LotID: &lotID,
+	}}
 	svc := newSecurityDepositAdminTestService(repo, false, &securityDepositAdminCacheStub{})
+	reconciler := &securityDepositKeyChangeReconcilerStub{}
+	svc.SetKeyEligibilityReconciler(reconciler)
 
 	result, err := svc.AdminRevokeAdminGrantLot(context.Background(), AdminSecurityDepositRevokeInput{
 		UserID: 7, OperatorID: 2, LotID: lotID, IdempotencyKey: "revoke-1",
@@ -69,6 +83,8 @@ func TestSecurityDepositAdminRevoke_AllowsMissingReason(t *testing.T) {
 	require.Equal(t, lotID, *result.LotID)
 	require.False(t, repo.adminRevokeEnforcement)
 	require.Nil(t, repo.adminRevokeInput.Reason)
+	require.Equal(t, SecurityDepositAdminActionRevoke, reconciler.eventType)
+	require.Equal(t, int64(12), reconciler.eventID)
 }
 
 func TestSecurityDepositAdminUnlock_InvalidatesKeyAndLeavesDisabled(t *testing.T) {

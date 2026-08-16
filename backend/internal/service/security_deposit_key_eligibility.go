@@ -25,7 +25,12 @@ type SecurityDepositKeyEligibilityRepository interface {
 	DisableActiveSecurityDepositKeys(ctx context.Context, keyIDs []int64, eventType string, eventID int64, disabledAt time.Time) ([]SecurityDepositKeyReference, error)
 }
 
-// KeyEligibilityReconciler 在资金减少或倍率变化后统一重算密钥资格。
+// SecurityDepositKeyChangeReconciler 在任意保证金变化后只负责禁用不足密钥。
+type SecurityDepositKeyChangeReconciler interface {
+	DisableInsufficientKeys(ctx context.Context, userID int64, eventType string, eventID int64) ([]SecurityDepositKeyReference, error)
+}
+
+// KeyEligibilityReconciler 在资金或倍率变化后统一重算密钥资格。
 type KeyEligibilityReconciler struct {
 	gate        SecurityDepositAccessGate
 	repo        SecurityDepositKeyEligibilityRepository

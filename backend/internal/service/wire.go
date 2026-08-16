@@ -977,6 +977,7 @@ func ProvideSecurityDepositService(repo SecurityDepositRepository, apiKeyService
 	if eligibilityRepo, ok := apiKeyService.apiKeyRepo.(SecurityDepositKeyEligibilityRepository); ok {
 		svc.SetKeyEligibilityReconciler(NewKeyEligibilityReconciler(svc, eligibilityRepo, apiKeyService))
 	}
+	paymentService.SetSecurityDepositKeyChangeReconciler(svc.keyEligibility)
 	return svc
 }
 

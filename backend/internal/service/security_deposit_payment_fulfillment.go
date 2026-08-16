@@ -29,7 +29,7 @@ func (s *PaymentService) ExecuteSecurityDepositFulfillment(ctx context.Context, 
 		return infraerrors.BadRequest("INVALID_ORDER_TYPE", "order is not a security deposit")
 	}
 	if order.Status == OrderStatusCompleted {
-		return nil
+		return s.reconcileSecurityDepositPaymentKeys(ctx, order.UserID, order.ID)
 	}
 	if psIsRefundStatus(order.Status) {
 		return infraerrors.BadRequest("INVALID_STATUS", "refund-related order cannot fulfill")
@@ -47,6 +47,16 @@ func (s *PaymentService) ExecuteSecurityDepositFulfillment(ctx context.Context, 
 	if err := s.fulfillSecurityDepositPayment(ctx, order, lease); err != nil {
 		s.markFailed(ctx, orderID, lease, err)
 		return err
+	}
+	return s.reconcileSecurityDepositPaymentKeys(ctx, order.UserID, order.ID)
+}
+
+func (s *PaymentService) reconcileSecurityDepositPaymentKeys(ctx context.Context, userID, orderID int64) error {
+	if s == nil || s.securityDepositKeyChange == nil {
+		return nil
+	}
+	if _, err := s.securityDepositKeyChange.DisableInsufficientKeys(ctx, userID, "payment_credit", orderID); err != nil {
+		return fmt.Errorf("reconcile security deposit keys after payment credit: %w", err)
 	}
 	return nil
 }

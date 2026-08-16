@@ -225,6 +225,7 @@ type PaymentService struct {
 	authCacheInvalidator     APIKeyAuthCacheInvalidator
 	concurrencyCache         ConcurrencyCache
 	totpService              *TotpService
+	securityDepositKeyChange SecurityDepositKeyChangeReconciler
 }
 
 func NewPaymentService(entClient *dbent.Client, registry *payment.Registry, loadBalancer payment.LoadBalancer, redeemService *RedeemService, subscriptionSvc *SubscriptionService, configService *PaymentConfigService, userRepo UserRepository, groupRepo GroupRepository, affiliateService *AffiliateService) *PaymentService {
@@ -240,6 +241,11 @@ func (s *PaymentService) SetNotificationEmailService(notificationEmailService *N
 // SetRechargeBonusService 注入充值赠送活动服务。
 func (s *PaymentService) SetRechargeBonusService(rechargeBonusService *RechargeBonusService) {
 	s.rechargeBonusService = rechargeBonusService
+}
+
+// SetSecurityDepositKeyChangeReconciler 注入保证金入账后的只禁用资格重算器。
+func (s *PaymentService) SetSecurityDepositKeyChangeReconciler(reconciler SecurityDepositKeyChangeReconciler) {
+	s.securityDepositKeyChange = reconciler
 }
 
 // --- Provider Registry ---

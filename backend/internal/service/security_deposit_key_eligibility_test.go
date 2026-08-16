@@ -97,3 +97,33 @@ func TestKeyEligibilityReconcilerFailsClosedWhenAccessStatusUnavailable(t *testi
 	require.Error(t, err)
 	require.Empty(t, repo.disabledIDs)
 }
+
+type securityDepositKeyChangeReconcilerStub struct {
+	calls     int
+	userID    int64
+	eventType string
+	eventID   int64
+	disabled  []SecurityDepositKeyReference
+}
+
+func (s *securityDepositKeyChangeReconcilerStub) DisableInsufficientKeys(_ context.Context, userID int64, eventType string, eventID int64) ([]SecurityDepositKeyReference, error) {
+	s.calls++
+	s.userID = userID
+	s.eventType = eventType
+	s.eventID = eventID
+	return s.disabled, nil
+}
+
+func TestSecurityDepositBalanceChangeReconcileOnlyMergesDisabledKeys(t *testing.T) {
+	reconciler := &securityDepositKeyChangeReconcilerStub{disabled: []SecurityDepositKeyReference{{ID: 2}, {ID: 3}}}
+	svc := NewSecurityDepositService(nil)
+	svc.SetKeyEligibilityReconciler(reconciler)
+
+	disabled, err := svc.reconcileKeysAfterBalanceChange(context.Background(), 7, "payment_credit", 91, []int64{1, 2})
+
+	require.NoError(t, err)
+	require.Equal(t, []int64{1, 2, 3}, disabled)
+	require.Equal(t, int64(7), reconciler.userID)
+	require.Equal(t, "payment_credit", reconciler.eventType)
+	require.Equal(t, int64(91), reconciler.eventID)
+}

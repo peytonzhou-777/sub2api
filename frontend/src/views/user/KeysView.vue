@@ -1207,10 +1207,9 @@ const userGroupRates = ref<Record<number, number>>({})
 const securityDepositEligibilities = ref<Record<number, SecurityDepositEligibility>>({})
 const securityDepositEligibilityLoading = ref<Record<number, boolean>>({})
 
-type PendingSecurityDepositAction =
-  | { type: 'submit' }
-  | { type: 'toggle'; key: ApiKey }
-  | { type: 'change_group'; key: ApiKey; groupId: number }
+type PendingSecurityDepositAction = { type: 'enable'; keyId: number; groupId: number }
+
+const PENDING_SECURITY_DEPOSIT_ACTION_KEY = 'security-deposit-pending-key-enable'
 
 const securityDepositDialog = reactive({
   show: false,
@@ -1294,15 +1293,9 @@ const statusOptions = computed(() => [
   { value: 'inactive', label: t('common.inactive') }
 ])
 
-const shouldSubmitEditStatus = (key: ApiKey, status: 'active' | 'inactive') => {
-  if (key.status === 'security_locked') {
-    return false
-  }
-  if (key.status === 'quota_exhausted' || key.status === 'expired') {
-    return status === 'active'
-  }
-  return true
-}
+const preservesSystemManagedStatus = (key: ApiKey, requestedStatus: 'active' | 'inactive') =>
+  key.status === 'security_locked' ||
+  ((key.status === 'quota_exhausted' || key.status === 'expired') && requestedStatus !== 'active')
 
 // Filter dropdown options
 const groupFilterOptions = computed(() => [
@@ -1461,14 +1454,32 @@ const loadSecurityDepositEligibilities = async () => {
   }))
 }
 
-function requiresSecurityDeposit(groupId: number | null | undefined): boolean {
-  if (!groupId) return false
-  const eligibility = securityDepositEligibilities.value[groupId]
-  return Boolean(eligibility && eligibility.base_required_cents > 0 && !eligibility.eligible)
+function persistPendingSecurityDepositAction(action: PendingSecurityDepositAction | null) {
+  pendingSecurityDepositAction = action
+  if (!action) {
+    window.sessionStorage.removeItem(PENDING_SECURITY_DEPOSIT_ACTION_KEY)
+    return
+  }
+  window.sessionStorage.setItem(PENDING_SECURITY_DEPOSIT_ACTION_KEY, JSON.stringify(action))
+}
+
+function restorePendingSecurityDepositAction(): PendingSecurityDepositAction | null {
+  const raw = window.sessionStorage.getItem(PENDING_SECURITY_DEPOSIT_ACTION_KEY)
+  if (!raw) return null
+  try {
+    const action = JSON.parse(raw) as Partial<PendingSecurityDepositAction>
+    if (action.type === 'enable' && Number(action.keyId) > 0 && Number(action.groupId) > 0) {
+      return { type: 'enable', keyId: Number(action.keyId), groupId: Number(action.groupId) }
+    }
+  } catch {
+    // 无效快照直接清理，避免重复阻塞后续密钥操作。
+  }
+  window.sessionStorage.removeItem(PENDING_SECURITY_DEPOSIT_ACTION_KEY)
+  return null
 }
 
 function openSecurityDepositDialog(groupId: number, action: PendingSecurityDepositAction | null = null) {
-  pendingSecurityDepositAction = action
+  if (action) persistPendingSecurityDepositAction(action)
   securityDepositDialog.groupId = groupId
   securityDepositDialog.resumeToken = ''
   securityDepositDialog.paymentType = ''
@@ -1479,18 +1490,16 @@ function closeSecurityDepositDialog() {
   securityDepositDialog.show = false
   securityDepositDialog.resumeToken = ''
   securityDepositDialog.paymentType = ''
-  pendingSecurityDepositAction = null
+  persistPendingSecurityDepositAction(null)
 }
 
 async function handleSecurityDepositSuccess(updated: SecurityDepositEligibility) {
   securityDepositEligibilities.value[updated.group_id] = updated
   const action = pendingSecurityDepositAction
   securityDepositDialog.show = false
-  pendingSecurityDepositAction = null
+  persistPendingSecurityDepositAction(null)
   if (!action) return
-  if (action.type === 'submit') await handleSubmit()
-  else if (action.type === 'toggle') await toggleKeyStatus(action.key)
-  else await changeGroup(action.key, action.groupId)
+  await enableKey(action.keyId, action.groupId, t('keys.keyEnabledSuccess'))
 }
 
 function isSecurityDepositRequiredError(error: unknown): boolean {
@@ -1569,22 +1578,37 @@ const editKey = (key: ApiKey) => {
 
 const toggleKeyStatus = async (key: ApiKey) => {
   const newStatus = key.status === 'active' ? 'inactive' : 'active'
-  if (newStatus === 'active' && requiresSecurityDeposit(key.group_id)) {
-    openSecurityDepositDialog(key.group_id!, { type: 'toggle', key })
+  if (newStatus === 'active') {
+    await enableKey(key.id, key.group_id, t('keys.keyEnabledSuccess'))
     return
   }
   try {
     await keysAPI.toggleStatus(key.id, newStatus)
-    appStore.showSuccess(
-      newStatus === 'active' ? t('keys.keyEnabledSuccess') : t('keys.keyDisabledSuccess')
-    )
+    appStore.showSuccess(t('keys.keyDisabledSuccess'))
     loadApiKeys()
+  } catch {
+    appStore.showError(t('keys.failedToUpdateStatus'))
+  }
+}
+
+// 创建、手动启用、换组和支付恢复统一通过服务端 Gate 决定是否需要保证金。
+async function enableKey(keyId: number, groupId: number | null | undefined, successMessage?: string) {
+  try {
+    await keysAPI.toggleStatus(keyId, 'active')
+    persistPendingSecurityDepositAction(null)
+    if (successMessage) appStore.showSuccess(successMessage)
+    await loadApiKeys()
+    return true
   } catch (error) {
-    if (newStatus === 'active' && key.group_id && isSecurityDepositRequiredError(error)) {
-      openSecurityDepositDialog(key.group_id, { type: 'toggle', key })
-    } else {
-      appStore.showError(t('keys.failedToUpdateStatus'))
+    if (groupId && isSecurityDepositRequiredError(error)) {
+      openSecurityDepositDialog(groupId, { type: 'enable', keyId, groupId })
+      await loadApiKeys()
+      return false
     }
+    persistPendingSecurityDepositAction(null)
+    appStore.showError(t('keys.failedToUpdateStatus'))
+    await loadApiKeys()
+    return false
   }
 }
 
@@ -1627,21 +1651,14 @@ const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
   dropdownPosition.value = null
   if (key.group_id === newGroupId) return
 
-  if (newGroupId && requiresSecurityDeposit(newGroupId)) {
-    openSecurityDepositDialog(newGroupId, { type: 'change_group', key, groupId: newGroupId })
-    return
-  }
-
   try {
-    await keysAPI.update(key.id, { group_id: newGroupId })
+    // 先原子落库为新分组 + 禁用，再单独尝试启用，取消缴纳时不回滚分组。
+    await keysAPI.update(key.id, { group_id: newGroupId, status: 'inactive' })
     appStore.showSuccess(t('keys.groupChangedSuccess'))
-    loadApiKeys()
-  } catch (error) {
-    if (newGroupId && isSecurityDepositRequiredError(error)) {
-      openSecurityDepositDialog(newGroupId, { type: 'change_group', key, groupId: newGroupId })
-    } else {
-      appStore.showError(t('keys.failedToChangeGroup'))
-    }
+    await enableKey(key.id, newGroupId)
+  } catch {
+    appStore.showError(t('keys.failedToChangeGroup'))
+    await loadApiKeys()
   }
 }
 
@@ -1666,11 +1683,6 @@ const handleSubmit = async () => {
   // Validate group_id is required
   if (formData.value.group_id === null) {
     appStore.showError(t('keys.groupRequired'))
-    return
-  }
-
-  if (requiresSecurityDeposit(formData.value.group_id)) {
-    openSecurityDepositDialog(formData.value.group_id, { type: 'submit' })
     return
   }
 
@@ -1711,7 +1723,13 @@ const handleSubmit = async () => {
 
   submitting.value = true
   try {
+    let keyToEnable: { keyId: number; groupId: number } | null = null
     if (showEditModal.value && selectedKey.value) {
+      const editingKey = selectedKey.value
+      const groupChanged = editingKey.group_id !== formData.value.group_id
+      const securityLocked = editingKey.status === 'security_locked'
+      const wantsActive = formData.value.status === 'active' && !securityLocked
+      const preserveStatus = preservesSystemManagedStatus(editingKey, formData.value.status)
       const updates: UpdateApiKeyRequest = {
         name: formData.value.name,
         group_id: formData.value.group_id,
@@ -1723,13 +1741,16 @@ const handleSubmit = async () => {
         rate_limit_1d: rateLimitData.rate_limit_1d,
         rate_limit_7d: rateLimitData.rate_limit_7d,
       }
-      if (shouldSubmitEditStatus(selectedKey.value, formData.value.status)) {
-        updates.status = formData.value.status
+      if (!preserveStatus && (groupChanged || !wantsActive)) {
+        updates.status = 'inactive'
       }
-      await keysAPI.update(selectedKey.value.id, updates)
+      await keysAPI.update(editingKey.id, updates)
+      if (wantsActive && (groupChanged || editingKey.status !== 'active')) {
+        keyToEnable = { keyId: editingKey.id, groupId: formData.value.group_id }
+      }
       appStore.showSuccess(t('keys.keyUpdatedSuccess'))
     } else {
-      await keysAPI.create(
+      const created = await keysAPI.create(
         formData.value.name,
         formData.value.group_id,
         undefined,
@@ -1739,6 +1760,9 @@ const handleSubmit = async () => {
         expiresInDays,
         rateLimitData
       )
+      if (created.status !== 'active' && created.group_id && created.disabled_reason === 'security_deposit_insufficient') {
+        keyToEnable = { keyId: created.id, groupId: created.group_id }
+      }
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
       if (onboardingStore.isCurrentStep('[data-tour="key-form-submit"]')) {
@@ -1746,14 +1770,15 @@ const handleSubmit = async () => {
       }
     }
     closeModals()
-    loadApiKeys()
-  } catch (error: any) {
-    if (formData.value.group_id && isSecurityDepositRequiredError(error)) {
-      openSecurityDepositDialog(formData.value.group_id, { type: 'submit' })
-    } else {
-      const errorMsg = error.response?.data?.detail || error.message || t('keys.failedToSave')
-      appStore.showError(errorMsg)
+    if (keyToEnable) {
+      openSecurityDepositDialog(keyToEnable.groupId, {
+        type: 'enable', keyId: keyToEnable.keyId, groupId: keyToEnable.groupId,
+      })
     }
+    await loadApiKeys()
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.detail || error.message || t('keys.failedToSave')
+    appStore.showError(errorMsg)
     // Don't advance tour on error
   } finally {
     submitting.value = false
@@ -1957,6 +1982,7 @@ onMounted(() => {
   const resumeURL = new URL(window.location.href)
   const resumeGroupId = Number(resumeURL.searchParams.get('security_deposit_group_id'))
   const resumeToken = resumeURL.searchParams.get('wechat_resume_token') || ''
+  pendingSecurityDepositAction = restorePendingSecurityDepositAction()
   if (resumeGroupId > 0 && resumeToken) {
     securityDepositDialog.groupId = resumeGroupId
     securityDepositDialog.resumeToken = resumeToken
@@ -1966,6 +1992,9 @@ onMounted(() => {
       resumeURL.searchParams.delete(key)
     }
     window.history.replaceState(window.history.state, '', `${resumeURL.pathname}${resumeURL.search}${resumeURL.hash}`)
+  } else if (pendingSecurityDepositAction) {
+    const action = pendingSecurityDepositAction
+    void enableKey(action.keyId, action.groupId, t('keys.keyEnabledSuccess'))
   }
   document.addEventListener('click', closeGroupSelector)
   resetTimer = setInterval(() => { now.value = new Date() }, 60000)

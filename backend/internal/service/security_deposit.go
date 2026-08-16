@@ -264,13 +264,42 @@ type SecurityDepositService struct {
 	paymentCreator       securityDepositPaymentCreator
 	settings             *SettingService
 	now                  func() time.Time
-	keyEligibility       *KeyEligibilityReconciler
+	keyEligibility       SecurityDepositKeyChangeReconciler
 	authCacheInvalidator APIKeyAuthCacheInvalidator
 }
 
 // SetKeyEligibilityReconciler 注入资金事件后的统一密钥资格重算器。
-func (s *SecurityDepositService) SetKeyEligibilityReconciler(reconciler *KeyEligibilityReconciler) {
+func (s *SecurityDepositService) SetKeyEligibilityReconciler(reconciler SecurityDepositKeyChangeReconciler) {
 	s.keyEligibility = reconciler
+}
+
+// reconcileKeysAfterBalanceChange 对每次保证金变化执行只禁用重算，不自动恢复任何密钥。
+func (s *SecurityDepositService) reconcileKeysAfterBalanceChange(ctx context.Context, userID int64, eventType string, eventID int64, alreadyDisabled []int64) ([]int64, error) {
+	if s == nil || s.keyEligibility == nil {
+		return append([]int64(nil), alreadyDisabled...), nil
+	}
+	disabled, err := s.keyEligibility.DisableInsufficientKeys(ctx, userID, eventType, eventID)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[int64]struct{}, len(alreadyDisabled)+len(disabled))
+	merged := make([]int64, 0, len(alreadyDisabled)+len(disabled))
+	for _, key := range append(append([]int64(nil), alreadyDisabled...), securityDepositKeyIDs(disabled)...) {
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		merged = append(merged, key)
+	}
+	return merged, nil
+}
+
+func securityDepositKeyIDs(keys []SecurityDepositKeyReference) []int64 {
+	ids := make([]int64, 0, len(keys))
+	for _, key := range keys {
+		ids = append(ids, key.ID)
+	}
+	return ids
 }
 
 // SetPenaltyDependencies 注入处罚提交后的认证缓存失效能力。
@@ -419,9 +448,9 @@ func (s *SecurityDepositService) GetEligibility(ctx context.Context, userID, gro
 	return eligibility, nil
 }
 
-// CheckAccess 按最新分组、双资金桶和风险档案执行权威准入检查。
+// GetAccessSnapshot 读取处罚和准入共用的最新保证金快照，不因当前余额不足而丢弃证据。
 // 门槛为 0 或全局执法关闭时保持存量行为，不读取保证金账户。
-func (s *SecurityDepositService) CheckAccess(ctx context.Context, userID, groupID int64) (*SecurityDepositAccessGrant, error) {
+func (s *SecurityDepositService) GetAccessSnapshot(ctx context.Context, userID, groupID int64) (*SecurityDepositAccessGrant, error) {
 	if userID <= 0 || groupID <= 0 {
 		return nil, infraerrors.BadRequest("INVALID_SECURITY_DEPOSIT_ACCESS", "user_id and group_id must be positive")
 	}
@@ -464,6 +493,18 @@ func (s *SecurityDepositService) CheckAccess(ctx context.Context, userID, groupI
 	}
 	grant.EffectiveBalanceCents = account.EffectiveBalanceCents
 	grant.AccessVersion = securityDepositAccessVersion(grant, account)
+	return grant, nil
+}
+
+// CheckAccess 按最新分组、双资金桶和风险档案执行权威准入检查。
+func (s *SecurityDepositService) CheckAccess(ctx context.Context, userID, groupID int64) (*SecurityDepositAccessGrant, error) {
+	grant, err := s.GetAccessSnapshot(ctx, userID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	if !grant.Enforced {
+		return grant, nil
+	}
 	if grant.EffectiveBalanceCents >= grant.RequiredCents {
 		return grant, nil
 	}

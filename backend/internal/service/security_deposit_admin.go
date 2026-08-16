@@ -103,6 +103,10 @@ func (s *SecurityDepositService) AdminCreditAdminGrant(ctx context.Context, inpu
 	if err != nil {
 		return nil, err
 	}
+	result.DisabledKeyIDs, err = s.reconcileKeysAfterBalanceChange(ctx, input.UserID, result.ActionType, result.ActionID, result.DisabledKeyIDs)
+	if err != nil {
+		return nil, fmt.Errorf("reconcile security deposit keys after admin credit: %w", err)
+	}
 	s.invalidateSecurityDepositUser(ctx, input.UserID)
 	return result, nil
 }
@@ -132,6 +136,10 @@ func (s *SecurityDepositService) AdminDeductAdminGrant(ctx context.Context, inpu
 	if err != nil {
 		return nil, err
 	}
+	result.DisabledKeyIDs, err = s.reconcileKeysAfterBalanceChange(ctx, input.UserID, result.ActionType, result.ActionID, result.DisabledKeyIDs)
+	if err != nil {
+		return nil, fmt.Errorf("reconcile security deposit keys after admin deduction: %w", err)
+	}
 	s.invalidateSecurityDepositUser(ctx, input.UserID)
 	return result, nil
 }
@@ -160,6 +168,10 @@ func (s *SecurityDepositService) AdminRevokeAdminGrantLot(ctx context.Context, i
 	})
 	if err != nil {
 		return nil, err
+	}
+	result.DisabledKeyIDs, err = s.reconcileKeysAfterBalanceChange(ctx, input.UserID, result.ActionType, result.ActionID, result.DisabledKeyIDs)
+	if err != nil {
+		return nil, fmt.Errorf("reconcile security deposit keys after admin revoke: %w", err)
 	}
 	s.invalidateSecurityDepositUser(ctx, input.UserID)
 	return result, nil

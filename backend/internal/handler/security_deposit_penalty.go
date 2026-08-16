@@ -12,6 +12,11 @@ import (
 	"go.uber.org/zap"
 )
 
+type securityDepositPenaltyService interface {
+	GetAccessSnapshot(ctx context.Context, userID, groupID int64) (*service.SecurityDepositAccessGrant, error)
+	ApplyCyberPolicyPenalty(ctx context.Context, input service.SecurityDepositCyberPenaltyInput) (*service.SecurityDepositCyberPenaltyResult, error)
+}
+
 // applySecurityDepositCyberPenalty 在网关请求收尾时同步提交可信官方网安处罚。
 // 该适配层独立于 OpenAI handler 主流程，便于其他兼容入口复用并降低上游冲突面。
 func (h *OpenAIGatewayHandler) applySecurityDepositCyberPenalty(
@@ -25,8 +30,7 @@ func (h *OpenAIGatewayHandler) applySecurityDepositCyberPenalty(
 	if h == nil || h.securityDepositService == nil || c == nil || apiKey == nil || mark == nil || requestCtx == nil {
 		return
 	}
-	grant, ok := requestCtx.Value(ctxkey.SecurityDepositAccessGrant).(*service.SecurityDepositAccessGrant)
-	if !ok || grant == nil {
+	if apiKey.GroupID == nil {
 		return
 	}
 	penaltyRequestID, _ := requestCtx.Value(ctxkey.RequestID).(string)
@@ -43,6 +47,17 @@ func (h *OpenAIGatewayHandler) applySecurityDepositCyberPenalty(
 	}
 	penaltyCtx, cancelPenalty := context.WithTimeout(requestCtx, 30*time.Second)
 	defer cancelPenalty()
+	grant, accessErr := h.securityDepositService.GetAccessSnapshot(penaltyCtx, apiKey.UserID, *apiKey.GroupID)
+	if accessErr != nil || grant == nil {
+		requestLogger(c, "handler.openai_gateway.security_deposit_penalty").Error(
+			"security_deposit_penalty_access_snapshot_failed",
+			zap.Int64("user_id", apiKey.UserID),
+			zap.Int64("api_key_id", apiKey.ID),
+			zap.Int64("group_id", *apiKey.GroupID),
+			zap.Error(accessErr),
+		)
+		return
+	}
 	_, penaltyErr := h.securityDepositService.ApplyCyberPolicyPenalty(penaltyCtx, service.SecurityDepositCyberPenaltyInput{
 		EventKey:  service.BuildSecurityDepositCyberPenaltyEventKey(penaltyRequestID, apiKey.ID, upstreamResponseID, turnIndex),
 		RequestID: penaltyRequestID, UpstreamResponseID: upstreamResponseID, TurnIndex: turnIndex,

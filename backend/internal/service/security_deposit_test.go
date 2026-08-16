@@ -455,6 +455,27 @@ func TestSecurityDepositGateReturnsStableShortfallError(t *testing.T) {
 	require.Equal(t, "5000", appErr.Metadata["effective_balance_cents"])
 }
 
+func TestSecurityDepositAccessSnapshotPreservesInsufficientPenaltyEvidence(t *testing.T) {
+	repo := &fakeSecurityDepositRepository{data: &SecurityDepositUserData{
+		Accounts:       []SecurityDepositAccountRecord{{BucketType: "paid", BalanceCents: 5000}},
+		RiskMultiplier: 2,
+	}}
+	settings := &SettingService{settingRepo: &securityDepositSettingRepoStub{values: map[string]string{
+		SettingKeySecurityDepositEnforcementEnabled: "true",
+	}}}
+	service := NewSecurityDepositService(repo)
+	service.SetOrderDependencies(fakeSecurityDepositGroupAccess{groups: []Group{{
+		ID: 7, Name: "受保护分组", SecurityDepositBaseRequiredCents: 10000,
+	}}}, nil, settings)
+
+	grant, err := service.GetAccessSnapshot(context.Background(), 42, 7)
+
+	require.NoError(t, err)
+	require.True(t, grant.Enforced)
+	require.Equal(t, int64(20000), grant.RequiredCents)
+	require.Equal(t, int64(5000), grant.EffectiveBalanceCents)
+}
+
 func TestSecurityDepositGateFailsClosedWhenProtectedAccountStateIsUnknown(t *testing.T) {
 	repo := &fakeSecurityDepositRepository{dataErr: errors.New("database unavailable")}
 	settings := &SettingService{settingRepo: &securityDepositSettingRepoStub{values: map[string]string{

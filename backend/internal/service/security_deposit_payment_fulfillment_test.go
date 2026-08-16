@@ -57,9 +57,14 @@ func TestSecurityDepositPaymentFulfillmentCreditsPaidBucketExactlyOnce(t *testin
 		Save(ctx)
 	require.NoError(t, err)
 
-	service := &PaymentService{entClient: client}
+	reconciler := &securityDepositKeyChangeReconcilerStub{}
+	service := &PaymentService{entClient: client, securityDepositKeyChange: reconciler}
 	require.NoError(t, service.ExecuteSecurityDepositFulfillment(ctx, order.ID))
 	require.NoError(t, service.ExecuteSecurityDepositFulfillment(ctx, order.ID))
+	require.Equal(t, 2, reconciler.calls)
+	require.Equal(t, user.ID, reconciler.userID)
+	require.Equal(t, "payment_credit", reconciler.eventType)
+	require.Equal(t, order.ID, reconciler.eventID)
 
 	account, err := client.SecurityDepositAccount.Query().Where(
 		securitydepositaccount.UserIDEQ(user.ID),

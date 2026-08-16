@@ -9,8 +9,6 @@ import (
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -36,15 +34,13 @@ func securityDepositAuthTestAPIKey() *service.APIKey {
 	}
 }
 
-func TestAPIKeyAuthRejectsInsufficientSecurityDepositBeforeHandler(t *testing.T) {
+func TestAPIKeyAuthDoesNotCheckSecurityDepositOnRequestPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	apiKey := securityDepositAuthTestAPIKey()
 	repo := &stubApiKeyRepo{getByKey: func(context.Context, string) (*service.APIKey, error) { return apiKey, nil }}
 	cfg := &config.Config{RunMode: config.RunModeSimple}
 	svc := service.NewAPIKeyService(repo, nil, nil, nil, nil, nil, cfg)
-	gate := &middlewareSecurityDepositGateStub{err: infraerrors.Forbidden(
-		"SECURITY_DEPOSIT_REQUIRED", "security deposit is insufficient for this group",
-	)}
+	gate := &middlewareSecurityDepositGateStub{err: assertNeverCalledError{}}
 	svc.SetSecurityDepositGate(gate)
 
 	router := gin.New()
@@ -59,21 +55,18 @@ func TestAPIKeyAuthRejectsInsufficientSecurityDepositBeforeHandler(t *testing.T)
 	req.Header.Set("x-api-key", apiKey.Key)
 	router.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusForbidden, w.Code)
-	require.Contains(t, w.Body.String(), "SECURITY_DEPOSIT_REQUIRED")
-	require.False(t, handlerCalled)
-	require.Equal(t, 1, gate.calls)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.True(t, handlerCalled)
+	require.Zero(t, gate.calls)
 }
 
-func TestGoogleAPIKeyAuthRejectsInsufficientSecurityDepositBeforeHandler(t *testing.T) {
+func TestGoogleAPIKeyAuthDoesNotCheckSecurityDepositOnRequestPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	apiKey := securityDepositAuthTestAPIKey()
 	repo := fakeAPIKeyRepo{getByKey: func(context.Context, string) (*service.APIKey, error) { return apiKey, nil }}
 	cfg := &config.Config{RunMode: config.RunModeSimple}
 	svc := service.NewAPIKeyService(repo, nil, nil, nil, nil, nil, cfg)
-	gate := &middlewareSecurityDepositGateStub{err: infraerrors.Forbidden(
-		"SECURITY_DEPOSIT_REQUIRED", "security deposit is insufficient for this group",
-	)}
+	gate := &middlewareSecurityDepositGateStub{err: assertNeverCalledError{}}
 	svc.SetSecurityDepositGate(gate)
 
 	router := gin.New()
@@ -88,34 +81,13 @@ func TestGoogleAPIKeyAuthRejectsInsufficientSecurityDepositBeforeHandler(t *test
 	req.Header.Set("x-goog-api-key", apiKey.Key)
 	router.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusForbidden, w.Code)
-	require.Contains(t, w.Body.String(), "security deposit is insufficient")
-	require.False(t, handlerCalled)
-	require.Equal(t, 1, gate.calls)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.True(t, handlerCalled)
+	require.Zero(t, gate.calls)
 }
 
-func TestAPIKeyAuthAttachesSecurityDepositAccessGrant(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	apiKey := securityDepositAuthTestAPIKey()
-	repo := &stubApiKeyRepo{getByKey: func(context.Context, string) (*service.APIKey, error) { return apiKey, nil }}
-	cfg := &config.Config{RunMode: config.RunModeSimple}
-	svc := service.NewAPIKeyService(repo, nil, nil, nil, nil, nil, cfg)
-	want := &service.SecurityDepositAccessGrant{
-		UserID: 7, GroupID: 9, BaseRequiredCents: 10000, RiskMultiplier: 2,
-		RequiredCents: 20000, EffectiveBalanceCents: 20000, Enforced: true,
-	}
-	svc.SetSecurityDepositGate(&middlewareSecurityDepositGateStub{grant: want})
+type assertNeverCalledError struct{}
 
-	router := gin.New()
-	router.Use(gin.HandlerFunc(NewAPIKeyAuthMiddleware(svc, nil, cfg)))
-	router.POST("/v1/messages", func(c *gin.Context) {
-		got, _ := c.Request.Context().Value(ctxkey.SecurityDepositAccessGrant).(*service.SecurityDepositAccessGrant)
-		require.Equal(t, want, got)
-		c.Status(http.StatusOK)
-	})
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
-	req.Header.Set("x-api-key", apiKey.Key)
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
+func (assertNeverCalledError) Error() string {
+	return "security deposit gate must not run on request path"
 }

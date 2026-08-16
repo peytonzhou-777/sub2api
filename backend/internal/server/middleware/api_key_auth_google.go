@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -146,11 +145,6 @@ func APIKeyAuthWithSubscriptionGoogleAndBillingCache(apiKeyService *service.APIK
 			abortWithGoogleError(c, 403, "API Key 所属专属分组不再允许当前用户使用")
 			return
 		}
-		if err := attachSecurityDepositAccessGrant(c, apiKeyService, apiKey); err != nil {
-			abortWithGoogleError(c, infraerrors.Code(err), infraerrors.Message(err))
-			return
-		}
-
 		// 简易模式：跳过余额和订阅检查
 		if cfg.RunMode == config.RunModeSimple {
 			c.Set(string(ContextKeyAPIKey), apiKey)

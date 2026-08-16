@@ -45,12 +45,23 @@ type apiKeyRepoStub struct {
 	updateLastUsed         func(ctx context.Context, id int64, usedAt time.Time) error
 	touchedIDs             []int64
 	touchedUsedAts         []time.Time
+	allowCreate            bool
+	createdKeys            []APIKey
+	createErr              error
 }
 
 // 以下方法在本测试中不应被调用，使用 panic 确保测试失败时能快速定位问题
 
 func (s *apiKeyRepoStub) Create(ctx context.Context, key *APIKey) error {
-	panic("unexpected Create call")
+	if !s.allowCreate {
+		panic("unexpected Create call")
+	}
+	if key != nil {
+		clone := *key
+		s.createdKeys = append(s.createdKeys, clone)
+		key.ID = int64(len(s.createdKeys))
+	}
+	return s.createErr
 }
 
 func (s *apiKeyRepoStub) GetByID(ctx context.Context, id int64) (*APIKey, error) {
