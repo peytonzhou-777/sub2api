@@ -110,7 +110,7 @@ func TestSchedulerCacheSnapshotAccountIDReusePreservesPayloadAndMembers(t *testi
 
 	wantFull, err := json.Marshal(validOne)
 	require.NoError(t, err)
-	wantMeta, err := json.Marshal(buildSchedulerMetadataAccount(validOne))
+	wantMeta, err := json.Marshal(buildSchedulerAccountSnapshot(validOne))
 	require.NoError(t, err)
 	fullBefore, err := cache.rdb.Get(ctx, schedulerAccountKey("701")).Bytes()
 	require.NoError(t, err)
@@ -290,7 +290,7 @@ func TestMarshalSchedulerCacheAccountKeepsEncodingJSONWireFormat(t *testing.T) {
 			require.NoError(t, err)
 			wantFull, err := json.Marshal(tc.account)
 			require.NoError(t, err)
-			wantMeta, err := json.Marshal(buildSchedulerMetadataAccount(tc.account))
+			wantMeta, err := json.Marshal(buildSchedulerAccountSnapshot(tc.account))
 			require.NoError(t, err)
 			require.Equal(t, wantFull, full)
 			require.Equal(t, wantMeta, meta)
@@ -323,6 +323,81 @@ func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
 	require.Equal(t, false, got.Extra["openai_responses_supported"])
 	require.Equal(t, true, got.Extra["mixed_scheduling"])
 	require.Nil(t, got.Extra["unused_large_field"])
+}
+
+func TestSchedulerCacheSnapshotPreservesOpenAIPrivacyStatus(t *testing.T) {
+	ctx := context.Background()
+	cache := newSchedulerCacheUnit(t)
+	account := service.Account{
+		ID:          840,
+		Platform:    service.PlatformOpenAI,
+		Type:        service.AccountTypeOAuth,
+		Status:      service.StatusActive,
+		Schedulable: true,
+		Extra:       map[string]any{"privacy_mode": service.PrivacyModeTrainingOff},
+	}
+	bucket := service.SchedulerBucket{GroupID: 8, Platform: service.PlatformOpenAI, Mode: service.SchedulerModeSingle}
+	token, err := cache.CaptureBucketWriteToken(ctx, bucket)
+	require.NoError(t, err)
+	require.NoError(t, cache.SetSnapshot(ctx, bucket, token, []service.Account{account}))
+
+	accounts, hit, err := cache.GetSnapshot(ctx, bucket)
+	require.NoError(t, err)
+	require.True(t, hit)
+	require.Len(t, accounts, 1)
+	require.Equal(t, service.SchedulerPrivacyCompliant, accounts[0].SchedulerPrivacyStatus)
+	require.Equal(t, service.PrivacyModeTrainingOff, accounts[0].Extra["privacy_mode"])
+	require.False(t, accounts[0].SchedulerSnapshotNeedsRefresh)
+}
+
+func TestSchedulerCacheMissingPrivacyFieldBecomesUnknownAndRequestsRefresh(t *testing.T) {
+	ctx := context.Background()
+	cache := newSchedulerCacheUnit(t)
+	account := service.Account{
+		ID:          841,
+		Platform:    service.PlatformOpenAI,
+		Type:        service.AccountTypeOAuth,
+		Status:      service.StatusActive,
+		Schedulable: true,
+	}
+	bucket := service.SchedulerBucket{GroupID: 8, Platform: service.PlatformOpenAI, Mode: service.SchedulerModeSingle}
+	token, err := cache.CaptureBucketWriteToken(ctx, bucket)
+	require.NoError(t, err)
+	require.NoError(t, cache.SetSnapshot(ctx, bucket, token, []service.Account{account}))
+
+	legacyFields := map[string]any{}
+	encodedSnapshot, err := json.Marshal(buildSchedulerAccountSnapshot(account))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(encodedSnapshot, &legacyFields))
+	delete(legacyFields, "privacy_status")
+	legacyPayload, err := json.Marshal(legacyFields)
+	require.NoError(t, err)
+	require.NoError(t, cache.rdb.Set(ctx, schedulerAccountMetaKey(strconv.FormatInt(account.ID, 10)), legacyPayload, 0).Err())
+
+	accounts, hit, err := cache.GetSnapshot(ctx, bucket)
+	require.NoError(t, err)
+	require.True(t, hit)
+	require.Len(t, accounts, 1)
+	require.Equal(t, service.SchedulerPrivacyUnknown, accounts[0].SchedulerPrivacyStatus)
+	require.True(t, accounts[0].SchedulerSnapshotNeedsRefresh)
+}
+
+func TestSchedulerCacheV2NamespaceIgnoresLegacyAccountKeys(t *testing.T) {
+	ctx := context.Background()
+	cache, mr := newSchedulerCacheUnitWithRedis(t)
+	legacy, err := json.Marshal(service.Account{
+		ID:       842,
+		Platform: service.PlatformOpenAI,
+		Type:     service.AccountTypeOAuth,
+		Extra:    map[string]any{"privacy_mode": service.PrivacyModeTrainingOff},
+	})
+	require.NoError(t, err)
+	mr.Set("sched:acc:842", string(legacy))
+
+	account, err := cache.GetAccount(ctx, 842)
+	require.NoError(t, err)
+	require.Nil(t, account)
+	require.Equal(t, "sched:v2:acc:842", schedulerAccountKey("842"))
 }
 
 func TestBuildSchedulerMetadataAccount_KeepsGrokMediaEligibility(t *testing.T) {

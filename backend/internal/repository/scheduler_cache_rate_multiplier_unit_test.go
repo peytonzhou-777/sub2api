@@ -43,12 +43,16 @@ func TestSchedulerCachePreservesRateMultiplier(t *testing.T) {
 		full, meta, err := marshalSchedulerCacheAccount(account)
 		require.NoError(t, err)
 
-		for name, payload := range map[string][]byte{"full": full, "metadata": meta} {
-			decoded, decodeErr := decodeCachedAccount(payload)
-			require.NoError(t, decodeErr, name)
-			require.NotNil(t, decoded.RateMultiplier, "%s payload 反序列化后 rate_multiplier 不得为 nil", name)
-			require.Equal(t, rate, *decoded.RateMultiplier, name)
-		}
+		decodedFull, decodeErr := decodeCachedAccount(full)
+		require.NoError(t, decodeErr)
+		require.NotNil(t, decodedFull.RateMultiplier)
+		require.Equal(t, rate, *decodedFull.RateMultiplier)
+
+		decodedSnapshot, decodeErr := decodeCachedSchedulerAccountSnapshot(meta)
+		require.NoError(t, decodeErr)
+		decodedMetadata := decodedSnapshot.ToAccount()
+		require.NotNil(t, decodedMetadata.RateMultiplier, "metadata payload 反序列化后 rate_multiplier 不得为 nil")
+		require.Equal(t, rate, *decodedMetadata.RateMultiplier)
 	})
 
 	t.Run("zero rate survives as zero rather than nil", func(t *testing.T) {
@@ -61,8 +65,9 @@ func TestSchedulerCachePreservesRateMultiplier(t *testing.T) {
 
 		_, meta, err := marshalSchedulerCacheAccount(zeroAccount)
 		require.NoError(t, err)
-		decoded, err := decodeCachedAccount(meta)
+		decodedSnapshot, err := decodeCachedSchedulerAccountSnapshot(meta)
 		require.NoError(t, err)
+		decoded := decodedSnapshot.ToAccount()
 		require.NotNil(t, decoded.RateMultiplier)
 		require.Equal(t, 0.0, *decoded.RateMultiplier)
 	})
