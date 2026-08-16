@@ -309,7 +309,13 @@ func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
 			"openai_ws_force_http":                         true,
 			"openai_responses_mode":                        "force_chat_completions",
 			"openai_responses_supported":                   false,
+			"openai_passthrough":                           true,
+			"openai_compact_mode":                          service.OpenAICompactModeForceOff,
+			"openai_compact_supported":                     false,
 			"mixed_scheduling":                             true,
+			"base_rpm":                                     120,
+			"rpm_strategy":                                 "sticky_exempt",
+			"rpm_sticky_buffer":                            16,
 			"unused_large_field":                           "drop-me",
 		},
 	}
@@ -321,7 +327,13 @@ func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
 	require.Equal(t, true, got.Extra["openai_ws_force_http"])
 	require.Equal(t, "force_chat_completions", got.Extra["openai_responses_mode"])
 	require.Equal(t, false, got.Extra["openai_responses_supported"])
+	require.Equal(t, true, got.Extra["openai_passthrough"])
+	require.Equal(t, service.OpenAICompactModeForceOff, got.Extra["openai_compact_mode"])
+	require.Equal(t, false, got.Extra["openai_compact_supported"])
 	require.Equal(t, true, got.Extra["mixed_scheduling"])
+	require.Equal(t, 120, got.Extra["base_rpm"])
+	require.Equal(t, "sticky_exempt", got.Extra["rpm_strategy"])
+	require.Equal(t, 16, got.Extra["rpm_sticky_buffer"])
 	require.Nil(t, got.Extra["unused_large_field"])
 }
 
@@ -382,7 +394,7 @@ func TestSchedulerCacheMissingPrivacyFieldBecomesUnknownAndRequestsRefresh(t *te
 	require.True(t, accounts[0].SchedulerSnapshotNeedsRefresh)
 }
 
-func TestSchedulerCacheV2NamespaceIgnoresLegacyAccountKeys(t *testing.T) {
+func TestSchedulerCacheV3NamespaceIgnoresLegacyAccountKeys(t *testing.T) {
 	ctx := context.Background()
 	cache, mr := newSchedulerCacheUnitWithRedis(t)
 	legacy, err := json.Marshal(service.Account{
@@ -393,11 +405,114 @@ func TestSchedulerCacheV2NamespaceIgnoresLegacyAccountKeys(t *testing.T) {
 	})
 	require.NoError(t, err)
 	mr.Set("sched:acc:842", string(legacy))
+	mr.Set("sched:v2:acc:842", string(legacy))
 
 	account, err := cache.GetAccount(ctx, 842)
 	require.NoError(t, err)
 	require.Nil(t, account)
-	require.Equal(t, "sched:v2:acc:842", schedulerAccountKey("842"))
+	require.Equal(t, "sched:v3:acc:842", schedulerAccountKey("842"))
+}
+
+func TestSchedulerCachePreservesDecisionSemantics(t *testing.T) {
+	ctx := context.Background()
+	cache := newSchedulerCacheUnit(t)
+	proxyID := int64(8430)
+	account := service.Account{
+		ID:          843,
+		Platform:    service.PlatformOpenAI,
+		Type:        service.AccountTypeOAuth,
+		Status:      service.StatusActive,
+		Schedulable: true,
+		ProxyID:     &proxyID,
+		Credentials: map[string]any{
+			"model_mapping":       map[string]any{"legacy-only": "gpt-5.4"},
+			"plan_type":           "plus",
+			"auth_mode":           "personalAccessToken",
+			"openai_capabilities": []any{"chat_completions"},
+			"access_token":        "secret-access-token",
+			"refresh_token":       "secret-refresh-token",
+		},
+		Extra: map[string]any{
+			"privacy_mode":             service.PrivacyModeTrainingOff,
+			"openai_passthrough":       true,
+			"openai_compact_mode":      service.OpenAICompactModeForceOff,
+			"openai_compact_supported": true,
+			"base_rpm":                 120,
+			"rpm_strategy":             "sticky_exempt",
+			"rpm_sticky_buffer":        16,
+		},
+	}
+	bucket := service.SchedulerBucket{GroupID: 8, Platform: service.PlatformOpenAI, Mode: service.SchedulerModeSingle}
+	token, err := cache.CaptureBucketWriteToken(ctx, bucket)
+	require.NoError(t, err)
+	require.NoError(t, cache.SetSnapshot(ctx, bucket, token, []service.Account{account}))
+
+	accounts, hit, err := cache.GetSnapshot(ctx, bucket)
+	require.NoError(t, err)
+	require.True(t, hit)
+	require.Len(t, accounts, 1)
+	cached := accounts[0]
+
+	require.Equal(t, account.IsModelSupported("unmapped-model"), cached.IsModelSupported("unmapped-model"))
+	require.Equal(t, account.SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityLive), cached.SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityLive))
+	require.Equal(t, account.SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityEmbeddings), cached.SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityEmbeddings))
+	wantCompact, wantKnown := account.OpenAICompactSupportKnown()
+	gotCompact, gotKnown := cached.OpenAICompactSupportKnown()
+	require.Equal(t, wantCompact, gotCompact)
+	require.Equal(t, wantKnown, gotKnown)
+	require.Equal(t, account.GetBaseRPM(), cached.GetBaseRPM())
+	require.Equal(t, account.GetRPMStrategy(), cached.GetRPMStrategy())
+	require.Equal(t, account.GetRPMStickyBuffer(), cached.GetRPMStickyBuffer())
+	require.Equal(t, account.ProxyID, cached.ProxyID)
+	require.Equal(t, service.SchedulerPrivacyCompliant, cached.SchedulerPrivacyStatus)
+	require.NotContains(t, cached.Credentials, "access_token")
+	require.NotContains(t, cached.Credentials, "refresh_token")
+}
+
+func TestSchedulerMetadataPreservesAntigravityOveragesDecision(t *testing.T) {
+	resetAt := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	account := service.Account{
+		ID:       844,
+		Platform: service.PlatformAntigravity,
+		Type:     service.AccountTypeOAuth,
+		Status:   service.StatusActive,
+		Extra: map[string]any{
+			"allow_overages": true,
+			"model_rate_limits": map[string]any{
+				"gemini-3-flash": map[string]any{"rate_limit_reset_at": resetAt},
+			},
+		},
+		Schedulable: true,
+	}
+
+	cached := buildSchedulerMetadataAccount(account)
+
+	require.True(t, account.IsOveragesEnabled())
+	require.True(t, cached.IsOveragesEnabled())
+	require.Equal(t, account.IsSchedulableForModelWithContext(context.Background(), "gemini-3-flash"), cached.IsSchedulableForModelWithContext(context.Background(), "gemini-3-flash"))
+}
+
+func TestSchedulerMetadataPreservesGrokQuotaSignals(t *testing.T) {
+	account := service.Account{
+		ID:       845,
+		Platform: service.PlatformGrok,
+		Type:     service.AccountTypeOAuth,
+		Credentials: map[string]any{
+			"subscription_tier": "free",
+		},
+		Extra: map[string]any{
+			"grok_usage_snapshot": map[string]any{"updated_at": time.Now().UTC().Format(time.RFC3339)},
+			"subscription_tier":   "free",
+			"plan_type":           "free",
+		},
+	}
+
+	cached := buildSchedulerMetadataAccount(account)
+
+	require.Equal(t, "free", cached.GetCredential("subscription_tier"))
+	require.Equal(t, account.Extra["grok_usage_snapshot"], cached.Extra["grok_usage_snapshot"])
+	require.Equal(t, "free", cached.Extra["subscription_tier"])
+	require.Equal(t, "free", cached.Extra["plan_type"])
 }
 
 func TestBuildSchedulerMetadataAccount_KeepsGrokMediaEligibility(t *testing.T) {

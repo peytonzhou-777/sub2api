@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	schedulerCacheNamespace        = "v2"
+	schedulerCacheNamespace        = "v3"
 	schedulerBucketSetKey          = "sched:" + schedulerCacheNamespace + ":buckets"
 	schedulerOutboxWatermarkKey    = "sched:" + schedulerCacheNamespace + ":outbox:watermark"
 	schedulerAccountPrefix         = "sched:" + schedulerCacheNamespace + ":acc:"
@@ -872,8 +872,14 @@ func marshalSchedulerCacheAccount(account service.Account) ([]byte, []byte, erro
 }
 
 func buildSchedulerAccountSnapshot(account service.Account) service.SchedulerAccountSnapshot {
-	snapshot := service.NewSchedulerAccountSnapshot(buildSchedulerMetadataAccount(account))
-	snapshot.PrivacyStatus = service.ResolveSchedulerPrivacyStatus(account)
+	snapshot := service.NewSchedulerAccountSnapshot(account)
+	if snapshot.Extra != nil && snapshot.Extra.UpstreamBillingProbe != nil {
+		if filtered := filterSchedulerUpstreamBillingProbe(snapshot.Extra.UpstreamBillingProbe); filtered != nil {
+			snapshot.Extra.UpstreamBillingProbe = filtered
+		} else {
+			snapshot.Extra.UpstreamBillingProbe = nil
+		}
+	}
 	return snapshot
 }
 
@@ -902,35 +908,10 @@ func (c *schedulerCache) mgetChunked(ctx context.Context, keys []string) ([]any,
 }
 
 func buildSchedulerMetadataAccount(account service.Account) service.Account {
-	return service.Account{
-		ID:                      account.ID,
-		Name:                    account.Name,
-		Platform:                account.Platform,
-		Type:                    account.Type,
-		Concurrency:             account.Concurrency,
-		LoadFactor:              account.LoadFactor,
-		Priority:                account.Priority,
-		RateMultiplier:          account.RateMultiplier,
-		Status:                  account.Status,
-		LastUsedAt:              account.LastUsedAt,
-		ExpiresAt:               account.ExpiresAt,
-		AutoPauseOnExpired:      account.AutoPauseOnExpired,
-		Schedulable:             account.Schedulable,
-		RateLimitedAt:           account.RateLimitedAt,
-		RateLimitResetAt:        account.RateLimitResetAt,
-		OverloadUntil:           account.OverloadUntil,
-		TempUnschedulableUntil:  account.TempUnschedulableUntil,
-		TempUnschedulableReason: account.TempUnschedulableReason,
-		SessionWindowStart:      account.SessionWindowStart,
-		SessionWindowEnd:        account.SessionWindowEnd,
-		SessionWindowStatus:     account.SessionWindowStatus,
-		ParentAccountID:         account.ParentAccountID,
-		QuotaDimension:          account.QuotaDimension,
-		AccountGroups:           filterSchedulerAccountGroups(account.AccountGroups),
-		GroupIDs:                filterSchedulerGroupIDs(account.GroupIDs, account.AccountGroups),
-		Credentials:             filterSchedulerCredentials(account.Credentials),
-		Extra:                   filterSchedulerExtra(account.Extra),
-	}
+	account.AccountGroups = filterSchedulerAccountGroups(account.AccountGroups)
+	account.GroupIDs = filterSchedulerGroupIDs(account.GroupIDs, account.AccountGroups)
+	snapshot := buildSchedulerAccountSnapshot(account)
+	return snapshot.ToAccount()
 }
 
 func filterSchedulerAccountGroups(accountGroups []service.AccountGroup) []service.AccountGroup {
@@ -990,89 +971,20 @@ func filterSchedulerGroupIDs(groupIDs []int64, accountGroups []service.AccountGr
 }
 
 func filterSchedulerCredentials(credentials map[string]any) map[string]any {
-	if len(credentials) == 0 {
-		return nil
-	}
-	keys := []string{"model_mapping", "compact_model_mapping", "api_key", "project_id", "oauth_type", "plan_type"}
-	filtered := make(map[string]any)
-	for _, key := range keys {
-		if value, ok := credentials[key]; ok && value != nil {
-			filtered[key] = value
-		}
-	}
-	if len(filtered) == 0 {
-		return nil
-	}
-	return filtered
+	snapshot := service.NewSchedulerAccountSnapshot(service.Account{Credentials: credentials})
+	return snapshot.ToAccount().Credentials
 }
 
 func filterSchedulerExtra(extra map[string]any) map[string]any {
-	if len(extra) == 0 {
-		return nil
-	}
-	keys := []string{
-		"quota_limit",
-		"quota_used",
-		"quota_daily_limit",
-		"quota_daily_used",
-		"quota_daily_start",
-		"quota_daily_reset_mode",
-		"quota_daily_reset_hour",
-		"quota_weekly_limit",
-		"quota_weekly_used",
-		"quota_weekly_start",
-		"quota_weekly_reset_mode",
-		"quota_weekly_reset_day",
-		"quota_weekly_reset_hour",
-		"quota_reset_timezone",
-		"mixed_scheduling",
-		"window_cost_limit",
-		"window_cost_sticky_reserve",
-		"max_sessions",
-		"session_idle_timeout_minutes",
-		"openai_oauth_responses_websockets_v2_enabled",
-		"openai_oauth_responses_websockets_v2_mode",
-		"openai_apikey_responses_websockets_v2_enabled",
-		"openai_apikey_responses_websockets_v2_mode",
-		"responses_websockets_v2_enabled",
-		"openai_ws_enabled",
-		"openai_ws_force_http",
-		"openai_responses_mode",
-		"openai_responses_supported",
-		"codex_5h_used_percent",
-		"codex_7d_used_percent",
-		"codex_5h_reset_at",
-		"codex_7d_reset_at",
-		"codex_5h_reset_after_seconds",
-		"codex_7d_reset_after_seconds",
-		"codex_usage_updated_at",
-		"auto_pause_5h_threshold",
-		"auto_pause_7d_threshold",
-		"auto_pause_5h_disabled",
-		"auto_pause_7d_disabled",
-		"model_rate_limits",
-		service.UpstreamBillingProbeExtraKey,
-		service.GrokMediaEligibleExtraKey,
-		"grok_billing_snapshot",
-		"privacy_mode",
-	}
-	filtered := make(map[string]any)
-	for _, key := range keys {
-		if value, ok := extra[key]; ok && value != nil {
-			if key == service.UpstreamBillingProbeExtraKey {
-				filteredProbe := filterSchedulerUpstreamBillingProbe(value)
-				if filteredProbe == nil {
-					continue
-				}
-				value = filteredProbe
-			}
-			filtered[key] = value
+	snapshot := service.NewSchedulerAccountSnapshot(service.Account{Extra: extra})
+	if snapshot.Extra != nil && snapshot.Extra.UpstreamBillingProbe != nil {
+		if filtered := filterSchedulerUpstreamBillingProbe(snapshot.Extra.UpstreamBillingProbe); filtered != nil {
+			snapshot.Extra.UpstreamBillingProbe = filtered
+		} else {
+			snapshot.Extra.UpstreamBillingProbe = nil
 		}
 	}
-	if len(filtered) == 0 {
-		return nil
-	}
-	return filtered
+	return snapshot.ToAccount().Extra
 }
 
 func filterSchedulerUpstreamBillingProbe(value any) map[string]any {
