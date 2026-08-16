@@ -265,12 +265,18 @@ type SecurityDepositService struct {
 	settings             *SettingService
 	now                  func() time.Time
 	keyEligibility       SecurityDepositKeyChangeReconciler
+	groupKeyEligibility  SecurityDepositGroupKeyReconciler
 	authCacheInvalidator APIKeyAuthCacheInvalidator
 }
 
 // SetKeyEligibilityReconciler 注入资金事件后的统一密钥资格重算器。
 func (s *SecurityDepositService) SetKeyEligibilityReconciler(reconciler SecurityDepositKeyChangeReconciler) {
 	s.keyEligibility = reconciler
+}
+
+// SetGroupKeyEligibilityReconciler 注入管理员按分组执行的资格重算器。
+func (s *SecurityDepositService) SetGroupKeyEligibilityReconciler(reconciler SecurityDepositGroupKeyReconciler) {
+	s.groupKeyEligibility = reconciler
 }
 
 // reconcileKeysAfterBalanceChange 对每次保证金变化执行只禁用重算，不自动恢复任何密钥。
@@ -313,6 +319,14 @@ func (s *SecurityDepositService) DisableInsufficientKeys(ctx context.Context, us
 		return nil, infraerrors.ServiceUnavailable("SECURITY_DEPOSIT_RECONCILER_UNAVAILABLE", "security deposit key eligibility reconciler is unavailable")
 	}
 	return s.keyEligibility.DisableInsufficientKeys(ctx, userID, eventType, eventID)
+}
+
+// DisableInsufficientKeysByGroup 将管理员分组重算统一委托给同一资格协调器。
+func (s *SecurityDepositService) DisableInsufficientKeysByGroup(ctx context.Context, groupID int64, eventType string, eventID int64) ([]SecurityDepositKeyReference, error) {
+	if s == nil || s.groupKeyEligibility == nil {
+		return nil, infraerrors.ServiceUnavailable("SECURITY_DEPOSIT_RECONCILER_UNAVAILABLE", "security deposit key eligibility reconciler is unavailable")
+	}
+	return s.groupKeyEligibility.DisableInsufficientKeysByGroup(ctx, groupID, eventType, eventID)
 }
 
 // NewSecurityDepositService 创建保证金领域服务。

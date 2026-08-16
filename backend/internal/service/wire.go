@@ -801,6 +801,7 @@ var ProviderSet = wire.NewSet(
 	ProvideRedeemService,
 	NewLimitedCreditService,
 	ProvideSecurityDepositService,
+	wire.Bind(new(SecurityDepositGroupKeyReconciler), new(*SecurityDepositService)),
 	NewResetRebateService,
 	NewRecurringCreditService,
 	NewRechargeBonusService,
@@ -811,7 +812,7 @@ var ProviderSet = wire.NewSet(
 	NewBillingService,
 	ProvideBillingCacheService,
 	NewAnnouncementService,
-	NewAdminService,
+	ProvideAdminService,
 	NewGatewayService,
 	NewOpenAIGatewayService,
 	ProvideImageStorageSettingService,
@@ -971,15 +972,15 @@ func ProvidePaymentService(entClient *dbent.Client, registry *payment.Registry, 
 }
 
 // ProvideSecurityDepositService 接入现有分组授权、支付和配置能力。
-func ProvideSecurityDepositService(repo SecurityDepositRepository, apiKeyService *APIKeyService, paymentService *PaymentService, settingService *SettingService) *SecurityDepositService {
+func ProvideSecurityDepositService(repo SecurityDepositRepository, eligibilityRepo SecurityDepositKeyEligibilityRepository, apiKeyService *APIKeyService, paymentService *PaymentService, settingService *SettingService) *SecurityDepositService {
 	svc := NewSecurityDepositService(repo)
 	svc.SetOrderDependencies(apiKeyService, paymentService, settingService)
 	svc.SetPenaltyDependencies(apiKeyService)
 	apiKeyService.SetSecurityDepositGate(svc)
-	if eligibilityRepo, ok := apiKeyService.apiKeyRepo.(SecurityDepositKeyEligibilityRepository); ok {
-		svc.SetKeyEligibilityReconciler(NewKeyEligibilityReconciler(svc, eligibilityRepo, apiKeyService))
-	}
-	paymentService.SetSecurityDepositKeyChangeReconciler(svc.keyEligibility)
+	reconciler := NewKeyEligibilityReconciler(svc, eligibilityRepo, apiKeyService)
+	svc.SetKeyEligibilityReconciler(reconciler)
+	svc.SetGroupKeyEligibilityReconciler(reconciler)
+	paymentService.SetSecurityDepositKeyChangeReconciler(svc)
 	return svc
 }
 

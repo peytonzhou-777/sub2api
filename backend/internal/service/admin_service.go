@@ -699,7 +699,6 @@ func NewAdminService(
 	accountRepo AdminAccountRepository,
 	proxyRepo ProxyRepository,
 	apiKeyRepo APIKeyRepository,
-	apiKeyService *APIKeyService,
 	redeemCodeRepo RedeemCodeRepository,
 	userGroupRateRepo UserGroupRateRepository,
 	userRPMCache UserRPMCache,
@@ -719,7 +718,7 @@ func NewAdminService(
 	compositeResolver *CompositeRouteResolver,
 	channelCacheInvalidator ChannelCacheInvalidator,
 ) AdminService {
-	svc := &adminServiceImpl{
+	return &adminServiceImpl{
 		userRepo:                    userRepo,
 		groupRepo:                   groupRepo,
 		groupDuplicateRepo:          groupRepo,
@@ -747,24 +746,4 @@ func NewAdminService(
 		compositeResolver:           compositeResolver,
 		channelCacheInvalidator:     channelCacheInvalidator,
 	}
-	if eligibilityRepo, ok := apiKeyRepo.(SecurityDepositKeyEligibilityRepository); ok {
-		svc.securityDepositGroupKeyReconciler = NewKeyEligibilityReconciler(
-			adminAPIKeySecurityDepositGate{apiKeyService: apiKeyService},
-			eligibilityRepo,
-			authCacheInvalidator,
-		)
-	}
-	return svc
-}
-
-// adminAPIKeySecurityDepositGate 延迟读取 APIKeyService 的门禁，避免初始化阶段形成循环依赖。
-type adminAPIKeySecurityDepositGate struct {
-	apiKeyService *APIKeyService
-}
-
-func (g adminAPIKeySecurityDepositGate) CheckAccess(ctx context.Context, userID, groupID int64) (*SecurityDepositAccessGrant, error) {
-	if g.apiKeyService == nil {
-		return nil, infraerrors.ServiceUnavailable("SECURITY_DEPOSIT_GATE_UNAVAILABLE", "security deposit access gate is unavailable")
-	}
-	return g.apiKeyService.CheckSecurityDepositAccess(ctx, userID, groupID)
 }

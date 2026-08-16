@@ -1,0 +1,58 @@
+package service
+
+import dbent "github.com/Wei-Shaw/sub2api/ent"
+
+// ProvideAdminService 为 Wire 使用具名依赖装配管理服务，避免位置参数在业务测试中扩散。
+func ProvideAdminService(
+	userRepo UserRepository,
+	groupRepo AdminGroupRepository,
+	accountRepo AdminAccountRepository,
+	proxyRepo ProxyRepository,
+	apiKeyRepo APIKeyRepository,
+	redeemCodeRepo RedeemCodeRepository,
+	userGroupRateRepo UserGroupRateRepository,
+	userRPMCache UserRPMCache,
+	billingCacheService *BillingCacheService,
+	proxyProber ProxyExitInfoProber,
+	proxyLatencyCache ProxyLatencyCache,
+	authCacheInvalidator APIKeyAuthCacheInvalidator,
+	entClient *dbent.Client,
+	settingService *SettingService,
+	defaultSubAssigner DefaultSubscriptionAssigner,
+	defaultLimitedCreditGranter *LimitedCreditService,
+	userSubRepo UserSubscriptionRepository,
+	privacyClientFactory PrivacyClientFactory,
+	runtimeBlocker AccountRuntimeBlocker,
+	affiliateService *AffiliateService,
+	compositeRouteRepo CompositeModelRouteRepository,
+	compositeResolver *CompositeRouteResolver,
+	channelCacheInvalidator ChannelCacheInvalidator,
+	securityDepositGroupKeyReconciler SecurityDepositGroupKeyReconciler,
+) AdminService {
+	return NewAdminServiceWithDependencies(AdminServiceDependencies{
+		UserRepository:                    userRepo,
+		GroupRepository:                   groupRepo,
+		AccountRepository:                 accountRepo,
+		ProxyRepository:                   proxyRepo,
+		APIKeyRepository:                  apiKeyRepo,
+		RedeemCodeRepository:              redeemCodeRepo,
+		UserGroupRateRepository:           userGroupRateRepo,
+		UserRPMCache:                      userRPMCache,
+		BillingCacheService:               billingCacheService,
+		ProxyProber:                       proxyProber,
+		ProxyLatencyCache:                 proxyLatencyCache,
+		AuthCacheInvalidator:              authCacheInvalidator,
+		EntClient:                         entClient,
+		SettingService:                    settingService,
+		DefaultSubscriptionAssigner:       defaultSubAssigner,
+		DefaultLimitedCreditGranter:       defaultLimitedCreditGranter,
+		UserSubscriptionRepository:        userSubRepo,
+		PrivacyClientFactory:              privacyClientFactory,
+		RuntimeBlocker:                    runtimeBlocker,
+		AffiliateService:                  affiliateService,
+		CompositeRouteRepository:          compositeRouteRepo,
+		CompositeResolver:                 compositeResolver,
+		ChannelCacheInvalidator:           channelCacheInvalidator,
+		SecurityDepositGroupKeyReconciler: securityDepositGroupKeyReconciler,
+	})
+}

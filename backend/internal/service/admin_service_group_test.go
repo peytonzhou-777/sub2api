@@ -157,6 +157,14 @@ func (s *groupRepoStubForAdmin) UpdateSortOrders(_ context.Context, _ []GroupSor
 	return nil
 }
 
+func (s *groupRepoStubForAdmin) FindByDuplicateOperationID(_ context.Context, _ string) (*Group, error) {
+	return nil, ErrGroupNotFound
+}
+
+func (s *groupRepoStubForAdmin) CreateFromSource(_ context.Context, _ *Group, _ int64) error {
+	return nil
+}
+
 type compositeRouteRepoStubForAdmin struct {
 	routes    []CompositeModelRoute
 	created   *CompositeModelRoute
@@ -298,7 +306,10 @@ func TestAdminService_UpdateGroup_ReconcilesSecurityDepositKeysWhenRequested(t *
 		Status: StatusActive, SecurityDepositBaseRequiredCents: 10000,
 	}}
 	reconciler := &securityDepositGroupKeyReconcilerStub{}
-	svc := &adminServiceImpl{groupRepo: repo, securityDepositGroupKeyReconciler: reconciler}
+	svc := NewAdminServiceWithDependencies(AdminServiceDependencies{
+		GroupRepository:                   repo,
+		SecurityDepositGroupKeyReconciler: reconciler,
+	})
 	threshold := int64(10000)
 
 	_, err := svc.UpdateGroup(context.Background(), 7, &UpdateGroupInput{
@@ -311,6 +322,20 @@ func TestAdminService_UpdateGroup_ReconcilesSecurityDepositKeysWhenRequested(t *
 	require.Equal(t, int64(7), reconciler.groupID)
 	require.Equal(t, "group_threshold_update", reconciler.eventType)
 	require.Equal(t, int64(7), reconciler.eventID)
+}
+
+func TestSecurityDepositServiceDelegatesGroupKeyReconciliation(t *testing.T) {
+	reconciler := &securityDepositGroupKeyReconcilerStub{}
+	svc := NewSecurityDepositService(nil)
+	svc.SetGroupKeyEligibilityReconciler(reconciler)
+
+	_, err := svc.DisableInsufficientKeysByGroup(context.Background(), 9, "group_threshold_update", 19)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, reconciler.calls)
+	require.Equal(t, int64(9), reconciler.groupID)
+	require.Equal(t, "group_threshold_update", reconciler.eventType)
+	require.Equal(t, int64(19), reconciler.eventID)
 }
 
 // TestAdminService_CreateGroup_WithImagePricing 测试创建分组时 ImagePrice 字段正确传递
