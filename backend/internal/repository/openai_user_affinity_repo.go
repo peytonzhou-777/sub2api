@@ -47,12 +47,17 @@ func (r *accountRepository) GetOpenAIUserAffinityCandidateStats(ctx context.Cont
 		       ) AS active_contact_users,
 		       COALESCE(BOOL_OR(c.user_id = %s AND (
 		           c.touch_expires_at > NOW() OR c.reservation_until > NOW()
-		       )), FALSE) AS user_already_active
+		       )), FALSE) AS user_already_active,
+		       EXISTS (
+		           SELECT 1 FROM user_account_placements p
+		           WHERE p.user_id = %s AND p.account_id = a.id
+		             AND p.status = 'active' AND p.expires_at > NOW()
+		       ) AS user_already_resident
 		FROM accounts a
 		LEFT JOIN account_user_contacts c ON c.account_id = a.id
 		WHERE a.id IN (%s)
 		GROUP BY a.id, a.max_contact_users, a.new_resident_cooldown_seconds,
-		         a.new_resident_cooldown_until`, userPlaceholder, strings.Join(placeholders, ", ")), args...)
+		         a.new_resident_cooldown_until`, userPlaceholder, userPlaceholder, strings.Join(placeholders, ", ")), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +67,7 @@ func (r *accountRepository) GetOpenAIUserAffinityCandidateStats(ctx context.Cont
 		var candidate service.OpenAIUserAffinityCandidate
 		var maxContactUsers, cooldownSeconds sql.NullInt64
 		var cooldownUntil sql.NullTime
-		if err := rows.Scan(&candidate.AccountID, &maxContactUsers, &cooldownSeconds, &cooldownUntil, &candidate.ActiveContactUsers, &candidate.UserAlreadyActive); err != nil {
+		if err := rows.Scan(&candidate.AccountID, &maxContactUsers, &cooldownSeconds, &cooldownUntil, &candidate.ActiveContactUsers, &candidate.UserAlreadyActive, &candidate.UserAlreadyResident); err != nil {
 			return nil, err
 		}
 		if maxContactUsers.Valid {
@@ -88,6 +93,9 @@ func (r *accountRepository) AssignOpenAIUserAffinityPlacement(ctx context.Contex
 	if r == nil || r.client == nil || placement.AccountID == nil {
 		return false, errors.New("openai user affinity storage unavailable")
 	}
+	if strings.TrimSpace(placement.ProvisionalToken) == "" {
+		return false, errors.New("openai user affinity placement requires provisional token")
+	}
 	tx, err := r.client.Tx(ctx)
 	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
 		return false, err
@@ -100,12 +108,20 @@ func (r *accountRepository) AssignOpenAIUserAffinityPlacement(ctx context.Contex
 	now := time.Now().UTC()
 	var maxContactUsers, cooldownSeconds sql.NullInt64
 	var cooldownUntil sql.NullTime
+	var accountStatus, accountPlatform string
+	var accountSchedulable, userAlreadyResident bool
 	if err := scanSingleRow(ctx, exec, `
-		SELECT max_contact_users, new_resident_cooldown_seconds, new_resident_cooldown_until
-		FROM accounts WHERE id = $1 FOR UPDATE`, []any{*placement.AccountID}, &maxContactUsers, &cooldownSeconds, &cooldownUntil); err != nil {
+		SELECT max_contact_users, new_resident_cooldown_seconds, new_resident_cooldown_until,
+		       status, schedulable, platform,
+		       EXISTS (SELECT 1 FROM user_account_placements p
+		               WHERE p.user_id = $2 AND p.account_id = accounts.id
+		                 AND p.status = 'active' AND p.expires_at > $3)
+		FROM accounts WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+		[]any{*placement.AccountID, placement.UserID, now}, &maxContactUsers, &cooldownSeconds,
+		&cooldownUntil, &accountStatus, &accountSchedulable, &accountPlatform, &userAlreadyResident); err != nil {
 		return false, err
 	}
-	if cooldownUntil.Valid && now.Before(cooldownUntil.Time) {
+	if accountStatus != service.StatusActive || !accountSchedulable || accountPlatform != service.PlatformOpenAI {
 		return false, nil
 	}
 	effectiveMax := config.DefaultMaxContactUsers
@@ -120,7 +136,10 @@ func (r *accountRepository) AssignOpenAIUserAffinityPlacement(ctx context.Contex
 		  AND (touch_expires_at > $2 OR reservation_until > $2)`, []any{*placement.AccountID, now, placement.UserID}, &activeContacts, &userAlreadyActive); err != nil {
 		return false, err
 	}
-	if activeContacts >= effectiveMax && !userAlreadyActive {
+	if activeContacts >= effectiveMax && !userAlreadyActive && !userAlreadyResident {
+		return false, nil
+	}
+	if cooldownUntil.Valid && now.Before(cooldownUntil.Time) && !userAlreadyActive && !userAlreadyResident {
 		return false, nil
 	}
 
@@ -140,8 +159,9 @@ func (r *accountRepository) AssignOpenAIUserAffinityPlacement(ctx context.Contex
 	if _, err := exec.ExecContext(ctx, `
 		INSERT INTO user_account_placements
 			(user_id, scope_key, account_id, generation, status, assigned_at, expires_at,
-			 assignment_reason, predicted_5h_demand, predicted_7d_demand, prediction_version, updated_at)
-		VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, $9, $10, $5)
+			 assignment_reason, predicted_5h_demand, predicted_7d_demand, prediction_version,
+			 provisional_token, updated_at)
+		VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, $9, $10, $11, $5)
 		ON CONFLICT (user_id, scope_key) DO UPDATE SET
 			account_id = EXCLUDED.account_id, generation = EXCLUDED.generation,
 			status = 'active', assigned_at = EXCLUDED.assigned_at,
@@ -151,28 +171,34 @@ func (r *accountRepository) AssignOpenAIUserAffinityPlacement(ctx context.Contex
 			predicted_5h_demand = EXCLUDED.predicted_5h_demand,
 			predicted_7d_demand = EXCLUDED.predicted_7d_demand,
 			prediction_version = EXCLUDED.prediction_version,
+			provisional_token = EXCLUDED.provisional_token,
 			reset_at = NULL, reset_by_admin_id = NULL, reset_reason = NULL,
 			reset_source_account_id = NULL, updated_at = EXCLUDED.updated_at`,
 		placement.UserID, placement.ScopeKey, placement.AccountID, placement.Generation,
 		now, placement.ExpiresAt, placement.AssignmentReason, placement.Predicted5HDemand,
-		placement.Predicted7DDemand, placement.PredictionVersion); err != nil {
+		placement.Predicted7DDemand, placement.PredictionVersion, placement.ProvisionalToken); err != nil {
 		return false, err
 	}
 	reservationUntil := now.Add(2 * time.Minute)
+	reservationKind := "new_resident"
+	if userAlreadyActive || userAlreadyResident {
+		reservationKind = "resident_scope"
+	}
 	if _, err := exec.ExecContext(ctx, `
 		INSERT INTO account_user_contacts
-			(account_id, user_id, reservation_kind, reservation_until, reservation_generation,
+			(account_id, user_id, reservation_kind, reservation_token, reservation_until, reservation_generation,
 			 reentry_config_version, follower_jitter_min_ms, follower_jitter_max_ms, updated_at)
-		VALUES ($1, $2, 'new_resident', $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (account_id, user_id) DO UPDATE SET
 			reservation_kind = EXCLUDED.reservation_kind,
+			reservation_token = EXCLUDED.reservation_token,
 			reservation_until = EXCLUDED.reservation_until,
 			reservation_generation = EXCLUDED.reservation_generation,
 			reentry_config_version = EXCLUDED.reentry_config_version,
 			follower_jitter_min_ms = EXCLUDED.follower_jitter_min_ms,
 			follower_jitter_max_ms = EXCLUDED.follower_jitter_max_ms,
 			updated_at = EXCLUDED.updated_at`, *placement.AccountID, placement.UserID,
-		reservationUntil, placement.Generation, config.ConfigVersion,
+		reservationKind, placement.ProvisionalToken, reservationUntil, placement.Generation, config.ConfigVersion,
 		config.FollowerJitterMinMS, config.FollowerJitterMaxMS, now); err != nil {
 		return false, err
 	}
@@ -180,11 +206,13 @@ func (r *accountRepository) AssignOpenAIUserAffinityPlacement(ctx context.Contex
 	if cooldownSeconds.Valid && cooldownSeconds.Int64 > 0 {
 		effectiveCooldown = int(cooldownSeconds.Int64)
 	}
-	if _, err := exec.ExecContext(ctx, `
-		UPDATE accounts SET new_resident_cooldown_until = $2,
-			affinity_config_version = $3, updated_at = $1 WHERE id = $4`,
-		now, now.Add(time.Duration(effectiveCooldown)*time.Second), config.ConfigVersion, *placement.AccountID); err != nil {
-		return false, err
+	if !userAlreadyActive && !userAlreadyResident {
+		if _, err := exec.ExecContext(ctx, `
+			UPDATE accounts SET new_resident_cooldown_until = $2,
+				affinity_config_version = $3, updated_at = $1 WHERE id = $4`,
+			now, now.Add(time.Duration(effectiveCooldown)*time.Second), config.ConfigVersion, *placement.AccountID); err != nil {
+			return false, err
+		}
 	}
 	if _, err := exec.ExecContext(ctx, `
 		INSERT INTO user_account_placement_events
@@ -282,17 +310,10 @@ func (r *accountRepository) TouchOpenAIUserAffinity(ctx context.Context, userID,
 	}
 	if placementMatches {
 		if _, err := exec.ExecContext(ctx, `
-			UPDATE user_account_placements SET last_active_at = $4, expires_at = $5, updated_at = $4
+			UPDATE user_account_placements SET last_active_at = $4, expires_at = $5,
+				provisional_token = NULL, updated_at = $4
 			WHERE user_id = $1 AND scope_key = $2 AND account_id = $3 AND generation = $6 AND status = 'active'`,
 			userID, scopeKey, accountID, now, residenceExpiresAt, generation); err != nil {
-			return err
-		}
-		if _, err := exec.ExecContext(ctx, `
-			UPDATE user_account_capacity_incidents SET status = 'closed', close_reason = 'resident_recovered',
-				closed_at = $5, updated_at = $5
-			WHERE user_id = $1 AND scope_key = $2 AND source_account_id = $3
-			  AND placement_generation = $4 AND closed_at IS NULL`,
-			userID, scopeKey, accountID, generation, now); err != nil {
 			return err
 		}
 	}
@@ -300,6 +321,127 @@ func (r *accountRepository) TouchOpenAIUserAffinity(ctx context.Context, userID,
 		return tx.Commit()
 	}
 	return nil
+}
+
+// ConfirmOpenAIUserAffinitySuccess 只在真实成功终态关闭当前归属的容量事故。
+func (r *accountRepository) ConfirmOpenAIUserAffinitySuccess(ctx context.Context, userID, accountID, generation int64, scopeKey string) error {
+	if r == nil || r.sql == nil || userID <= 0 || accountID <= 0 || generation <= 0 {
+		return errors.New("openai user affinity storage unavailable")
+	}
+	now := time.Now().UTC()
+	_, err := r.sql.ExecContext(ctx, `
+		UPDATE user_account_capacity_incidents SET status = 'closed', close_reason = 'resident_recovered',
+			closed_at = $5, updated_at = $5
+		WHERE user_id = $1 AND scope_key = $2 AND source_account_id = $3
+		  AND placement_generation = $4 AND closed_at IS NULL`,
+		userID, normalizeOpenAIUserAffinityScopeKey(scopeKey), accountID, generation, now)
+	return err
+}
+
+// RollbackOpenAIUserAffinityPlacement 按请求 token 恢复失败前归属，避免撤销并发请求已提交的状态。
+func (r *accountRepository) RollbackOpenAIUserAffinityPlacement(ctx context.Context, transition service.OpenAIUserAffinityProvisionalTransition, config service.OpenAIUserAffinityConfig) (bool, error) {
+	if r == nil || r.client == nil || transition.Token == "" || transition.TargetPlacement.AccountID == nil {
+		return false, nil
+	}
+	target := transition.TargetPlacement
+	tx, err := r.client.Tx(ctx)
+	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+		return false, err
+	}
+	exec := r.sql
+	if tx != nil {
+		defer func() { _ = tx.Rollback() }()
+		exec = tx.Client()
+	}
+	now := time.Now().UTC()
+	var result sql.Result
+	if previous := transition.PreviousPlacement; previous != nil {
+		result, err = exec.ExecContext(ctx, `
+			UPDATE user_account_placements SET account_id = $5, generation = $6, status = $7,
+				assigned_at = $8, last_active_at = $9, expires_at = $10, last_moved_at = $11,
+				assignment_reason = $12, reset_exclude_source_account = $13,
+				reset_source_account_id = $14, reset_at = $15, reset_by_admin_id = $16,
+				reset_reason = $17, predicted_5h_demand = $18, predicted_7d_demand = $19,
+				prediction_version = $20, provisional_token = $21, updated_at = $4
+			WHERE user_id = $1 AND scope_key = $2 AND account_id = $3 AND generation = $22
+			  AND provisional_token = $23`,
+			target.UserID, target.ScopeKey, target.AccountID, now, previous.AccountID,
+			previous.Generation, previous.Status, previous.AssignedAt, previous.LastActiveAt,
+			previous.ExpiresAt, previous.LastMovedAt, previous.AssignmentReason,
+			previous.ResetExcludeSourceAccount, previous.ResetSourceAccountID, previous.ResetAt,
+			previous.ResetByAdminID, previous.ResetReason, previous.Predicted5HDemand,
+			previous.Predicted7DDemand, previous.PredictionVersion, previous.ProvisionalToken,
+			target.Generation, transition.Token)
+	} else {
+		result, err = exec.ExecContext(ctx, `
+			UPDATE user_account_placements SET status = 'expired', expires_at = $4,
+				provisional_token = NULL, updated_at = $4
+			WHERE user_id = $1 AND scope_key = $2 AND account_id = $3 AND generation = $5
+			  AND provisional_token = $6`, target.UserID, target.ScopeKey, target.AccountID,
+			now, target.Generation, transition.Token)
+	}
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil || affected == 0 {
+		return false, err
+	}
+	var reservationKind sql.NullString
+	reservationErr := scanSingleRow(ctx, exec, `
+		SELECT reservation_kind FROM account_user_contacts
+		WHERE account_id = $1 AND user_id = $2 AND reservation_token = $3 FOR UPDATE`,
+		[]any{*target.AccountID, target.UserID, transition.Token}, &reservationKind)
+	if reservationErr != nil && !errors.Is(reservationErr, sql.ErrNoRows) {
+		return false, reservationErr
+	}
+	if _, err := exec.ExecContext(ctx, `
+		UPDATE account_user_contacts SET reservation_kind = NULL, reservation_token = NULL,
+			reservation_until = NULL, updated_at = $4
+		WHERE account_id = $1 AND user_id = $2 AND reservation_token = $3`,
+		*target.AccountID, target.UserID, transition.Token, now); err != nil {
+		return false, err
+	}
+	startedCooldown := reservationKind.Valid && (reservationKind.String == "new_resident" || reservationKind.String == "migration")
+	if startedCooldown {
+		if _, err := exec.ExecContext(ctx, `
+			UPDATE accounts SET new_resident_cooldown_until = NULL, updated_at = $2
+			WHERE id = $1 AND NOT EXISTS (
+				SELECT 1 FROM account_user_contacts c
+				WHERE c.account_id = $1 AND c.reservation_until > $2
+			)`, *target.AccountID, now); err != nil {
+			return false, err
+		}
+	}
+	if transition.Kind == "migration" && transition.PreviousPlacement != nil && transition.PreviousPlacement.AccountID != nil {
+		if _, err := exec.ExecContext(ctx, `
+			UPDATE user_account_capacity_incidents SET migration_target_account_id = NULL,
+				status = 'migration_eligible', close_reason = NULL, closed_at = NULL, updated_at = $5
+			WHERE user_id = $1 AND scope_key = $2 AND source_account_id = $3
+			  AND placement_generation = $4 AND close_reason = 'migration_succeeded'`,
+			target.UserID, target.ScopeKey, *transition.PreviousPlacement.AccountID,
+			transition.PreviousPlacement.Generation, now); err != nil {
+			return false, err
+		}
+	}
+	var sourceAccountID *int64
+	if transition.PreviousPlacement != nil {
+		sourceAccountID = transition.PreviousPlacement.AccountID
+	}
+	if _, err := exec.ExecContext(ctx, `
+		INSERT INTO user_account_placement_events
+			(user_id, scope_key, placement_generation, source_account_id, target_account_id,
+			 event_type, reason, config_version, effective_source)
+		VALUES ($1, $2, $3, $4, $5, 'rollback', 'request_failed_before_success', $6, 'global')`,
+		target.UserID, target.ScopeKey, target.Generation, target.AccountID, sourceAccountID, config.ConfigVersion); err != nil {
+		return false, err
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 // RecordOpenAIUserAffinityCapacityFailure 在固定窗口内累计客户端重试可见的容量失败。
@@ -408,11 +550,14 @@ func (r *accountRepository) RecordOpenAIUserAffinityCapacityFailure(ctx context.
 		if authorizedAt.Valid {
 			status = "migration_eligible"
 		}
+		stableWindowExpiresAt := now.Add(time.Duration(config.MigrationStabilitySeconds+windowSeconds) * time.Second)
 		if _, err := exec.ExecContext(ctx, `
 			UPDATE user_account_capacity_incidents SET failure_count = $2,
 				last_failure_reason = $3, last_failure_at = $4,
-				migration_authorized_at = $5, status = $6, updated_at = $4
-			WHERE id = $1`, incidentID, failureCount, reason, now, authorizedAt, status); err != nil {
+				migration_authorized_at = $5, status = $6,
+				window_expires_at = CASE WHEN $5 IS NOT NULL THEN GREATEST(window_expires_at, $7) ELSE window_expires_at END,
+				updated_at = $4
+			WHERE id = $1`, incidentID, failureCount, reason, now, authorizedAt, status, stableWindowExpiresAt); err != nil {
 			return nil, err
 		}
 	}
@@ -439,7 +584,7 @@ func (r *accountRepository) GetOpenAIUserAffinityMigrationAuthorizedAt(ctx conte
 		SELECT migration_authorized_at FROM user_account_capacity_incidents
 		WHERE user_id = $1 AND scope_key = $2 AND source_account_id = $3
 		  AND placement_generation = $4 AND closed_at IS NULL
-		  AND migration_authorized_at IS NOT NULL
+		  AND migration_authorized_at IS NOT NULL AND window_expires_at > NOW()
 		ORDER BY migration_authorized_at DESC LIMIT 1`, []any{userID, scopeKey, accountID, generation}, &authorizedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -452,9 +597,13 @@ func (r *accountRepository) GetOpenAIUserAffinityMigrationAuthorizedAt(ctx conte
 }
 
 // MigrateOpenAIUserAffinityPlacement 在归属 generation 未变化时原子搬迁到新账号。
-func (r *accountRepository) MigrateOpenAIUserAffinityPlacement(ctx context.Context, userID, sourceAccountID, targetAccountID, generation int64, scopeKey, reason string, config service.OpenAIUserAffinityConfig) (bool, error) {
+func (r *accountRepository) MigrateOpenAIUserAffinityPlacement(ctx context.Context, userID, sourceAccountID, targetAccountID, generation int64, scopeKey, provisionalToken, reason string, config service.OpenAIUserAffinityConfig) (bool, error) {
 	if r == nil || r.client == nil || sourceAccountID <= 0 || targetAccountID <= 0 || sourceAccountID == targetAccountID {
 		return false, nil
+	}
+	provisionalToken = strings.TrimSpace(provisionalToken)
+	if provisionalToken == "" {
+		return false, errors.New("openai user affinity migration requires provisional token")
 	}
 	scopeKey = normalizeOpenAIUserAffinityScopeKey(scopeKey)
 	reason = strings.TrimSpace(reason)
@@ -496,22 +645,32 @@ func (r *accountRepository) MigrateOpenAIUserAffinityPlacement(ctx context.Conte
 	var currentAccount sql.NullInt64
 	var currentGeneration int64
 	var status string
+	var sourceProvisionalToken sql.NullString
 	if err := scanSingleRow(ctx, exec, `
-		SELECT account_id, generation, status FROM user_account_placements
-		WHERE user_id = $1 AND scope_key = $2 FOR UPDATE`, []any{userID, scopeKey}, &currentAccount, &currentGeneration, &status); err != nil {
+		SELECT account_id, generation, status, provisional_token FROM user_account_placements
+		WHERE user_id = $1 AND scope_key = $2 FOR UPDATE`, []any{userID, scopeKey}, &currentAccount, &currentGeneration, &status, &sourceProvisionalToken); err != nil {
 		return false, err
 	}
-	if !currentAccount.Valid || currentAccount.Int64 != sourceAccountID || currentGeneration != generation || status != "active" {
+	if !currentAccount.Valid || currentAccount.Int64 != sourceAccountID || currentGeneration != generation || status != "active" ||
+		(sourceProvisionalToken.Valid && strings.TrimSpace(sourceProvisionalToken.String) != "") {
 		return false, nil
 	}
 	var maxContactUsers, cooldownSeconds sql.NullInt64
 	var cooldownUntil sql.NullTime
+	var targetStatus, targetPlatform string
+	var targetSchedulable, userAlreadyResident bool
 	if err := scanSingleRow(ctx, exec, `
-		SELECT max_contact_users, new_resident_cooldown_seconds, new_resident_cooldown_until
-		FROM accounts WHERE id = $1`, []any{targetAccountID}, &maxContactUsers, &cooldownSeconds, &cooldownUntil); err != nil {
+		SELECT max_contact_users, new_resident_cooldown_seconds, new_resident_cooldown_until,
+		       status, schedulable, platform,
+		       EXISTS (SELECT 1 FROM user_account_placements p
+		               WHERE p.user_id = $2 AND p.account_id = accounts.id
+		                 AND p.status = 'active' AND p.expires_at > $3)
+		FROM accounts WHERE id = $1 AND deleted_at IS NULL`,
+		[]any{targetAccountID, userID, now}, &maxContactUsers, &cooldownSeconds, &cooldownUntil,
+		&targetStatus, &targetSchedulable, &targetPlatform, &userAlreadyResident); err != nil {
 		return false, err
 	}
-	if cooldownUntil.Valid && now.Before(cooldownUntil.Time) {
+	if targetStatus != service.StatusActive || !targetSchedulable || targetPlatform != service.PlatformOpenAI {
 		return false, nil
 	}
 	effectiveMax := config.DefaultMaxContactUsers
@@ -526,7 +685,10 @@ func (r *accountRepository) MigrateOpenAIUserAffinityPlacement(ctx context.Conte
 		[]any{targetAccountID, now, userID}, &activeContacts, &userAlreadyActive); err != nil {
 		return false, err
 	}
-	if activeContacts >= effectiveMax && !userAlreadyActive {
+	if activeContacts >= effectiveMax && !userAlreadyActive && !userAlreadyResident {
+		return false, nil
+	}
+	if cooldownUntil.Valid && now.Before(cooldownUntil.Time) && !userAlreadyActive && !userAlreadyResident {
 		return false, nil
 	}
 	newGeneration := generation + 1
@@ -535,24 +697,30 @@ func (r *accountRepository) MigrateOpenAIUserAffinityPlacement(ctx context.Conte
 			assigned_at = $4, last_active_at = NULL, expires_at = $5,
 			last_moved_at = $4, assignment_reason = $10,
 			predicted_5h_demand = $6, predicted_7d_demand = $7, prediction_version = $8,
-			updated_at = $4
+			provisional_token = $11, updated_at = $4
 		WHERE user_id = $1 AND scope_key = $9`, userID, targetAccountID,
-		newGeneration, now, now.Add(14*24*time.Hour), demand.Demand5H, demand.Demand7D, demand.Version, scopeKey, reason); err != nil {
+		newGeneration, now, now.Add(14*24*time.Hour), demand.Demand5H, demand.Demand7D, demand.Version, scopeKey, reason,
+		provisionalToken); err != nil {
 		return false, err
+	}
+	reservationKind := "migration"
+	if userAlreadyActive || userAlreadyResident {
+		reservationKind = "resident_scope_migration"
 	}
 	if _, err := exec.ExecContext(ctx, `
 		INSERT INTO account_user_contacts
-			(account_id, user_id, reservation_kind, reservation_until, reservation_generation,
+			(account_id, user_id, reservation_kind, reservation_token, reservation_until, reservation_generation,
 			 reentry_config_version, follower_jitter_min_ms, follower_jitter_max_ms, updated_at)
-		VALUES ($1, $2, 'migration', $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (account_id, user_id) DO UPDATE SET
 			reservation_kind = EXCLUDED.reservation_kind,
+			reservation_token = EXCLUDED.reservation_token,
 			reservation_until = EXCLUDED.reservation_until,
 			reservation_generation = EXCLUDED.reservation_generation,
 			reentry_config_version = EXCLUDED.reentry_config_version,
 			follower_jitter_min_ms = EXCLUDED.follower_jitter_min_ms,
 			follower_jitter_max_ms = EXCLUDED.follower_jitter_max_ms,
-			updated_at = EXCLUDED.updated_at`, targetAccountID, userID, now.Add(2*time.Minute),
+			updated_at = EXCLUDED.updated_at`, targetAccountID, userID, reservationKind, provisionalToken, now.Add(2*time.Minute),
 		newGeneration, config.ConfigVersion, config.FollowerJitterMinMS, config.FollowerJitterMaxMS, now); err != nil {
 		return false, err
 	}
@@ -560,10 +728,12 @@ func (r *accountRepository) MigrateOpenAIUserAffinityPlacement(ctx context.Conte
 	if cooldownSeconds.Valid && cooldownSeconds.Int64 > 0 {
 		effectiveCooldown = int(cooldownSeconds.Int64)
 	}
-	if _, err := exec.ExecContext(ctx, `UPDATE accounts SET new_resident_cooldown_until = $2,
-		affinity_config_version = $3, updated_at = $1 WHERE id = $4`, now,
-		now.Add(time.Duration(effectiveCooldown)*time.Second), config.ConfigVersion, targetAccountID); err != nil {
-		return false, err
+	if !userAlreadyActive && !userAlreadyResident {
+		if _, err := exec.ExecContext(ctx, `UPDATE accounts SET new_resident_cooldown_until = $2,
+			affinity_config_version = $3, updated_at = $1 WHERE id = $4`, now,
+			now.Add(time.Duration(effectiveCooldown)*time.Second), config.ConfigVersion, targetAccountID); err != nil {
+			return false, err
+		}
 	}
 	if _, err := exec.ExecContext(ctx, `
 		UPDATE user_account_capacity_incidents SET migration_target_account_id = $5,

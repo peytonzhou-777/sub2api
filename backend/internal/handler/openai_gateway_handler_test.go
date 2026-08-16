@@ -855,7 +855,7 @@ func TestOpenAIResponses_RejectsMessageIDAsPreviousResponseID(t *testing.T) {
 	require.Contains(t, w.Body.String(), "previous_response_id must be a response.id")
 }
 
-func TestOpenAIResponses_RejectsHTTPContinuationPreviousResponseID(t *testing.T) {
+func TestOpenAIResponses_AllowsHTTPContinuationPreviousResponseIDPastValidation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	w := httptest.NewRecorder()
@@ -879,12 +879,22 @@ func TestOpenAIResponses_RejectsHTTPContinuationPreviousResponseID(t *testing.T)
 	h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
 	h.Responses(c)
 
-	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.Contains(t, w.Body.String(), "Responses WebSocket v2")
-	require.Contains(t, w.Body.String(), "previous_response_id")
+	require.NotEqual(t, http.StatusBadRequest, w.Code)
+	require.NotContains(t, w.Body.String(), "Responses WebSocket v2")
 }
 
-func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceDoesNotSuggestPreviousResponseReuse(t *testing.T) {
+func TestOpenAIForwardAttemptBodyStripsMovableContinuationAfterAccountSwitch(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.1","previous_response_id":"resp_A","input":"full context"}`)
+
+	kept := openAIForwardAttemptBodyForPreviousResponse(body, "resp_A", true)
+	require.JSONEq(t, string(body), string(kept))
+
+	stripped := openAIForwardAttemptBodyForPreviousResponse(body, "resp_A", false)
+	require.Empty(t, gjson.GetBytes(stripped, "previous_response_id").String())
+	require.Equal(t, "full context", gjson.GetBytes(stripped, "input").String())
+}
+
+func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceAllowsPreviousResponse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	w := httptest.NewRecorder()
@@ -909,8 +919,8 @@ func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceDoesNotSuggestPreviousRes
 	h.Responses(c)
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.Contains(t, w.Body.String(), "Responses WebSocket v2")
-	require.NotContains(t, w.Body.String(), "reuse previous_response_id")
+	require.Contains(t, w.Body.String(), "previous_response_id")
+	require.NotContains(t, w.Body.String(), "Responses WebSocket v2")
 }
 
 func TestOpenAIResponsesWebSocket_SetsClientTransportWSWhenUpgradeValid(t *testing.T) {

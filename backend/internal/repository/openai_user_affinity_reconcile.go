@@ -38,7 +38,7 @@ func (r *accountRepository) ReconcileOpenAIUserAffinity(ctx context.Context, now
 			WHERE closed_at IS NULL AND touch_expires_at <= $1`},
 		{"capacity_incidents", `UPDATE user_account_capacity_incidents SET status = 'expired',
 			closed_at = $1, close_reason = 'window_expired', updated_at = $1
-			WHERE closed_at IS NULL AND status = 'collecting' AND window_expires_at <= $1`},
+			WHERE closed_at IS NULL AND window_expires_at <= $1`},
 	}
 	counts := make(map[string]int64, len(statements))
 	for _, statement := range statements {

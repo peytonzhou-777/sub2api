@@ -407,6 +407,7 @@ func (s *defaultOpenAIAccountScheduler) Select(
 			}
 		}
 		if selection != nil && selection.Account != nil {
+			s.service.rememberOpenAIUserAffinityPreviousResponseAttempt(ctx, req, selection.Account.ID)
 			decision.Layer = openAIAccountScheduleLayerPreviousResponse
 			decision.StickyPreviousHit = true
 			decision.SelectedAccountID = selection.Account.ID

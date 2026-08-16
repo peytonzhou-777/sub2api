@@ -3,6 +3,9 @@ package service
 import (
 	"context"
 	"strings"
+	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 )
 
 const openAIAccountScheduleLayerUserAffinity = "user_affinity"
@@ -74,6 +77,7 @@ func (s *OpenAIGatewayService) selectLegacyOpenAIUserAffinityPreflight(
 		if selection != nil && selection.Account != nil &&
 			s.isOpenAIAccountTransportCompatible(selection.Account, req.RequiredTransport) &&
 			accountSupportsOpenAICapabilities(selection.Account, req.RequiredCapability, req.RequiredImageCapability) {
+			s.rememberOpenAIUserAffinityPreviousResponseAttempt(ctx, req, selection.Account.ID)
 			decision.Layer = openAIAccountScheduleLayerPreviousResponse
 			decision.StickyPreviousHit = true
 			decision.SelectedAccountID = selection.Account.ID
@@ -103,4 +107,30 @@ func (s *OpenAIGatewayService) selectLegacyOpenAIUserAffinityPreflight(
 		decision.SelectedAccountType = selection.Account.Type
 	}
 	return selection, true, nil
+}
+
+// rememberOpenAIUserAffinityPreviousResponseAttempt 让严格续链成功同样刷新既有居住 TTL。
+func (s *OpenAIGatewayService) rememberOpenAIUserAffinityPreviousResponseAttempt(ctx context.Context, req OpenAIAccountScheduleRequest, accountID int64) {
+	if s == nil || s.settingService == nil || s.accountRepo == nil || accountID <= 0 {
+		return
+	}
+	config, err := s.settingService.GetOpenAIUserAffinityConfig(ctx)
+	if err != nil || !config.Enabled || config.Mode != OpenAIUserAffinityModeEnforce {
+		return
+	}
+	userID, _ := ctx.Value(ctxkey.UserID).(int64)
+	if userID <= 0 {
+		return
+	}
+	store, ok := s.accountRepo.(OpenAIUserAffinityStore)
+	if !ok {
+		return
+	}
+	scopeKey := openAIUserAffinityScopeKey(req.GroupID, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
+	placement, err := store.GetOpenAIUserPlacement(ctx, userID, scopeKey)
+	if err != nil || placement == nil || placement.AccountID == nil || placement.Status != "active" ||
+		*placement.AccountID != accountID || !time.Now().UTC().Before(placement.ExpiresAt) {
+		return
+	}
+	s.rememberOpenAIUserAffinityAttempt(ctx, placement)
 }

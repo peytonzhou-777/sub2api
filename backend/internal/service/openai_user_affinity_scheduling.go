@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/google/uuid"
 )
 
 // selectLegacyOpenAIAccountWithUserAffinity 为 legacy 公共入口统一处理居民恢复和新居民归属。
@@ -63,6 +64,13 @@ func (s *OpenAIGatewayService) classifyOpenAIUserAffinityResidentAdmission(ctx c
 		!s.isOpenAIAccountTransportCompatible(account, requiredTransport) || !s.openAIAccountMatchesSchedulingGroup(account, groupID) ||
 		(requireCompact && openAICompactSupportTier(account) == 0) {
 		return openAIUserAffinityResidentPermanentUnavailable
+	}
+	if !parentHealthyForShadow(account, s.parentAccountLookup(ctx)) ||
+		s.isOpenAIAccountRequestRuntimeBlocked(account, requestedModel) ||
+		s.isOpenAIProxyStreamQuarantined(ctx, account) ||
+		!s.openAIUserAffinityPrivacyAllowed(ctx, groupID, account) ||
+		s.openAIUserAffinityChannelRestricted(ctx, groupID, account, requestedModel, requireCompact) {
+		return openAIUserAffinityResidentTemporaryCapacity
 	}
 	now := time.Now()
 	if available, known := readOpenAIUserAffinityQuotaAvailableRatio(account.Extra, "7d", now); known && available <= 0 {
@@ -141,7 +149,9 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Con
 		}
 		if excludedIDs != nil {
 			if _, excluded := excludedIDs[*placement.AccountID]; excluded {
-				s.failOpenAIUserAffinityReentryLeader(ctx)
+				if s.failOpenAIUserAffinityReentryLeader(ctx) {
+					return s.selectOpenAIUserAffinityPlacement(ctx, groupID, requestedModel, excludedIDs, requireCompact, requiredCapability, requiredImageCapability, requiredTransport)
+				}
 				if runtimeOK {
 					authorizedAt, failureErr := recordOpenAIUserAffinityCapacityFailure(ctx, runtimeStore, userID, *placement.AccountID, placement.Generation, placement.ScopeKey, "resident_account_excluded", config)
 					if failureErr != nil {
@@ -234,7 +244,8 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityMigrationTarget(ctx conte
 		account := accounts[candidate.AccountID]
 		acquired, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
 		if acquireErr == nil && acquired != nil && acquired.Acquired {
-			migrated, migrateErr := runtimeStore.MigrateOpenAIUserAffinityPlacement(ctx, placement.UserID, *placement.AccountID, account.ID, placement.Generation, placement.ScopeKey, migrationReason, config)
+			provisionalToken := uuid.NewString()
+			migrated, migrateErr := runtimeStore.MigrateOpenAIUserAffinityPlacement(ctx, placement.UserID, *placement.AccountID, account.ID, placement.Generation, placement.ScopeKey, provisionalToken, migrationReason, config)
 			if migrateErr != nil {
 				if acquired.ReleaseFunc != nil {
 					acquired.ReleaseFunc()
@@ -245,7 +256,11 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityMigrationTarget(ctx conte
 				moved := *placement
 				moved.AccountID = &account.ID
 				moved.Generation++
-				s.rememberOpenAIUserAffinityAttempt(ctx, &moved)
+				moved.ProvisionalToken = provisionalToken
+				previous := *placement
+				s.rememberOpenAIUserAffinityAttempt(ctx, &moved, &OpenAIUserAffinityProvisionalTransition{
+					Kind: "migration", Token: provisionalToken, TargetPlacement: moved, PreviousPlacement: &previous, Config: config,
+				})
 				result, resultErr := s.newAcquiredSelectionResult(ctx, account, acquired.ReleaseFunc)
 				return result, true, resultErr
 			}
@@ -265,6 +280,15 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityNewResident(ctx context.C
 	accountByID, candidates, err := s.openAIUserAffinityCandidates(ctx, userID, groupID, requestedModel, excludedIDs, requireCompact, requiredCapability, requiredImageCapability, requiredTransport)
 	if err != nil {
 		return nil, true, err
+	}
+	knownQuota := false
+	unknownQuota := false
+	for _, candidate := range candidates {
+		if candidate.Quota5HKnown && candidate.Quota7DKnown {
+			knownQuota = true
+		} else {
+			unknownQuota = true
+		}
 	}
 
 	for len(candidates) > 0 {
@@ -293,6 +317,10 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityNewResident(ctx context.C
 		}
 		candidates = removeOpenAIUserAffinityCandidate(candidates, candidate.AccountID)
 	}
+	if !knownQuota && unknownQuota {
+		// 仅额度快照未知时回退普通调度，用一次真实请求自愈响应头快照。
+		return nil, false, nil
+	}
 	return nil, true, ErrNoAvailableAccounts
 }
 
@@ -314,14 +342,16 @@ func (s *OpenAIGatewayService) openAIUserAffinityCandidates(ctx context.Context,
 				continue
 			}
 		}
-		if !isOpenAICompatibleAccountEligibleForRequest(ctx, account, PlatformOpenAI, requestedModel, requireCompact, requiredCapability) ||
-			!account.SupportsOpenAIImageCapability(requiredImageCapability) ||
-			!s.isOpenAIAccountTransportCompatible(account, requiredTransport) ||
-			!s.openAIAccountMatchesSchedulingGroup(account, groupID) || !parentHealthyForShadow(account, s.parentAccountLookup(ctx)) {
+		fresh := s.resolveFreshSchedulableOpenAIAccount(ctx, account, PlatformOpenAI, requestedModel, requireCompact, requiredCapability)
+		fresh = s.recheckSelectedOpenAIAccountFromDB(ctx, fresh, groupID, PlatformOpenAI, requestedModel, requireCompact, requiredCapability)
+		if fresh == nil || !fresh.SupportsOpenAIImageCapability(requiredImageCapability) ||
+			!s.isOpenAIAccountTransportCompatible(fresh, requiredTransport) ||
+			!s.openAIUserAffinityPrivacyAllowed(ctx, groupID, fresh) ||
+			s.openAIUserAffinityChannelRestricted(ctx, groupID, fresh, requestedModel, requireCompact) {
 			continue
 		}
-		accountByID[account.ID] = account
-		accountIDs = append(accountIDs, account.ID)
+		accountByID[fresh.ID] = fresh
+		accountIDs = append(accountIDs, fresh.ID)
 	}
 	stats, err := statsStore.GetOpenAIUserAffinityCandidateStats(ctx, userID, accountIDs)
 	if err != nil {
@@ -389,13 +419,24 @@ func (s *OpenAIGatewayService) reserveOpenAIUserAffinityPlacement(ctx context.Co
 	placement.Predicted7DDemand = &demand.Demand7D
 	placement.PredictionVersion = demand.Version
 	if runtimeStore, ok := s.accountRepo.(OpenAIUserAffinityRuntimeStore); ok {
+		placement.ProvisionalToken = uuid.NewString()
 		assigned, assignErr := runtimeStore.AssignOpenAIUserAffinityPlacement(ctx, placement, config)
 		if assignErr != nil {
 			slog.Warn("openai_user_affinity.placement_reservation_failed", "user_id", userID, "account_id", accountID, "error", assignErr)
 			return false
 		}
 		if assigned {
-			s.rememberOpenAIUserAffinityAttempt(ctx, &placement)
+			latest, latestErr := store.GetOpenAIUserPlacement(ctx, userID, scopeKey)
+			if latestErr != nil || latest == nil || latest.AccountID == nil || *latest.AccountID != accountID {
+				return false
+			}
+			if latest.ProvisionalToken == placement.ProvisionalToken {
+				s.rememberOpenAIUserAffinityAttempt(ctx, latest, &OpenAIUserAffinityProvisionalTransition{
+					Kind: "assignment", Token: placement.ProvisionalToken, TargetPlacement: *latest, PreviousPlacement: current, Config: config,
+				})
+			} else {
+				s.rememberOpenAIUserAffinityAttempt(ctx, latest)
+			}
 		}
 		return assigned
 	}
@@ -405,4 +446,17 @@ func (s *OpenAIGatewayService) reserveOpenAIUserAffinityPlacement(ctx context.Co
 	}
 	s.rememberOpenAIUserAffinityAttempt(ctx, &placement)
 	return true
+}
+
+func (s *OpenAIGatewayService) openAIUserAffinityPrivacyAllowed(ctx context.Context, groupID *int64, account *Account) bool {
+	if groupID == nil || s.schedulerSnapshot == nil {
+		return true
+	}
+	group, err := s.schedulerSnapshot.GetGroupByID(ctx, *groupID)
+	return err == nil && group != nil && SchedulerPrivacyAllowsSelection(*account, group.RequirePrivacySet)
+}
+
+func (s *OpenAIGatewayService) openAIUserAffinityChannelRestricted(ctx context.Context, groupID *int64, account *Account, requestedModel string, requireCompact bool) bool {
+	return s.needsUpstreamChannelRestrictionCheck(ctx, groupID) &&
+		groupID != nil && s.isUpstreamModelRestrictedByChannel(ctx, *groupID, account, requestedModel, requireCompact)
 }

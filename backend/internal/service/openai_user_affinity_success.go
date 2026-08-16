@@ -14,6 +14,7 @@ import (
 type openAIUserAffinityAcceptedState struct {
 	config    OpenAIUserAffinityConfig
 	createdAt time.Time
+	touched   bool
 }
 
 // RecordOpenAIUserAffinityAccepted 在收到首个非错误上游响应时冻结成功判定配置。
@@ -26,16 +27,15 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinityAccepted(ctx context.Cont
 		return
 	}
 	key := openAIUserAffinitySuccessKey(ctx, accountID, eventKeys...)
-	if config.TouchSuccessMode == OpenAIUserAffinityTouchCompleted {
-		if key != "" {
-			s.openaiAffinity.accepted.Store(key, openAIUserAffinityAcceptedState{config: config, createdAt: time.Now().UTC()})
-			s.pruneOpenAIUserAffinityAcceptedStates()
-		}
+	if key == "" {
 		return
 	}
+	state := openAIUserAffinityAcceptedState{config: config, createdAt: time.Now().UTC()}
 	if config.TouchSuccessMode == OpenAIUserAffinityTouchAccepted {
-		s.touchOpenAIUserAffinity(ctx, accountID, config)
+		state.touched = s.touchOpenAIUserAffinity(ctx, accountID, config)
 	}
+	s.openaiAffinity.accepted.Store(key, state)
+	s.pruneOpenAIUserAffinityAcceptedStates()
 }
 
 // RecordOpenAIUserAffinitySuccess 在响应或 WebSocket turn 成功完成后消费 accepted 事实。
@@ -52,24 +52,37 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinitySuccess(ctx context.Conte
 		return
 	}
 	state, ok := value.(openAIUserAffinityAcceptedState)
-	if !ok || state.config.TouchSuccessMode != OpenAIUserAffinityTouchCompleted {
+	if !ok {
 		return
 	}
 	latest, err := s.settingService.GetOpenAIUserAffinityConfig(ctx)
 	if err != nil || !latest.Enabled || latest.Mode != OpenAIUserAffinityModeEnforce {
 		return
 	}
-	s.touchOpenAIUserAffinity(ctx, accountID, state.config)
+	if !state.touched && !s.touchOpenAIUserAffinity(ctx, accountID, state.config) {
+		return
+	}
+	s.confirmOpenAIUserAffinitySuccess(ctx, accountID)
+	s.activateOpenAIUserAffinityReentry(ctx)
 }
 
-func (s *OpenAIGatewayService) touchOpenAIUserAffinity(ctx context.Context, accountID int64, config OpenAIUserAffinityConfig) {
+// RecordOpenAIUserAffinityFailure 清理失败终态，并让回流 followers 尽快进入 CAS 接棒。
+func (s *OpenAIGatewayService) RecordOpenAIUserAffinityFailure(ctx context.Context, accountID int64, eventKeys ...string) {
+	if s == nil || accountID <= 0 {
+		return
+	}
+	s.openaiAffinity.accepted.Delete(openAIUserAffinitySuccessKey(ctx, accountID, eventKeys...))
+	s.failOpenAIUserAffinityReentryLeader(ctx)
+}
+
+func (s *OpenAIGatewayService) touchOpenAIUserAffinity(ctx context.Context, accountID int64, config OpenAIUserAffinityConfig) bool {
 	userID, ok := ctx.Value(ctxkey.UserID).(int64)
 	if !ok || userID <= 0 {
-		return
+		return false
 	}
 	touchStore, ok := s.accountRepo.(OpenAIUserAffinityTouchStore)
 	if !ok {
-		return
+		return false
 	}
 	generation := int64(0)
 	scopeKey := ""
@@ -79,9 +92,27 @@ func (s *OpenAIGatewayService) touchOpenAIUserAffinity(ctx context.Context, acco
 	}
 	if err := touchStore.TouchOpenAIUserAffinity(ctx, userID, accountID, generation, scopeKey, config); err != nil {
 		slog.Warn("openai_user_affinity.touch_refresh_failed", "user_id", userID, "account_id", accountID, "error", err)
+		return false
+	}
+	return true
+}
+
+func (s *OpenAIGatewayService) confirmOpenAIUserAffinitySuccess(ctx context.Context, accountID int64) {
+	userID, ok := ctx.Value(ctxkey.UserID).(int64)
+	if !ok || userID <= 0 {
 		return
 	}
-	s.activateOpenAIUserAffinityReentry(ctx)
+	attempt, found := s.openAIUserAffinityAttempt(ctx, accountID)
+	if !found {
+		return
+	}
+	store, ok := s.accountRepo.(OpenAIUserAffinitySuccessStore)
+	if !ok {
+		return
+	}
+	if err := store.ConfirmOpenAIUserAffinitySuccess(ctx, userID, accountID, attempt.generation, attempt.scopeKey); err != nil {
+		slog.Warn("openai_user_affinity.success_confirm_failed", "user_id", userID, "account_id", accountID, "error", err)
+	}
 }
 
 func openAIUserAffinitySuccessKey(ctx context.Context, accountID int64, eventKeys ...string) string {
@@ -137,7 +168,9 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinityCapacityFailure(ctx conte
 	if !found {
 		return
 	}
-	s.failOpenAIUserAffinityReentryLeader(ctx)
+	if s.failOpenAIUserAffinityReentryLeader(ctx) {
+		return
+	}
 	reason := "concurrency_unavailable"
 	if len(reasons) > 0 && strings.TrimSpace(reasons[0]) != "" {
 		reason = strings.TrimSpace(reasons[0])
@@ -190,9 +223,6 @@ func recordOpenAIUserAffinityCapacityFailure(ctx context.Context, store OpenAIUs
 
 // getOpenAIUserAffinityResidentAccount 读取居民账号原始状态，避免新流量调度阈值提前抹掉失败类别。
 func (s *OpenAIGatewayService) getOpenAIUserAffinityResidentAccount(ctx context.Context, accountID int64) (*Account, error) {
-	if s.schedulerSnapshot != nil {
-		return s.schedulerSnapshot.GetAccount(ctx, accountID)
-	}
 	account, err := s.accountRepo.GetByID(ctx, accountID)
 	if errors.Is(err, ErrAccountNotFound) {
 		return nil, nil

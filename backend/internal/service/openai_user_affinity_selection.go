@@ -16,6 +16,7 @@ type OpenAIUserAffinityCandidate struct {
 	Quota7DKnown               bool
 	ActiveContactUsers         int
 	UserAlreadyActive          bool
+	UserAlreadyResident        bool
 	MaxContactUsers            int
 	NewResidentCooldownSeconds int
 	CooldownUntil              *time.Time
@@ -52,10 +53,11 @@ func SelectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates 
 		if !candidate.Quota5HKnown || !candidate.Quota7DKnown {
 			continue
 		}
-		if candidate.AccountID <= 0 || candidate.ActiveContactUsers >= effectiveMaxContactUsers(cfg, candidate.MaxContactUsers) && !candidate.UserAlreadyActive {
+		resident := candidate.UserAlreadyActive || candidate.UserAlreadyResident
+		if candidate.AccountID <= 0 || candidate.ActiveContactUsers >= effectiveMaxContactUsers(cfg, candidate.MaxContactUsers) && !resident {
 			continue
 		}
-		if candidate.CooldownUntil != nil && now.Before(*candidate.CooldownUntil) {
+		if candidate.CooldownUntil != nil && now.Before(*candidate.CooldownUntil) && !resident {
 			continue
 		}
 		if candidate.Available5HRatio < demand5H+cfg.QuotaReserveRatio5H || candidate.Available7DRatio < demand7D+cfg.QuotaReserveRatio7D {
@@ -72,6 +74,11 @@ func SelectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates 
 		primary, secondary = secondary, primary
 	}
 	sort.SliceStable(valid, func(i, j int) bool {
+		residentI := valid[i].UserAlreadyActive || valid[i].UserAlreadyResident
+		residentJ := valid[j].UserAlreadyActive || valid[j].UserAlreadyResident
+		if residentI != residentJ {
+			return residentI
+		}
 		pi, pj := primary(valid[i]), primary(valid[j])
 		if !nearlyEqualAffinityRatio(pi, pj, cfg.BestFitCloseToleranceRatio) {
 			return pi < pj

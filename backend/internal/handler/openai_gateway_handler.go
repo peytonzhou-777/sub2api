@@ -342,6 +342,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	}
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
 	previousResponseID := strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String())
+	previousResponseCanMove := true
 	if previousResponseID != "" {
 		previousResponseIDKind := service.ClassifyOpenAIPreviousResponseIDKind(previousResponseID)
 		reqLog = reqLog.With(
@@ -356,11 +357,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "previous_response_id must be a response.id (resp_*), not a message id")
 			return
 		}
-		reqLog.Warn("openai.request_validation_failed",
-			zap.String("reason", "previous_response_id_requires_wsv2"),
-		)
-		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "previous_response_id is only supported on Responses WebSocket v2")
-		return
+		coverage := service.AnalyzeToolCallOutputContextCoverageBytes(body)
+		previousResponseCanMove = !coverage.HasFunctionCallOutput || coverage.ContextCoversAllCallIDs
 	}
 
 	setOpsRequestContext(c, reqModel, reqStream)
@@ -493,7 +491,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			service.OpenAIUpstreamTransportAny,
 			requiredCapability,
 			requireCompact,
-			false,
+			previousResponseCanMove,
 			!imageIntent,
 			requestPlatform,
 		)
@@ -506,6 +504,11 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				zap.Error(openAICompatibleSelectionErrorForLog(err, requestPlatform)),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
+			if errors.Is(err, service.ErrOpenAIPreviousResponseAccountUnavailable) {
+				h.gatewayService.RecordOpenAIContinuationRejected()
+				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "Continuation account is unavailable; retry when the original account recovers", streamStarted)
+				return
+			}
 			if len(failedAccountIDs) == 0 {
 				if legacyCompact && errors.Is(err, service.ErrNoAvailableCompactAccounts) {
 					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
@@ -575,6 +578,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		// 从不可变的 canonical forwardBody 派生本次尝试 body 并整块剔除上游私有的加密
 		// reasoning item（含耦合的 id/summary），避免非透传上游 400 拒绝 Kiro reasoning 形态。
 		attemptBody := h.deriveOpenAIForwardAttemptBody(reqLog, forwardBody, account, &passthroughFailoverState)
+		if previousResponseID != "" && !scheduleDecision.StickyPreviousHit {
+			attemptBody = openAIForwardAttemptBodyForPreviousResponse(attemptBody, previousResponseID, scheduleDecision.StickyPreviousHit)
+			reqLog.Debug("openai.previous_response_id_stripped_for_account_switch", zap.Int64("account_id", account.ID))
+		}
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
 				if accountReleaseFunc != nil {
@@ -608,6 +615,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					if failoverErr.StatusCode == http.StatusTooManyRequests {
+						h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(c.Request.Context(), account.ID, "upstream_rpm_or_quota")
+					}
 					if failoverClientGone(c) {
 						reqLog.Info("openai.failover_aborted_client_disconnected",
 							zap.Int64("account_id", account.ID),
@@ -705,7 +715,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				return
 			}
 		}
-		h.gatewayService.RecordOpenAIUserAffinitySuccess(c.Request.Context(), account.ID)
+		if openAIForwardSucceededForScheduling(result) {
+			h.gatewayService.RecordOpenAIUserAffinitySuccess(c.Request.Context(), account.ID)
+		}
 		if result != nil {
 			// 排除 spark 影子:其 codex_* 仅由 QueryUsage(/wham/usage bengalfox)更新(外审第7轮 P1)。
 			if account.Type == service.AccountTypeOAuth && !account.IsShadow() {
@@ -762,6 +774,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		)
 		return
 	}
+}
+
+func openAIForwardAttemptBodyForPreviousResponse(body []byte, previousResponseID string, stickyPreviousHit bool) []byte {
+	if strings.TrimSpace(previousResponseID) == "" || stickyPreviousHit {
+		return body
+	}
+	return service.RemovePreviousResponseIDFromBody(body)
 }
 
 func isOpenAILegacyCompactPath(c *gin.Context) bool {
@@ -1157,6 +1176,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					if failoverErr.StatusCode == http.StatusTooManyRequests {
+						h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(c.Request.Context(), account.ID, "upstream_rpm_or_quota")
+					}
 					if failoverClientGone(c) {
 						reqLog.Info("openai_messages.failover_aborted_client_disconnected",
 							zap.Int64("account_id", account.ID),
@@ -1374,7 +1396,7 @@ func (h *OpenAIGatewayHandler) validateFunctionCallOutputRequest(c *gin.Context,
 		reqLog.Warn("openai.request_validation_failed",
 			zap.String("reason", "function_call_output_missing_call_id"),
 		)
-		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "function_call_output requires call_id on HTTP requests; continuation via previous_response_id is only supported on Responses WebSocket v2")
+		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "function_call_output requires call_id and either previous_response_id or complete tool-call context")
 		return false
 	}
 	if validation.HasItemReferenceForAllCallIDs {
@@ -1384,7 +1406,7 @@ func (h *OpenAIGatewayHandler) validateFunctionCallOutputRequest(c *gin.Context,
 	reqLog.Warn("openai.request_validation_failed",
 		zap.String("reason", "function_call_output_missing_item_reference"),
 	)
-	h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "function_call_output requires item_reference ids matching each call_id on HTTP requests; continuation via previous_response_id is only supported on Responses WebSocket v2")
+	h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "function_call_output requires previous_response_id or item_reference ids matching each call_id")
 	return false
 }
 
@@ -1527,7 +1549,6 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlot(
 	)
 	if err != nil {
 		reqLog.Warn("openai.account_slot_quick_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-		h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID)
 		h.handleConcurrencyError(c, err, "account", *streamStarted)
 		return nil, openAISlotAcquireFailed
 	}
@@ -1582,7 +1603,10 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlot(
 	)
 	if err != nil {
 		reqLog.Warn("openai.account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-		h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID)
+		var concurrencyErr *ConcurrencyError
+		if errors.As(err, &concurrencyErr) {
+			h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID)
+		}
 		h.handleConcurrencyError(c, err, "account", *streamStarted)
 		return nil, openAISlotAcquireFailed
 	}
@@ -2191,6 +2215,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				turnUsageFields := turnMapping.ToUsageFields(turnRequestedModel, turnUpstreamModel)
 				turnIndex := int64(turn)
 				h.recordCyberPolicyIfMarked(c, apiKey, account, subscription, turnRequestedModel, turnErr != nil, cyberBlockKey, turnUsageFields, requestPayloadHash, &turnIndex)
+				if turnErr != nil || !openAIForwardSucceededForScheduling(result) {
+					h.gatewayService.RecordOpenAIUserAffinityFailure(ctx, account.ID, "ws-turn-"+strconv.Itoa(turn))
+				}
 				if service.GetOpsCyberPolicy(c) != nil {
 					cyberBlockedThisConn = true
 				}
@@ -2212,7 +2239,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if result == nil {
 					return
 				}
-				if turnErr == nil {
+				if turnErr == nil && openAIForwardSucceededForScheduling(result) {
 					h.gatewayService.RecordOpenAIUserAffinitySuccess(ctx, account.ID, "ws-turn-"+strconv.Itoa(turn))
 				}
 				result.BillingModel = openAIWSTurnBillingModel(result, turnMapping, turnRequestedModel, turnUpstreamModel)

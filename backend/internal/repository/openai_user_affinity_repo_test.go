@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,12 +31,13 @@ func TestGetOpenAIUserAffinityCandidateStatsMarksAlreadyActiveUser(t *testing.T)
 		WithArgs(int64(11), int64(12), int64(42)).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "max_contact_users", "new_resident_cooldown_seconds",
-			"new_resident_cooldown_until", "active_contact_users", "user_already_active",
-		}).AddRow(11, 10, 300, nil, 10, true).AddRow(12, 10, 300, nil, 4, false))
+			"new_resident_cooldown_until", "active_contact_users", "user_already_active", "user_already_resident",
+		}).AddRow(11, 10, 300, nil, 10, true, true).AddRow(12, 10, 300, nil, 4, false, false))
 
 	stats, err := repo.GetOpenAIUserAffinityCandidateStats(context.Background(), 42, []int64{11, 12})
 	require.NoError(t, err)
 	require.True(t, stats[11].UserAlreadyActive)
+	require.True(t, stats[11].UserAlreadyResident)
 	require.False(t, stats[12].UserAlreadyActive)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -47,13 +49,14 @@ func TestAssignOpenAIUserAffinityPlacementAllowsAlreadyCountedUserAtCapacity(t *
 	placement := service.OpenAIUserPlacement{
 		UserID: 42, ScopeKey: "openai:v1:group:1:lane:general", AccountID: &accountID,
 		Generation: 1, ExpiresAt: now.Add(14 * 24 * time.Hour), AssignmentReason: "new_resident",
+		ProvisionalToken: "assignment-token",
 	}
 	config := service.DefaultOpenAIUserAffinityConfig()
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(`(?s)SELECT max_contact_users.*FROM accounts.*FOR UPDATE`).
-		WithArgs(accountID).
-		WillReturnRows(sqlmock.NewRows([]string{"max_contact_users", "new_resident_cooldown_seconds", "new_resident_cooldown_until"}).AddRow(10, 300, nil))
+		WithArgs(accountID, placement.UserID, sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"max_contact_users", "new_resident_cooldown_seconds", "new_resident_cooldown_until", "status", "schedulable", "platform", "user_already_resident"}).AddRow(10, 300, nil, service.StatusActive, true, service.PlatformOpenAI, false))
 	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\), COALESCE\(BOOL_OR\(user_id = \$3\), FALSE\).*account_user_contacts`).
 		WithArgs(accountID, sqlmock.AnyArg(), placement.UserID).
 		WillReturnRows(sqlmock.NewRows([]string{"count", "user_already_active"}).AddRow(10, true))
@@ -62,7 +65,6 @@ func TestAssignOpenAIUserAffinityPlacementAllowsAlreadyCountedUserAtCapacity(t *
 		WillReturnRows(sqlmock.NewRows([]string{"account_id", "status", "expires_at"}))
 	mock.ExpectExec(`(?s)INSERT INTO user_account_placements`).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(`(?s)INSERT INTO account_user_contacts`).WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec(`(?s)UPDATE accounts SET new_resident_cooldown_until`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`(?s)INSERT INTO user_account_placement_events`).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -84,31 +86,135 @@ func TestMigrateOpenAIUserAffinityPlacementUsesStableLockOrderAndAllowsExistingC
 	mock.ExpectQuery(`(?s)SELECT id FROM accounts WHERE id IN \(\$1, \$2\) ORDER BY id FOR UPDATE`).
 		WithArgs(int64(11), int64(12)).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(11).AddRow(12))
-	mock.ExpectQuery(`(?s)SELECT account_id, generation, status FROM user_account_placements.*FOR UPDATE`).
+	mock.ExpectQuery(`(?s)SELECT account_id, generation, status, provisional_token FROM user_account_placements.*FOR UPDATE`).
 		WithArgs(int64(42), scopeKey).
-		WillReturnRows(sqlmock.NewRows([]string{"account_id", "generation", "status"}).AddRow(11, 3, "active"))
+		WillReturnRows(sqlmock.NewRows([]string{"account_id", "generation", "status", "provisional_token"}).AddRow(11, 3, "active", nil))
 	mock.ExpectQuery(`(?s)SELECT max_contact_users.*FROM accounts WHERE id = \$1`).
-		WithArgs(int64(12)).
-		WillReturnRows(sqlmock.NewRows([]string{"max_contact_users", "new_resident_cooldown_seconds", "new_resident_cooldown_until"}).AddRow(10, 300, nil))
+		WithArgs(int64(12), int64(42), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"max_contact_users", "new_resident_cooldown_seconds", "new_resident_cooldown_until", "status", "schedulable", "platform", "user_already_resident"}).AddRow(10, 300, nil, service.StatusActive, true, service.PlatformOpenAI, false))
 	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\), COALESCE\(BOOL_OR\(user_id = \$3\), FALSE\).*account_user_contacts`).
 		WithArgs(int64(12), sqlmock.AnyArg(), int64(42)).
 		WillReturnRows(sqlmock.NewRows([]string{"count", "user_already_active"}).AddRow(10, true))
 	mock.ExpectExec(`(?s)UPDATE user_account_placements SET account_id`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`(?s)INSERT INTO account_user_contacts`).WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec(`(?s)UPDATE accounts SET new_resident_cooldown_until`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`(?s)UPDATE user_account_capacity_incidents SET migration_target_account_id`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`(?s)INSERT INTO user_account_placement_events`).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	migrated, err := repo.MigrateOpenAIUserAffinityPlacement(
-		context.Background(), 42, 11, 12, 3, scopeKey, "capacity_retry_threshold", config,
+		context.Background(), 42, 11, 12, 3, scopeKey, "provisional-token", "capacity_retry_threshold", config,
 	)
 	require.NoError(t, err)
 	require.True(t, migrated)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestTouchOpenAIUserAffinityClosesCurrentGenerationIncidentAfterRecovery(t *testing.T) {
+func TestMigrateOpenAIUserAffinityPlacementRejectsDisabledTargetAccount(t *testing.T) {
+	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
+	config := service.DefaultOpenAIUserAffinityConfig()
+	scopeKey := "openai:v1:group:1:lane:general"
+
+	mock.ExpectQuery(`(?s)WITH per_user AS.*percentile_cont\(\$2\).*FROM population`).
+		WithArgs(int64(42), config.ColdStartDemandQuantile).
+		WillReturnRows(sqlmock.NewRows([]string{"tokens_5h", "tokens_7d", "p5h", "p7d"}).AddRow(100, 200, 1000, 2000))
+	mock.ExpectBegin()
+	mock.ExpectQuery(`(?s)SELECT id FROM accounts WHERE id IN \(\$1, \$2\) ORDER BY id FOR UPDATE`).
+		WithArgs(int64(11), int64(12)).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(11).AddRow(12))
+	mock.ExpectQuery(`(?s)SELECT account_id, generation, status, provisional_token FROM user_account_placements.*FOR UPDATE`).
+		WithArgs(int64(42), scopeKey).
+		WillReturnRows(sqlmock.NewRows([]string{"account_id", "generation", "status", "provisional_token"}).AddRow(11, 3, "active", nil))
+	mock.ExpectQuery(`(?s)SELECT max_contact_users.*FROM accounts WHERE id = \$1`).
+		WithArgs(int64(12), int64(42), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"max_contact_users", "new_resident_cooldown_seconds", "new_resident_cooldown_until", "status", "schedulable", "platform", "user_already_resident"}).
+			AddRow(10, 300, nil, service.StatusDisabled, false, service.PlatformOpenAI, false))
+	mock.ExpectRollback()
+
+	migrated, err := repo.MigrateOpenAIUserAffinityPlacement(
+		context.Background(), 42, 11, 12, 3, scopeKey, "provisional-token", "capacity_retry_threshold", config,
+	)
+	require.NoError(t, err)
+	require.False(t, migrated)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMigrateOpenAIUserAffinityPlacementRejectsProvisionalSourcePlacement(t *testing.T) {
+	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
+	config := service.DefaultOpenAIUserAffinityConfig()
+	scopeKey := "openai:v1:group:1:lane:general"
+
+	mock.ExpectQuery(`(?s)WITH per_user AS.*percentile_cont\(\$2\).*FROM population`).
+		WithArgs(int64(42), config.ColdStartDemandQuantile).
+		WillReturnRows(sqlmock.NewRows([]string{"tokens_5h", "tokens_7d", "p5h", "p7d"}).AddRow(100, 200, 1000, 2000))
+	mock.ExpectBegin()
+	mock.ExpectQuery(`(?s)SELECT id FROM accounts WHERE id IN \(\$1, \$2\) ORDER BY id FOR UPDATE`).
+		WithArgs(int64(11), int64(12)).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(11).AddRow(12))
+	mock.ExpectQuery(`(?s)SELECT account_id, generation, status, provisional_token FROM user_account_placements.*FOR UPDATE`).
+		WithArgs(int64(42), scopeKey).
+		WillReturnRows(sqlmock.NewRows([]string{"account_id", "generation", "status", "provisional_token"}).AddRow(11, 3, "active", "pending-request"))
+	mock.ExpectRollback()
+
+	migrated, err := repo.MigrateOpenAIUserAffinityPlacement(
+		context.Background(), 42, 11, 12, 3, scopeKey, "migration-token", "capacity_retry_threshold", config,
+	)
+	require.NoError(t, err)
+	require.False(t, migrated)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestAssignOpenAIUserAffinityPlacementRejectsDisabledAuthoritativeAccount(t *testing.T) {
+	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
+	accountID := int64(11)
+	placement := service.OpenAIUserPlacement{
+		UserID: 42, ScopeKey: "openai:v1:group:1:lane:general", AccountID: &accountID,
+		Generation: 1, ExpiresAt: time.Now().UTC().Add(14 * 24 * time.Hour),
+		ProvisionalToken: "assignment-token",
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`(?s)SELECT max_contact_users.*FROM accounts.*FOR UPDATE`).
+		WithArgs(accountID, placement.UserID, sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"max_contact_users", "new_resident_cooldown_seconds", "new_resident_cooldown_until", "status", "schedulable", "platform", "user_already_resident"}).
+			AddRow(10, 300, nil, service.StatusDisabled, false, service.PlatformOpenAI, false))
+	mock.ExpectRollback()
+
+	assigned, err := repo.AssignOpenAIUserAffinityPlacement(context.Background(), placement, service.DefaultOpenAIUserAffinityConfig())
+	require.NoError(t, err)
+	require.False(t, assigned)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRollbackOpenAIUserAffinityPlacementUsesProvisionalTokenCAS(t *testing.T) {
+	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
+	accountID := int64(11)
+	transition := service.OpenAIUserAffinityProvisionalTransition{
+		Kind:  "assignment",
+		Token: "request-token",
+		TargetPlacement: service.OpenAIUserPlacement{
+			UserID: 42, ScopeKey: "openai:v1:group:1:lane:general", AccountID: &accountID, Generation: 4,
+		},
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`(?s)UPDATE user_account_placements SET status = 'expired'.*provisional_token = \$6`).
+		WithArgs(int64(42), transition.TargetPlacement.ScopeKey, &accountID, sqlmock.AnyArg(), int64(4), transition.Token).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`(?s)SELECT reservation_kind FROM account_user_contacts.*FOR UPDATE`).
+		WithArgs(accountID, int64(42), transition.Token).
+		WillReturnRows(sqlmock.NewRows([]string{"reservation_kind"}).AddRow("new_resident"))
+	mock.ExpectExec(`(?s)UPDATE account_user_contacts SET reservation_kind = NULL`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`(?s)UPDATE accounts SET new_resident_cooldown_until = NULL`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`(?s)INSERT INTO user_account_placement_events`).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	rolledBack, err := repo.RollbackOpenAIUserAffinityPlacement(context.Background(), transition, service.DefaultOpenAIUserAffinityConfig())
+	require.NoError(t, err)
+	require.True(t, rolledBack)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestTouchAndConfirmOpenAIUserAffinitySeparateAcceptedFromRecovery(t *testing.T) {
 	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
 	config := service.DefaultOpenAIUserAffinityConfig()
 	scopeKey := "openai:v1:group:1:lane:general"
@@ -124,11 +230,55 @@ func TestTouchOpenAIUserAffinityClosesCurrentGenerationIncidentAfterRecovery(t *
 	mock.ExpectExec(`(?s)UPDATE account_user_contact_periods SET last_touched_at`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`(?s)INSERT INTO account_user_contacts`).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(`(?s)UPDATE user_account_placements SET last_active_at`).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`(?s)UPDATE user_account_capacity_incidents SET status = 'closed'.*resident_recovered`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
+	mock.ExpectExec(`(?s)UPDATE user_account_capacity_incidents SET status = 'closed'.*resident_recovered`).WillReturnResult(sqlmock.NewResult(0, 1))
 
 	err := repo.TouchOpenAIUserAffinity(context.Background(), 42, 11, 3, scopeKey, config)
 	require.NoError(t, err)
+	err = repo.ConfirmOpenAIUserAffinitySuccess(context.Background(), 42, 11, 3, scopeKey)
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRecordOpenAIUserAffinityCapacityFailureExtendsAuthorizedWindow(t *testing.T) {
+	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
+	config := service.DefaultOpenAIUserAffinityConfig()
+	config.CapacityFailureMigrationThreshold = 2
+	scopeKey := "openai:v1:group:1:lane:general"
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`(?s)SELECT capacity_failure_migration_threshold.*FROM accounts WHERE id = \$1`).
+		WithArgs(int64(11)).
+		WillReturnRows(sqlmock.NewRows([]string{"capacity_failure_migration_threshold", "capacity_failure_window_seconds"}).AddRow(nil, nil))
+	mock.ExpectQuery(`(?s)SELECT account_id, generation, status FROM user_account_placements.*FOR UPDATE`).
+		WithArgs(int64(42), scopeKey).
+		WillReturnRows(sqlmock.NewRows([]string{"account_id", "generation", "status"}).AddRow(11, 3, "active"))
+	mock.ExpectQuery(`(?s)SELECT id, failure_count, migration_authorized_at.*window_expires_at > \$5`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "failure_count", "migration_authorized_at"}).AddRow(91, 1, nil))
+	mock.ExpectQuery(`(?s)INSERT INTO user_account_capacity_failures.*RETURNING id`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(101))
+	mock.ExpectExec(`(?s)UPDATE user_account_capacity_incidents SET failure_count.*GREATEST\(window_expires_at, \$7\)`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	authorizedAt, err := repo.RecordOpenAIUserAffinityCapacityFailure(
+		context.Background(), 42, 11, 3, scopeKey, strings.Repeat("a", 64), "concurrency_unavailable", config,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, authorizedAt)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetOpenAIUserAffinityMigrationAuthorizedAtIgnoresExpiredWindow(t *testing.T) {
+	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
+	scopeKey := "openai:v1:group:1:lane:general"
+	mock.ExpectQuery(`(?s)SELECT migration_authorized_at.*window_expires_at > NOW\(\)`).
+		WithArgs(int64(42), scopeKey, int64(11), int64(3)).
+		WillReturnRows(sqlmock.NewRows([]string{"migration_authorized_at"}))
+
+	authorizedAt, err := repo.GetOpenAIUserAffinityMigrationAuthorizedAt(context.Background(), 42, 11, 3, scopeKey)
+	require.NoError(t, err)
+	require.Nil(t, authorizedAt)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

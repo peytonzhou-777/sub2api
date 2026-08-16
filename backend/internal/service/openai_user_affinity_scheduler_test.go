@@ -15,6 +15,19 @@ type schedulerAffinityAccountRepo struct {
 	schedulerTestOpenAIAccountRepo
 	OpenAIUserAffinityRuntimeStore
 	placement *OpenAIUserPlacement
+	stats     map[int64]OpenAIUserAffinityCandidate
+}
+
+func (r *schedulerAffinityAccountRepo) GetOpenAIUserAffinityCandidateStats(_ context.Context, _ int64, accountIDs []int64) (map[int64]OpenAIUserAffinityCandidate, error) {
+	result := make(map[int64]OpenAIUserAffinityCandidate, len(accountIDs))
+	for _, accountID := range accountIDs {
+		result[accountID] = r.stats[accountID]
+	}
+	return result, nil
+}
+
+func (r *schedulerAffinityAccountRepo) PredictOpenAIUserAffinityDemand(context.Context, int64, float64) (OpenAIUserAffinityDemand, error) {
+	return OpenAIUserAffinityDemand{Demand5H: 0.05, Demand7D: 0.05, Version: "test"}, nil
 }
 
 func (r *schedulerAffinityAccountRepo) GetOpenAIUserPlacement(_ context.Context, userID int64, scopeKey string) (*OpenAIUserPlacement, error) {
@@ -138,4 +151,59 @@ func TestOpenAIGatewayService_UserAffinityEnforceRejectsMissingIdentity(t *testi
 	require.ErrorIs(t, err, ErrNoAvailableAccounts)
 	require.True(t, found)
 	require.Nil(t, selection)
+}
+
+func TestOpenAIGatewayService_UserAffinityUnknownQuotaFallsBackForSnapshotHealing(t *testing.T) {
+	accountID := int64(36121)
+	repo := &schedulerAffinityAccountRepo{
+		schedulerTestOpenAIAccountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{
+			{ID: accountID, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1},
+		}},
+		stats: map[int64]OpenAIUserAffinityCandidate{accountID: {AccountID: accountID}},
+	}
+	svc := &OpenAIGatewayService{accountRepo: repo, cfg: &config.Config{RunMode: config.RunModeSimple}}
+	ctx := context.WithValue(context.Background(), ctxkey.UserID, int64(42))
+	ctx = context.WithValue(ctx, ctxkey.RequestID, "affinity-unknown-quota")
+
+	selection, handled, err := svc.selectOpenAIUserAffinityNewResident(
+		ctx, nil, "gpt-5.1", nil, false, "", "", OpenAIUpstreamTransportHTTPSSE,
+		openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE),
+		DefaultOpenAIUserAffinityConfig(), time.Now().UTC(),
+	)
+	require.NoError(t, err)
+	require.False(t, handled)
+	require.Nil(t, selection)
+}
+
+func TestOpenAIUserAffinityPreviousResponseAttemptRefreshesMatchingPlacement(t *testing.T) {
+	groupID := int64(11003)
+	accountID := int64(36131)
+	scopeKey := openAIUserAffinityScopeKey(&groupID, false, OpenAIEndpointCapabilityResponses, "", OpenAIUpstreamTransportHTTPSSE)
+	now := time.Now().UTC()
+	repo := &schedulerAffinityAccountRepo{
+		placement: &OpenAIUserPlacement{
+			UserID: 42, ScopeKey: scopeKey, AccountID: &accountID, Generation: 5,
+			Status: "active", AssignedAt: now, ExpiresAt: now.Add(time.Hour),
+		},
+	}
+	configValue := DefaultOpenAIUserAffinityConfig()
+	configValue.Enabled = true
+	configValue.Mode = OpenAIUserAffinityModeEnforce
+	raw, err := json.Marshal(configValue)
+	require.NoError(t, err)
+	svc := &OpenAIGatewayService{
+		accountRepo:    repo,
+		settingService: NewSettingService(&openAIUserAffinitySuccessSettingRepo{value: string(raw)}, &config.Config{}),
+	}
+	ctx := context.WithValue(context.Background(), ctxkey.UserID, int64(42))
+	ctx = context.WithValue(ctx, ctxkey.RequestID, "previous-response-affinity-touch")
+	req := newOpenAIUserAffinityScheduleRequest(
+		&groupID, PlatformOpenAI, "resp_1", "gpt-5.1", OpenAIUpstreamTransportHTTPSSE,
+		OpenAIEndpointCapabilityResponses, "", false, nil,
+	)
+
+	svc.rememberOpenAIUserAffinityPreviousResponseAttempt(ctx, req, accountID)
+	attempt, found := svc.openAIUserAffinityAttempt(ctx, accountID)
+	require.True(t, found)
+	require.Equal(t, int64(5), attempt.generation)
 }

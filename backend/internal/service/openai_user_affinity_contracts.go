@@ -26,9 +26,11 @@ type OpenAIUserAffinityReconciler interface {
 type OpenAIUserAffinityRuntimeStore interface {
 	AssignOpenAIUserAffinityPlacement(ctx context.Context, placement OpenAIUserPlacement, config OpenAIUserAffinityConfig) (bool, error)
 	OpenAIUserAffinityTouchStore
+	ConfirmOpenAIUserAffinitySuccess(ctx context.Context, userID, accountID, generation int64, scopeKey string) error
+	RollbackOpenAIUserAffinityPlacement(ctx context.Context, transition OpenAIUserAffinityProvisionalTransition, config OpenAIUserAffinityConfig) (bool, error)
 	RecordOpenAIUserAffinityCapacityFailure(ctx context.Context, userID, accountID, generation int64, scopeKey, requestIDHash, reason string, config OpenAIUserAffinityConfig) (*time.Time, error)
 	GetOpenAIUserAffinityMigrationAuthorizedAt(ctx context.Context, userID, accountID, generation int64, scopeKey string) (*time.Time, error)
-	MigrateOpenAIUserAffinityPlacement(ctx context.Context, userID, sourceAccountID, targetAccountID, generation int64, scopeKey, reason string, config OpenAIUserAffinityConfig) (bool, error)
+	MigrateOpenAIUserAffinityPlacement(ctx context.Context, userID, sourceAccountID, targetAccountID, generation int64, scopeKey, provisionalToken, reason string, config OpenAIUserAffinityConfig) (bool, error)
 	BeginOpenAIUserAffinityReentry(ctx context.Context, input OpenAIUserAffinityReentryBegin) (*OpenAIUserAffinityReentryAdmission, error)
 	ActivateOpenAIUserAffinityReentry(ctx context.Context, input OpenAIUserAffinityReentryTransition) (bool, error)
 	FailOpenAIUserAffinityReentryLeader(ctx context.Context, input OpenAIUserAffinityReentryTransition) (bool, error)
@@ -40,6 +42,16 @@ type OpenAIUserAffinityRuntimeStore interface {
 // OpenAIUserAffinityTouchStore 只承载成功触达事实，便于协议成功钩子独立验证。
 type OpenAIUserAffinityTouchStore interface {
 	TouchOpenAIUserAffinity(ctx context.Context, userID, accountID, generation int64, scopeKey string, config OpenAIUserAffinityConfig) error
+}
+
+// OpenAIUserAffinitySuccessStore 将最终成功与 accepted 触达刷新分离。
+type OpenAIUserAffinitySuccessStore interface {
+	ConfirmOpenAIUserAffinitySuccess(ctx context.Context, userID, accountID, generation int64, scopeKey string) error
+}
+
+// OpenAIUserAffinityProvisionalStore 负责失败请求的归属 CAS 回滚。
+type OpenAIUserAffinityProvisionalStore interface {
+	RollbackOpenAIUserAffinityPlacement(ctx context.Context, transition OpenAIUserAffinityProvisionalTransition, config OpenAIUserAffinityConfig) (bool, error)
 }
 
 // OpenAIUserAffinityReentryQueue 只保存跨实例协调元数据，不保存请求正文或业务响应。
@@ -126,9 +138,22 @@ type OpenAIUserPlacement struct {
 	AssignmentReason          string     `json:"assignment_reason"`
 	ResetExcludeSourceAccount *bool      `json:"reset_exclude_source_account"`
 	ResetSourceAccountID      *int64     `json:"reset_source_account_id"`
+	ResetAt                   *time.Time `json:"reset_at"`
+	ResetByAdminID            *int64     `json:"reset_by_admin_id"`
+	ResetReason               string     `json:"reset_reason"`
 	Predicted5HDemand         *float64   `json:"predicted_5h_demand"`
 	Predicted7DDemand         *float64   `json:"predicted_7d_demand"`
 	PredictionVersion         string     `json:"prediction_version"`
+	ProvisionalToken          string     `json:"-"`
+}
+
+// OpenAIUserAffinityProvisionalTransition 冻结归属写入前后的状态，供失败路径恢复。
+type OpenAIUserAffinityProvisionalTransition struct {
+	Kind              string
+	Token             string
+	TargetPlacement   OpenAIUserPlacement
+	PreviousPlacement *OpenAIUserPlacement
+	Config            OpenAIUserAffinityConfig
 }
 
 // OpenAIUserPlacementEvent 是管理员反查和搬迁审计共用的事件投影。

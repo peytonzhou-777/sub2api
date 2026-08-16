@@ -22,9 +22,25 @@ func (r *openAIUserAffinitySuccessSettingRepo) GetValue(context.Context, string)
 
 type openAIUserAffinitySuccessTouchRepo struct {
 	AccountRepository
-	mu      sync.Mutex
-	touches []OpenAIUserAffinityConfig
-	touchCh chan struct{}
+	mu        sync.Mutex
+	touches   []OpenAIUserAffinityConfig
+	confirms  int
+	rollbacks int
+	touchCh   chan struct{}
+}
+
+func (r *openAIUserAffinitySuccessTouchRepo) ConfirmOpenAIUserAffinitySuccess(context.Context, int64, int64, int64, string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.confirms++
+	return nil
+}
+
+func (r *openAIUserAffinitySuccessTouchRepo) RollbackOpenAIUserAffinityPlacement(context.Context, OpenAIUserAffinityProvisionalTransition, OpenAIUserAffinityConfig) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.rollbacks++
+	return true, nil
 }
 
 func (r *openAIUserAffinitySuccessTouchRepo) TouchOpenAIUserAffinity(_ context.Context, _, _, _ int64, _ string, config OpenAIUserAffinityConfig) error {
@@ -44,6 +60,12 @@ func (r *openAIUserAffinitySuccessTouchRepo) touchCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.touches)
+}
+
+func (r *openAIUserAffinitySuccessTouchRepo) confirmCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.confirms
 }
 
 func newOpenAIUserAffinitySuccessTestService(t *testing.T, mode string) (*OpenAIGatewayService, *openAIUserAffinitySuccessTouchRepo) {
@@ -75,6 +97,22 @@ func TestOpenAIUserAffinityAcceptedModeTouchesImmediately(t *testing.T) {
 	require.Equal(t, 1, repo.touchCount())
 	service.RecordOpenAIUserAffinitySuccess(ctx, 9)
 	require.Equal(t, 1, repo.touchCount(), "完成钩子不得重复刷新 accepted 请求")
+}
+
+func TestOpenAIUserAffinityAcceptedDoesNotConfirmIncidentUntilTerminalSuccess(t *testing.T) {
+	service, repo := newOpenAIUserAffinitySuccessTestService(t, OpenAIUserAffinityTouchAccepted)
+	ctx := openAIUserAffinitySuccessTestContext("req-accepted-terminal")
+	accountID := int64(9)
+	service.rememberOpenAIUserAffinityAttempt(ctx, &OpenAIUserPlacement{
+		UserID: 42, ScopeKey: "openai:v1:group:1:lane:general", AccountID: &accountID, Generation: 3,
+	})
+
+	service.RecordOpenAIUserAffinityAccepted(ctx, accountID)
+	require.Equal(t, 1, repo.touchCount())
+	require.Zero(t, repo.confirmCount())
+
+	service.RecordOpenAIUserAffinitySuccess(ctx, accountID)
+	require.Equal(t, 1, repo.confirmCount())
 }
 
 func TestOpenAIUserAffinityCompletedModeRequiresAcceptedFact(t *testing.T) {
@@ -138,4 +176,24 @@ func TestOpenAIUserAffinityAttemptFailureClearsHTTPAcceptedState(t *testing.T) {
 	service.failOpenAIUserAffinityReentryLeader(ctx)
 	_, exists := service.openaiAffinity.accepted.Load(acceptedKey)
 	require.False(t, exists)
+}
+
+func TestOpenAIUserAffinityAttemptFailureRollsBackProvisionalPlacement(t *testing.T) {
+	service, repo := newOpenAIUserAffinitySuccessTestService(t, OpenAIUserAffinityTouchCompleted)
+	ctx := openAIUserAffinitySuccessTestContext("req-provisional-failed")
+	accountID := int64(9)
+	placement := OpenAIUserPlacement{
+		UserID: 42, ScopeKey: "openai:v1:group:1:lane:general", AccountID: &accountID, Generation: 3,
+	}
+	service.openaiAffinity.requests.Store(openAIUserAffinityRequestKey(ctx), &openAIUserAffinityRequestState{
+		accountID: accountID, scopeKey: placement.ScopeKey, generation: placement.Generation,
+		provisional: &OpenAIUserAffinityProvisionalTransition{
+			Kind: "assignment", Token: "request-token", TargetPlacement: placement,
+		},
+	})
+
+	require.True(t, service.failOpenAIUserAffinityReentryLeader(ctx))
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	require.Equal(t, 1, repo.rollbacks)
 }

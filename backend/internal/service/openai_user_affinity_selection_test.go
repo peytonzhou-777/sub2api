@@ -48,6 +48,12 @@ func TestClassifyOpenAIUserAffinityResidentAdmission(t *testing.T) {
 	if got := svc.classifyOpenAIUserAffinityResidentAdmission(context.Background(), account, nil, "", false, "", "", OpenAIUpstreamTransportHTTPSSE); got != openAIUserAffinityResidentQuota7DExhausted {
 		t.Fatalf("7d exhausted admission=%s, want direct migration", got)
 	}
+
+	account.Extra = cloneMapAny(baseExtra)
+	svc.openaiAccountRuntimeBlockUntil.Store(account.ID, time.Now().Add(time.Minute))
+	if got := svc.classifyOpenAIUserAffinityResidentAdmission(context.Background(), account, nil, "", false, "", "", OpenAIUpstreamTransportHTTPSSE); got != openAIUserAffinityResidentTemporaryCapacity {
+		t.Fatalf("runtime-blocked resident admission=%s, want temporary capacity", got)
+	}
 }
 
 func cloneMapAny(source map[string]any) map[string]any {
@@ -94,6 +100,19 @@ func TestSelectOpenAIUserAffinityCandidateAllowsAlreadyCountedUserAtCapacity(t *
 	if !ok || selected.AccountID != 1 {
 		t.Fatalf("selected=%+v ok=%v, want already-counted account 1", selected, ok)
 	}
+}
+
+func TestSelectOpenAIUserAffinityCandidatePrefersResidentAcrossScopesAndBypassesCooldown(t *testing.T) {
+	cfg := DefaultOpenAIUserAffinityConfig()
+	now := time.Now().UTC()
+	cooldown := now.Add(time.Minute)
+	selected, ok := SelectOpenAIUserAffinityCandidate(cfg, []OpenAIUserAffinityCandidate{
+		{AccountID: 11, Quota5HKnown: true, Quota7DKnown: true, Available5HRatio: 0.9, Available7DRatio: 0.9},
+		{AccountID: 12, Quota5HKnown: true, Quota7DKnown: true, Available5HRatio: 0.8, Available7DRatio: 0.8,
+			ActiveContactUsers: cfg.DefaultMaxContactUsers, UserAlreadyResident: true, CooldownUntil: &cooldown},
+	}, 0.05, 0.05, now)
+	require.True(t, ok)
+	require.Equal(t, int64(12), selected.AccountID)
 }
 
 func TestSelectOpenAIUserAffinityCandidateRejectsUnknownQuotaWindow(t *testing.T) {

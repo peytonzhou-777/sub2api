@@ -16,16 +16,19 @@ func (r *accountRepository) GetOpenAIUserPlacement(ctx context.Context, userID i
 	scopeKey = normalizeOpenAIUserAffinityScopeKey(scopeKey)
 	var placement service.OpenAIUserPlacement
 	var accountID sql.NullInt64
-	var lastActive, lastMovedAccount sql.NullTime
+	var lastActive, lastMovedAccount, resetAt sql.NullTime
 	var resetExclude sql.NullBool
-	var resetSource sql.NullInt64
+	var resetSource, resetByAdmin sql.NullInt64
+	var resetReason sql.NullString
 	var predicted5H, predicted7D sql.NullFloat64
-	var predictionVersion sql.NullString
+	var predictionVersion, provisionalToken sql.NullString
 	rows, err := r.sql.QueryContext(ctx, `
 		SELECT user_id, scope_key, account_id, generation, status, assigned_at,
 		       last_active_at, expires_at, last_moved_at, assignment_reason,
 		       reset_exclude_source_account, reset_source_account_id,
-		       predicted_5h_demand, predicted_7d_demand, prediction_version
+		       reset_at, reset_by_admin_id, reset_reason,
+		       predicted_5h_demand, predicted_7d_demand, prediction_version,
+		       provisional_token
 		FROM user_account_placements
 		WHERE user_id = $1 AND scope_key = $2`, userID, scopeKey)
 	if err != nil {
@@ -42,7 +45,8 @@ func (r *accountRepository) GetOpenAIUserPlacement(ctx context.Context, userID i
 		&placement.UserID, &placement.ScopeKey, &accountID, &placement.Generation,
 		&placement.Status, &placement.AssignedAt, &lastActive, &placement.ExpiresAt,
 		&lastMovedAccount, &placement.AssignmentReason, &resetExclude, &resetSource,
-		&predicted5H, &predicted7D, &predictionVersion,
+		&resetAt, &resetByAdmin, &resetReason, &predicted5H, &predicted7D,
+		&predictionVersion, &provisionalToken,
 	)
 	if err != nil {
 		return nil, err
@@ -62,6 +66,16 @@ func (r *accountRepository) GetOpenAIUserPlacement(ctx context.Context, userID i
 	if resetSource.Valid {
 		placement.ResetSourceAccountID = &resetSource.Int64
 	}
+	if resetAt.Valid {
+		value := resetAt.Time.UTC()
+		placement.ResetAt = &value
+	}
+	if resetByAdmin.Valid {
+		placement.ResetByAdminID = &resetByAdmin.Int64
+	}
+	if resetReason.Valid {
+		placement.ResetReason = resetReason.String
+	}
 	if predicted5H.Valid {
 		placement.Predicted5HDemand = &predicted5H.Float64
 	}
@@ -70,6 +84,9 @@ func (r *accountRepository) GetOpenAIUserPlacement(ctx context.Context, userID i
 	}
 	if predictionVersion.Valid {
 		placement.PredictionVersion = predictionVersion.String
+	}
+	if provisionalToken.Valid {
+		placement.ProvisionalToken = provisionalToken.String
 	}
 	return &placement, nil
 }
@@ -85,8 +102,10 @@ func (r *accountRepository) UpsertOpenAIUserPlacement(ctx context.Context, place
 	_, err := r.sql.ExecContext(ctx, `
 		INSERT INTO user_account_placements
 			(user_id, scope_key, account_id, generation, status, assigned_at, last_active_at,
-			 expires_at, last_moved_at, assignment_reason, reset_exclude_source_account, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+			 expires_at, last_moved_at, assignment_reason, reset_exclude_source_account,
+			 reset_source_account_id, reset_at, reset_by_admin_id, reset_reason,
+			 provisional_token, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
 		ON CONFLICT (user_id, scope_key) DO UPDATE SET
 			account_id = EXCLUDED.account_id,
 			generation = EXCLUDED.generation,
@@ -97,10 +116,17 @@ func (r *accountRepository) UpsertOpenAIUserPlacement(ctx context.Context, place
 			last_moved_at = EXCLUDED.last_moved_at,
 			assignment_reason = EXCLUDED.assignment_reason,
 			reset_exclude_source_account = EXCLUDED.reset_exclude_source_account,
+			reset_source_account_id = EXCLUDED.reset_source_account_id,
+			reset_at = EXCLUDED.reset_at,
+			reset_by_admin_id = EXCLUDED.reset_by_admin_id,
+			reset_reason = EXCLUDED.reset_reason,
+			provisional_token = EXCLUDED.provisional_token,
 			updated_at = NOW()`,
 		placement.UserID, placement.ScopeKey, placement.AccountID, placement.Generation,
 		placement.Status, placement.AssignedAt, placement.LastActiveAt, placement.ExpiresAt,
 		placement.LastMovedAt, placement.AssignmentReason, placement.ResetExcludeSourceAccount,
+		placement.ResetSourceAccountID, placement.ResetAt, placement.ResetByAdminID,
+		placement.ResetReason, placement.ProvisionalToken,
 	)
 	return err
 }

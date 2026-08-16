@@ -27,12 +27,13 @@ var (
 const openAIUserAffinityReconcileInterval = 10 * time.Minute
 
 type openAIUserAffinityRequestState struct {
-	admission  OpenAIUserAffinityReentryAdmission
-	released   bool
-	scopeKey   string
-	generation int64
-	accountID  int64
-	createdAt  time.Time
+	admission   OpenAIUserAffinityReentryAdmission
+	released    bool
+	provisional *OpenAIUserAffinityProvisionalTransition
+	scopeKey    string
+	generation  int64
+	accountID   int64
+	createdAt   time.Time
 }
 
 type openAIUserAffinityMetrics struct {
@@ -268,31 +269,44 @@ func (s *OpenAIGatewayService) activateOpenAIUserAffinityReentry(ctx context.Con
 	}
 }
 
-func (s *OpenAIGatewayService) failOpenAIUserAffinityReentryLeader(ctx context.Context) {
+func (s *OpenAIGatewayService) failOpenAIUserAffinityReentryLeader(ctx context.Context) bool {
 	requestKey := openAIUserAffinityRequestKey(ctx)
 	value, ok := s.openaiAffinity.requests.LoadAndDelete(requestKey)
 	if !ok {
-		return
+		return false
 	}
 	state, ok := value.(*openAIUserAffinityRequestState)
 	if !ok || state == nil {
-		return
+		return false
+	}
+	rolledBack := false
+	if state.provisional != nil {
+		if store, storeOK := s.accountRepo.(OpenAIUserAffinityProvisionalStore); storeOK {
+			var rollbackErr error
+			rolledBack, rollbackErr = store.RollbackOpenAIUserAffinityPlacement(ctx, *state.provisional, state.provisional.Config)
+			if rollbackErr != nil {
+				slog.Warn("openai_user_affinity.provisional_rollback_failed", "user_id", state.provisional.TargetPlacement.UserID, "account_id", state.accountID, "error", rollbackErr)
+			} else if rolledBack {
+				slog.Info("openai_user_affinity.provisional_rolled_back", "user_id", state.provisional.TargetPlacement.UserID, "account_id", state.accountID, "kind", state.provisional.Kind)
+			}
+		}
 	}
 	// HTTP 请求失败后立即丢弃 completed 模式的 accepted 事实，避免等待定期清理。
 	s.openaiAffinity.accepted.Delete(openAIUserAffinitySuccessKey(ctx, state.accountID))
 	if !state.admission.Leader {
-		return
+		return rolledBack
 	}
 	runtimeStore, storeOK := s.accountRepo.(OpenAIUserAffinityRuntimeStore)
 	queue, queueOK := s.cache.(OpenAIUserAffinityReentryQueue)
 	if !storeOK || !queueOK {
-		return
+		return rolledBack
 	}
 	failed, err := runtimeStore.FailOpenAIUserAffinityReentryLeader(ctx, openAIUserAffinityReentryTransition(state.admission))
 	if err == nil && failed {
 		_ = queue.MarkOpenAIUserAffinityLeaderFailed(ctx, state.admission)
 		s.openaiAffinity.metrics.reentryLeaderFailures.Add(1)
 	}
+	return rolledBack
 }
 
 func openAIUserAffinityReentryTransition(admission OpenAIUserAffinityReentryAdmission) OpenAIUserAffinityReentryTransition {
@@ -329,7 +343,7 @@ func openAIUserAffinityRequestKey(ctx context.Context) string {
 }
 
 // rememberOpenAIUserAffinityAttempt 冻结本次选号对应的 scope/generation，供成功与失败钩子使用。
-func (s *OpenAIGatewayService) rememberOpenAIUserAffinityAttempt(ctx context.Context, placement *OpenAIUserPlacement) {
+func (s *OpenAIGatewayService) rememberOpenAIUserAffinityAttempt(ctx context.Context, placement *OpenAIUserPlacement, provisional ...*OpenAIUserAffinityProvisionalTransition) {
 	if s == nil || placement == nil || placement.AccountID == nil {
 		return
 	}
@@ -341,10 +355,16 @@ func (s *OpenAIGatewayService) rememberOpenAIUserAffinityAttempt(ctx context.Con
 		scopeKey: placement.ScopeKey, generation: placement.Generation,
 		accountID: *placement.AccountID, createdAt: time.Now().UTC(),
 	}
+	if len(provisional) > 0 {
+		state.provisional = provisional[0]
+	}
 	if current, ok := s.openaiAffinity.requests.Load(key); ok {
 		if existing, valid := current.(*openAIUserAffinityRequestState); valid && existing != nil {
 			state.admission = existing.admission
 			state.released = existing.released
+			if state.provisional == nil {
+				state.provisional = existing.provisional
+			}
 		}
 	}
 	s.openaiAffinity.requests.Store(key, state)
