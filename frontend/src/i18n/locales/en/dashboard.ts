@@ -125,7 +125,7 @@ export default {
       available: 'Deposit available',
       required: 'Deposit required {amount}',
       personalRequired: 'Personal threshold {amount} ({multiplier}x)',
-      current: 'Current {amount}',
+      current: 'Current deposit {amount}',
       shortfall: '{amount} more required',
       dialogTitle: 'Pay Security Deposit',
       group: 'Selected Group',

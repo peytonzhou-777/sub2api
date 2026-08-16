@@ -405,6 +405,8 @@ export default {
       lockExplanation: 'Time-locked deposits cannot be refunded before expiry. Admin grants are permanently locked. Both count toward group eligibility and may be forfeited after a network security policy violation.',
       riskMultiplier: 'Current risk multiplier {multiplier}x',
       riskMultiplierAdjusted: 'The deposit threshold is now {multiplier}x after an official network security policy penalty.',
+      viewAccountDetails: 'Show account details',
+      hideAccountDetails: 'Hide account details',
       viewDetails: 'View deposit lots',
       hideDetails: 'Hide deposit lots',
       paidLot: 'User-paid deposit',

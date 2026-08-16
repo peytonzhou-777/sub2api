@@ -429,6 +429,8 @@ export default {
       lockExplanation: '限时冻结在到期前不可退款；管理员发放额永久冻结。两者均可用于分组准入，并可能因网络安全策略违规被扣除。',
       riskMultiplier: '当前风险倍率 {multiplier}x',
       riskMultiplierAdjusted: '官方网安策略处罚后，保证金门槛已调整为 {multiplier} 倍',
+      viewAccountDetails: '展开账户明细',
+      hideAccountDetails: '收起账户明细',
       viewDetails: '查看批次明细',
       hideDetails: '收起批次明细',
       paidLot: '实付保证金',

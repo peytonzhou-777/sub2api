@@ -189,6 +189,9 @@ const DataTableStub = {
           <slot name="cell-id" :value="row.id" :row="row" />
         </div>
         <slot name="cell-name" :value="row.name" :row="row" />
+        <div data-test="group-cell">
+          <slot name="cell-group" :value="row.group_id" :row="row" />
+        </div>
         <div data-test="current-concurrency">
           <slot name="cell-current_concurrency" :value="row.current_concurrency" :row="row" />
         </div>
@@ -234,6 +237,21 @@ const IconStub = {
   template: '<span data-test="icon">{{ name }}</span>',
 }
 
+const GroupOptionItemStub = {
+  name: 'GroupOptionItem',
+  props: ['name', 'securityDepositBaseRequiredCents', 'securityDepositEligibility', 'securityDepositLoading'],
+  template: `
+    <div
+      data-test="group-option-item"
+      :data-name="name"
+      :data-deposit-base="securityDepositBaseRequiredCents"
+      :data-deposit-current="securityDepositEligibility?.effective_balance_cents ?? ''"
+      :data-deposit-eligible="securityDepositEligibility?.eligible ?? ''"
+      :data-deposit-loading="securityDepositLoading"
+    />
+  `,
+}
+
 const SecurityDepositDialogStub = {
   name: 'SecurityDepositDialog',
   props: ['show', 'groupId', 'resumeToken', 'resumePaymentType'],
@@ -258,7 +276,7 @@ const mountView = async () => {
         UseKeyModal: true,
         EndpointPopover: true,
         GroupBadge: true,
-        GroupOptionItem: true,
+        GroupOptionItem: GroupOptionItemStub,
         SecurityDepositDialog: SecurityDepositDialogStub,
         Teleport: true,
       },
@@ -631,6 +649,36 @@ describe('user KeysView create form', () => {
 
 describe('user KeysView security deposit group flow', () => {
   beforeEach(() => resetViewMocks([{ ...createApiKey(), group_id: 1 }]))
+
+  it('passes threshold and current deposit status to the switch-group popup', async () => {
+    getAvailableGroups.mockResolvedValue([
+      { id: 1, name: 'No Deposit', platform: 'openai', rate_multiplier: 1, security_deposit_base_required_cents: 0 },
+      { id: 9, name: 'Deposit Group', platform: 'openai', rate_multiplier: 1, security_deposit_base_required_cents: 10000 },
+    ])
+    getSecurityDepositEligibility.mockResolvedValue({
+      data: {
+        group_id: 9,
+        base_required_cents: 10000,
+        risk_multiplier: 1,
+        required_cents: 10000,
+        effective_balance_cents: 5000,
+        shortfall_cents: 5000,
+        eligible: false,
+      },
+    })
+    const wrapper = await mountView()
+
+    await wrapper.get('button[title="keys.clickToChangeGroup"]').trigger('click')
+    await nextTick()
+
+    const depositOption = wrapper
+      .findAll('[data-test="group-option-item"]')
+      .find((option) => option.attributes('data-name') === 'Deposit Group')
+    expect(depositOption).toBeDefined()
+    expect(depositOption?.attributes('data-deposit-base')).toBe('10000')
+    expect(depositOption?.attributes('data-deposit-current')).toBe('5000')
+    expect(depositOption?.attributes('data-deposit-eligible')).toBe('false')
+  })
 
   it('disables in the new group before automatically enabling a no-deposit key', async () => {
     getAvailableGroups.mockResolvedValue([

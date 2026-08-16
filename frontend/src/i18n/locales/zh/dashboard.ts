@@ -125,7 +125,7 @@ export default {
       available: '保证金可用',
       required: '需保证金 {amount}',
       personalRequired: '个人门槛 {amount}（{multiplier}x）',
-      current: '当前 {amount}',
+      current: '当前保证金 {amount}',
       shortfall: '还需 {amount}',
       dialogTitle: '缴纳安全保证金',
       group: '所选分组',

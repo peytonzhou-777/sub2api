@@ -24,16 +24,29 @@ const account: SecurityDepositAccount = {
 }
 
 describe('SecurityDepositAccountPanel', () => {
-  it('将实付和管理员发放保证金分开显示且使用人民币分转换', () => {
+  it('默认收起账户明细并可展开查看分项金额', async () => {
     const wrapper = mount(SecurityDepositAccountPanel, {
       props: { account, loading: false },
       global: { plugins: [createPinia()] },
     })
 
     expect(wrapper.get('[data-test="security-deposit-total"]').text()).toBe('¥173.45')
+    expect(wrapper.find('[data-test="security-deposit-account-details"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="security-deposit-paid"]').exists()).toBe(false)
+
+    const toggle = wrapper.get('[data-test="security-deposit-account-details-toggle"]')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    await toggle.trigger('click')
+
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.get('[data-test="security-deposit-account-details"]').isVisible()).toBe(true)
     expect(wrapper.get('[data-test="security-deposit-paid"]').text()).toBe('¥123.45')
     expect(wrapper.get('[data-test="security-deposit-admin-grant"]').text()).toBe('¥50.00')
     expect(wrapper.text()).toContain('限时冻结 ¥23.45')
     expect(wrapper.text()).toContain('永久冻结 ¥50.00')
+
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('[data-test="security-deposit-account-details"]').exists()).toBe(false)
   })
 })
