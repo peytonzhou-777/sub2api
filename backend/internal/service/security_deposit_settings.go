@@ -22,8 +22,8 @@ const (
 
 - 禁止破限、破甲、越狱、提示注入绕过，以及以角色扮演等方式掩饰绕过网络安全策略。
 - 保证金与调用额度完全分离，不会被正常 API 请求消费。
-- 用户实付保证金在冻结期内不可退款；管理员发放保证金永久冻结且不可退款。冻结不影响分组准入或违规扣除。
-- 可信上游官方网络安全策略命中时，平台将按本次个人门槛扣除保证金并安全锁定触发密钥；后续门槛按违规次数线性递增。
+- 用户实付保证金在冻结期内不可退款。冻结期结束后，仅当平台保证金自助退款、对应支付实例的退款能力和“允许用户退款”均开启时，用户才可自助退款；否则需由管理员处理。管理员发放保证金永久冻结且不可退款。冻结不影响分组准入或违规扣除。
+- 可信上游官方网络安全策略命中时，平台将按本次个人门槛扣除保证金并安全锁定触发密钥；首次触发按 1 倍门槛，第二次按 2 倍，第三次按 3 倍，之后依次递增，并受管理员配置的倍率上限约束。
 - 本地内容审计不扣保证金，但可独立触发账户封禁。
 - 退款或扣除后余额不足时，相关密钥将被自动禁用；补足后仍需显式启用。
 - 支付退款、申诉和隐私处理以平台公布的现行规则为准。`
@@ -32,8 +32,8 @@ const (
 
 - Attempts to bypass limits, safeguards, jailbreak protections, prompt-injection controls, or to disguise such attempts through role-play are prohibited.
 - The security deposit is separate from usage credit and is never consumed by normal API requests.
-- User-paid deposits cannot be refunded during the freeze period. Administrator-issued deposits are permanently frozen and non-refundable. Frozen funds still count for access and policy forfeiture.
-- A trusted official upstream network-security-policy response causes forfeiture up to the applicable personal threshold and security-locks the triggering key. Future thresholds increase linearly with confirmed violations.
+- User-paid deposits cannot be refunded during the freeze period. After that period, self-service refunds are available only when platform self-refund and the corresponding payment-provider instance's refund and user-refund capabilities are all enabled; otherwise an administrator must process the refund. Administrator-issued deposits are permanently frozen and non-refundable. Frozen funds still count for access and policy forfeiture.
+- A trusted official upstream network-security-policy response causes forfeiture up to the applicable personal threshold and security-locks the triggering key. The first violation uses 1x the base threshold, the second uses 2x, the third uses 3x, and each later violation increases it by another 1x, subject to the administrator-configured multiplier cap.
 - Local content moderation does not forfeit the deposit, but may independently disable the account.
 - A refund or deduction that leaves the deposit below a group threshold automatically disables affected keys. Keys must be explicitly enabled again after funds are restored.
 - Payment refunds, appeals, and privacy handling follow the platform's current published rules.`

@@ -136,6 +136,7 @@ export default {
       amountDue: '本次应缴差额',
       agreementTitle: '网络安全使用规则（{version}）',
       acceptAgreement: '我已完整阅读并同意遵守网络安全使用规则，知悉违规可能导致保证金扣除及密钥禁用。',
+      agreementReadHint: '请阅读至协议底部后再勾选确认。',
       freezeHint: '缴纳成功后，本笔保证金将在 {hours} 小时内不可退款；冻结期间仍计入分组资格，也可因官方网安策略违规被扣除。',
       noPaymentMethod: '当前没有支持本次保证金金额的人民币支付方式。',
       payAction: '同意规则并缴纳 {amount}',

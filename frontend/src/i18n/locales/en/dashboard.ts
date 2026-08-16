@@ -136,6 +136,7 @@ export default {
       amountDue: 'Amount Due',
       agreementTitle: 'Network Security Usage Rules ({version})',
       acceptAgreement: 'I have read and accept the network security usage rules and understand that violations may forfeit the deposit and disable the API key.',
+      agreementReadHint: 'Read to the end of the terms before confirming.',
       freezeHint: 'This payment cannot be refunded for {hours} hours. It still counts toward group eligibility during that period and may be forfeited after an official network security policy violation.',
       noPaymentMethod: 'No CNY payment method currently supports this deposit amount.',
       payAction: 'Accept and Pay {amount}',

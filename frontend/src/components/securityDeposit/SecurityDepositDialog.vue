@@ -65,13 +65,32 @@
           <span class="text-xs text-gray-400">{{ agreement.content_hash.slice(0, 12) }}</span>
         </div>
         <div
+          ref="agreementBody"
           data-test="security-deposit-agreement"
-          class="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm leading-6 text-gray-700 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-300"
-        >{{ agreementContent }}</div>
+          class="max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm leading-6 text-gray-700 outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-300 [&_a]:text-primary-600 [&_a]:underline [&_h1]:mb-3 [&_h1]:text-base [&_h1]:font-semibold [&_li]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-5"
+          tabindex="0"
+          @scroll="handleAgreementScroll"
+          v-html="renderedAgreementHtml"
+        ></div>
+        <p
+          v-if="agreementNeedsReading && !agreementReadComplete"
+          data-test="security-deposit-agreement-read-hint"
+          class="mt-2 text-xs text-amber-600 dark:text-amber-400"
+        >
+          {{ t('keys.securityDeposit.agreementReadHint') }}
+        </p>
       </div>
 
-      <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-4 dark:border-dark-700">
-        <input v-model="accepted" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+      <label
+        class="flex items-start gap-3 rounded-lg border border-gray-200 p-4 dark:border-dark-700"
+        :class="agreementReadComplete ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'"
+      >
+        <input
+          v-model="accepted"
+          type="checkbox"
+          class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          :disabled="!agreementReadComplete"
+        />
         <span class="text-sm leading-5 text-gray-700 dark:text-gray-300">
           {{ t('keys.securityDeposit.acceptAgreement') }}
         </span>
@@ -116,7 +135,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -160,6 +181,8 @@ const agreement = ref<SecurityDepositAgreement | null>(null)
 const checkout = ref<CheckoutInfoResponse | null>(null)
 const selectedMethod = ref('')
 const accepted = ref(false)
+const agreementReadComplete = ref(false)
+const agreementBody = ref<HTMLElement | null>(null)
 const errorMessage = ref('')
 const paymentState = ref<PaymentRecoverySnapshot>(emptyPaymentState())
 let resumedToken = ''
@@ -168,6 +191,16 @@ const agreementContent = computed(() => {
   if (!agreement.value) return ''
   return locale.value.toLowerCase().startsWith('zh') ? agreement.value.content_zh : agreement.value.content_en
 })
+
+const renderedAgreementHtml = computed(() => {
+  const html = marked.parse(agreementContent.value, { breaks: true, gfm: true }) as string
+  return DOMPurify.sanitize(html)
+})
+
+const agreementAcceptanceExempt = computed(() => Boolean(
+  props.resumeToken || (eligibility.value && !eligibility.value.agreement_required),
+))
+const agreementNeedsReading = computed(() => Boolean(agreement.value && !agreementAcceptanceExempt.value))
 
 const methodOptions = computed<PaymentMethodOption[]>(() => {
   if (!checkout.value || !eligibility.value) return []
@@ -189,6 +222,7 @@ const canSubmit = computed(() => Boolean(
   && agreement.value
   && eligibility.value.shortfall_cents > 0
   && accepted.value
+  && agreementReadComplete.value
   && selectedMethod.value
   && methodOptions.value.some(method => method.type === selectedMethod.value && method.available)
   && !submitting.value,
@@ -202,12 +236,21 @@ watch(
   { immediate: true },
 )
 
+watch(() => locale.value, async () => {
+  if (!props.show || phase.value !== 'select') return
+  resetAgreementAcceptance()
+  await nextTick()
+  updateAgreementReadState()
+})
+
 // 每次打开都重新读取权威报价，避免复用已过期的差额和协议。
 async function loadDialog() {
   if (!props.groupId) return
   loading.value = true
   errorMessage.value = ''
   phase.value = 'select'
+  accepted.value = false
+  agreementReadComplete.value = false
   try {
     const [eligibilityResponse, agreementResponse, checkoutResponse] = await Promise.all([
       securityDepositsAPI.getEligibility(props.groupId),
@@ -217,7 +260,7 @@ async function loadDialog() {
     eligibility.value = eligibilityResponse.data
     agreement.value = agreementResponse.data
     checkout.value = checkoutResponse.data
-    accepted.value = Boolean(props.resumeToken) || !eligibilityResponse.data.agreement_required
+    resetAgreementAcceptance()
     const availableMethods = methodOptions.value.filter(method => method.available)
     const requestedMethod = normalizeVisibleMethod(props.resumePaymentType || '')
     selectedMethod.value = availableMethods.some(method => method.type === requestedMethod)
@@ -237,7 +280,33 @@ async function loadDialog() {
     errorMessage.value = apiErrorMessage(error)
   } finally {
     loading.value = false
+    await nextTick()
+    updateAgreementReadState()
   }
+}
+
+// 首次接受当前协议时必须阅读到底；内容完整可见时无需制造无意义滚动。
+function updateAgreementReadState() {
+  if (agreementReadComplete.value || agreementAcceptanceExempt.value) {
+    agreementReadComplete.value = true
+    return
+  }
+  const element = agreementBody.value
+  if (!element || element.clientHeight <= 0) return
+  if (element.scrollHeight <= element.clientHeight + 4) agreementReadComplete.value = true
+}
+
+function handleAgreementScroll() {
+  const element = agreementBody.value
+  if (!element || agreementReadComplete.value) return
+  if (element.scrollTop + element.clientHeight >= element.scrollHeight - 4) {
+    agreementReadComplete.value = true
+  }
+}
+
+function resetAgreementAcceptance() {
+  accepted.value = agreementAcceptanceExempt.value
+  agreementReadComplete.value = agreementAcceptanceExempt.value
 }
 
 async function submitDeposit() {

@@ -60,6 +60,26 @@ func TestSecurityDepositSettings_UpdatePersistsAllFields(t *testing.T) {
 	require.Equal(t, "English terms v3", repo.updates[SettingKeySecurityDepositAgreementContentEN])
 }
 
+func TestSecurityDepositSettings_DefaultAgreementStatesPenaltyAndRefundRules(t *testing.T) {
+	policy := buildSecurityDepositPolicyConfig(nil)
+
+	require.Contains(t, policy.ContentZH, "首次触发按 1 倍门槛")
+	require.Contains(t, policy.ContentZH, "第二次按 2 倍")
+	require.Contains(t, policy.ContentZH, "第三次按 3 倍")
+	require.Contains(t, policy.ContentZH, "管理员配置的倍率上限")
+	require.Contains(t, policy.ContentZH, "平台保证金自助退款")
+	require.Contains(t, policy.ContentZH, "对应支付实例")
+	require.Contains(t, policy.ContentZH, "管理员发放保证金永久冻结且不可退款")
+
+	require.Contains(t, policy.ContentEN, "first violation uses 1x")
+	require.Contains(t, policy.ContentEN, "second uses 2x")
+	require.Contains(t, policy.ContentEN, "third uses 3x")
+	require.Contains(t, policy.ContentEN, "administrator-configured multiplier cap")
+	require.Contains(t, policy.ContentEN, "platform self-refund")
+	require.Contains(t, policy.ContentEN, "payment-provider instance")
+	require.Contains(t, policy.ContentEN, "permanently frozen and non-refundable")
+}
+
 func TestSecurityDepositSettings_RejectsInvalidBounds(t *testing.T) {
 	tests := []struct {
 		name       string
