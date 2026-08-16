@@ -111,6 +111,62 @@ func (_c *AccountCreate) SetExtra(v map[string]interface{}) *AccountCreate {
 	return _c
 }
 
+// SetCodexFingerprintSeed sets the "codex_fingerprint_seed" field.
+func (_c *AccountCreate) SetCodexFingerprintSeed(v string) *AccountCreate {
+	_c.mutation.SetCodexFingerprintSeed(v)
+	return _c
+}
+
+// SetNillableCodexFingerprintSeed sets the "codex_fingerprint_seed" field if the given value is not nil.
+func (_c *AccountCreate) SetNillableCodexFingerprintSeed(v *string) *AccountCreate {
+	if v != nil {
+		_c.SetCodexFingerprintSeed(*v)
+	}
+	return _c
+}
+
+// SetCodexFingerprintVersion sets the "codex_fingerprint_version" field.
+func (_c *AccountCreate) SetCodexFingerprintVersion(v string) *AccountCreate {
+	_c.mutation.SetCodexFingerprintVersion(v)
+	return _c
+}
+
+// SetNillableCodexFingerprintVersion sets the "codex_fingerprint_version" field if the given value is not nil.
+func (_c *AccountCreate) SetNillableCodexFingerprintVersion(v *string) *AccountCreate {
+	if v != nil {
+		_c.SetCodexFingerprintVersion(*v)
+	}
+	return _c
+}
+
+// SetCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field.
+func (_c *AccountCreate) SetCodexFingerprintEpoch(v int64) *AccountCreate {
+	_c.mutation.SetCodexFingerprintEpoch(v)
+	return _c
+}
+
+// SetNillableCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field if the given value is not nil.
+func (_c *AccountCreate) SetNillableCodexFingerprintEpoch(v *int64) *AccountCreate {
+	if v != nil {
+		_c.SetCodexFingerprintEpoch(*v)
+	}
+	return _c
+}
+
+// SetCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field.
+func (_c *AccountCreate) SetCodexFingerprintEpochStartedAt(v time.Time) *AccountCreate {
+	_c.mutation.SetCodexFingerprintEpochStartedAt(v)
+	return _c
+}
+
+// SetNillableCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field if the given value is not nil.
+func (_c *AccountCreate) SetNillableCodexFingerprintEpochStartedAt(v *time.Time) *AccountCreate {
+	if v != nil {
+		_c.SetCodexFingerprintEpochStartedAt(*v)
+	}
+	return _c
+}
+
 // SetProxyID sets the "proxy_id" field.
 func (_c *AccountCreate) SetProxyID(v int64) *AccountCreate {
 	_c.mutation.SetProxyID(v)
@@ -553,6 +609,14 @@ func (_c *AccountCreate) defaults() error {
 		v := account.DefaultExtra()
 		_c.mutation.SetExtra(v)
 	}
+	if _, ok := _c.mutation.CodexFingerprintVersion(); !ok {
+		v := account.DefaultCodexFingerprintVersion
+		_c.mutation.SetCodexFingerprintVersion(v)
+	}
+	if _, ok := _c.mutation.CodexFingerprintEpoch(); !ok {
+		v := account.DefaultCodexFingerprintEpoch
+		_c.mutation.SetCodexFingerprintEpoch(v)
+	}
 	if _, ok := _c.mutation.Concurrency(); !ok {
 		v := account.DefaultConcurrency
 		_c.mutation.SetConcurrency(v)
@@ -621,6 +685,22 @@ func (_c *AccountCreate) check() error {
 	}
 	if _, ok := _c.mutation.Extra(); !ok {
 		return &ValidationError{Name: "extra", err: errors.New(`ent: missing required field "Account.extra"`)}
+	}
+	if v, ok := _c.mutation.CodexFingerprintSeed(); ok {
+		if err := account.CodexFingerprintSeedValidator(v); err != nil {
+			return &ValidationError{Name: "codex_fingerprint_seed", err: fmt.Errorf(`ent: validator failed for field "Account.codex_fingerprint_seed": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.CodexFingerprintVersion(); !ok {
+		return &ValidationError{Name: "codex_fingerprint_version", err: errors.New(`ent: missing required field "Account.codex_fingerprint_version"`)}
+	}
+	if v, ok := _c.mutation.CodexFingerprintVersion(); ok {
+		if err := account.CodexFingerprintVersionValidator(v); err != nil {
+			return &ValidationError{Name: "codex_fingerprint_version", err: fmt.Errorf(`ent: validator failed for field "Account.codex_fingerprint_version": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.CodexFingerprintEpoch(); !ok {
+		return &ValidationError{Name: "codex_fingerprint_epoch", err: errors.New(`ent: missing required field "Account.codex_fingerprint_epoch"`)}
 	}
 	if _, ok := _c.mutation.Concurrency(); !ok {
 		return &ValidationError{Name: "concurrency", err: errors.New(`ent: missing required field "Account.concurrency"`)}
@@ -720,6 +800,22 @@ func (_c *AccountCreate) createSpec() (*Account, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Extra(); ok {
 		_spec.SetField(account.FieldExtra, field.TypeJSON, value)
 		_node.Extra = value
+	}
+	if value, ok := _c.mutation.CodexFingerprintSeed(); ok {
+		_spec.SetField(account.FieldCodexFingerprintSeed, field.TypeString, value)
+		_node.CodexFingerprintSeed = &value
+	}
+	if value, ok := _c.mutation.CodexFingerprintVersion(); ok {
+		_spec.SetField(account.FieldCodexFingerprintVersion, field.TypeString, value)
+		_node.CodexFingerprintVersion = value
+	}
+	if value, ok := _c.mutation.CodexFingerprintEpoch(); ok {
+		_spec.SetField(account.FieldCodexFingerprintEpoch, field.TypeInt64, value)
+		_node.CodexFingerprintEpoch = value
+	}
+	if value, ok := _c.mutation.CodexFingerprintEpochStartedAt(); ok {
+		_spec.SetField(account.FieldCodexFingerprintEpochStartedAt, field.TypeTime, value)
+		_node.CodexFingerprintEpochStartedAt = &value
 	}
 	if value, ok := _c.mutation.ProxyFallbackOriginID(); ok {
 		_spec.SetField(account.FieldProxyFallbackOriginID, field.TypeInt64, value)
@@ -1044,6 +1140,72 @@ func (u *AccountUpsert) SetExtra(v map[string]interface{}) *AccountUpsert {
 // UpdateExtra sets the "extra" field to the value that was provided on create.
 func (u *AccountUpsert) UpdateExtra() *AccountUpsert {
 	u.SetExcluded(account.FieldExtra)
+	return u
+}
+
+// SetCodexFingerprintSeed sets the "codex_fingerprint_seed" field.
+func (u *AccountUpsert) SetCodexFingerprintSeed(v string) *AccountUpsert {
+	u.Set(account.FieldCodexFingerprintSeed, v)
+	return u
+}
+
+// UpdateCodexFingerprintSeed sets the "codex_fingerprint_seed" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateCodexFingerprintSeed() *AccountUpsert {
+	u.SetExcluded(account.FieldCodexFingerprintSeed)
+	return u
+}
+
+// ClearCodexFingerprintSeed clears the value of the "codex_fingerprint_seed" field.
+func (u *AccountUpsert) ClearCodexFingerprintSeed() *AccountUpsert {
+	u.SetNull(account.FieldCodexFingerprintSeed)
+	return u
+}
+
+// SetCodexFingerprintVersion sets the "codex_fingerprint_version" field.
+func (u *AccountUpsert) SetCodexFingerprintVersion(v string) *AccountUpsert {
+	u.Set(account.FieldCodexFingerprintVersion, v)
+	return u
+}
+
+// UpdateCodexFingerprintVersion sets the "codex_fingerprint_version" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateCodexFingerprintVersion() *AccountUpsert {
+	u.SetExcluded(account.FieldCodexFingerprintVersion)
+	return u
+}
+
+// SetCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field.
+func (u *AccountUpsert) SetCodexFingerprintEpoch(v int64) *AccountUpsert {
+	u.Set(account.FieldCodexFingerprintEpoch, v)
+	return u
+}
+
+// UpdateCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateCodexFingerprintEpoch() *AccountUpsert {
+	u.SetExcluded(account.FieldCodexFingerprintEpoch)
+	return u
+}
+
+// AddCodexFingerprintEpoch adds v to the "codex_fingerprint_epoch" field.
+func (u *AccountUpsert) AddCodexFingerprintEpoch(v int64) *AccountUpsert {
+	u.Add(account.FieldCodexFingerprintEpoch, v)
+	return u
+}
+
+// SetCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field.
+func (u *AccountUpsert) SetCodexFingerprintEpochStartedAt(v time.Time) *AccountUpsert {
+	u.Set(account.FieldCodexFingerprintEpochStartedAt, v)
+	return u
+}
+
+// UpdateCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateCodexFingerprintEpochStartedAt() *AccountUpsert {
+	u.SetExcluded(account.FieldCodexFingerprintEpochStartedAt)
+	return u
+}
+
+// ClearCodexFingerprintEpochStartedAt clears the value of the "codex_fingerprint_epoch_started_at" field.
+func (u *AccountUpsert) ClearCodexFingerprintEpochStartedAt() *AccountUpsert {
+	u.SetNull(account.FieldCodexFingerprintEpochStartedAt)
 	return u
 }
 
@@ -1599,6 +1761,83 @@ func (u *AccountUpsertOne) SetExtra(v map[string]interface{}) *AccountUpsertOne 
 func (u *AccountUpsertOne) UpdateExtra() *AccountUpsertOne {
 	return u.Update(func(s *AccountUpsert) {
 		s.UpdateExtra()
+	})
+}
+
+// SetCodexFingerprintSeed sets the "codex_fingerprint_seed" field.
+func (u *AccountUpsertOne) SetCodexFingerprintSeed(v string) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetCodexFingerprintSeed(v)
+	})
+}
+
+// UpdateCodexFingerprintSeed sets the "codex_fingerprint_seed" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateCodexFingerprintSeed() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateCodexFingerprintSeed()
+	})
+}
+
+// ClearCodexFingerprintSeed clears the value of the "codex_fingerprint_seed" field.
+func (u *AccountUpsertOne) ClearCodexFingerprintSeed() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearCodexFingerprintSeed()
+	})
+}
+
+// SetCodexFingerprintVersion sets the "codex_fingerprint_version" field.
+func (u *AccountUpsertOne) SetCodexFingerprintVersion(v string) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetCodexFingerprintVersion(v)
+	})
+}
+
+// UpdateCodexFingerprintVersion sets the "codex_fingerprint_version" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateCodexFingerprintVersion() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateCodexFingerprintVersion()
+	})
+}
+
+// SetCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field.
+func (u *AccountUpsertOne) SetCodexFingerprintEpoch(v int64) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetCodexFingerprintEpoch(v)
+	})
+}
+
+// AddCodexFingerprintEpoch adds v to the "codex_fingerprint_epoch" field.
+func (u *AccountUpsertOne) AddCodexFingerprintEpoch(v int64) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.AddCodexFingerprintEpoch(v)
+	})
+}
+
+// UpdateCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateCodexFingerprintEpoch() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateCodexFingerprintEpoch()
+	})
+}
+
+// SetCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field.
+func (u *AccountUpsertOne) SetCodexFingerprintEpochStartedAt(v time.Time) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetCodexFingerprintEpochStartedAt(v)
+	})
+}
+
+// UpdateCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateCodexFingerprintEpochStartedAt() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateCodexFingerprintEpochStartedAt()
+	})
+}
+
+// ClearCodexFingerprintEpochStartedAt clears the value of the "codex_fingerprint_epoch_started_at" field.
+func (u *AccountUpsertOne) ClearCodexFingerprintEpochStartedAt() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearCodexFingerprintEpochStartedAt()
 	})
 }
 
@@ -2384,6 +2623,83 @@ func (u *AccountUpsertBulk) SetExtra(v map[string]interface{}) *AccountUpsertBul
 func (u *AccountUpsertBulk) UpdateExtra() *AccountUpsertBulk {
 	return u.Update(func(s *AccountUpsert) {
 		s.UpdateExtra()
+	})
+}
+
+// SetCodexFingerprintSeed sets the "codex_fingerprint_seed" field.
+func (u *AccountUpsertBulk) SetCodexFingerprintSeed(v string) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetCodexFingerprintSeed(v)
+	})
+}
+
+// UpdateCodexFingerprintSeed sets the "codex_fingerprint_seed" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateCodexFingerprintSeed() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateCodexFingerprintSeed()
+	})
+}
+
+// ClearCodexFingerprintSeed clears the value of the "codex_fingerprint_seed" field.
+func (u *AccountUpsertBulk) ClearCodexFingerprintSeed() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearCodexFingerprintSeed()
+	})
+}
+
+// SetCodexFingerprintVersion sets the "codex_fingerprint_version" field.
+func (u *AccountUpsertBulk) SetCodexFingerprintVersion(v string) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetCodexFingerprintVersion(v)
+	})
+}
+
+// UpdateCodexFingerprintVersion sets the "codex_fingerprint_version" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateCodexFingerprintVersion() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateCodexFingerprintVersion()
+	})
+}
+
+// SetCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field.
+func (u *AccountUpsertBulk) SetCodexFingerprintEpoch(v int64) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetCodexFingerprintEpoch(v)
+	})
+}
+
+// AddCodexFingerprintEpoch adds v to the "codex_fingerprint_epoch" field.
+func (u *AccountUpsertBulk) AddCodexFingerprintEpoch(v int64) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.AddCodexFingerprintEpoch(v)
+	})
+}
+
+// UpdateCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateCodexFingerprintEpoch() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateCodexFingerprintEpoch()
+	})
+}
+
+// SetCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field.
+func (u *AccountUpsertBulk) SetCodexFingerprintEpochStartedAt(v time.Time) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetCodexFingerprintEpochStartedAt(v)
+	})
+}
+
+// UpdateCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateCodexFingerprintEpochStartedAt() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateCodexFingerprintEpochStartedAt()
+	})
+}
+
+// ClearCodexFingerprintEpochStartedAt clears the value of the "codex_fingerprint_epoch_started_at" field.
+func (u *AccountUpsertBulk) ClearCodexFingerprintEpochStartedAt() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearCodexFingerprintEpochStartedAt()
 	})
 }
 

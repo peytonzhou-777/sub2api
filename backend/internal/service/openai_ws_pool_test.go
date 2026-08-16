@@ -623,6 +623,38 @@ func TestOpenAIWSConnPool_AcquireReusesOnlyMatchingBetaFeatures(t *testing.T) {
 	require.Equal(t, 2, dialer.DialCount())
 }
 
+func TestOpenAIWSHandshakeCompatibilitySeparatesFingerprintSessions(t *testing.T) {
+	base := http.Header{
+		"OpenAI-Beta":             []string{"responses_websockets=2026-02-06"},
+		"X-Codex-Installation-Id": []string{"device-a"},
+		"Session-Id":              []string{"session-1"},
+	}
+	nextSession := base.Clone()
+	nextSession.Set("session-id", "session-2")
+
+	baseKey := normalizeOpenAIWSHandshakeCompatibility(base)
+	nextKey := normalizeOpenAIWSHandshakeCompatibility(nextSession)
+	require.NotEmpty(t, baseKey.fingerprintScope)
+	require.NotEqual(t, baseKey, nextKey)
+	require.Equal(t, baseKey.betaFeatures, nextKey.betaFeatures)
+}
+
+func TestOpenAIWSConnPoolRotationBusyIgnoresIdleConnections(t *testing.T) {
+	pool := newOpenAIWSConnPool(&config.Config{})
+	t.Cleanup(pool.Close)
+	accountID := int64(901)
+	ap := pool.getOrCreateAccountPool(accountID)
+	idle := newOpenAIWSConn("idle", accountID, &openAIWSFakeConn{}, nil)
+	ap.mu.Lock()
+	ap.conns[idle.id] = idle
+	ap.mu.Unlock()
+
+	require.False(t, pool.AccountPoolRotationBusy(accountID), "普通空闲连接不应永久阻止 Session 轮换")
+	require.True(t, idle.tryAcquire())
+	require.True(t, pool.AccountPoolRotationBusy(accountID))
+	idle.release()
+}
+
 func TestOpenAIWSConnPool_AcquireReplacesIdleConnWithDifferentBetaFeatures(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 1

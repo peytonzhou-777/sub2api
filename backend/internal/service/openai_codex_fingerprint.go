@@ -149,6 +149,8 @@ type codexFingerprintIDs struct {
 	threadID       string
 	turnID         string
 	windowID       string
+	promptCacheKey string
+	requestID      string
 }
 
 // resolveCodexFingerprintIDs 按收敛模式计算出站 ID 集合。
@@ -240,7 +242,11 @@ func applyCodexFingerprintHeaders(h http.Header, ids *codexFingerprintIDs) {
 
 	// session / full 模式：改写所有相关头
 	h.Set("x-codex-window-id", ids.windowID)
-	h.Set("x-client-request-id", ids.threadID)
+	if ids.requestID != "" {
+		h.Set("x-client-request-id", ids.requestID)
+	} else {
+		h.Set("x-client-request-id", ids.threadID)
+	}
 	// 连字符形式和下划线形式都改写，保证一致
 	h.Set("session-id", ids.sessionID)
 	h.Set("session_id", ids.sessionID)
@@ -289,7 +295,12 @@ func applyCodexFingerprintClientMetadata(reqBody map[string]any, ids *codexFinge
 		existing = make(map[string]any)
 	}
 
-	if !applyCodexFingerprintToClientMetadataMap(existing, ids) {
+	modified := applyCodexFingerprintToClientMetadataMap(existing, ids)
+	if ids.promptCacheKey != "" {
+		reqBody["prompt_cache_key"] = ids.promptCacheKey
+		modified = true
+	}
+	if !modified {
 		return false
 	}
 	reqBody["client_metadata"] = existing
@@ -369,6 +380,12 @@ func applyCodexFingerprintClientMetadataRaw(body []byte, ids *codexFingerprintID
 	next, err := sjson.SetRawBytes(body, "client_metadata", raw)
 	if err != nil {
 		return body, false, fmt.Errorf("splice converged client_metadata: %w", err)
+	}
+	if ids.promptCacheKey != "" {
+		next, err = sjson.SetBytes(next, "prompt_cache_key", ids.promptCacheKey)
+		if err != nil {
+			return body, false, fmt.Errorf("splice converged prompt_cache_key: %w", err)
+		}
 	}
 	return next, true, nil
 }

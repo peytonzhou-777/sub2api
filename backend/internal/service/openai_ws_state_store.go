@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -27,6 +28,7 @@ type openAIWSAccountBinding struct {
 
 type openAIWSConnBinding struct {
 	connID    string
+	target    openAIWSConnectionTarget
 	expiresAt time.Time
 }
 
@@ -37,7 +39,55 @@ type openAIWSTurnStateBinding struct {
 
 type openAIWSSessionConnBinding struct {
 	connID    string
+	target    openAIWSConnectionTarget
 	expiresAt time.Time
+}
+
+// openAIWSConnectionTarget 描述连接可复用的完整上游目标。
+// 任一字段变化都必须按未命中处理，避免旧账号或旧 epoch 的连接被透明复用。
+type openAIWSConnectionTarget struct {
+	accountID        int64
+	fingerprintScope string
+	transport        OpenAIUpstreamTransport
+	wsURL            string
+}
+
+func newOpenAIWSConnectionTarget(account *Account, transport OpenAIUpstreamTransport, wsURL string, headers http.Header) openAIWSConnectionTarget {
+	target := openAIWSConnectionTarget{transport: transport, wsURL: strings.TrimSpace(wsURL)}
+	if account == nil {
+		return target
+	}
+	target.accountID = account.ID
+	target.fingerprintScope = normalizeOpenAIWSFingerprintScope(headers)
+	return target
+}
+
+// normalizeOpenAIWSFingerprintScope 对实际握手设备与 Session 标识取摘要，
+// 供连接索引和连接池共同判定兼容性，不暴露原始出站标识。
+func normalizeOpenAIWSFingerprintScope(headers http.Header) string {
+	if headers == nil {
+		return ""
+	}
+	installationID := strings.TrimSpace(headers.Get("x-codex-installation-id"))
+	sessionID := strings.TrimSpace(headers.Get("session-id"))
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(headers.Get("session_id"))
+	}
+	// installation_id 是指纹收敛已实际生效的门控；普通 API Key 客户端自带的
+	// session_id 仍沿用原连接复用语义，不能被误当成账号级握手指纹。
+	if installationID == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte("openai-ws-fingerprint-scope:v1\n" + installationID + "\n" + sessionID))
+	return hex.EncodeToString(sum[:16])
+}
+
+func (t openAIWSConnectionTarget) valid() bool {
+	return t.accountID > 0 && t.transport != "" && t.wsURL != ""
+}
+
+func (t openAIWSConnectionTarget) matches(other openAIWSConnectionTarget) bool {
+	return t.valid() && other.valid() && t == other
 }
 
 // OpenAIWSStateStore 管理 WSv2 的粘连状态。
@@ -61,6 +111,15 @@ type OpenAIWSStateStore interface {
 	BindSessionConn(groupID int64, sessionHash, connID string, ttl time.Duration)
 	GetSessionConn(groupID int64, sessionHash string) (string, bool)
 	DeleteSessionConn(groupID int64, sessionHash string)
+}
+
+// openAIWSTargetStateStore 为连接索引增加 expected-target 校验。
+// 保留基础接口是为了兼容测试桩；生产读取只接受实现本接口的存储。
+type openAIWSTargetStateStore interface {
+	BindResponseConnForTarget(responseID string, target openAIWSConnectionTarget, connID string, ttl time.Duration)
+	GetResponseConnForTarget(responseID string, expected openAIWSConnectionTarget) (string, bool)
+	BindSessionConnForTarget(groupID int64, sessionHash string, target openAIWSConnectionTarget, connID string, ttl time.Duration)
+	GetSessionConnForTarget(groupID int64, sessionHash string, expected openAIWSConnectionTarget) (string, bool)
 }
 
 type defaultOpenAIWSStateStore struct {
@@ -167,6 +226,14 @@ func (s *defaultOpenAIWSStateStore) DeleteResponseAccount(ctx context.Context, g
 }
 
 func (s *defaultOpenAIWSStateStore) BindResponseConn(responseID, connID string, ttl time.Duration) {
+	s.bindResponseConn(responseID, openAIWSConnectionTarget{}, connID, ttl)
+}
+
+func (s *defaultOpenAIWSStateStore) BindResponseConnForTarget(responseID string, target openAIWSConnectionTarget, connID string, ttl time.Duration) {
+	s.bindResponseConn(responseID, target, connID, ttl)
+}
+
+func (s *defaultOpenAIWSStateStore) bindResponseConn(responseID string, target openAIWSConnectionTarget, connID string, ttl time.Duration) {
 	id := normalizeOpenAIWSResponseID(responseID)
 	conn := strings.TrimSpace(connID)
 	if id == "" || conn == "" {
@@ -179,12 +246,21 @@ func (s *defaultOpenAIWSStateStore) BindResponseConn(responseID, connID string, 
 	ensureBindingCapacity(s.responseToConn, id, openAIWSStateStoreMaxEntriesPerMap)
 	s.responseToConn[id] = openAIWSConnBinding{
 		connID:    conn,
+		target:    target,
 		expiresAt: time.Now().Add(ttl),
 	}
 	s.responseToConnMu.Unlock()
 }
 
 func (s *defaultOpenAIWSStateStore) GetResponseConn(responseID string) (string, bool) {
+	return s.getResponseConn(responseID, openAIWSConnectionTarget{}, false)
+}
+
+func (s *defaultOpenAIWSStateStore) GetResponseConnForTarget(responseID string, expected openAIWSConnectionTarget) (string, bool) {
+	return s.getResponseConn(responseID, expected, true)
+}
+
+func (s *defaultOpenAIWSStateStore) getResponseConn(responseID string, expected openAIWSConnectionTarget, validateTarget bool) (string, bool) {
 	id := normalizeOpenAIWSResponseID(responseID)
 	if id == "" {
 		return "", false
@@ -195,7 +271,8 @@ func (s *defaultOpenAIWSStateStore) GetResponseConn(responseID string) (string, 
 	s.responseToConnMu.RLock()
 	binding, ok := s.responseToConn[id]
 	s.responseToConnMu.RUnlock()
-	if !ok || now.After(binding.expiresAt) || strings.TrimSpace(binding.connID) == "" {
+	if !ok || now.After(binding.expiresAt) || strings.TrimSpace(binding.connID) == "" ||
+		(validateTarget && !binding.target.matches(expected)) {
 		return "", false
 	}
 	return binding.connID, true
@@ -266,6 +343,14 @@ func (s *defaultOpenAIWSStateStore) GetTurnStateAccount(ctx context.Context, gro
 }
 
 func (s *defaultOpenAIWSStateStore) BindSessionConn(groupID int64, sessionHash, connID string, ttl time.Duration) {
+	s.bindSessionConn(groupID, sessionHash, openAIWSConnectionTarget{}, connID, ttl)
+}
+
+func (s *defaultOpenAIWSStateStore) BindSessionConnForTarget(groupID int64, sessionHash string, target openAIWSConnectionTarget, connID string, ttl time.Duration) {
+	s.bindSessionConn(groupID, sessionHash, target, connID, ttl)
+}
+
+func (s *defaultOpenAIWSStateStore) bindSessionConn(groupID int64, sessionHash string, target openAIWSConnectionTarget, connID string, ttl time.Duration) {
 	key := openAIWSSessionTurnStateKey(groupID, sessionHash)
 	conn := strings.TrimSpace(connID)
 	if key == "" || conn == "" {
@@ -278,12 +363,21 @@ func (s *defaultOpenAIWSStateStore) BindSessionConn(groupID int64, sessionHash, 
 	ensureBindingCapacity(s.sessionToConn, key, openAIWSStateStoreMaxEntriesPerMap)
 	s.sessionToConn[key] = openAIWSSessionConnBinding{
 		connID:    conn,
+		target:    target,
 		expiresAt: time.Now().Add(ttl),
 	}
 	s.sessionToConnMu.Unlock()
 }
 
 func (s *defaultOpenAIWSStateStore) GetSessionConn(groupID int64, sessionHash string) (string, bool) {
+	return s.getSessionConn(groupID, sessionHash, openAIWSConnectionTarget{}, false)
+}
+
+func (s *defaultOpenAIWSStateStore) GetSessionConnForTarget(groupID int64, sessionHash string, expected openAIWSConnectionTarget) (string, bool) {
+	return s.getSessionConn(groupID, sessionHash, expected, true)
+}
+
+func (s *defaultOpenAIWSStateStore) getSessionConn(groupID int64, sessionHash string, expected openAIWSConnectionTarget, validateTarget bool) (string, bool) {
 	key := openAIWSSessionTurnStateKey(groupID, sessionHash)
 	if key == "" {
 		return "", false
@@ -294,10 +388,43 @@ func (s *defaultOpenAIWSStateStore) GetSessionConn(groupID int64, sessionHash st
 	s.sessionToConnMu.RLock()
 	binding, ok := s.sessionToConn[key]
 	s.sessionToConnMu.RUnlock()
-	if !ok || now.After(binding.expiresAt) || strings.TrimSpace(binding.connID) == "" {
+	if !ok || now.After(binding.expiresAt) || strings.TrimSpace(binding.connID) == "" ||
+		(validateTarget && !binding.target.matches(expected)) {
 		return "", false
 	}
 	return binding.connID, true
+}
+
+func bindOpenAIWSResponseConn(store OpenAIWSStateStore, responseID string, target openAIWSConnectionTarget, connID string, ttl time.Duration) {
+	targetStore, ok := store.(openAIWSTargetStateStore)
+	if !ok || !target.valid() {
+		return
+	}
+	targetStore.BindResponseConnForTarget(responseID, target, connID, ttl)
+}
+
+func getOpenAIWSResponseConn(store OpenAIWSStateStore, responseID string, expected openAIWSConnectionTarget) (string, bool) {
+	targetStore, ok := store.(openAIWSTargetStateStore)
+	if !ok || !expected.valid() {
+		return "", false
+	}
+	return targetStore.GetResponseConnForTarget(responseID, expected)
+}
+
+func bindOpenAIWSSessionConn(store OpenAIWSStateStore, groupID int64, sessionHash string, target openAIWSConnectionTarget, connID string, ttl time.Duration) {
+	targetStore, ok := store.(openAIWSTargetStateStore)
+	if !ok || !target.valid() {
+		return
+	}
+	targetStore.BindSessionConnForTarget(groupID, sessionHash, target, connID, ttl)
+}
+
+func getOpenAIWSSessionConn(store OpenAIWSStateStore, groupID int64, sessionHash string, expected openAIWSConnectionTarget) (string, bool) {
+	targetStore, ok := store.(openAIWSTargetStateStore)
+	if !ok || !expected.valid() {
+		return "", false
+	}
+	return targetStore.GetSessionConnForTarget(groupID, sessionHash, expected)
 }
 
 func (s *defaultOpenAIWSStateStore) DeleteSessionConn(groupID int64, sessionHash string) {

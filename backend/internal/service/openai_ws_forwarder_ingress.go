@@ -143,6 +143,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			wsPath = normalizeOpenAIWSLogValue(parsedURL.Path)
 		}
 	}
+	var connectionTarget openAIWSConnectionTarget
 	debugEnabled := isOpenAIWSModeDebugEnabled()
 	isCodexCLI := openai.IsCodexOfficialClientByHeaders(c.GetHeader("User-Agent"), c.GetHeader("originator")) || (s.cfg != nil && s.cfg.Gateway.ForceCodexCLI)
 
@@ -397,6 +398,15 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			)
 		}
 		normalized = policyApplied
+		if account.IsOpenAIOAuth() && !isOpenAIResponsesCompactPath(c) {
+			// rawForHash 保留客户端原值，只有实际出站 payload 使用账号级身份。
+			fingerprinted, fpErr := s.applyCodexFingerprintRawForAttempt(ctx, c, account, normalized, true)
+			if fpErr != nil {
+				return openAIWSClientPayload{}, fmt.Errorf("apply ingress codex fingerprint: %w", fpErr)
+			}
+			normalized = fingerprinted
+			promptCacheKey = strings.TrimSpace(gjson.GetBytes(normalized, "prompt_cache_key").String())
+		}
 		ingressSessionOriginalModel = originalModel
 
 		return openAIWSClientPayload{
@@ -461,14 +471,14 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 
 		preferredConnID = ""
 		if stateStore != nil && payload.previousResponseID != "" {
-			if connID, ok := stateStore.GetResponseConn(payload.previousResponseID); ok {
+			if connID, ok := getOpenAIWSResponseConn(stateStore, payload.previousResponseID, connectionTarget); ok {
 				preferredConnID = connID
 			}
 		}
 
 		storeDisabled = s.isOpenAIWSStoreDisabledInRequestRaw(payload.payloadRaw, account)
 		if stateStore != nil && storeDisabled && payload.previousResponseID == "" && sessionHash != "" {
-			if connID, ok := stateStore.GetSessionConn(groupID, sessionHash); ok {
+			if connID, ok := getOpenAIWSSessionConn(stateStore, groupID, sessionHash, connectionTarget); ok {
 				preferredConnID = connID
 			}
 		}
@@ -629,6 +639,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	if buildHdrErr != nil {
 		return fmt.Errorf("build ws headers: %w", buildHdrErr)
 	}
+	connectionTarget = newOpenAIWSConnectionTarget(account, wsDecision.Transport, wsURL, wsHeaders)
+	// 首次解析 payload 时握手头尚未构造；现在按实际 fingerprint scope 重新解析首选连接。
+	refreshIngressRouteState(firstPayload)
 	baseAcquireReq := openAIWSAcquireRequest{
 		Account: account,
 		WSURL:   wsURL,
@@ -1629,10 +1642,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if responseID != "" && stateStore != nil {
 			ttl := s.openAIWSResponseStickyTTL()
 			logOpenAIWSBindResponseAccountWarn(groupID, account.ID, responseID, stateStore.BindResponseAccount(ctx, groupID, responseID, account.ID, ttl))
-			stateStore.BindResponseConn(responseID, connID, ttl)
+			bindOpenAIWSResponseConn(stateStore, responseID, connectionTarget, connID, ttl)
 		}
 		if stateStore != nil && storeDisabled && sessionHash != "" {
-			stateStore.BindSessionConn(groupID, sessionHash, connID, s.openAIWSSessionStickyTTL())
+			bindOpenAIWSSessionConn(stateStore, groupID, sessionHash, connectionTarget, connID, s.openAIWSSessionStickyTTL())
 		}
 		if connID != "" {
 			preferredConnID = connID
@@ -1701,7 +1714,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			)
 		}
 		if stateStore != nil && nextPayload.previousResponseID != "" {
-			if stickyConnID, ok := stateStore.GetResponseConn(nextPayload.previousResponseID); ok {
+			if stickyConnID, ok := getOpenAIWSResponseConn(stateStore, nextPayload.previousResponseID, connectionTarget); ok {
 				if sessionConnID != "" && stickyConnID != "" && stickyConnID != sessionConnID {
 					logOpenAIWSModeInfo(
 						"ingress_ws_keep_session_conn account_id=%d turn=%d conn_id=%s sticky_conn_id=%s previous_response_id=%s",

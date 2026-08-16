@@ -59,7 +59,6 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		wsHost,
 		wsPath,
 	)
-
 	payload := s.buildOpenAIWSCreatePayload(reqBody, account)
 	payloadStrategy, removedKeys := applyOpenAIWSRetryPayloadStrategy(payload, attempt)
 	previousResponseID := openAIWSPayloadString(payload, "previous_response_id")
@@ -117,21 +116,6 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		sessionHash, legacySessionHash = openAIWSSessionHashesFromID(promptCacheKey)
 		attachOpenAILegacySessionHashToGin(c, legacySessionHash)
 	}
-	preferredConnID := ""
-	if stateStore != nil && previousResponseID != "" {
-		if connID, ok := stateStore.GetResponseConn(previousResponseID); ok {
-			preferredConnID = connID
-		}
-	}
-	storeDisabled := s.isOpenAIWSStoreDisabledInRequest(reqBody, account)
-	if stateStore != nil && storeDisabled && previousResponseID == "" && sessionHash != "" {
-		if connID, ok := stateStore.GetSessionConn(groupID, sessionHash); ok {
-			preferredConnID = connID
-		}
-	}
-	storeDisabledConnMode := s.openAIWSStoreDisabledConnMode()
-	forceNewConnByPolicy := shouldForceNewConnOnStoreDisabled(storeDisabledConnMode, lastFailureReason)
-	forceNewConn := forceNewConnByPolicy && storeDisabled && previousResponseID == "" && sessionHash != "" && preferredConnID == ""
 	wsHeaders, sessionResolution, buildHdrErr := s.buildOpenAIWSHeaders(
 		ctx,
 		c,
@@ -148,6 +132,22 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	if buildHdrErr != nil {
 		return nil, fmt.Errorf("build ws headers: %w", buildHdrErr)
 	}
+	connectionTarget := newOpenAIWSConnectionTarget(account, decision.Transport, wsURL, wsHeaders)
+	preferredConnID := ""
+	if stateStore != nil && previousResponseID != "" {
+		if connID, ok := getOpenAIWSResponseConn(stateStore, previousResponseID, connectionTarget); ok {
+			preferredConnID = connID
+		}
+	}
+	storeDisabled := s.isOpenAIWSStoreDisabledInRequest(reqBody, account)
+	if stateStore != nil && storeDisabled && previousResponseID == "" && sessionHash != "" {
+		if connID, ok := getOpenAIWSSessionConn(stateStore, groupID, sessionHash, connectionTarget); ok {
+			preferredConnID = connID
+		}
+	}
+	storeDisabledConnMode := s.openAIWSStoreDisabledConnMode()
+	forceNewConnByPolicy := shouldForceNewConnOnStoreDisabled(storeDisabledConnMode, lastFailureReason)
+	forceNewConn := forceNewConnByPolicy && storeDisabled && previousResponseID == "" && sessionHash != "" && preferredConnID == ""
 	logOpenAIWSModeDebug(
 		"acquire_start account_id=%d account_type=%s transport=%s preferred_conn_id=%s has_previous_response_id=%v session_hash=%s has_turn_state=%v turn_state_len=%d has_turn_metadata=%v turn_metadata_len=%d store_disabled=%v store_disabled_conn_mode=%s retry_last_reason=%s force_new_conn=%v header_user_agent=%s header_openai_beta=%s header_originator=%s header_accept_language=%s header_session_id=%s header_conversation_id=%s session_id_source=%s conversation_id_source=%s has_prompt_cache_key=%v has_chatgpt_account_id=%v has_authorization=%v has_session_id=%v has_conversation_id=%v proxy_enabled=%v",
 		account.ID,
@@ -319,6 +319,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		account,
 		stateStore,
 		groupID,
+		connectionTarget,
 	); err != nil {
 		return nil, err
 	}
@@ -734,10 +735,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	if responseID != "" && stateStore != nil {
 		ttl := s.openAIWSResponseStickyTTL()
 		logOpenAIWSBindResponseAccountWarn(groupID, account.ID, responseID, stateStore.BindResponseAccount(ctx, groupID, responseID, account.ID, ttl))
-		stateStore.BindResponseConn(responseID, lease.ConnID(), ttl)
+		bindOpenAIWSResponseConn(stateStore, responseID, connectionTarget, lease.ConnID(), ttl)
 	}
 	if stateStore != nil && storeDisabled && sessionHash != "" {
-		stateStore.BindSessionConn(groupID, sessionHash, lease.ConnID(), s.openAIWSSessionStickyTTL())
+		bindOpenAIWSSessionConn(stateStore, groupID, sessionHash, connectionTarget, lease.ConnID(), s.openAIWSSessionStickyTTL())
 	}
 	firstTokenMsValue := -1
 	if firstTokenMs != nil {

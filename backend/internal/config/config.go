@@ -932,6 +932,15 @@ type GatewayConfig struct {
 	// CodexImageGenerationBridgeEnabled: 是否为 Codex `/v1/responses` 自动注入 image_generation 工具和桥接指令。
 	// 默认关闭，避免纯文本 Codex 请求被意外改写；显式携带 image_generation 工具的请求仍按分组能力转发。
 	CodexImageGenerationBridgeEnabled bool `mapstructure:"codex_image_generation_bridge_enabled"`
+	// CodexFingerprintSecret: v2 指纹 HMAC 集群密钥，HA 副本必须一致。
+	// 空值保持兼容：尚未初始化的账号继续旧算法；已初始化 v2 的账号失败关闭。
+	CodexFingerprintSecret string `mapstructure:"codex_fingerprint_secret"`
+	// CodexFingerprintMinSessionAgeHours: Session 最短寿命，达到后才允许在空闲门上轮换。
+	CodexFingerprintMinSessionAgeHours int `mapstructure:"codex_fingerprint_min_session_age_hours"`
+	// CodexFingerprintIdleGateMinutes: 账号上游活动连续空闲门槛。
+	CodexFingerprintIdleGateMinutes int `mapstructure:"codex_fingerprint_idle_gate_minutes"`
+	// CodexFingerprintOldEpochGraceHours: 旧 Thread epoch 绑定保留宽限期。
+	CodexFingerprintOldEpochGraceHours int `mapstructure:"codex_fingerprint_old_epoch_grace_hours"`
 	// ForcedCodexInstructionsTemplateFile: 服务端强制附加到 Codex 顶层 instructions 的模板文件路径。
 	// 模板渲染后会直接覆盖最终 instructions；若需要保留客户端 system 转换结果，请在模板中显式引用 {{ .ExistingInstructions }}。
 	ForcedCodexInstructionsTemplateFile string `mapstructure:"forced_codex_instructions_template_file"`
@@ -2291,6 +2300,10 @@ func setDefaults() {
 	viper.SetDefault("gateway.disable_codex_identity_enforcement", false)
 	viper.SetDefault("gateway.disable_codex_originator_normalization", false)
 	viper.SetDefault("gateway.codex_image_generation_bridge_enabled", false)
+	viper.SetDefault("gateway.codex_fingerprint_secret", "")
+	viper.SetDefault("gateway.codex_fingerprint_min_session_age_hours", 14*24)
+	viper.SetDefault("gateway.codex_fingerprint_idle_gate_minutes", 120)
+	viper.SetDefault("gateway.codex_fingerprint_old_epoch_grace_hours", 48)
 	viper.SetDefault("gateway.openai_passthrough_allow_timeout_headers", false)
 	viper.SetDefault("gateway.openai_compact_model", "gpt-5.4")
 	viper.SetDefault("gateway.live.max_session_duration_seconds", 3600)
@@ -3269,6 +3282,18 @@ func (c *Config) Validate() error {
 	if c.Gateway.ImageStreamKeepaliveInterval != 0 &&
 		(c.Gateway.ImageStreamKeepaliveInterval < 5 || c.Gateway.ImageStreamKeepaliveInterval > 60) {
 		return fmt.Errorf("gateway.image_stream_keepalive_interval must be 0 or between 5-60 seconds")
+	}
+	if secret := strings.TrimSpace(c.Gateway.CodexFingerprintSecret); secret != "" && len([]byte(secret)) < 32 {
+		return fmt.Errorf("gateway.codex_fingerprint_secret must be at least 32 bytes when configured")
+	}
+	if c.Gateway.CodexFingerprintMinSessionAgeHours <= 0 {
+		return fmt.Errorf("gateway.codex_fingerprint_min_session_age_hours must be positive")
+	}
+	if c.Gateway.CodexFingerprintIdleGateMinutes <= 0 {
+		return fmt.Errorf("gateway.codex_fingerprint_idle_gate_minutes must be positive")
+	}
+	if c.Gateway.CodexFingerprintOldEpochGraceHours <= 0 {
+		return fmt.Errorf("gateway.codex_fingerprint_old_epoch_grace_hours must be positive")
 	}
 	if c.Gateway.ImageNonstreamKeepaliveInterval < 0 {
 		return fmt.Errorf("gateway.image_nonstream_keepalive_interval must be non-negative")

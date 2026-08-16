@@ -37,6 +37,14 @@ type Account struct {
 	Credentials map[string]interface{} `json:"credentials,omitempty"`
 	// Extra holds the value of the "extra" field.
 	Extra map[string]interface{} `json:"extra,omitempty"`
+	// CodexFingerprintSeed holds the value of the "codex_fingerprint_seed" field.
+	CodexFingerprintSeed *string `json:"codex_fingerprint_seed,omitempty"`
+	// CodexFingerprintVersion holds the value of the "codex_fingerprint_version" field.
+	CodexFingerprintVersion string `json:"codex_fingerprint_version,omitempty"`
+	// CodexFingerprintEpoch holds the value of the "codex_fingerprint_epoch" field.
+	CodexFingerprintEpoch int64 `json:"codex_fingerprint_epoch,omitempty"`
+	// CodexFingerprintEpochStartedAt holds the value of the "codex_fingerprint_epoch_started_at" field.
+	CodexFingerprintEpochStartedAt *time.Time `json:"codex_fingerprint_epoch_started_at,omitempty"`
 	// ProxyID holds the value of the "proxy_id" field.
 	ProxyID *int64 `json:"proxy_id,omitempty"`
 	// Original proxy id replaced by expiry-fallback; for manual revert. NULL = not in fallback.
@@ -175,11 +183,11 @@ func (*Account) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case account.FieldRateMultiplier:
 			values[i] = new(sql.NullFloat64)
-		case account.FieldID, account.FieldProxyID, account.FieldProxyFallbackOriginID, account.FieldConcurrency, account.FieldLoadFactor, account.FieldPriority, account.FieldParentAccountID:
+		case account.FieldID, account.FieldCodexFingerprintEpoch, account.FieldProxyID, account.FieldProxyFallbackOriginID, account.FieldConcurrency, account.FieldLoadFactor, account.FieldPriority, account.FieldParentAccountID:
 			values[i] = new(sql.NullInt64)
-		case account.FieldName, account.FieldNotes, account.FieldPlatform, account.FieldType, account.FieldStatus, account.FieldErrorMessage, account.FieldTempUnschedulableReason, account.FieldSessionWindowStatus, account.FieldQuotaDimension:
+		case account.FieldName, account.FieldNotes, account.FieldPlatform, account.FieldType, account.FieldCodexFingerprintSeed, account.FieldCodexFingerprintVersion, account.FieldStatus, account.FieldErrorMessage, account.FieldTempUnschedulableReason, account.FieldSessionWindowStatus, account.FieldQuotaDimension:
 			values[i] = new(sql.NullString)
-		case account.FieldCreatedAt, account.FieldUpdatedAt, account.FieldDeletedAt, account.FieldLastUsedAt, account.FieldExpiresAt, account.FieldRateLimitedAt, account.FieldRateLimitResetAt, account.FieldOverloadUntil, account.FieldTempUnschedulableUntil, account.FieldSessionWindowStart, account.FieldSessionWindowEnd:
+		case account.FieldCreatedAt, account.FieldUpdatedAt, account.FieldDeletedAt, account.FieldCodexFingerprintEpochStartedAt, account.FieldLastUsedAt, account.FieldExpiresAt, account.FieldRateLimitedAt, account.FieldRateLimitResetAt, account.FieldOverloadUntil, account.FieldTempUnschedulableUntil, account.FieldSessionWindowStart, account.FieldSessionWindowEnd:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -261,6 +269,32 @@ func (_m *Account) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.Extra); err != nil {
 					return fmt.Errorf("unmarshal field extra: %w", err)
 				}
+			}
+		case account.FieldCodexFingerprintSeed:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field codex_fingerprint_seed", values[i])
+			} else if value.Valid {
+				_m.CodexFingerprintSeed = new(string)
+				*_m.CodexFingerprintSeed = value.String
+			}
+		case account.FieldCodexFingerprintVersion:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field codex_fingerprint_version", values[i])
+			} else if value.Valid {
+				_m.CodexFingerprintVersion = value.String
+			}
+		case account.FieldCodexFingerprintEpoch:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field codex_fingerprint_epoch", values[i])
+			} else if value.Valid {
+				_m.CodexFingerprintEpoch = value.Int64
+			}
+		case account.FieldCodexFingerprintEpochStartedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field codex_fingerprint_epoch_started_at", values[i])
+			} else if value.Valid {
+				_m.CodexFingerprintEpochStartedAt = new(time.Time)
+				*_m.CodexFingerprintEpochStartedAt = value.Time
 			}
 		case account.FieldProxyID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -505,6 +539,22 @@ func (_m *Account) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("extra=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Extra))
+	builder.WriteString(", ")
+	if v := _m.CodexFingerprintSeed; v != nil {
+		builder.WriteString("codex_fingerprint_seed=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	builder.WriteString("codex_fingerprint_version=")
+	builder.WriteString(_m.CodexFingerprintVersion)
+	builder.WriteString(", ")
+	builder.WriteString("codex_fingerprint_epoch=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CodexFingerprintEpoch))
+	builder.WriteString(", ")
+	if v := _m.CodexFingerprintEpochStartedAt; v != nil {
+		builder.WriteString("codex_fingerprint_epoch_started_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	if v := _m.ProxyID; v != nil {
 		builder.WriteString("proxy_id=")

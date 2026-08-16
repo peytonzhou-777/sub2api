@@ -752,6 +752,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, blocked.Message, blocked)
 	}
 	firstClientMessage = updatedFirst
+	if account.IsOpenAIOAuth() {
+		fingerprinted, fpErr := s.applyCodexFingerprintRawForAttempt(ctx, c, account, firstClientMessage, true)
+		if fpErr != nil {
+			return fmt.Errorf("apply first passthrough codex fingerprint: %w", fpErr)
+		}
+		firstClientMessage = fingerprinted
+	}
 
 	// 在 policy filter 之后再提取 service_tier / reasoning_effort 用于
 	// usage 上报：filter
@@ -1030,6 +1037,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				payload = s.ReplaceModelInBody(payload, model)
 			}
 			out, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, model, payload)
+			if policyErr == nil && blocked == nil && isResponseCreate && account.IsOpenAIOAuth() {
+				fingerprinted, fpErr := s.applyCodexFingerprintRawForAttempt(ctx, c, account, out, true)
+				if fpErr != nil {
+					return payload, nil, fmt.Errorf("apply passthrough codex fingerprint: %w", fpErr)
+				}
+				out = fingerprinted
+			}
 			// 多轮 passthrough usage：仅在成功（non-block / non-err）
 			// 的 response.create 帧上更新 usageMeta，使用
 			// filter 处理后的 payload，与首帧 policy-after-extract 语义

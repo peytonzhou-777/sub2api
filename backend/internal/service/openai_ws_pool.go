@@ -77,7 +77,8 @@ type openAIWSAcquireRequest struct {
 }
 
 type openAIWSHandshakeCompatibilityKey struct {
-	betaFeatures string
+	betaFeatures     string
+	fingerprintScope string
 }
 
 type openAIWSConnLease struct {
@@ -1499,6 +1500,22 @@ func (p *openAIWSConnPool) AccountPoolLoad(accountID int64) (inflight int, waite
 	return inflight, waiters, len(ap.conns)
 }
 
+// AccountPoolRotationBusy 判断账号是否仍有真实 WS 活动。
+// 普通空闲连接不阻止 Session 轮换；轮换提交后由 ClearAccount 统一淘汰。
+func (p *openAIWSConnPool) AccountPoolRotationBusy(accountID int64) bool {
+	if p == nil || accountID <= 0 {
+		return false
+	}
+	ap, ok := p.getAccountPool(accountID)
+	if !ok || ap == nil {
+		return false
+	}
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	inflight, waiters := accountPoolLoadLocked(ap)
+	return inflight > 0 || waiters > 0 || ap.creating > 0 || len(ap.pinnedConns) > 0
+}
+
 func (p *openAIWSConnPool) ensureTargetIdleAsync(accountID int64) {
 	if p == nil || accountID <= 0 {
 		return
@@ -2013,7 +2030,8 @@ func normalizeOpenAIWSBetaFeatures(headers http.Header) string {
 
 func normalizeOpenAIWSHandshakeCompatibility(headers http.Header) openAIWSHandshakeCompatibilityKey {
 	return openAIWSHandshakeCompatibilityKey{
-		betaFeatures: normalizeOpenAIWSBetaFeatures(headers),
+		betaFeatures:     normalizeOpenAIWSBetaFeatures(headers),
+		fingerprintScope: normalizeOpenAIWSFingerprintScope(headers),
 	}
 }
 

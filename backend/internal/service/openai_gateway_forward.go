@@ -22,6 +22,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	beginUpstreamResponseModelObservation(c)
 	restoreAttemptRequest := s.isolateOpenAITurnStateAttempt(ctx, c, account, body)
 	defer restoreAttemptRequest()
+	stageCodexFingerprintIDs(c, nil)
 	clearGrokResponsesClientToolMapping(c)
 	clearOpenAIResponsesNamespaceNames(c)
 	startTime := time.Now()
@@ -423,7 +424,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			if c != nil && c.Request != nil {
 				clientHeaders = c.Request.Header
 			}
-			fpIDs := resolveCodexFingerprintIDsFromRequest(account, clientHeaders)
+			fpContext, fpErr := s.resolveCodexFingerprintContextForAttempt(ctx, c, account, clientHeaders, body)
+			if fpErr != nil {
+				return nil, fpErr
+			}
+			fpIDs := codexFingerprintIDsFromContext(fpContext)
+			if fpIDs == nil {
+				fpIDs = resolveCodexFingerprintIDsFromRequest(account, clientHeaders)
+			}
 			if fpIDs != nil {
 				if applyCodexFingerprintClientMetadata(decoded, fpIDs) {
 					markDecodedModified()

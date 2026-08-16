@@ -90,6 +90,26 @@ func Type(v string) predicate.Account {
 	return predicate.Account(sql.FieldEQ(FieldType, v))
 }
 
+// CodexFingerprintSeed applies equality check predicate on the "codex_fingerprint_seed" field. It's identical to CodexFingerprintSeedEQ.
+func CodexFingerprintSeed(v string) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldCodexFingerprintSeed, v))
+}
+
+// CodexFingerprintVersion applies equality check predicate on the "codex_fingerprint_version" field. It's identical to CodexFingerprintVersionEQ.
+func CodexFingerprintVersion(v string) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldCodexFingerprintVersion, v))
+}
+
+// CodexFingerprintEpoch applies equality check predicate on the "codex_fingerprint_epoch" field. It's identical to CodexFingerprintEpochEQ.
+func CodexFingerprintEpoch(v int64) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldCodexFingerprintEpoch, v))
+}
+
+// CodexFingerprintEpochStartedAt applies equality check predicate on the "codex_fingerprint_epoch_started_at" field. It's identical to CodexFingerprintEpochStartedAtEQ.
+func CodexFingerprintEpochStartedAt(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldCodexFingerprintEpochStartedAt, v))
+}
+
 // ProxyID applies equality check predicate on the "proxy_id" field. It's identical to ProxyIDEQ.
 func ProxyID(v int64) predicate.Account {
 	return predicate.Account(sql.FieldEQ(FieldProxyID, v))
@@ -593,6 +613,236 @@ func TypeEqualFold(v string) predicate.Account {
 // TypeContainsFold applies the ContainsFold predicate on the "type" field.
 func TypeContainsFold(v string) predicate.Account {
 	return predicate.Account(sql.FieldContainsFold(FieldType, v))
+}
+
+// CodexFingerprintSeedEQ applies the EQ predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedEQ(v string) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldCodexFingerprintSeed, v))
+}
+
+// CodexFingerprintSeedNEQ applies the NEQ predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedNEQ(v string) predicate.Account {
+	return predicate.Account(sql.FieldNEQ(FieldCodexFingerprintSeed, v))
+}
+
+// CodexFingerprintSeedIn applies the In predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedIn(vs ...string) predicate.Account {
+	return predicate.Account(sql.FieldIn(FieldCodexFingerprintSeed, vs...))
+}
+
+// CodexFingerprintSeedNotIn applies the NotIn predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedNotIn(vs ...string) predicate.Account {
+	return predicate.Account(sql.FieldNotIn(FieldCodexFingerprintSeed, vs...))
+}
+
+// CodexFingerprintSeedGT applies the GT predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedGT(v string) predicate.Account {
+	return predicate.Account(sql.FieldGT(FieldCodexFingerprintSeed, v))
+}
+
+// CodexFingerprintSeedGTE applies the GTE predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedGTE(v string) predicate.Account {
+	return predicate.Account(sql.FieldGTE(FieldCodexFingerprintSeed, v))
+}
+
+// CodexFingerprintSeedLT applies the LT predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedLT(v string) predicate.Account {
+	return predicate.Account(sql.FieldLT(FieldCodexFingerprintSeed, v))
+}
+
+// CodexFingerprintSeedLTE applies the LTE predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedLTE(v string) predicate.Account {
+	return predicate.Account(sql.FieldLTE(FieldCodexFingerprintSeed, v))
+}
+
+// CodexFingerprintSeedContains applies the Contains predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedContains(v string) predicate.Account {
+	return predicate.Account(sql.FieldContains(FieldCodexFingerprintSeed, v))
+}
+
+// CodexFingerprintSeedHasPrefix applies the HasPrefix predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedHasPrefix(v string) predicate.Account {
+	return predicate.Account(sql.FieldHasPrefix(FieldCodexFingerprintSeed, v))
+}
+
+// CodexFingerprintSeedHasSuffix applies the HasSuffix predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedHasSuffix(v string) predicate.Account {
+	return predicate.Account(sql.FieldHasSuffix(FieldCodexFingerprintSeed, v))
+}
+
+// CodexFingerprintSeedIsNil applies the IsNil predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedIsNil() predicate.Account {
+	return predicate.Account(sql.FieldIsNull(FieldCodexFingerprintSeed))
+}
+
+// CodexFingerprintSeedNotNil applies the NotNil predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedNotNil() predicate.Account {
+	return predicate.Account(sql.FieldNotNull(FieldCodexFingerprintSeed))
+}
+
+// CodexFingerprintSeedEqualFold applies the EqualFold predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedEqualFold(v string) predicate.Account {
+	return predicate.Account(sql.FieldEqualFold(FieldCodexFingerprintSeed, v))
+}
+
+// CodexFingerprintSeedContainsFold applies the ContainsFold predicate on the "codex_fingerprint_seed" field.
+func CodexFingerprintSeedContainsFold(v string) predicate.Account {
+	return predicate.Account(sql.FieldContainsFold(FieldCodexFingerprintSeed, v))
+}
+
+// CodexFingerprintVersionEQ applies the EQ predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionEQ(v string) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldCodexFingerprintVersion, v))
+}
+
+// CodexFingerprintVersionNEQ applies the NEQ predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionNEQ(v string) predicate.Account {
+	return predicate.Account(sql.FieldNEQ(FieldCodexFingerprintVersion, v))
+}
+
+// CodexFingerprintVersionIn applies the In predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionIn(vs ...string) predicate.Account {
+	return predicate.Account(sql.FieldIn(FieldCodexFingerprintVersion, vs...))
+}
+
+// CodexFingerprintVersionNotIn applies the NotIn predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionNotIn(vs ...string) predicate.Account {
+	return predicate.Account(sql.FieldNotIn(FieldCodexFingerprintVersion, vs...))
+}
+
+// CodexFingerprintVersionGT applies the GT predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionGT(v string) predicate.Account {
+	return predicate.Account(sql.FieldGT(FieldCodexFingerprintVersion, v))
+}
+
+// CodexFingerprintVersionGTE applies the GTE predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionGTE(v string) predicate.Account {
+	return predicate.Account(sql.FieldGTE(FieldCodexFingerprintVersion, v))
+}
+
+// CodexFingerprintVersionLT applies the LT predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionLT(v string) predicate.Account {
+	return predicate.Account(sql.FieldLT(FieldCodexFingerprintVersion, v))
+}
+
+// CodexFingerprintVersionLTE applies the LTE predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionLTE(v string) predicate.Account {
+	return predicate.Account(sql.FieldLTE(FieldCodexFingerprintVersion, v))
+}
+
+// CodexFingerprintVersionContains applies the Contains predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionContains(v string) predicate.Account {
+	return predicate.Account(sql.FieldContains(FieldCodexFingerprintVersion, v))
+}
+
+// CodexFingerprintVersionHasPrefix applies the HasPrefix predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionHasPrefix(v string) predicate.Account {
+	return predicate.Account(sql.FieldHasPrefix(FieldCodexFingerprintVersion, v))
+}
+
+// CodexFingerprintVersionHasSuffix applies the HasSuffix predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionHasSuffix(v string) predicate.Account {
+	return predicate.Account(sql.FieldHasSuffix(FieldCodexFingerprintVersion, v))
+}
+
+// CodexFingerprintVersionEqualFold applies the EqualFold predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionEqualFold(v string) predicate.Account {
+	return predicate.Account(sql.FieldEqualFold(FieldCodexFingerprintVersion, v))
+}
+
+// CodexFingerprintVersionContainsFold applies the ContainsFold predicate on the "codex_fingerprint_version" field.
+func CodexFingerprintVersionContainsFold(v string) predicate.Account {
+	return predicate.Account(sql.FieldContainsFold(FieldCodexFingerprintVersion, v))
+}
+
+// CodexFingerprintEpochEQ applies the EQ predicate on the "codex_fingerprint_epoch" field.
+func CodexFingerprintEpochEQ(v int64) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldCodexFingerprintEpoch, v))
+}
+
+// CodexFingerprintEpochNEQ applies the NEQ predicate on the "codex_fingerprint_epoch" field.
+func CodexFingerprintEpochNEQ(v int64) predicate.Account {
+	return predicate.Account(sql.FieldNEQ(FieldCodexFingerprintEpoch, v))
+}
+
+// CodexFingerprintEpochIn applies the In predicate on the "codex_fingerprint_epoch" field.
+func CodexFingerprintEpochIn(vs ...int64) predicate.Account {
+	return predicate.Account(sql.FieldIn(FieldCodexFingerprintEpoch, vs...))
+}
+
+// CodexFingerprintEpochNotIn applies the NotIn predicate on the "codex_fingerprint_epoch" field.
+func CodexFingerprintEpochNotIn(vs ...int64) predicate.Account {
+	return predicate.Account(sql.FieldNotIn(FieldCodexFingerprintEpoch, vs...))
+}
+
+// CodexFingerprintEpochGT applies the GT predicate on the "codex_fingerprint_epoch" field.
+func CodexFingerprintEpochGT(v int64) predicate.Account {
+	return predicate.Account(sql.FieldGT(FieldCodexFingerprintEpoch, v))
+}
+
+// CodexFingerprintEpochGTE applies the GTE predicate on the "codex_fingerprint_epoch" field.
+func CodexFingerprintEpochGTE(v int64) predicate.Account {
+	return predicate.Account(sql.FieldGTE(FieldCodexFingerprintEpoch, v))
+}
+
+// CodexFingerprintEpochLT applies the LT predicate on the "codex_fingerprint_epoch" field.
+func CodexFingerprintEpochLT(v int64) predicate.Account {
+	return predicate.Account(sql.FieldLT(FieldCodexFingerprintEpoch, v))
+}
+
+// CodexFingerprintEpochLTE applies the LTE predicate on the "codex_fingerprint_epoch" field.
+func CodexFingerprintEpochLTE(v int64) predicate.Account {
+	return predicate.Account(sql.FieldLTE(FieldCodexFingerprintEpoch, v))
+}
+
+// CodexFingerprintEpochStartedAtEQ applies the EQ predicate on the "codex_fingerprint_epoch_started_at" field.
+func CodexFingerprintEpochStartedAtEQ(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldCodexFingerprintEpochStartedAt, v))
+}
+
+// CodexFingerprintEpochStartedAtNEQ applies the NEQ predicate on the "codex_fingerprint_epoch_started_at" field.
+func CodexFingerprintEpochStartedAtNEQ(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldNEQ(FieldCodexFingerprintEpochStartedAt, v))
+}
+
+// CodexFingerprintEpochStartedAtIn applies the In predicate on the "codex_fingerprint_epoch_started_at" field.
+func CodexFingerprintEpochStartedAtIn(vs ...time.Time) predicate.Account {
+	return predicate.Account(sql.FieldIn(FieldCodexFingerprintEpochStartedAt, vs...))
+}
+
+// CodexFingerprintEpochStartedAtNotIn applies the NotIn predicate on the "codex_fingerprint_epoch_started_at" field.
+func CodexFingerprintEpochStartedAtNotIn(vs ...time.Time) predicate.Account {
+	return predicate.Account(sql.FieldNotIn(FieldCodexFingerprintEpochStartedAt, vs...))
+}
+
+// CodexFingerprintEpochStartedAtGT applies the GT predicate on the "codex_fingerprint_epoch_started_at" field.
+func CodexFingerprintEpochStartedAtGT(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldGT(FieldCodexFingerprintEpochStartedAt, v))
+}
+
+// CodexFingerprintEpochStartedAtGTE applies the GTE predicate on the "codex_fingerprint_epoch_started_at" field.
+func CodexFingerprintEpochStartedAtGTE(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldGTE(FieldCodexFingerprintEpochStartedAt, v))
+}
+
+// CodexFingerprintEpochStartedAtLT applies the LT predicate on the "codex_fingerprint_epoch_started_at" field.
+func CodexFingerprintEpochStartedAtLT(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldLT(FieldCodexFingerprintEpochStartedAt, v))
+}
+
+// CodexFingerprintEpochStartedAtLTE applies the LTE predicate on the "codex_fingerprint_epoch_started_at" field.
+func CodexFingerprintEpochStartedAtLTE(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldLTE(FieldCodexFingerprintEpochStartedAt, v))
+}
+
+// CodexFingerprintEpochStartedAtIsNil applies the IsNil predicate on the "codex_fingerprint_epoch_started_at" field.
+func CodexFingerprintEpochStartedAtIsNil() predicate.Account {
+	return predicate.Account(sql.FieldIsNull(FieldCodexFingerprintEpochStartedAt))
+}
+
+// CodexFingerprintEpochStartedAtNotNil applies the NotNil predicate on the "codex_fingerprint_epoch_started_at" field.
+func CodexFingerprintEpochStartedAtNotNil() predicate.Account {
+	return predicate.Account(sql.FieldNotNull(FieldCodexFingerprintEpochStartedAt))
 }
 
 // ProxyIDEQ applies the EQ predicate on the "proxy_id" field.

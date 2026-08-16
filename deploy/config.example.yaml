@@ -287,6 +287,15 @@ gateway:
   # 默认 false：保持纯文本 Codex 请求不被改写；客户端显式提供 image_generation tool 时，
   # 仍会在分组允许图片生成的情况下正常转发。
   codex_image_generation_bridge_enabled: false
+  # Optional HMAC secret for account-scoped Codex fingerprint v2 derivation.
+  # Codex 账号级 v2 指纹 HMAC 密钥；至少 32 字节，同一 HA 集群所有副本必须一致，
+  # 不同独立部署必须使用不同值。留空时尚未初始化的账号继续使用旧算法。
+  codex_fingerprint_secret: ""
+  # Session 至少存活 14 天，且账号空闲 2 小时后，新 Thread 才可触发轮换。
+  codex_fingerprint_min_session_age_hours: 336
+  codex_fingerprint_idle_gate_minutes: 120
+  # 旧 Thread epoch 至少保留 48 小时；最多保留当前 epoch 及前两个 epoch。
+  codex_fingerprint_old_epoch_grace_hours: 48
   # Optional: template file used to build the final top-level Codex `instructions`.
   # 可选：用于构建最终 Codex 顶层 `instructions` 的模板文件路径。
   #

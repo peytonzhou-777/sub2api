@@ -86,6 +86,21 @@ func (Account) Fields() []ent.Field {
 			Default(func() map[string]any { return map[string]any{} }).
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 
+		// codex_fingerprint_*: Codex OAuth 指纹内部状态，不进入账号 extra 或普通导出。
+		field.String("codex_fingerprint_seed").
+			Optional().
+			Nillable().
+			MaxLen(64),
+		field.String("codex_fingerprint_version").
+			Default("").
+			MaxLen(16),
+		field.Int64("codex_fingerprint_epoch").
+			Default(0),
+		field.Time("codex_fingerprint_epoch_started_at").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
+
 		// proxy_id: 关联的代理配置 ID（可选）
 		// 用于需要通过特定代理访问 API 的场景
 		field.Int64("proxy_id").

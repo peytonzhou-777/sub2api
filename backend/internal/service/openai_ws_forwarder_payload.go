@@ -156,6 +156,8 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	if s != nil && s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
 		headers.Set("user-agent", codexCLIUserAgent)
 	}
+	// HTTP 与 WS 握手共享同一个 attempt 指纹快照，避免 body 与连接身份不一致。
+	applyStagedCodexFingerprintHeaders(c, account, headers)
 	// 终态收口：WS 握手与 HTTP 出站共用同一套身份语义，账号级自定义 UA 同样作为
 	// 管理员显式配置传入（上面写进 headers 的值只在强制统一被关闭时才参与配对）。
 	if account != nil && account.Type == AccountTypeOAuth {

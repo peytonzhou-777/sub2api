@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -26,6 +27,38 @@ func TestOpenAIWSStateStore_BindGetDeleteResponseAccount(t *testing.T) {
 	accountID, err = store.GetResponseAccount(ctx, groupID, "resp_abc")
 	require.NoError(t, err)
 	require.Zero(t, accountID)
+}
+
+func TestOpenAIWSStateStoreConnectionTargetIsolation(t *testing.T) {
+	store := NewOpenAIWSStateStore(nil)
+	accountA := &Account{ID: 101, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra:                   map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
+		CodexFingerprintVersion: "v2", CodexFingerprintEpoch: 3}
+	accountB := &Account{ID: 102, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra:                   map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
+		CodexFingerprintVersion: "v2", CodexFingerprintEpoch: 3}
+	headersA := http.Header{
+		"X-Codex-Installation-Id": []string{"device-a"},
+		"Session-Id":              []string{"session-3"},
+	}
+	headersNextEpoch := headersA.Clone()
+	headersNextEpoch.Set("session-id", "session-4")
+	targetA := newOpenAIWSConnectionTarget(accountA, OpenAIUpstreamTransportResponsesWebsocketV2, "wss://api.openai.com/v1/responses", headersA)
+	targetB := newOpenAIWSConnectionTarget(accountB, OpenAIUpstreamTransportResponsesWebsocketV2, "wss://api.openai.com/v1/responses", headersA)
+	nextEpoch := newOpenAIWSConnectionTarget(accountA, OpenAIUpstreamTransportResponsesWebsocketV2, "wss://api.openai.com/v1/responses", headersNextEpoch)
+
+	bindOpenAIWSResponseConn(store, "resp_target", targetA, "conn_a", time.Minute)
+	bindOpenAIWSSessionConn(store, 9, "session_target", targetA, "conn_a", time.Minute)
+
+	connID, ok := getOpenAIWSResponseConn(store, "resp_target", targetA)
+	require.True(t, ok)
+	require.Equal(t, "conn_a", connID)
+	_, ok = getOpenAIWSResponseConn(store, "resp_target", targetB)
+	require.False(t, ok)
+	_, ok = getOpenAIWSResponseConn(store, "resp_target", nextEpoch)
+	require.False(t, ok)
+	_, ok = getOpenAIWSSessionConn(store, 9, "session_target", targetB)
+	require.False(t, ok)
 }
 
 func TestOpenAIWSStateStore_ResponseConnTTL(t *testing.T) {

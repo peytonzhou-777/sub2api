@@ -2909,60 +2909,65 @@ func (m *APIKeyMutation) ResetEdge(name string) error {
 // AccountMutation represents an operation that mutates the Account nodes in the graph.
 type AccountMutation struct {
 	config
-	op                          Op
-	typ                         string
-	id                          *int64
-	created_at                  *time.Time
-	updated_at                  *time.Time
-	deleted_at                  *time.Time
-	name                        *string
-	notes                       *string
-	platform                    *string
-	_type                       *string
-	credentials                 *map[string]interface{}
-	extra                       *map[string]interface{}
-	proxy_fallback_origin_id    *int64
-	addproxy_fallback_origin_id *int64
-	concurrency                 *int
-	addconcurrency              *int
-	load_factor                 *int
-	addload_factor              *int
-	priority                    *int
-	addpriority                 *int
-	rate_multiplier             *float64
-	addrate_multiplier          *float64
-	status                      *string
-	error_message               *string
-	last_used_at                *time.Time
-	expires_at                  *time.Time
-	auto_pause_on_expired       *bool
-	schedulable                 *bool
-	rate_limited_at             *time.Time
-	rate_limit_reset_at         *time.Time
-	overload_until              *time.Time
-	temp_unschedulable_until    *time.Time
-	temp_unschedulable_reason   *string
-	session_window_start        *time.Time
-	session_window_end          *time.Time
-	session_window_status       *string
-	quota_dimension             *account.QuotaDimension
-	clearedFields               map[string]struct{}
-	groups                      map[int64]struct{}
-	removedgroups               map[int64]struct{}
-	clearedgroups               bool
-	proxy                       *int64
-	clearedproxy                bool
-	parent                      *int64
-	clearedparent               bool
-	children                    map[int64]struct{}
-	removedchildren             map[int64]struct{}
-	clearedchildren             bool
-	usage_logs                  map[int64]struct{}
-	removedusage_logs           map[int64]struct{}
-	clearedusage_logs           bool
-	done                        bool
-	oldValue                    func(context.Context) (*Account, error)
-	predicates                  []predicate.Account
+	op                                 Op
+	typ                                string
+	id                                 *int64
+	created_at                         *time.Time
+	updated_at                         *time.Time
+	deleted_at                         *time.Time
+	name                               *string
+	notes                              *string
+	platform                           *string
+	_type                              *string
+	credentials                        *map[string]interface{}
+	extra                              *map[string]interface{}
+	codex_fingerprint_seed             *string
+	codex_fingerprint_version          *string
+	codex_fingerprint_epoch            *int64
+	addcodex_fingerprint_epoch         *int64
+	codex_fingerprint_epoch_started_at *time.Time
+	proxy_fallback_origin_id           *int64
+	addproxy_fallback_origin_id        *int64
+	concurrency                        *int
+	addconcurrency                     *int
+	load_factor                        *int
+	addload_factor                     *int
+	priority                           *int
+	addpriority                        *int
+	rate_multiplier                    *float64
+	addrate_multiplier                 *float64
+	status                             *string
+	error_message                      *string
+	last_used_at                       *time.Time
+	expires_at                         *time.Time
+	auto_pause_on_expired              *bool
+	schedulable                        *bool
+	rate_limited_at                    *time.Time
+	rate_limit_reset_at                *time.Time
+	overload_until                     *time.Time
+	temp_unschedulable_until           *time.Time
+	temp_unschedulable_reason          *string
+	session_window_start               *time.Time
+	session_window_end                 *time.Time
+	session_window_status              *string
+	quota_dimension                    *account.QuotaDimension
+	clearedFields                      map[string]struct{}
+	groups                             map[int64]struct{}
+	removedgroups                      map[int64]struct{}
+	clearedgroups                      bool
+	proxy                              *int64
+	clearedproxy                       bool
+	parent                             *int64
+	clearedparent                      bool
+	children                           map[int64]struct{}
+	removedchildren                    map[int64]struct{}
+	clearedchildren                    bool
+	usage_logs                         map[int64]struct{}
+	removedusage_logs                  map[int64]struct{}
+	clearedusage_logs                  bool
+	done                               bool
+	oldValue                           func(context.Context) (*Account, error)
+	predicates                         []predicate.Account
 }
 
 var _ ent.Mutation = (*AccountMutation)(nil)
@@ -3411,6 +3416,196 @@ func (m *AccountMutation) OldExtra(ctx context.Context) (v map[string]interface{
 // ResetExtra resets all changes to the "extra" field.
 func (m *AccountMutation) ResetExtra() {
 	m.extra = nil
+}
+
+// SetCodexFingerprintSeed sets the "codex_fingerprint_seed" field.
+func (m *AccountMutation) SetCodexFingerprintSeed(s string) {
+	m.codex_fingerprint_seed = &s
+}
+
+// CodexFingerprintSeed returns the value of the "codex_fingerprint_seed" field in the mutation.
+func (m *AccountMutation) CodexFingerprintSeed() (r string, exists bool) {
+	v := m.codex_fingerprint_seed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCodexFingerprintSeed returns the old "codex_fingerprint_seed" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldCodexFingerprintSeed(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCodexFingerprintSeed is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCodexFingerprintSeed requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCodexFingerprintSeed: %w", err)
+	}
+	return oldValue.CodexFingerprintSeed, nil
+}
+
+// ClearCodexFingerprintSeed clears the value of the "codex_fingerprint_seed" field.
+func (m *AccountMutation) ClearCodexFingerprintSeed() {
+	m.codex_fingerprint_seed = nil
+	m.clearedFields[account.FieldCodexFingerprintSeed] = struct{}{}
+}
+
+// CodexFingerprintSeedCleared returns if the "codex_fingerprint_seed" field was cleared in this mutation.
+func (m *AccountMutation) CodexFingerprintSeedCleared() bool {
+	_, ok := m.clearedFields[account.FieldCodexFingerprintSeed]
+	return ok
+}
+
+// ResetCodexFingerprintSeed resets all changes to the "codex_fingerprint_seed" field.
+func (m *AccountMutation) ResetCodexFingerprintSeed() {
+	m.codex_fingerprint_seed = nil
+	delete(m.clearedFields, account.FieldCodexFingerprintSeed)
+}
+
+// SetCodexFingerprintVersion sets the "codex_fingerprint_version" field.
+func (m *AccountMutation) SetCodexFingerprintVersion(s string) {
+	m.codex_fingerprint_version = &s
+}
+
+// CodexFingerprintVersion returns the value of the "codex_fingerprint_version" field in the mutation.
+func (m *AccountMutation) CodexFingerprintVersion() (r string, exists bool) {
+	v := m.codex_fingerprint_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCodexFingerprintVersion returns the old "codex_fingerprint_version" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldCodexFingerprintVersion(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCodexFingerprintVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCodexFingerprintVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCodexFingerprintVersion: %w", err)
+	}
+	return oldValue.CodexFingerprintVersion, nil
+}
+
+// ResetCodexFingerprintVersion resets all changes to the "codex_fingerprint_version" field.
+func (m *AccountMutation) ResetCodexFingerprintVersion() {
+	m.codex_fingerprint_version = nil
+}
+
+// SetCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field.
+func (m *AccountMutation) SetCodexFingerprintEpoch(i int64) {
+	m.codex_fingerprint_epoch = &i
+	m.addcodex_fingerprint_epoch = nil
+}
+
+// CodexFingerprintEpoch returns the value of the "codex_fingerprint_epoch" field in the mutation.
+func (m *AccountMutation) CodexFingerprintEpoch() (r int64, exists bool) {
+	v := m.codex_fingerprint_epoch
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCodexFingerprintEpoch returns the old "codex_fingerprint_epoch" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldCodexFingerprintEpoch(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCodexFingerprintEpoch is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCodexFingerprintEpoch requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCodexFingerprintEpoch: %w", err)
+	}
+	return oldValue.CodexFingerprintEpoch, nil
+}
+
+// AddCodexFingerprintEpoch adds i to the "codex_fingerprint_epoch" field.
+func (m *AccountMutation) AddCodexFingerprintEpoch(i int64) {
+	if m.addcodex_fingerprint_epoch != nil {
+		*m.addcodex_fingerprint_epoch += i
+	} else {
+		m.addcodex_fingerprint_epoch = &i
+	}
+}
+
+// AddedCodexFingerprintEpoch returns the value that was added to the "codex_fingerprint_epoch" field in this mutation.
+func (m *AccountMutation) AddedCodexFingerprintEpoch() (r int64, exists bool) {
+	v := m.addcodex_fingerprint_epoch
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCodexFingerprintEpoch resets all changes to the "codex_fingerprint_epoch" field.
+func (m *AccountMutation) ResetCodexFingerprintEpoch() {
+	m.codex_fingerprint_epoch = nil
+	m.addcodex_fingerprint_epoch = nil
+}
+
+// SetCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field.
+func (m *AccountMutation) SetCodexFingerprintEpochStartedAt(t time.Time) {
+	m.codex_fingerprint_epoch_started_at = &t
+}
+
+// CodexFingerprintEpochStartedAt returns the value of the "codex_fingerprint_epoch_started_at" field in the mutation.
+func (m *AccountMutation) CodexFingerprintEpochStartedAt() (r time.Time, exists bool) {
+	v := m.codex_fingerprint_epoch_started_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCodexFingerprintEpochStartedAt returns the old "codex_fingerprint_epoch_started_at" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldCodexFingerprintEpochStartedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCodexFingerprintEpochStartedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCodexFingerprintEpochStartedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCodexFingerprintEpochStartedAt: %w", err)
+	}
+	return oldValue.CodexFingerprintEpochStartedAt, nil
+}
+
+// ClearCodexFingerprintEpochStartedAt clears the value of the "codex_fingerprint_epoch_started_at" field.
+func (m *AccountMutation) ClearCodexFingerprintEpochStartedAt() {
+	m.codex_fingerprint_epoch_started_at = nil
+	m.clearedFields[account.FieldCodexFingerprintEpochStartedAt] = struct{}{}
+}
+
+// CodexFingerprintEpochStartedAtCleared returns if the "codex_fingerprint_epoch_started_at" field was cleared in this mutation.
+func (m *AccountMutation) CodexFingerprintEpochStartedAtCleared() bool {
+	_, ok := m.clearedFields[account.FieldCodexFingerprintEpochStartedAt]
+	return ok
+}
+
+// ResetCodexFingerprintEpochStartedAt resets all changes to the "codex_fingerprint_epoch_started_at" field.
+func (m *AccountMutation) ResetCodexFingerprintEpochStartedAt() {
+	m.codex_fingerprint_epoch_started_at = nil
+	delete(m.clearedFields, account.FieldCodexFingerprintEpochStartedAt)
 }
 
 // SetProxyID sets the "proxy_id" field.
@@ -4765,7 +4960,7 @@ func (m *AccountMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AccountMutation) Fields() []string {
-	fields := make([]string, 0, 31)
+	fields := make([]string, 0, 35)
 	if m.created_at != nil {
 		fields = append(fields, account.FieldCreatedAt)
 	}
@@ -4792,6 +4987,18 @@ func (m *AccountMutation) Fields() []string {
 	}
 	if m.extra != nil {
 		fields = append(fields, account.FieldExtra)
+	}
+	if m.codex_fingerprint_seed != nil {
+		fields = append(fields, account.FieldCodexFingerprintSeed)
+	}
+	if m.codex_fingerprint_version != nil {
+		fields = append(fields, account.FieldCodexFingerprintVersion)
+	}
+	if m.codex_fingerprint_epoch != nil {
+		fields = append(fields, account.FieldCodexFingerprintEpoch)
+	}
+	if m.codex_fingerprint_epoch_started_at != nil {
+		fields = append(fields, account.FieldCodexFingerprintEpochStartedAt)
 	}
 	if m.proxy != nil {
 		fields = append(fields, account.FieldProxyID)
@@ -4885,6 +5092,14 @@ func (m *AccountMutation) Field(name string) (ent.Value, bool) {
 		return m.Credentials()
 	case account.FieldExtra:
 		return m.Extra()
+	case account.FieldCodexFingerprintSeed:
+		return m.CodexFingerprintSeed()
+	case account.FieldCodexFingerprintVersion:
+		return m.CodexFingerprintVersion()
+	case account.FieldCodexFingerprintEpoch:
+		return m.CodexFingerprintEpoch()
+	case account.FieldCodexFingerprintEpochStartedAt:
+		return m.CodexFingerprintEpochStartedAt()
 	case account.FieldProxyID:
 		return m.ProxyID()
 	case account.FieldProxyFallbackOriginID:
@@ -4956,6 +5171,14 @@ func (m *AccountMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldCredentials(ctx)
 	case account.FieldExtra:
 		return m.OldExtra(ctx)
+	case account.FieldCodexFingerprintSeed:
+		return m.OldCodexFingerprintSeed(ctx)
+	case account.FieldCodexFingerprintVersion:
+		return m.OldCodexFingerprintVersion(ctx)
+	case account.FieldCodexFingerprintEpoch:
+		return m.OldCodexFingerprintEpoch(ctx)
+	case account.FieldCodexFingerprintEpochStartedAt:
+		return m.OldCodexFingerprintEpochStartedAt(ctx)
 	case account.FieldProxyID:
 		return m.OldProxyID(ctx)
 	case account.FieldProxyFallbackOriginID:
@@ -5071,6 +5294,34 @@ func (m *AccountMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetExtra(v)
+		return nil
+	case account.FieldCodexFingerprintSeed:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCodexFingerprintSeed(v)
+		return nil
+	case account.FieldCodexFingerprintVersion:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCodexFingerprintVersion(v)
+		return nil
+	case account.FieldCodexFingerprintEpoch:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCodexFingerprintEpoch(v)
+		return nil
+	case account.FieldCodexFingerprintEpochStartedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCodexFingerprintEpochStartedAt(v)
 		return nil
 	case account.FieldProxyID:
 		v, ok := value.(int64)
@@ -5234,6 +5485,9 @@ func (m *AccountMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *AccountMutation) AddedFields() []string {
 	var fields []string
+	if m.addcodex_fingerprint_epoch != nil {
+		fields = append(fields, account.FieldCodexFingerprintEpoch)
+	}
 	if m.addproxy_fallback_origin_id != nil {
 		fields = append(fields, account.FieldProxyFallbackOriginID)
 	}
@@ -5257,6 +5511,8 @@ func (m *AccountMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *AccountMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case account.FieldCodexFingerprintEpoch:
+		return m.AddedCodexFingerprintEpoch()
 	case account.FieldProxyFallbackOriginID:
 		return m.AddedProxyFallbackOriginID()
 	case account.FieldConcurrency:
@@ -5276,6 +5532,13 @@ func (m *AccountMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *AccountMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case account.FieldCodexFingerprintEpoch:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCodexFingerprintEpoch(v)
+		return nil
 	case account.FieldProxyFallbackOriginID:
 		v, ok := value.(int64)
 		if !ok {
@@ -5324,6 +5587,12 @@ func (m *AccountMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(account.FieldNotes) {
 		fields = append(fields, account.FieldNotes)
+	}
+	if m.FieldCleared(account.FieldCodexFingerprintSeed) {
+		fields = append(fields, account.FieldCodexFingerprintSeed)
+	}
+	if m.FieldCleared(account.FieldCodexFingerprintEpochStartedAt) {
+		fields = append(fields, account.FieldCodexFingerprintEpochStartedAt)
 	}
 	if m.FieldCleared(account.FieldProxyID) {
 		fields = append(fields, account.FieldProxyID)
@@ -5389,6 +5658,12 @@ func (m *AccountMutation) ClearField(name string) error {
 		return nil
 	case account.FieldNotes:
 		m.ClearNotes()
+		return nil
+	case account.FieldCodexFingerprintSeed:
+		m.ClearCodexFingerprintSeed()
+		return nil
+	case account.FieldCodexFingerprintEpochStartedAt:
+		m.ClearCodexFingerprintEpochStartedAt()
 		return nil
 	case account.FieldProxyID:
 		m.ClearProxyID()
@@ -5469,6 +5744,18 @@ func (m *AccountMutation) ResetField(name string) error {
 		return nil
 	case account.FieldExtra:
 		m.ResetExtra()
+		return nil
+	case account.FieldCodexFingerprintSeed:
+		m.ResetCodexFingerprintSeed()
+		return nil
+	case account.FieldCodexFingerprintVersion:
+		m.ResetCodexFingerprintVersion()
+		return nil
+	case account.FieldCodexFingerprintEpoch:
+		m.ResetCodexFingerprintEpoch()
+		return nil
+	case account.FieldCodexFingerprintEpochStartedAt:
+		m.ResetCodexFingerprintEpochStartedAt()
 		return nil
 	case account.FieldProxyID:
 		m.ResetProxyID()

@@ -131,6 +131,81 @@ func (_u *AccountUpdate) SetExtra(v map[string]interface{}) *AccountUpdate {
 	return _u
 }
 
+// SetCodexFingerprintSeed sets the "codex_fingerprint_seed" field.
+func (_u *AccountUpdate) SetCodexFingerprintSeed(v string) *AccountUpdate {
+	_u.mutation.SetCodexFingerprintSeed(v)
+	return _u
+}
+
+// SetNillableCodexFingerprintSeed sets the "codex_fingerprint_seed" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableCodexFingerprintSeed(v *string) *AccountUpdate {
+	if v != nil {
+		_u.SetCodexFingerprintSeed(*v)
+	}
+	return _u
+}
+
+// ClearCodexFingerprintSeed clears the value of the "codex_fingerprint_seed" field.
+func (_u *AccountUpdate) ClearCodexFingerprintSeed() *AccountUpdate {
+	_u.mutation.ClearCodexFingerprintSeed()
+	return _u
+}
+
+// SetCodexFingerprintVersion sets the "codex_fingerprint_version" field.
+func (_u *AccountUpdate) SetCodexFingerprintVersion(v string) *AccountUpdate {
+	_u.mutation.SetCodexFingerprintVersion(v)
+	return _u
+}
+
+// SetNillableCodexFingerprintVersion sets the "codex_fingerprint_version" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableCodexFingerprintVersion(v *string) *AccountUpdate {
+	if v != nil {
+		_u.SetCodexFingerprintVersion(*v)
+	}
+	return _u
+}
+
+// SetCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field.
+func (_u *AccountUpdate) SetCodexFingerprintEpoch(v int64) *AccountUpdate {
+	_u.mutation.ResetCodexFingerprintEpoch()
+	_u.mutation.SetCodexFingerprintEpoch(v)
+	return _u
+}
+
+// SetNillableCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableCodexFingerprintEpoch(v *int64) *AccountUpdate {
+	if v != nil {
+		_u.SetCodexFingerprintEpoch(*v)
+	}
+	return _u
+}
+
+// AddCodexFingerprintEpoch adds value to the "codex_fingerprint_epoch" field.
+func (_u *AccountUpdate) AddCodexFingerprintEpoch(v int64) *AccountUpdate {
+	_u.mutation.AddCodexFingerprintEpoch(v)
+	return _u
+}
+
+// SetCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field.
+func (_u *AccountUpdate) SetCodexFingerprintEpochStartedAt(v time.Time) *AccountUpdate {
+	_u.mutation.SetCodexFingerprintEpochStartedAt(v)
+	return _u
+}
+
+// SetNillableCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableCodexFingerprintEpochStartedAt(v *time.Time) *AccountUpdate {
+	if v != nil {
+		_u.SetCodexFingerprintEpochStartedAt(*v)
+	}
+	return _u
+}
+
+// ClearCodexFingerprintEpochStartedAt clears the value of the "codex_fingerprint_epoch_started_at" field.
+func (_u *AccountUpdate) ClearCodexFingerprintEpochStartedAt() *AccountUpdate {
+	_u.mutation.ClearCodexFingerprintEpochStartedAt()
+	return _u
+}
+
 // SetProxyID sets the "proxy_id" field.
 func (_u *AccountUpdate) SetProxyID(v int64) *AccountUpdate {
 	_u.mutation.SetProxyID(v)
@@ -772,6 +847,16 @@ func (_u *AccountUpdate) check() error {
 			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "Account.type": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.CodexFingerprintSeed(); ok {
+		if err := account.CodexFingerprintSeedValidator(v); err != nil {
+			return &ValidationError{Name: "codex_fingerprint_seed", err: fmt.Errorf(`ent: validator failed for field "Account.codex_fingerprint_seed": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CodexFingerprintVersion(); ok {
+		if err := account.CodexFingerprintVersionValidator(v); err != nil {
+			return &ValidationError{Name: "codex_fingerprint_version", err: fmt.Errorf(`ent: validator failed for field "Account.codex_fingerprint_version": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := account.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Account.status": %w`, err)}
@@ -831,6 +916,27 @@ func (_u *AccountUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Extra(); ok {
 		_spec.SetField(account.FieldExtra, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.CodexFingerprintSeed(); ok {
+		_spec.SetField(account.FieldCodexFingerprintSeed, field.TypeString, value)
+	}
+	if _u.mutation.CodexFingerprintSeedCleared() {
+		_spec.ClearField(account.FieldCodexFingerprintSeed, field.TypeString)
+	}
+	if value, ok := _u.mutation.CodexFingerprintVersion(); ok {
+		_spec.SetField(account.FieldCodexFingerprintVersion, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CodexFingerprintEpoch(); ok {
+		_spec.SetField(account.FieldCodexFingerprintEpoch, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedCodexFingerprintEpoch(); ok {
+		_spec.AddField(account.FieldCodexFingerprintEpoch, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.CodexFingerprintEpochStartedAt(); ok {
+		_spec.SetField(account.FieldCodexFingerprintEpochStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.CodexFingerprintEpochStartedAtCleared() {
+		_spec.ClearField(account.FieldCodexFingerprintEpochStartedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.ProxyFallbackOriginID(); ok {
 		_spec.SetField(account.FieldProxyFallbackOriginID, field.TypeInt64, value)
@@ -1268,6 +1374,81 @@ func (_u *AccountUpdateOne) SetCredentials(v map[string]interface{}) *AccountUpd
 // SetExtra sets the "extra" field.
 func (_u *AccountUpdateOne) SetExtra(v map[string]interface{}) *AccountUpdateOne {
 	_u.mutation.SetExtra(v)
+	return _u
+}
+
+// SetCodexFingerprintSeed sets the "codex_fingerprint_seed" field.
+func (_u *AccountUpdateOne) SetCodexFingerprintSeed(v string) *AccountUpdateOne {
+	_u.mutation.SetCodexFingerprintSeed(v)
+	return _u
+}
+
+// SetNillableCodexFingerprintSeed sets the "codex_fingerprint_seed" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableCodexFingerprintSeed(v *string) *AccountUpdateOne {
+	if v != nil {
+		_u.SetCodexFingerprintSeed(*v)
+	}
+	return _u
+}
+
+// ClearCodexFingerprintSeed clears the value of the "codex_fingerprint_seed" field.
+func (_u *AccountUpdateOne) ClearCodexFingerprintSeed() *AccountUpdateOne {
+	_u.mutation.ClearCodexFingerprintSeed()
+	return _u
+}
+
+// SetCodexFingerprintVersion sets the "codex_fingerprint_version" field.
+func (_u *AccountUpdateOne) SetCodexFingerprintVersion(v string) *AccountUpdateOne {
+	_u.mutation.SetCodexFingerprintVersion(v)
+	return _u
+}
+
+// SetNillableCodexFingerprintVersion sets the "codex_fingerprint_version" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableCodexFingerprintVersion(v *string) *AccountUpdateOne {
+	if v != nil {
+		_u.SetCodexFingerprintVersion(*v)
+	}
+	return _u
+}
+
+// SetCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field.
+func (_u *AccountUpdateOne) SetCodexFingerprintEpoch(v int64) *AccountUpdateOne {
+	_u.mutation.ResetCodexFingerprintEpoch()
+	_u.mutation.SetCodexFingerprintEpoch(v)
+	return _u
+}
+
+// SetNillableCodexFingerprintEpoch sets the "codex_fingerprint_epoch" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableCodexFingerprintEpoch(v *int64) *AccountUpdateOne {
+	if v != nil {
+		_u.SetCodexFingerprintEpoch(*v)
+	}
+	return _u
+}
+
+// AddCodexFingerprintEpoch adds value to the "codex_fingerprint_epoch" field.
+func (_u *AccountUpdateOne) AddCodexFingerprintEpoch(v int64) *AccountUpdateOne {
+	_u.mutation.AddCodexFingerprintEpoch(v)
+	return _u
+}
+
+// SetCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field.
+func (_u *AccountUpdateOne) SetCodexFingerprintEpochStartedAt(v time.Time) *AccountUpdateOne {
+	_u.mutation.SetCodexFingerprintEpochStartedAt(v)
+	return _u
+}
+
+// SetNillableCodexFingerprintEpochStartedAt sets the "codex_fingerprint_epoch_started_at" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableCodexFingerprintEpochStartedAt(v *time.Time) *AccountUpdateOne {
+	if v != nil {
+		_u.SetCodexFingerprintEpochStartedAt(*v)
+	}
+	return _u
+}
+
+// ClearCodexFingerprintEpochStartedAt clears the value of the "codex_fingerprint_epoch_started_at" field.
+func (_u *AccountUpdateOne) ClearCodexFingerprintEpochStartedAt() *AccountUpdateOne {
+	_u.mutation.ClearCodexFingerprintEpochStartedAt()
 	return _u
 }
 
@@ -1925,6 +2106,16 @@ func (_u *AccountUpdateOne) check() error {
 			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "Account.type": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.CodexFingerprintSeed(); ok {
+		if err := account.CodexFingerprintSeedValidator(v); err != nil {
+			return &ValidationError{Name: "codex_fingerprint_seed", err: fmt.Errorf(`ent: validator failed for field "Account.codex_fingerprint_seed": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CodexFingerprintVersion(); ok {
+		if err := account.CodexFingerprintVersionValidator(v); err != nil {
+			return &ValidationError{Name: "codex_fingerprint_version", err: fmt.Errorf(`ent: validator failed for field "Account.codex_fingerprint_version": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := account.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Account.status": %w`, err)}
@@ -2001,6 +2192,27 @@ func (_u *AccountUpdateOne) sqlSave(ctx context.Context) (_node *Account, err er
 	}
 	if value, ok := _u.mutation.Extra(); ok {
 		_spec.SetField(account.FieldExtra, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.CodexFingerprintSeed(); ok {
+		_spec.SetField(account.FieldCodexFingerprintSeed, field.TypeString, value)
+	}
+	if _u.mutation.CodexFingerprintSeedCleared() {
+		_spec.ClearField(account.FieldCodexFingerprintSeed, field.TypeString)
+	}
+	if value, ok := _u.mutation.CodexFingerprintVersion(); ok {
+		_spec.SetField(account.FieldCodexFingerprintVersion, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CodexFingerprintEpoch(); ok {
+		_spec.SetField(account.FieldCodexFingerprintEpoch, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedCodexFingerprintEpoch(); ok {
+		_spec.AddField(account.FieldCodexFingerprintEpoch, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.CodexFingerprintEpochStartedAt(); ok {
+		_spec.SetField(account.FieldCodexFingerprintEpochStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.CodexFingerprintEpochStartedAtCleared() {
+		_spec.ClearField(account.FieldCodexFingerprintEpochStartedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.ProxyFallbackOriginID(); ok {
 		_spec.SetField(account.FieldProxyFallbackOriginID, field.TypeInt64, value)

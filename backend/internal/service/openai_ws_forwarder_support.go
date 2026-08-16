@@ -30,9 +30,14 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 	account *Account,
 	stateStore OpenAIWSStateStore,
 	groupID int64,
+	connectionTargets ...openAIWSConnectionTarget,
 ) error {
 	if s == nil {
 		return nil
+	}
+	connectionTarget := openAIWSConnectionTarget{}
+	if len(connectionTargets) > 0 {
+		connectionTarget = connectionTargets[0]
 	}
 	if lease == nil || account == nil {
 		logOpenAIWSModeInfo("prewarm_skip reason=invalid_state has_lease=%v has_account=%v", lease != nil, account != nil)
@@ -166,7 +171,7 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 	if prewarmResponseID != "" && stateStore != nil {
 		ttl := s.openAIWSResponseStickyTTL()
 		logOpenAIWSBindResponseAccountWarn(groupID, account.ID, prewarmResponseID, stateStore.BindResponseAccount(ctx, groupID, prewarmResponseID, account.ID, ttl))
-		stateStore.BindResponseConn(prewarmResponseID, lease.ConnID(), ttl)
+		bindOpenAIWSResponseConn(stateStore, prewarmResponseID, connectionTarget, lease.ConnID(), ttl)
 	}
 	logOpenAIWSModeInfo(
 		"prewarm_done account_id=%d conn_id=%s response_id=%s events=%d terminal_events=%d duration_ms=%d",

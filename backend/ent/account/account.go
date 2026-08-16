@@ -34,6 +34,14 @@ const (
 	FieldCredentials = "credentials"
 	// FieldExtra holds the string denoting the extra field in the database.
 	FieldExtra = "extra"
+	// FieldCodexFingerprintSeed holds the string denoting the codex_fingerprint_seed field in the database.
+	FieldCodexFingerprintSeed = "codex_fingerprint_seed"
+	// FieldCodexFingerprintVersion holds the string denoting the codex_fingerprint_version field in the database.
+	FieldCodexFingerprintVersion = "codex_fingerprint_version"
+	// FieldCodexFingerprintEpoch holds the string denoting the codex_fingerprint_epoch field in the database.
+	FieldCodexFingerprintEpoch = "codex_fingerprint_epoch"
+	// FieldCodexFingerprintEpochStartedAt holds the string denoting the codex_fingerprint_epoch_started_at field in the database.
+	FieldCodexFingerprintEpochStartedAt = "codex_fingerprint_epoch_started_at"
 	// FieldProxyID holds the string denoting the proxy_id field in the database.
 	FieldProxyID = "proxy_id"
 	// FieldProxyFallbackOriginID holds the string denoting the proxy_fallback_origin_id field in the database.
@@ -140,6 +148,10 @@ var Columns = []string{
 	FieldType,
 	FieldCredentials,
 	FieldExtra,
+	FieldCodexFingerprintSeed,
+	FieldCodexFingerprintVersion,
+	FieldCodexFingerprintEpoch,
+	FieldCodexFingerprintEpochStartedAt,
 	FieldProxyID,
 	FieldProxyFallbackOriginID,
 	FieldConcurrency,
@@ -204,6 +216,14 @@ var (
 	DefaultCredentials func() map[string]interface{}
 	// DefaultExtra holds the default value on creation for the "extra" field.
 	DefaultExtra func() map[string]interface{}
+	// CodexFingerprintSeedValidator is a validator for the "codex_fingerprint_seed" field. It is called by the builders before save.
+	CodexFingerprintSeedValidator func(string) error
+	// DefaultCodexFingerprintVersion holds the default value on creation for the "codex_fingerprint_version" field.
+	DefaultCodexFingerprintVersion string
+	// CodexFingerprintVersionValidator is a validator for the "codex_fingerprint_version" field. It is called by the builders before save.
+	CodexFingerprintVersionValidator func(string) error
+	// DefaultCodexFingerprintEpoch holds the default value on creation for the "codex_fingerprint_epoch" field.
+	DefaultCodexFingerprintEpoch int64
 	// DefaultConcurrency holds the default value on creation for the "concurrency" field.
 	DefaultConcurrency int
 	// DefaultPriority holds the default value on creation for the "priority" field.
@@ -289,6 +309,26 @@ func ByPlatform(opts ...sql.OrderTermOption) OrderOption {
 // ByType orders the results by the type field.
 func ByType(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldType, opts...).ToFunc()
+}
+
+// ByCodexFingerprintSeed orders the results by the codex_fingerprint_seed field.
+func ByCodexFingerprintSeed(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCodexFingerprintSeed, opts...).ToFunc()
+}
+
+// ByCodexFingerprintVersion orders the results by the codex_fingerprint_version field.
+func ByCodexFingerprintVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCodexFingerprintVersion, opts...).ToFunc()
+}
+
+// ByCodexFingerprintEpoch orders the results by the codex_fingerprint_epoch field.
+func ByCodexFingerprintEpoch(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCodexFingerprintEpoch, opts...).ToFunc()
+}
+
+// ByCodexFingerprintEpochStartedAt orders the results by the codex_fingerprint_epoch_started_at field.
+func ByCodexFingerprintEpochStartedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCodexFingerprintEpochStartedAt, opts...).ToFunc()
 }
 
 // ByProxyID orders the results by the proxy_id field.
