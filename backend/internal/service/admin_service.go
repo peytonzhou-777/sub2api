@@ -357,6 +357,8 @@ type UpdateGroupInput struct {
 	ProfitSafetyBuffer   *float64
 	// nil 表示不修改，0 表示关闭保证金门槛。
 	SecurityDepositBaseRequiredCents *int64
+	// 为 true 时，保存后立即批量禁用该分组中保证金不足的 active 密钥。
+	ReconcileSecurityDepositKeys bool
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64
 }
@@ -672,7 +674,8 @@ type adminServiceImpl struct {
 	compositeRouteRepo          CompositeModelRouteRepository
 	compositeResolver           *CompositeRouteResolver
 	// 分组平台变更后用来失效渠道缓存；可为 nil（缓存会在 TTL 到期后自然重建）
-	channelCacheInvalidator ChannelCacheInvalidator
+	channelCacheInvalidator           ChannelCacheInvalidator
+	securityDepositGroupKeyReconciler SecurityDepositGroupKeyReconciler
 }
 
 // ChannelCacheInvalidator 失效渠道缓存。
@@ -696,6 +699,7 @@ func NewAdminService(
 	accountRepo AdminAccountRepository,
 	proxyRepo ProxyRepository,
 	apiKeyRepo APIKeyRepository,
+	apiKeyService *APIKeyService,
 	redeemCodeRepo RedeemCodeRepository,
 	userGroupRateRepo UserGroupRateRepository,
 	userRPMCache UserRPMCache,
@@ -715,7 +719,7 @@ func NewAdminService(
 	compositeResolver *CompositeRouteResolver,
 	channelCacheInvalidator ChannelCacheInvalidator,
 ) AdminService {
-	return &adminServiceImpl{
+	svc := &adminServiceImpl{
 		userRepo:                    userRepo,
 		groupRepo:                   groupRepo,
 		groupDuplicateRepo:          groupRepo,
@@ -743,4 +747,24 @@ func NewAdminService(
 		compositeResolver:           compositeResolver,
 		channelCacheInvalidator:     channelCacheInvalidator,
 	}
+	if eligibilityRepo, ok := apiKeyRepo.(SecurityDepositKeyEligibilityRepository); ok {
+		svc.securityDepositGroupKeyReconciler = NewKeyEligibilityReconciler(
+			adminAPIKeySecurityDepositGate{apiKeyService: apiKeyService},
+			eligibilityRepo,
+			authCacheInvalidator,
+		)
+	}
+	return svc
+}
+
+// adminAPIKeySecurityDepositGate 延迟读取 APIKeyService 的门禁，避免初始化阶段形成循环依赖。
+type adminAPIKeySecurityDepositGate struct {
+	apiKeyService *APIKeyService
+}
+
+func (g adminAPIKeySecurityDepositGate) CheckAccess(ctx context.Context, userID, groupID int64) (*SecurityDepositAccessGrant, error) {
+	if g.apiKeyService == nil {
+		return nil, infraerrors.ServiceUnavailable("SECURITY_DEPOSIT_GATE_UNAVAILABLE", "security deposit access gate is unavailable")
+	}
+	return g.apiKeyService.CheckSecurityDepositAccess(ctx, userID, groupID)
 }

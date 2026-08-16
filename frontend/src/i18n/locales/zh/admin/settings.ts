@@ -733,7 +733,7 @@ export default {
         securityDepositTitle: '网络安全保证金',
         securityDepositDescription: '配置保证金准入、退款和版本化网络安全约定。启用执法前请先完成分组门槛与支付实例退款能力配置。',
         securityDepositEnforcement: '启用保证金执法',
-        securityDepositEnforcementHint: '启用后，创建、换组、启用密钥及模型调用均校验分组保证金门槛',
+        securityDepositEnforcementHint: '启用后，创建、换组和启用密钥时校验分组保证金门槛；保证金变化时仅自动禁用不满足门槛的密钥',
         securityDepositSelfRefund: '允许用户自助退款',
         securityDepositSelfRefundHint: '还需对应支付实例同时启用退款并允许用户退款；否则只能由管理员操作',
         securityDepositPenaltyMode: '官方网安处罚模式',

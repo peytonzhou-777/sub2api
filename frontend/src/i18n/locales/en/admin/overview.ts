@@ -948,6 +948,13 @@ export default {
         priorityHint: 'Lower value means higher priority, used for account scheduling',
         statusLabel: 'Status'
       },
+      securityDepositReconcile: {
+        title: 'Save deposit threshold',
+        message: 'The deposit threshold will change from CNY {from} to CNY {to}. Check now and disable active keys with insufficient deposits?',
+        deferHint: 'With “Save only”, existing keys remain unchanged and the latest threshold applies the next time they are enabled. Official cyber-policy penalties also use the latest threshold and never reduce the deposit below zero.',
+        saveOnly: 'Save only',
+        saveAndReconcile: 'Save, check, and disable'
+      },
       exclusiveObj: {
         yes: 'Yes',
         no: 'No'

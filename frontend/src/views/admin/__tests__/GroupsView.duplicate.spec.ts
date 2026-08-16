@@ -9,6 +9,7 @@ const {
   listGroups,
   duplicateGroup,
   createGroup,
+  updateGroup,
   getModelsListCandidates,
   getUsageSummary,
   getCapacitySummary,
@@ -19,6 +20,7 @@ const {
   listGroups: vi.fn(),
   duplicateGroup: vi.fn(),
   createGroup: vi.fn(),
+  updateGroup: vi.fn(),
   getModelsListCandidates: vi.fn(),
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
@@ -38,7 +40,7 @@ vi.mock('@/api/admin', () => ({
       getLiveCapability,
       getAll: vi.fn(),
       create: createGroup,
-      update: vi.fn(),
+      update: updateGroup,
       delete: vi.fn(),
       updateSortOrder: vi.fn()
     },
@@ -175,6 +177,7 @@ describe('GroupsView duplicate action', () => {
       listGroups,
       duplicateGroup,
       createGroup,
+      updateGroup,
       getModelsListCandidates,
       getUsageSummary,
       getCapacitySummary,
@@ -203,6 +206,7 @@ describe('GroupsView duplicate action', () => {
     getCapacitySummary.mockResolvedValue([])
     getLiveCapability.mockResolvedValue({ supported: false })
     createGroup.mockResolvedValue({ ...sourceGroup, id: 44 })
+    updateGroup.mockResolvedValue({ ...sourceGroup })
   })
 
   afterEach(() => {
@@ -241,6 +245,55 @@ describe('GroupsView duplicate action', () => {
       })
     )
     expect(createGroup.mock.calls[0][0]).not.toHaveProperty('security_deposit_required_yuan')
+    wrapper.unmount()
+  })
+
+  it('asks whether to reconcile active keys when the deposit threshold changes', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="group-edit"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="edit-security-deposit-threshold"]').setValue('50')
+    await wrapper.get('#edit-group-form').trigger('submit.prevent')
+    await wrapper.vm.$nextTick()
+
+    expect(updateGroup).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="security-deposit-save-only"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('admin.groups.securityDepositReconcile.deferHint')
+
+    await wrapper.get('[data-testid="security-deposit-save-only"]').trigger('click')
+    await flushPromises()
+
+    expect(updateGroup).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        security_deposit_base_required_cents: 5000,
+        reconcile_security_deposit_keys: false
+      })
+    )
+    wrapper.unmount()
+  })
+
+  it('requests a batch key reconciliation when the admin confirms it', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="group-edit"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="edit-security-deposit-threshold"]').setValue('50')
+    await wrapper.get('#edit-group-form').trigger('submit.prevent')
+    await wrapper.vm.$nextTick()
+    await wrapper.get('[data-testid="security-deposit-save-and-reconcile"]').trigger('click')
+    await flushPromises()
+
+    expect(updateGroup).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        security_deposit_base_required_cents: 5000,
+        reconcile_security_deposit_keys: true
+      })
+    )
     wrapper.unmount()
   })
 

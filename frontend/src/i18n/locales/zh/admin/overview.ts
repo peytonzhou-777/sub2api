@@ -930,6 +930,13 @@ export default {
         priorityHint: '数值越小优先级越高，用于账号调度',
         statusLabel: '状态'
       },
+      securityDepositReconcile: {
+        title: '保存保证金门槛',
+        message: '保证金门槛将由 ¥{from} 调整为 ¥{to}。是否立即批量检查并禁用保证金不足的已启用密钥？',
+        deferHint: '选择“仅保存”时，已有密钥不会立即禁用；下次启用时按最新门槛校验。官方网安警告也会按最新门槛扣除，最多扣至保证金余额为 0。',
+        saveOnly: '仅保存',
+        saveAndReconcile: '保存并检查禁用'
+      },
       exclusiveObj: {
         yes: '是',
         no: '否'

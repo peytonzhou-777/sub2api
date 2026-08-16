@@ -231,6 +231,8 @@ type UpdateGroupRequest struct {
 	ReasoningEffortMappings *[]service.ReasoningEffortMapping `json:"reasoning_effort_mappings"`
 	// nil 不修改，0 表示关闭。
 	SecurityDepositBaseRequiredCents *int64 `json:"security_deposit_base_required_cents" binding:"omitempty,min=0"`
+	// 保存后是否立即批量禁用该分组中保证金不足的 active 密钥。
+	ReconcileSecurityDepositKeys bool `json:"reconcile_security_deposit_keys"`
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -693,6 +695,7 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		MaxReasoningEffort:               req.MaxReasoningEffort,
 		ReasoningEffortMappings:          req.ReasoningEffortMappings,
 		SecurityDepositBaseRequiredCents: req.SecurityDepositBaseRequiredCents,
+		ReconcileSecurityDepositKeys:     req.ReconcileSecurityDepositKeys,
 		CopyAccountsFromGroupIDs:         req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {

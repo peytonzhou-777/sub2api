@@ -277,6 +277,42 @@ func TestAdminService_UpdateGroup_RejectsNegativeSecurityDepositThreshold(t *tes
 	require.Nil(t, repo.updated)
 }
 
+type securityDepositGroupKeyReconcilerStub struct {
+	calls     int
+	groupID   int64
+	eventType string
+	eventID   int64
+}
+
+func (s *securityDepositGroupKeyReconcilerStub) DisableInsufficientKeysByGroup(_ context.Context, groupID int64, eventType string, eventID int64) ([]SecurityDepositKeyReference, error) {
+	s.calls++
+	s.groupID = groupID
+	s.eventType = eventType
+	s.eventID = eventID
+	return []SecurityDepositKeyReference{}, nil
+}
+
+func TestAdminService_UpdateGroup_ReconcilesSecurityDepositKeysWhenRequested(t *testing.T) {
+	repo := &groupRepoStubForAdmin{getByID: &Group{
+		ID: 7, Name: "deposit-group", Platform: PlatformAnthropic, RateMultiplier: 1,
+		Status: StatusActive, SecurityDepositBaseRequiredCents: 10000,
+	}}
+	reconciler := &securityDepositGroupKeyReconcilerStub{}
+	svc := &adminServiceImpl{groupRepo: repo, securityDepositGroupKeyReconciler: reconciler}
+	threshold := int64(10000)
+
+	_, err := svc.UpdateGroup(context.Background(), 7, &UpdateGroupInput{
+		SecurityDepositBaseRequiredCents: &threshold,
+		ReconcileSecurityDepositKeys:     true,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, reconciler.calls)
+	require.Equal(t, int64(7), reconciler.groupID)
+	require.Equal(t, "group_threshold_update", reconciler.eventType)
+	require.Equal(t, int64(7), reconciler.eventID)
+}
+
 // TestAdminService_CreateGroup_WithImagePricing 测试创建分组时 ImagePrice 字段正确传递
 func TestAdminService_CreateGroup_WithImagePricing(t *testing.T) {
 	repo := &groupRepoStubForAdmin{}

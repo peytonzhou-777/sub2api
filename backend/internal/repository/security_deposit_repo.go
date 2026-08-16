@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -733,6 +734,20 @@ FOR UPDATE`, input.Grant.UserID).Scan(&strikeBefore, &currentMultiplier); err !=
 		return existing, nil
 	}
 
+	var latestBaseRequiredCents int64
+	if err := tx.QueryRowContext(ctx, `
+SELECT security_deposit_base_required_cents
+FROM groups
+WHERE id = $1
+FOR SHARE`, input.Grant.GroupID).Scan(&latestBaseRequiredCents); err != nil {
+		return nil, fmt.Errorf("load latest security deposit group threshold: %w", err)
+	}
+	if latestBaseRequiredCents < 0 || currentMultiplier < 1 ||
+		(latestBaseRequiredCents > 0 && currentMultiplier > math.MaxInt64/latestBaseRequiredCents) {
+		return nil, infraerrors.BadRequest("INVALID_SECURITY_DEPOSIT_THRESHOLD", "security deposit threshold is invalid")
+	}
+	latestRequiredCents := latestBaseRequiredCents * currentMultiplier
+
 	multiplierAfter := currentMultiplier
 	strikeAfter := strikeBefore
 	state := "shadow"
@@ -766,7 +781,7 @@ ON CONFLICT (event_key) DO NOTHING
 RETURNING id`,
 		input.EventKey, input.RequestID, nullableString(input.UpstreamResponseID), nullableInt64(input.TurnIndex),
 		input.Grant.UserID, input.APIKeyID, input.Grant.GroupID, input.PolicyCode, "openai-error-code-v1",
-		input.Grant.BaseRequiredCents, input.Grant.RiskMultiplier, input.Grant.RequiredCents,
+		latestBaseRequiredCents, currentMultiplier, latestRequiredCents,
 		multiplierAfter, state, input.APIKeyName, input.GroupName, processedAt,
 	).Scan(&violationID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -789,7 +804,7 @@ RETURNING id`,
 
 	result := &service.SecurityDepositCyberPenaltyResult{
 		ViolationID: violationID, State: state,
-		RiskMultiplierBefore: input.Grant.RiskMultiplier,
+		RiskMultiplierBefore: currentMultiplier,
 		RiskMultiplierAfter:  multiplierAfter,
 		DisabledKeyIDs:       []int64{},
 	}
@@ -808,12 +823,16 @@ RETURNING id`,
 	if err != nil {
 		return nil, err
 	}
-	remainingTarget := input.Grant.RequiredCents
+	remainingTarget := latestRequiredCents
 	for _, lot := range lots {
 		if remainingTarget <= 0 {
 			break
 		}
 		available := lot.remainingCents - lot.reservedCents
+		accountAvailable := accountBalances[lot.bucketType] - accountReserved[lot.bucketType]
+		if available > accountAvailable {
+			available = accountAvailable
+		}
 		if available <= 0 {
 			continue
 		}

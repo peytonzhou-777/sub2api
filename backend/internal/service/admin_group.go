@@ -988,6 +988,15 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		}
 	}
 
+	if input.ReconcileSecurityDepositKeys {
+		if s.securityDepositGroupKeyReconciler == nil {
+			return nil, infraerrors.ServiceUnavailable("SECURITY_DEPOSIT_RECONCILER_UNAVAILABLE", "security deposit group key reconciler is unavailable")
+		}
+		if _, err := s.securityDepositGroupKeyReconciler.DisableInsufficientKeysByGroup(ctx, id, "group_threshold_update", id); err != nil {
+			return nil, fmt.Errorf("reconcile security deposit keys after group threshold update: %w", err)
+		}
+	}
+
 	return group, nil
 }
 

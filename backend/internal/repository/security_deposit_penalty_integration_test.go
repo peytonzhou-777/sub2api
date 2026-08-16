@@ -105,6 +105,9 @@ RETURNING id`, user.ID).Scan(&adminLotID)
 		},
 		APIKeyID: triggerKey.ID, APIKeyName: triggerKey.Name, GroupName: triggerGroup.Name,
 	}
+	// 准入后管理员提高门槛；处罚必须按事务发生时的最新门槛计算，而不是旧准入快照。
+	_, err = client.Group.UpdateOneID(triggerGroup.ID).SetSecurityDepositBaseRequiredCents(20000).Save(ctx)
+	require.NoError(t, err)
 	// 模拟退款/扣除与官方网安回调竞态：触发密钥先被普通资金事件禁用，可信处罚仍必须升级为安全锁。
 	_, err = integrationDB.ExecContext(ctx, `UPDATE api_keys SET status = $1 WHERE id = $2`, service.StatusAPIKeyDisabled, triggerKey.ID)
 	require.NoError(t, err)
@@ -112,8 +115,8 @@ RETURNING id`, user.ID).Scan(&adminLotID)
 	result, err := repo.ApplyCyberPolicyPenalty(ctx, input, 8, false)
 	require.NoError(t, err)
 	require.Equal(t, "processed", result.State)
-	require.Equal(t, int64(20000), result.ForfeitedCents)
-	require.Zero(t, result.ShortfallCents)
+	require.Equal(t, int64(25000), result.ForfeitedCents)
+	require.Equal(t, int64(15000), result.ShortfallCents)
 	require.Equal(t, int64(3), result.RiskMultiplierAfter)
 	require.True(t, result.SecurityLocked)
 	require.Equal(t, []int64{otherKey.ID}, result.DisabledKeyIDs)
@@ -145,13 +148,13 @@ func assertSecurityDepositPenaltyState(t *testing.T, ctx context.Context, userID
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT balance_cents FROM security_deposit_accounts WHERE user_id = $1 AND bucket_type = 'paid'`, userID).Scan(&paidBalance))
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT balance_cents FROM security_deposit_accounts WHERE user_id = $1 AND bucket_type = 'admin_grant'`, userID).Scan(&adminBalance))
 	require.Equal(t, int64(0), paidBalance)
-	require.Equal(t, int64(5000), adminBalance)
+	require.Zero(t, adminBalance)
 
 	var paidRemaining, adminRemaining int64
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT remaining_cents FROM security_deposit_lots WHERE id = $1`, paidLotID).Scan(&paidRemaining))
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT remaining_cents FROM security_deposit_lots WHERE id = $1`, adminLotID).Scan(&adminRemaining))
 	require.Equal(t, int64(0), paidRemaining)
-	require.Equal(t, int64(5000), adminRemaining)
+	require.Zero(t, adminRemaining)
 
 	var strikeCount, multiplier int64
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT cyber_strike_count, risk_multiplier FROM security_deposit_risk_profiles WHERE user_id = $1`, userID).Scan(&strikeCount, &multiplier))
@@ -174,4 +177,15 @@ func assertSecurityDepositPenaltyState(t *testing.T, ctx context.Context, userID
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM security_deposit_risk_events WHERE violation_id = $1`, violationID).Scan(&riskEventCount))
 	require.Equal(t, 2, ledgerCount)
 	require.Equal(t, 1, riskEventCount)
+
+	var baseRequiredSnapshot, riskMultiplierBefore, requiredSnapshot, forfeited, shortfall int64
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+SELECT base_required_snapshot_cents, risk_multiplier_before, required_snapshot_cents, forfeited_cents, shortfall_cents
+FROM security_deposit_violations
+WHERE id = $1`, violationID).Scan(&baseRequiredSnapshot, &riskMultiplierBefore, &requiredSnapshot, &forfeited, &shortfall))
+	require.Equal(t, int64(20000), baseRequiredSnapshot)
+	require.Equal(t, int64(2), riskMultiplierBefore)
+	require.Equal(t, int64(40000), requiredSnapshot)
+	require.Equal(t, int64(25000), forfeited)
+	require.Equal(t, int64(15000), shortfall)
 }

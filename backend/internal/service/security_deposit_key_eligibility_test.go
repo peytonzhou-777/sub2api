@@ -10,20 +10,26 @@ import (
 )
 
 type keyEligibilityGateStub struct {
-	insufficient map[int64]bool
-	calls        map[int64]int
-	err          error
+	insufficient      map[int64]bool
+	insufficientUsers map[int64]bool
+	calls             map[int64]int
+	userCalls         map[int64]int
+	err               error
 }
 
 func (s *keyEligibilityGateStub) CheckAccess(_ context.Context, userID, groupID int64) (*SecurityDepositAccessGrant, error) {
 	if s.calls == nil {
 		s.calls = map[int64]int{}
 	}
+	if s.userCalls == nil {
+		s.userCalls = map[int64]int{}
+	}
 	s.calls[groupID]++
+	s.userCalls[userID]++
 	if s.err != nil {
 		return nil, s.err
 	}
-	if s.insufficient[groupID] {
+	if s.insufficient[groupID] || s.insufficientUsers[userID] {
 		return nil, infraerrors.Forbidden("SECURITY_DEPOSIT_REQUIRED", "insufficient")
 	}
 	return &SecurityDepositAccessGrant{UserID: userID, GroupID: groupID, Enforced: true}, nil
@@ -34,10 +40,22 @@ type keyEligibilityRepoStub struct {
 	disabledIDs []int64
 	eventType   string
 	eventID     int64
+	groupID     int64
 }
 
 func (s *keyEligibilityRepoStub) ListActiveSecurityDepositKeys(context.Context, int64) ([]SecurityDepositKeyReference, error) {
 	return s.keys, nil
+}
+
+func (s *keyEligibilityRepoStub) ListActiveSecurityDepositKeysByGroup(_ context.Context, groupID int64) ([]SecurityDepositKeyReference, error) {
+	s.groupID = groupID
+	result := make([]SecurityDepositKeyReference, 0, len(s.keys))
+	for _, key := range s.keys {
+		if key.GroupID == groupID {
+			result = append(result, key)
+		}
+	}
+	return result, nil
 }
 
 func (s *keyEligibilityRepoStub) DisableActiveSecurityDepositKeys(_ context.Context, keyIDs []int64, eventType string, eventID int64, _ time.Time) ([]SecurityDepositKeyReference, error) {
@@ -96,6 +114,26 @@ func TestKeyEligibilityReconcilerFailsClosedWhenAccessStatusUnavailable(t *testi
 
 	require.Error(t, err)
 	require.Empty(t, repo.disabledIDs)
+}
+
+func TestKeyEligibilityReconcilerDisablesInsufficientKeysByGroup(t *testing.T) {
+	gate := &keyEligibilityGateStub{insufficientUsers: map[int64]bool{7: true}}
+	repo := &keyEligibilityRepoStub{keys: []SecurityDepositKeyReference{
+		{ID: 1, UserID: 7, Key: "sk-one", GroupID: 10},
+		{ID: 2, UserID: 7, Key: "sk-two", GroupID: 10},
+		{ID: 3, UserID: 8, Key: "sk-three", GroupID: 10},
+		{ID: 4, UserID: 7, Key: "sk-other", GroupID: 20},
+	}}
+	reconciler := NewKeyEligibilityReconciler(gate, repo, nil)
+
+	disabled, err := reconciler.DisableInsufficientKeysByGroup(context.Background(), 10, "group_threshold_update", 10)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(10), repo.groupID)
+	require.Equal(t, []int64{1, 2}, repo.disabledIDs)
+	require.Len(t, disabled, 2)
+	require.Equal(t, 1, gate.userCalls[7], "同一用户在同一分组只应读取一次资格")
+	require.Equal(t, 1, gate.userCalls[8])
 }
 
 type securityDepositKeyChangeReconcilerStub struct {

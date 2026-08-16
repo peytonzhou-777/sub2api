@@ -738,7 +738,7 @@ export default {
         securityDepositTitle: 'Network Security Deposit',
         securityDepositDescription: 'Configure deposit access enforcement, refunds, and versioned network-security terms. Configure group thresholds and provider refund capabilities before enabling enforcement.',
         securityDepositEnforcement: 'Enforce deposit thresholds',
-        securityDepositEnforcementHint: 'Checks the group threshold when keys are created, regrouped, enabled, and used for model requests',
+        securityDepositEnforcementHint: 'Checks the group threshold when keys are created, regrouped, or enabled. Deposit changes only auto-disable keys that no longer meet the threshold.',
         securityDepositSelfRefund: 'Allow user self-refunds',
         securityDepositSelfRefundHint: 'The payment provider must also enable refunds and user refunds; otherwise an administrator must process the refund',
         securityDepositPenaltyMode: 'Official cyber-policy penalty mode',

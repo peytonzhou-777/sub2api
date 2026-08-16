@@ -370,6 +370,7 @@
           <template #cell-actions="{ row }">
             <div class="flex items-center gap-1">
               <button
+                data-testid="group-edit"
                 @click="handleEdit(row)"
                 class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
               >
@@ -3934,6 +3935,58 @@
       </template>
     </BaseDialog>
 
+    <BaseDialog
+      :show="showSecurityDepositReconcileDialog"
+      :title="t('admin.groups.securityDepositReconcile.title')"
+      width="narrow"
+      :z-index="60"
+      :show-close-button="false"
+      :close-on-escape="false"
+      @close="cancelSecurityDepositReconcile"
+    >
+      <div class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+        <p>
+          {{
+            t("admin.groups.securityDepositReconcile.message", {
+              from: securityDepositThresholdChange.from,
+              to: securityDepositThresholdChange.to,
+            })
+          }}
+        </p>
+        <p class="text-gray-500 dark:text-gray-400">
+          {{ t("admin.groups.securityDepositReconcile.deferHint") }}
+        </p>
+      </div>
+      <template #footer>
+        <div class="flex flex-wrap justify-end gap-3 pt-4">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-testid="security-deposit-reconcile-cancel"
+            @click="cancelSecurityDepositReconcile"
+          >
+            {{ t("common.cancel") }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-testid="security-deposit-save-only"
+            @click="confirmSecurityDepositReconcile(false)"
+          >
+            {{ t("admin.groups.securityDepositReconcile.saveOnly") }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            data-testid="security-deposit-save-and-reconcile"
+            @click="confirmSecurityDepositReconcile(true)"
+          >
+            {{ t("admin.groups.securityDepositReconcile.saveAndReconcile") }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
+
     <!-- Delete Confirmation Dialog -->
     <ConfirmDialog
       :show="showDeleteDialog"
@@ -4441,6 +4494,7 @@ import type {
   CompositeRouteMatchType,
   GroupPlatform,
   SubscriptionType,
+  UpdateGroupRequest,
 } from "@/types";
 import type { Column } from "@/components/common/types";
 import AppLayout from "@/components/layout/AppLayout.vue";
@@ -4976,6 +5030,7 @@ let abortController: AbortController | null = null;
 
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
+const showSecurityDepositReconcileDialog = ref(false);
 const showDeleteDialog = ref(false);
 const pendingLiveForm = ref<"create" | "edit" | null>(null);
 const showUnsupportedLiveConfirm = computed(
@@ -4990,6 +5045,10 @@ const showSortModal = ref(false);
 const submitting = ref(false);
 const sortSubmitting = ref(false);
 const editingGroup = ref<AdminGroup | null>(null);
+const securityDepositThresholdChange = computed(() => ({
+  from: ((editingGroup.value?.security_deposit_base_required_cents ?? 0) / 100).toFixed(2),
+  to: Math.max(0, Number(editForm.security_deposit_required_yuan) || 0).toFixed(2),
+}));
 const deletingGroup = ref<AdminGroup | null>(null);
 const duplicatingGroupIds = reactive(new Set<number>());
 const showRateMultipliersModal = ref(false);
@@ -6213,6 +6272,7 @@ const handleEdit = async (group: AdminGroup) => {
 };
 
 const closeEditModal = () => {
+  showSecurityDepositReconcileDialog.value = false;
   editModelRoutingRules.value.forEach((rule) => {
     accountSearchRunner.clearKey(getEditRuleSearchKey(rule));
   });
@@ -6250,7 +6310,20 @@ const closeEditModal = () => {
   resetModelsListState(editModelsListState);
 };
 
-const handleUpdateGroup = async () => {
+const handleUpdateGroup = () => {
+  void updateGroupWithSecurityDepositChoice();
+};
+
+const cancelSecurityDepositReconcile = () => {
+  showSecurityDepositReconcileDialog.value = false;
+};
+
+const confirmSecurityDepositReconcile = (reconcile: boolean) => {
+  showSecurityDepositReconcileDialog.value = false;
+  void updateGroupWithSecurityDepositChoice(reconcile);
+};
+
+const updateGroupWithSecurityDepositChoice = async (reconcile?: boolean) => {
   if (!editingGroup.value) return;
   if (!editForm.name.trim()) {
     appStore.showError(t("admin.groups.nameRequired"));
@@ -6264,6 +6337,18 @@ const handleUpdateGroup = async () => {
     return;
   }
   if (!validateProfitControlForm(editForm)) {
+    return;
+  }
+
+  const nextSecurityDepositThreshold = Math.round(
+    Math.max(0, Number(editForm.security_deposit_required_yuan) || 0) * 100,
+  );
+  if (
+    reconcile === undefined &&
+    nextSecurityDepositThreshold !==
+      (editingGroup.value.security_deposit_base_required_cents ?? 0)
+  ) {
+    showSecurityDepositReconcileDialog.value = true;
     return;
   }
 
@@ -6323,9 +6408,8 @@ const handleUpdateGroup = async () => {
       profit_safety_buffer: percentToDecimal(
         editForm.profit_safety_buffer_percent,
       ),
-      security_deposit_base_required_cents: Math.round(
-        Math.max(0, Number(editForm.security_deposit_required_yuan) || 0) * 100,
-      ),
+      security_deposit_base_required_cents: nextSecurityDepositThreshold,
+      reconcile_security_deposit_keys: reconcile === true,
     };
     delete (payload as Record<string, unknown>).profit_min_margin_percent;
     delete (payload as Record<string, unknown>).profit_safety_buffer_percent;
@@ -6379,7 +6463,10 @@ const handleUpdateGroup = async () => {
     payload.peak_rate_multiplier = normalizeRateMultiplier(
       editForm.peak_rate_multiplier,
     );
-    await adminAPI.groups.update(editingGroup.value.id, payload);
+    await adminAPI.groups.update(
+      editingGroup.value.id,
+      payload as UpdateGroupRequest,
+    );
     appStore.showSuccess(t("admin.groups.groupUpdated"));
     closeEditModal();
     loadGroups();

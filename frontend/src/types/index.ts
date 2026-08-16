@@ -831,6 +831,8 @@ export interface CreateGroupRequest {
   reasoning_effort_mappings?: ReasoningEffortMapping[]
   require_oauth_only?: boolean
   require_privacy_set?: boolean
+  // 保证金基础门槛，人民币分；0 表示关闭。
+  security_deposit_base_required_cents?: number
   // 从指定分组复制账号
   copy_accounts_from_group_ids?: number[]
 }
@@ -893,6 +895,10 @@ export interface UpdateGroupRequest {
   reasoning_effort_mappings?: ReasoningEffortMapping[]
   require_oauth_only?: boolean
   require_privacy_set?: boolean
+  // 保证金基础门槛，人民币分；0 表示关闭。
+  security_deposit_base_required_cents?: number
+  // 保存后立即批量禁用该分组中保证金不足的 active 密钥。
+  reconcile_security_deposit_keys?: boolean
   copy_accounts_from_group_ids?: number[]
 }
 

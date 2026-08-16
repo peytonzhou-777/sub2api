@@ -13,6 +13,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -515,9 +516,18 @@ func (r *apiKeyRepository) ListAllByUserID(ctx context.Context, userID int64, fi
 
 // ListActiveSecurityDepositKeys 返回参与保证金资格重算的 active 且已绑定分组密钥。
 func (r *apiKeyRepository) ListActiveSecurityDepositKeys(ctx context.Context, userID int64) ([]service.SecurityDepositKeyReference, error) {
+	return r.listActiveSecurityDepositKeys(ctx, apikey.UserIDEQ(userID))
+}
+
+// ListActiveSecurityDepositKeysByGroup 返回指定分组内参与保证金资格重算的 active 密钥。
+func (r *apiKeyRepository) ListActiveSecurityDepositKeysByGroup(ctx context.Context, groupID int64) ([]service.SecurityDepositKeyReference, error) {
+	return r.listActiveSecurityDepositKeys(ctx, apikey.GroupIDEQ(groupID))
+}
+
+func (r *apiKeyRepository) listActiveSecurityDepositKeys(ctx context.Context, scopePredicate predicate.APIKey) ([]service.SecurityDepositKeyReference, error) {
 	rows, err := clientFromContext(ctx, r.client).APIKey.Query().
 		Where(
-			apikey.UserIDEQ(userID),
+			scopePredicate,
 			apikey.StatusEQ(service.StatusAPIKeyActive),
 			apikey.GroupIDNotNil(),
 			apikey.DeletedAtIsNil(),

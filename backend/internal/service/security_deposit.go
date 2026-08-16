@@ -151,8 +151,8 @@ type SecurityDepositEligibility struct {
 	QuoteHash             string `json:"quote_hash"`
 }
 
-// SecurityDepositAccessGrant 是一次服务端准入检查产生的可信门槛快照。
-// 第五阶段处罚只能使用该快照，不能按处罚后的风险倍率重新计算本次金额。
+// SecurityDepositAccessGrant 是一次服务端准入检查产生的可信身份与准入快照。
+// 处罚事务会据此定位用户和分组，并按处罚时的最新基础门槛与风险倍率结算。
 type SecurityDepositAccessGrant struct {
 	UserID                int64  `json:"user_id"`
 	GroupID               int64  `json:"group_id"`
