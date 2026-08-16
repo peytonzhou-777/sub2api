@@ -202,6 +202,80 @@ func TestFetchCodexModelsManifestPassthrough(t *testing.T) {
 	}
 }
 
+func TestFetchCodexModelsManifestUsesAuthoritativeOAuthTokenWhenSchedulerSnapshotHasNoToken(t *testing.T) {
+	manifestBody := `{"models":[{"slug":"gpt-5.5"}]}`
+	var gotAuthorization, gotAccountID string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuthorization = r.Header.Get("Authorization")
+		gotAccountID = r.Header.Get("chatgpt-account-id")
+		_, _ = w.Write([]byte(manifestBody))
+	}))
+	defer server.Close()
+
+	original := chatgptCodexModelsURL
+	chatgptCodexModelsURL = server.URL
+	defer func() { chatgptCodexModelsURL = original }()
+
+	databaseAccount := newCodexModelsTestAccount()
+	databaseAccount.ID = 71
+	repo := &stubOpenAIAccountRepo{accounts: []Account{*databaseAccount}}
+	snapshotAccount := NewSchedulerAccountSnapshot(*databaseAccount).ToAccount()
+	require.Empty(t, snapshotAccount.GetOpenAIAccessToken(), "调度快照不得携带 access_token")
+
+	s := &OpenAIGatewayService{
+		accountRepo:         repo,
+		openAITokenProvider: NewOpenAITokenProvider(repo, nil, nil),
+	}
+	manifest, err := s.FetchCodexModelsManifest(context.Background(), &snapshotAccount, "0.137.0", "")
+
+	require.NoError(t, err)
+	require.Equal(t, manifestBody, string(manifest.Body))
+	require.Equal(t, "Bearer test-access-token", gotAuthorization)
+	require.Equal(t, "acc-123", gotAccountID)
+	require.Empty(t, snapshotAccount.GetOpenAIAccessToken(), "读取权威凭据不得回填调度快照")
+}
+
+func TestFetchCodexModelsManifestUsesAuthoritativeAPIKeyWhenSchedulerSnapshotHasNoKey(t *testing.T) {
+	var gotAuthorization, gotURL string
+	upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		gotAuthorization = req.Header.Get("Authorization")
+		gotURL = req.URL.String()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"models":[]}`)),
+		}, nil
+	}}
+	databaseAccount := newCodexModelsAPIKeyTestAccount("https://upstream.example/v1")
+	databaseAccount.ID = 72
+	repo := &stubOpenAIAccountRepo{accounts: []Account{*databaseAccount}}
+	snapshotAccount := NewSchedulerAccountSnapshot(*databaseAccount).ToAccount()
+	require.Empty(t, snapshotAccount.GetOpenAIApiKey(), "调度快照不得携带 api_key")
+
+	s := newCodexModelsAPIKeyTestService(upstream)
+	s.accountRepo = repo
+	_, err := s.FetchCodexModelsManifest(context.Background(), &snapshotAccount, "0.144.0", "")
+
+	require.NoError(t, err)
+	require.Equal(t, "Bearer sk-upstream", gotAuthorization)
+	require.Equal(t, "https://upstream.example/v1/models?client_version=0.144.0", gotURL)
+	require.Empty(t, snapshotAccount.GetOpenAIApiKey(), "读取权威凭据不得回填调度快照")
+}
+
+func TestFetchCodexModelsManifestDoesNotFallbackToSnapshotTokenWhenAuthoritativeLoadFails(t *testing.T) {
+	selected := newCodexModelsTestAccount()
+	repo := &stubOpenAIAccountRepo{}
+	s := &OpenAIGatewayService{
+		accountRepo:         repo,
+		openAITokenProvider: NewOpenAITokenProvider(repo, nil, nil),
+	}
+
+	_, err := s.FetchCodexModelsManifest(context.Background(), selected, "0.137.0", "")
+
+	require.Error(t, err)
+	require.Equal(t, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", infraerrors.Reason(err))
+}
+
 func TestFetchCodexModelsManifestAgentIdentityUsesAssertionWithoutOAuthToken(t *testing.T) {
 	key, privateKey := newTestAgentIdentityKey(t)
 	account := &Account{

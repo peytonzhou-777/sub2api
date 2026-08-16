@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math/rand/v2"
 	"strings"
@@ -153,6 +154,28 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	}
 
 	slog.Debug("openai_token_cache_miss", "account_id", account.ID)
+	credentialsAbsent := strings.TrimSpace(account.GetOpenAIAccessToken()) == ""
+	if account.IsSchedulerSnapshot && p.accountRepo == nil {
+		return "", errors.New("authoritative account repository is required for an OpenAI scheduler snapshot")
+	}
+	if (account.IsSchedulerSnapshot || credentialsAbsent) && p.accountRepo != nil {
+		slog.Warn("openai_token_provider.scheduler_snapshot_incomplete",
+			"account_id", account.ID,
+			"is_scheduler_snapshot", account.IsSchedulerSnapshot,
+			"action", "reload_authoritative_account",
+		)
+		authoritative, err := p.accountRepo.GetByID(ctx, account.ID)
+		if err != nil {
+			return "", fmt.Errorf("load authoritative OpenAI account %d: %w", account.ID, err)
+		}
+		if authoritative == nil {
+			return "", fmt.Errorf("authoritative OpenAI account %d not found", account.ID)
+		}
+		if !authoritative.IsOpenAIOAuth() {
+			return "", fmt.Errorf("authoritative account %d is not an OpenAI OAuth account", account.ID)
+		}
+		account = authoritative
+	}
 
 	// 2) Refresh if needed (pre-expiry skew).
 	expiresAt := account.GetCredentialAsTime("expires_at")

@@ -93,6 +93,10 @@ func TestOpenAISelectAccountWithLoadAwareness_HydratesSelectedAccountFromSchedul
 				Schedulable: true,
 				Concurrency: 1,
 				Priority:    1,
+				GroupIDs:    []int64{2},
+				AccountGroups: []AccountGroup{
+					{AccountID: 1, GroupID: 2},
+				},
 				Credentials: map[string]any{
 					"model_mapping": map[string]any{
 						"gpt-4": "gpt-4",
@@ -109,6 +113,10 @@ func TestOpenAISelectAccountWithLoadAwareness_HydratesSelectedAccountFromSchedul
 				Schedulable: true,
 				Concurrency: 1,
 				Priority:    1,
+				GroupIDs:    []int64{2},
+				AccountGroups: []AccountGroup{
+					{AccountID: 1, GroupID: 2},
+				},
 				Credentials: map[string]any{
 					"api_key":       "sk-live",
 					"model_mapping": map[string]any{"gpt-4": "gpt-4"},
@@ -119,8 +127,10 @@ func TestOpenAISelectAccountWithLoadAwareness_HydratesSelectedAccountFromSchedul
 
 	schedulerSnapshot := NewSchedulerSnapshotService(cache, nil, nil, nil, nil)
 	groupID := int64(2)
+	authoritativeRepo := &stubOpenAIAccountRepo{accounts: []Account{*cache.accounts[1]}}
 	svc := &OpenAIGatewayService{
 		schedulerSnapshot: schedulerSnapshot,
+		accountRepo:       authoritativeRepo,
 		cache:             &stubGatewayCache{},
 	}
 
@@ -143,6 +153,7 @@ func TestOpenAINewAcquiredSelectionResult_ReleasesSlotWhenHydrationFails(t *test
 	schedulerSnapshot := NewSchedulerSnapshotService(cache, nil, stubOpenAIAccountRepo{}, nil, nil)
 	svc := &OpenAIGatewayService{
 		schedulerSnapshot: schedulerSnapshot,
+		accountRepo:       &stubOpenAIAccountRepo{},
 	}
 	releaseCalls := 0
 
@@ -193,6 +204,7 @@ func TestGatewaySelectAccountWithLoadAwareness_HydratesSelectedAccountFromSchedu
 	schedulerSnapshot := NewSchedulerSnapshotService(cache, nil, nil, nil, nil)
 	svc := &GatewayService{
 		schedulerSnapshot: schedulerSnapshot,
+		accountRepo:       &stubOpenAIAccountRepo{accounts: []Account{*cache.accounts[9]}},
 		cache:             &mockGatewayCacheForPlatform{},
 		cfg:               testConfig(),
 	}

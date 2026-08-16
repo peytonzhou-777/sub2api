@@ -46,11 +46,15 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 		zap.String("upstream_model", upstreamModel),
 	)
 
-	apiKey := account.GetOpenAIApiKey()
+	credentialAccount, err := s.resolveAuthoritativeOpenAICredentialAccount(ctx, account)
+	if err != nil {
+		return nil, fmt.Errorf("resolve authoritative credentials for account %d: %w", account.ID, err)
+	}
+	apiKey := credentialAccount.GetOpenAIApiKey()
 	if apiKey == "" {
 		return nil, fmt.Errorf("account %d missing api_key", account.ID)
 	}
-	baseURL := account.GetOpenAIBaseURL()
+	baseURL := credentialAccount.GetOpenAIBaseURL()
 	if baseURL == "" {
 		baseURL = "https://api.openai.com"
 	}
@@ -78,12 +82,12 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 			}
 		}
 	}
-	if customUA := account.GetOpenAIUserAgent(); customUA != "" {
+	if customUA := credentialAccount.GetOpenAIUserAgent(); customUA != "" {
 		upstreamReq.Header.Set("user-agent", customUA)
 	}
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效）
-	account.ApplyHeaderOverrides(upstreamReq.Header)
+	credentialAccount.ApplyHeaderOverrides(upstreamReq.Header)
 
 	proxyURL := ""
 	if account.Proxy != nil {

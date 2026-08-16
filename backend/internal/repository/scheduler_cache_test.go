@@ -30,6 +30,32 @@ func TestFilterSchedulerCredentialsKeepsSubscriptionPlanType(t *testing.T) {
 	require.NotContains(t, filtered, "refresh_token")
 }
 
+func TestMarshalSchedulerCacheAccountNeverStoresSecrets(t *testing.T) {
+	account := service.Account{
+		ID:       25,
+		Platform: service.PlatformOpenAI,
+		Type:     service.AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":  "secret-access-token",
+			"refresh_token": "secret-refresh-token",
+			"api_key":       "secret-api-key",
+			"plan_type":     "plus",
+		},
+	}
+
+	accountPayload, metadataPayload, err := marshalSchedulerCacheAccount(account)
+	require.NoError(t, err)
+	require.Equal(t, metadataPayload, accountPayload)
+	for _, secret := range []string{"secret-access-token", "secret-refresh-token", "secret-api-key"} {
+		require.NotContains(t, string(accountPayload), secret)
+		require.NotContains(t, string(metadataPayload), secret)
+	}
+	decoded, err := decodeCachedAccount(accountPayload)
+	require.NoError(t, err)
+	require.True(t, decoded.IsSchedulerSnapshot)
+	require.Equal(t, "plus", decoded.GetCredential("plan_type"))
+}
+
 func TestSchedulerMetadataAccountKeepsOpenAISubscriptionIdentity(t *testing.T) {
 	account := service.Account{
 		ID:       24,
@@ -100,9 +126,9 @@ func TestSchedulerMetadataAccountProjectsUpstreamBillingProbe(t *testing.T) {
 	require.NotContains(t, filteredData, "effective_rate_multiplier")
 	require.NotContains(t, filteredData, "remote_diagnostic")
 	require.NotContains(t, metadata.Extra, "unused_large_field")
-	require.Contains(t, string(fullPayload), lastError)
+	require.NotContains(t, string(fullPayload), "last_error")
 	require.NotContains(t, string(metaPayload), "last_error")
-	require.Less(t, len(metaPayload)*4, len(fullPayload))
+	require.Equal(t, metaPayload, fullPayload, "单账号键和桶元数据键都必须只保存无密钥调度投影")
 }
 
 func TestSchedulerMetadataAccountDropsInvalidUpstreamBillingProbe(t *testing.T) {

@@ -1522,15 +1522,15 @@ func (s *OpenAIGatewayService) isOpenAIAccountBlockedBySchedulingThreshold(ctx c
 }
 
 func (s *OpenAIGatewayService) hydrateSelectedAccount(ctx context.Context, account *Account) (*Account, error) {
-	if account == nil || s.schedulerSnapshot == nil {
+	if account == nil || s.accountRepo == nil {
 		return account, nil
 	}
-	hydrated, err := s.schedulerSnapshot.GetAccount(ctx, account.ID)
+	hydrated, err := s.accountRepo.GetByID(ctx, account.ID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load selected openai account %d from authoritative repository: %w", account.ID, err)
 	}
 	if hydrated == nil {
-		return nil, fmt.Errorf("selected openai account %d not found during hydration", account.ID)
+		return nil, fmt.Errorf("selected openai account %d not found in authoritative repository", account.ID)
 	}
 	return hydrated, nil
 }

@@ -7,7 +7,7 @@ import (
 
 // SchedulerAccountSnapshotSchemaVersion 是调度账号快照的结构版本。
 // 修改调度决策字段时必须递增版本，并切换缓存命名空间，避免旧快照被新代码解释。
-const SchedulerAccountSnapshotSchemaVersion = 3
+const SchedulerAccountSnapshotSchemaVersion = 4
 
 // SchedulerPrivacyStatus 是调度使用的隐私合规状态，而不是账号持久化状态。
 type SchedulerPrivacyStatus string
@@ -380,6 +380,7 @@ func (s SchedulerAccountSnapshot) ToAccount() Account {
 	}
 	account.SchedulerPrivacyStatus = normalizeSchedulerPrivacyStatus(s.PrivacyStatus)
 	account.SchedulerSnapshotNeedsRefresh = s.NeedsRefresh
+	account.IsSchedulerSnapshot = true
 	return account
 }
 

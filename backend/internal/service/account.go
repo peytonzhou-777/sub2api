@@ -55,6 +55,8 @@ type Account struct {
 	SchedulerPrivacyStatus SchedulerPrivacyStatus `json:"-"`
 	// SchedulerSnapshotNeedsRefresh 表示缓存投影缺少当前 schema 的决策字段。
 	SchedulerSnapshotNeedsRefresh bool `json:"-"`
+	// IsSchedulerSnapshot 标记账号仅来自无密钥调度投影，不得作为凭据来源。
+	IsSchedulerSnapshot bool `json:"-"`
 
 	RateLimitedAt    *time.Time
 	RateLimitResetAt *time.Time

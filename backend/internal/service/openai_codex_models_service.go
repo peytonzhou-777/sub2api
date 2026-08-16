@@ -236,7 +236,7 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	if account == nil {
 		return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_ACCOUNT_REQUIRED", "account is required")
 	}
-	credAccount, err := resolveCredentialAccount(ctx, s.accountRepo, account)
+	credAccount, err := s.resolveAuthoritativeOpenAICredentialAccount(ctx, account)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", "resolve credential account: %v", err)
 	}
@@ -252,7 +252,11 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	appendModelsPath := false
 	switch {
 	case credAccount.IsOpenAIOAuth():
-		authToken = strings.TrimSpace(credAccount.GetOpenAIAccessToken())
+		authToken, _, err = s.GetAccessToken(ctx, credAccount)
+		if err != nil {
+			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_AUTH_FAILED", "get Codex models access token: %v", err)
+		}
+		authToken = strings.TrimSpace(authToken)
 		if authToken == "" && !credAccount.IsOpenAIAgentIdentity() {
 			return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_TOKEN_MISSING", "account has no Codex backend access token")
 		}
@@ -265,7 +269,11 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 				"Codex models manifest requires a custom API key upstream base URL",
 			)
 		}
-		authToken = strings.TrimSpace(credAccount.GetOpenAIApiKey())
+		authToken, _, err = s.GetAccessToken(ctx, credAccount)
+		if err != nil {
+			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_AUTH_FAILED", "get Codex models API key: %v", err)
+		}
+		authToken = strings.TrimSpace(authToken)
 		if authToken == "" {
 			return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_API_KEY_MISSING", "account has no API key for the Codex models upstream")
 		}

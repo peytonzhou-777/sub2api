@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSchedulerCacheSnapshotUsesSlimMetadataButKeepsFullAccount(t *testing.T) {
+func TestSchedulerCacheStoresOnlyCredentialFreeSchedulerSnapshots(t *testing.T) {
 	ctx := context.Background()
 	rdb := testRedis(t)
 	cache := NewSchedulerCache(rdb)
@@ -78,7 +78,7 @@ func TestSchedulerCacheSnapshotUsesSlimMetadataButKeepsFullAccount(t *testing.T)
 
 	got := snapshot[0]
 	require.NotNil(t, got)
-	require.Equal(t, "gemini-api-key", got.GetCredential("api_key"))
+	require.Empty(t, got.GetCredential("api_key"))
 	require.Equal(t, "proj-1", got.GetCredential("project_id"))
 	require.Equal(t, "ai_studio", got.GetCredential("oauth_type"))
 	require.NotEmpty(t, got.GetModelMapping())
@@ -96,13 +96,15 @@ func TestSchedulerCacheSnapshotUsesSlimMetadataButKeepsFullAccount(t *testing.T)
 	require.Equal(t, bucket.GroupID, got.AccountGroups[0].GroupID)
 	require.Nil(t, got.AccountGroups[0].Group)
 
-	full, err := cache.GetAccount(ctx, account.ID)
+	accountSnapshot, err := cache.GetAccount(ctx, account.ID)
 	require.NoError(t, err)
-	require.NotNil(t, full)
-	require.Equal(t, "secret-access-token", full.GetCredential("access_token"))
-	require.Equal(t, strings.Repeat("x", 4096), full.GetCredential("huge_blob"))
-	require.Len(t, full.AccountGroups, 1)
-	require.NotNil(t, full.AccountGroups[0].Group)
+	require.NotNil(t, accountSnapshot)
+	require.True(t, accountSnapshot.IsSchedulerSnapshot)
+	require.Empty(t, accountSnapshot.GetCredential("api_key"))
+	require.Empty(t, accountSnapshot.GetCredential("access_token"))
+	require.Empty(t, accountSnapshot.GetCredential("huge_blob"))
+	require.Len(t, accountSnapshot.AccountGroups, 1)
+	require.Nil(t, accountSnapshot.AccountGroups[0].Group)
 }
 
 func TestSchedulerCacheRetireAndReopenFencesOldEpochIntegration(t *testing.T) {

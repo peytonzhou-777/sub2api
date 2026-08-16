@@ -53,6 +53,45 @@ func TestForwardResponses_ForceChatCompletionsRoutesNonStreamingToChatCompletion
 	require.False(t, result.Stream)
 }
 
+func TestForwardResponsesChatFallbackUsesAuthoritativeCredentialsWhenSchedulerSnapshotHasNoKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"gpt-5.4","input":"hello","stream":false}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(strings.NewReader(
+			`{"id":"chatcmpl_authoritative","object":"chat.completion","model":"gpt-5.4","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`,
+		)),
+	}}
+	databaseAccount := forceChatResponsesFallbackAccount()
+	databaseAccount.ID = 74
+	databaseAccount.Credentials["api_key"] = "sk-authoritative-fallback"
+	databaseAccount.Credentials["base_url"] = "http://authoritative.example/v1"
+	databaseAccount.Credentials["user_agent"] = "authoritative-fallback-agent"
+	repo := &stubOpenAIAccountRepo{accounts: []Account{*databaseAccount}}
+	snapshotAccount := NewSchedulerAccountSnapshot(*databaseAccount).ToAccount()
+	require.Empty(t, snapshotAccount.GetOpenAIApiKey(), "调度快照不得携带 api_key")
+
+	svc := &OpenAIGatewayService{
+		accountRepo:  repo,
+		cfg:          rawChatCompletionsTestConfig(),
+		httpUpstream: upstream,
+	}
+	result, err := svc.Forward(context.Background(), c, &snapshotAccount, body)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "http://authoritative.example/v1/chat/completions", upstream.lastReq.URL.String())
+	require.Equal(t, "Bearer sk-authoritative-fallback", upstream.lastReq.Header.Get("Authorization"))
+	require.Equal(t, "authoritative-fallback-agent", upstream.lastReq.Header.Get("User-Agent"))
+	require.Empty(t, snapshotAccount.GetOpenAIApiKey(), "读取权威凭据不得回填调度快照")
+}
+
 func TestForwardResponses_PassthroughFlagWithUnsupportedResponsesUsesAccountMapping(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

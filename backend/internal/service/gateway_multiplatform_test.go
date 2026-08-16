@@ -2315,7 +2315,7 @@ func TestGatewayService_SelectAccountWithLoadAwareness(t *testing.T) {
 		require.Equal(t, int64(2), result.Account.ID, "不应选择被排除的账号")
 	})
 
-	t.Run("粘性命中-不调用GetByID", func(t *testing.T) {
+	t.Run("粘性命中-最终账号回源GetByID", func(t *testing.T) {
 		repo := &mockAccountRepoForPlatform{
 			accounts: []Account{
 				{ID: 1, Platform: PlatformAnthropic, Priority: 1, Status: StatusActive, Schedulable: true, Concurrency: 5},
@@ -2347,7 +2347,7 @@ func TestGatewayService_SelectAccountWithLoadAwareness(t *testing.T) {
 		require.NotNil(t, result)
 		require.NotNil(t, result.Account)
 		require.Equal(t, int64(1), result.Account.ID)
-		require.Equal(t, 0, repo.getByIDCalls, "粘性命中不应调用GetByID")
+		require.Equal(t, 1, repo.getByIDCalls, "粘性命中后应从权威仓库加载最终账号")
 		require.Equal(t, 0, concurrencyCache.loadBatchCalls, "粘性命中应在负载批量查询前返回")
 	})
 
@@ -2383,7 +2383,7 @@ func TestGatewayService_SelectAccountWithLoadAwareness(t *testing.T) {
 		require.NotNil(t, result)
 		require.NotNil(t, result.Account)
 		require.Equal(t, int64(2), result.Account.ID, "粘性账号不在候选集时应回退到可用账号")
-		require.Equal(t, 0, repo.getByIDCalls, "粘性账号缺失不应回退到GetByID")
+		require.Equal(t, 1, repo.getByIDCalls, "回退选号后应从权威仓库加载最终账号")
 		require.Equal(t, 1, concurrencyCache.loadBatchCalls, "应继续进行负载批量查询")
 	})
 

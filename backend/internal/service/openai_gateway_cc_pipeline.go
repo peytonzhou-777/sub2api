@@ -147,18 +147,22 @@ func (s *OpenAIGatewayService) openAIChatCompletionsTargetURL(account *Account) 
 	return buildOpenAIChatCompletionsURL(validatedURL), nil
 }
 
-// resolveCCFallbackTarget 解析两条 CC 回退路径共用的账号凭证与上游端点
-// （回退路径仅面向 APIKey 账号，凭证恒为 openai api_key）。
-func (s *OpenAIGatewayService) resolveCCFallbackTarget(account *Account) (apiKey string, targetURL string, err error) {
-	apiKey = account.GetOpenAIApiKey()
-	if apiKey == "" {
-		return "", "", fmt.Errorf("account %d missing api_key", account.ID)
-	}
-	targetURL, err = s.openAIChatCompletionsTargetURL(account)
+// resolveCCFallbackTarget 从权威仓库解析两条 CC 回退路径共用的账号凭证与上游端点。
+// 回退路径仅面向 APIKey 账号，调度快照不能作为 api_key 来源。
+func (s *OpenAIGatewayService) resolveCCFallbackTarget(ctx context.Context, account *Account) (credentialAccount *Account, apiKey string, targetURL string, err error) {
+	credentialAccount, err = s.resolveAuthoritativeOpenAICredentialAccount(ctx, account)
 	if err != nil {
-		return "", "", err
+		return nil, "", "", err
 	}
-	return apiKey, targetURL, nil
+	apiKey = credentialAccount.GetOpenAIApiKey()
+	if apiKey == "" {
+		return nil, "", "", fmt.Errorf("account %d missing api_key", account.ID)
+	}
+	targetURL, err = s.openAIChatCompletionsTargetURL(credentialAccount)
+	if err != nil {
+		return nil, "", "", err
+	}
+	return credentialAccount, apiKey, targetURL, nil
 }
 
 // sendCCUpstreamRequest 构建并发送 CC 上游请求：分离的上游 context、OpenAI HTTP
@@ -171,6 +175,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	ctx context.Context,
 	c *gin.Context,
 	account *Account,
+	credentialAccount *Account,
 	targetURL string,
 	body []byte,
 	stream bool,
@@ -178,6 +183,9 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	userAgent string,
 	grokCacheIdentity string,
 ) (*http.Response, error) {
+	if credentialAccount == nil {
+		credentialAccount = account
+	}
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	upstreamReq, err := http.NewRequestWithContext(upstreamCtx, http.MethodPost, targetURL, bytes.NewReader(body))
 	releaseUpstreamCtx()
@@ -214,7 +222,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	}
 	// 账号级请求头覆写：放在所有内置默认头（含 Grok CLI 身份头）之后应用，
 	// 使配置值获得除共享传输层强制头之外的最高优先级。
-	account.ApplyHeaderOverrides(upstreamReq.Header)
+	credentialAccount.ApplyHeaderOverrides(upstreamReq.Header)
 
 	proxyURL := ""
 	if account.Proxy != nil {

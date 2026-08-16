@@ -108,15 +108,13 @@ func TestSchedulerCacheSnapshotAccountIDReusePreservesPayloadAndMembers(t *testi
 	require.NoError(t, err)
 	require.Equal(t, []int64{701, 702, 701}, accountIDs, "应保留可编码账号的原顺序和重复项")
 
-	wantFull, err := json.Marshal(validOne)
-	require.NoError(t, err)
 	wantMeta, err := json.Marshal(buildSchedulerAccountSnapshot(validOne))
 	require.NoError(t, err)
 	fullBefore, err := cache.rdb.Get(ctx, schedulerAccountKey("701")).Bytes()
 	require.NoError(t, err)
 	metaBefore, err := cache.rdb.Get(ctx, schedulerAccountMetaKey("701")).Bytes()
 	require.NoError(t, err)
-	require.Equal(t, wantFull, fullBefore)
+	require.Equal(t, wantMeta, fullBefore)
 	require.Equal(t, wantMeta, metaBefore)
 
 	forced := service.SchedulerBucket{GroupID: 17, Platform: service.PlatformOpenAI, Mode: service.SchedulerModeForced}
@@ -128,7 +126,7 @@ func TestSchedulerCacheSnapshotAccountIDReusePreservesPayloadAndMembers(t *testi
 	require.NoError(t, err)
 	metaAfter, err := cache.rdb.Get(ctx, schedulerAccountMetaKey("701")).Bytes()
 	require.NoError(t, err)
-	require.Equal(t, fullBefore, fullAfter, "ID-only 路径不得重写完整账号键")
+	require.Equal(t, fullBefore, fullAfter, "ID-only 路径不得重写单账号调度投影键")
 	require.Equal(t, metaBefore, metaAfter, "ID-only 路径不得重写调度元数据键")
 
 	for _, bucket := range []service.SchedulerBucket{single, forced} {
@@ -288,11 +286,9 @@ func TestMarshalSchedulerCacheAccountKeepsEncodingJSONWireFormat(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			full, meta, err := marshalSchedulerCacheAccount(tc.account)
 			require.NoError(t, err)
-			wantFull, err := json.Marshal(tc.account)
-			require.NoError(t, err)
 			wantMeta, err := json.Marshal(buildSchedulerAccountSnapshot(tc.account))
 			require.NoError(t, err)
-			require.Equal(t, wantFull, full)
+			require.Equal(t, wantMeta, full)
 			require.Equal(t, wantMeta, meta)
 		})
 	}
@@ -394,7 +390,7 @@ func TestSchedulerCacheMissingPrivacyFieldBecomesUnknownAndRequestsRefresh(t *te
 	require.True(t, accounts[0].SchedulerSnapshotNeedsRefresh)
 }
 
-func TestSchedulerCacheV3NamespaceIgnoresLegacyAccountKeys(t *testing.T) {
+func TestSchedulerCacheV4NamespaceIgnoresLegacyAccountKeys(t *testing.T) {
 	ctx := context.Background()
 	cache, mr := newSchedulerCacheUnitWithRedis(t)
 	legacy, err := json.Marshal(service.Account{
@@ -406,11 +402,12 @@ func TestSchedulerCacheV3NamespaceIgnoresLegacyAccountKeys(t *testing.T) {
 	require.NoError(t, err)
 	mr.Set("sched:acc:842", string(legacy))
 	mr.Set("sched:v2:acc:842", string(legacy))
+	mr.Set("sched:v3:acc:842", string(legacy))
 
 	account, err := cache.GetAccount(ctx, 842)
 	require.NoError(t, err)
 	require.Nil(t, account)
-	require.Equal(t, "sched:v3:acc:842", schedulerAccountKey("842"))
+	require.Equal(t, "sched:v4:acc:842", schedulerAccountKey("842"))
 }
 
 func TestSchedulerCachePreservesDecisionSemantics(t *testing.T) {

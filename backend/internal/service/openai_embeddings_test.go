@@ -104,3 +104,47 @@ func TestForwardEmbeddings_APIKeyPassthroughRecordsUsageAndBatchInput(t *testing
 	require.Equal(t, "float", gjson.GetBytes(upstream.lastBody, "encoding_format").String())
 	require.Equal(t, int64(256), gjson.GetBytes(upstream.lastBody, "dimensions").Int())
 }
+
+func TestForwardEmbeddingsUsesAuthoritativeCredentialsWhenSchedulerSnapshotHasNoKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"text-embedding-3-small","input":"hello"}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/embeddings", bytes.NewReader(body))
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"data":[],"usage":{"prompt_tokens":1,"total_tokens":1}}`)),
+	}}
+	databaseAccount := Account{
+		ID:          73,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 2,
+		Credentials: map[string]any{
+			"api_key":    "sk-authoritative-embedding",
+			"base_url":   "https://embedding.example/v1",
+			"user_agent": "authoritative-embedding-agent",
+		},
+	}
+	repo := &stubOpenAIAccountRepo{accounts: []Account{databaseAccount}}
+	snapshotAccount := NewSchedulerAccountSnapshot(databaseAccount).ToAccount()
+	require.Empty(t, snapshotAccount.GetOpenAIApiKey(), "调度快照不得携带 api_key")
+
+	svc := &OpenAIGatewayService{
+		accountRepo: repo,
+		cfg: &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{
+			Enabled: false,
+		}}},
+		httpUpstream: upstream,
+	}
+	_, err := svc.ForwardEmbeddings(context.Background(), c, &snapshotAccount, body, "")
+
+	require.NoError(t, err)
+	require.Equal(t, "https://embedding.example/v1/embeddings", upstream.lastReq.URL.String())
+	require.Equal(t, "Bearer sk-authoritative-embedding", upstream.lastReq.Header.Get("Authorization"))
+	require.Equal(t, "authoritative-embedding-agent", upstream.lastReq.Header.Get("User-Agent"))
+	require.Empty(t, snapshotAccount.GetOpenAIApiKey(), "读取权威凭据不得回填调度快照")
+}

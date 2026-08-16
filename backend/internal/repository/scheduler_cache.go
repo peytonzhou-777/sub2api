@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	schedulerCacheNamespace        = "v3"
+	schedulerCacheNamespace        = "v4"
 	schedulerBucketSetKey          = "sched:" + schedulerCacheNamespace + ":buckets"
 	schedulerOutboxWatermarkKey    = "sched:" + schedulerCacheNamespace + ":outbox:watermark"
 	schedulerAccountPrefix         = "sched:" + schedulerCacheNamespace + ":acc:"
@@ -762,20 +762,11 @@ func applySchedulerLastUsed(account *service.Account, value any) error {
 }
 
 func decodeCachedAccount(val any) (*service.Account, error) {
-	var payload []byte
-	switch raw := val.(type) {
-	case string:
-		payload = []byte(raw)
-	case []byte:
-		payload = raw
-	default:
-		return nil, fmt.Errorf("unexpected account cache type: %T", val)
-	}
-	var account service.Account
-	if err := json.Unmarshal(payload, &account); err != nil {
+	snapshot, err := decodeCachedSchedulerAccountSnapshot(val)
+	if err != nil {
 		return nil, err
 	}
-	account.SchedulerPrivacyStatus = service.ResolveSchedulerPrivacyStatus(account)
+	account := snapshot.ToAccount()
 	return &account, nil
 }
 
@@ -860,18 +851,18 @@ func (c *schedulerCache) writeAccountIDs(ctx context.Context, accounts []service
 }
 
 func marshalSchedulerCacheAccount(account service.Account) ([]byte, []byte, error) {
-	fullPayload, err := json.Marshal(account)
+	snapshotPayload, err := json.Marshal(buildSchedulerAccountSnapshot(account))
 	if err != nil {
-		return nil, nil, fmt.Errorf("marshal account: %w", err)
+		return nil, nil, fmt.Errorf("marshal scheduler account snapshot: %w", err)
 	}
-	metaPayload, err := json.Marshal(buildSchedulerAccountSnapshot(account))
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal account metadata: %w", err)
-	}
-	return fullPayload, metaPayload, nil
+	// acc/meta 键保留独立命名以兼容现有读写与 last_used 原子脚本，
+	// 两者均只保存同一份无密钥强类型调度投影。
+	return snapshotPayload, snapshotPayload, nil
 }
 
 func buildSchedulerAccountSnapshot(account service.Account) service.SchedulerAccountSnapshot {
+	account.AccountGroups = filterSchedulerAccountGroups(account.AccountGroups)
+	account.GroupIDs = filterSchedulerGroupIDs(account.GroupIDs, account.AccountGroups)
 	snapshot := service.NewSchedulerAccountSnapshot(account)
 	if snapshot.Extra != nil && snapshot.Extra.UpstreamBillingProbe != nil {
 		if filtered := filterSchedulerUpstreamBillingProbe(snapshot.Extra.UpstreamBillingProbe); filtered != nil {

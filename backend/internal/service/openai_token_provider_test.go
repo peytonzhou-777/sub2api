@@ -86,6 +86,7 @@ func (s *openAITokenCacheStub) ReleaseRefreshLock(ctx context.Context, cacheKey 
 
 // openAIAccountRepoStub is a minimal stub implementing only the methods used by OpenAITokenProvider
 type openAIAccountRepoStub struct {
+	AccountRepository
 	account      *Account
 	getErr       error
 	updateErr    error
@@ -179,6 +180,47 @@ func TestOpenAITokenProvider_CacheMiss_FromCredentials(t *testing.T) {
 	// Should have stored in cache
 	cacheKey := OpenAITokenCacheKey(account)
 	require.Equal(t, "credential-token", cache.tokens[cacheKey])
+}
+
+func TestOpenAITokenProvider_CacheMissLoadsAuthoritativeAccountForSchedulerSnapshot(t *testing.T) {
+	cache := newOpenAITokenCacheStub()
+	databaseAccount := &Account{
+		ID:       111,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "database-token",
+			"expires_at":   time.Now().Add(time.Hour).Format(time.RFC3339),
+		},
+	}
+	repo := &openAIAccountRepoStub{account: databaseAccount}
+	snapshotAccount := NewSchedulerAccountSnapshot(*databaseAccount).ToAccount()
+	require.True(t, snapshotAccount.IsSchedulerSnapshot)
+	require.Empty(t, snapshotAccount.GetOpenAIAccessToken())
+
+	provider := NewOpenAITokenProvider(repo, cache, nil)
+	token, err := provider.GetAccessToken(context.Background(), &snapshotAccount)
+
+	require.NoError(t, err)
+	require.Equal(t, "database-token", token)
+	require.GreaterOrEqual(t, atomic.LoadInt32(&repo.getCalled), int32(1))
+	require.Equal(t, "database-token", cache.tokens[OpenAITokenCacheKey(databaseAccount)])
+	require.Empty(t, snapshotAccount.GetOpenAIAccessToken(), "Token Provider 不得把密钥回填到调度快照")
+}
+
+func TestOpenAITokenProvider_TokenCacheHitDoesNotLoadAuthoritativeAccountForSchedulerSnapshot(t *testing.T) {
+	cache := newOpenAITokenCacheStub()
+	databaseAccount := &Account{ID: 112, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	snapshotAccount := NewSchedulerAccountSnapshot(*databaseAccount).ToAccount()
+	cache.tokens[OpenAITokenCacheKey(&snapshotAccount)] = "credential-cache-token"
+	repo := &openAIAccountRepoStub{getErr: errors.New("database should not be read")}
+
+	provider := NewOpenAITokenProvider(repo, cache, nil)
+	token, err := provider.GetAccessToken(context.Background(), &snapshotAccount)
+
+	require.NoError(t, err)
+	require.Equal(t, "credential-cache-token", token)
+	require.Equal(t, int32(0), atomic.LoadInt32(&repo.getCalled))
 }
 
 func TestOpenAITokenProvider_TokenRefresh(t *testing.T) {
