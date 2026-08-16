@@ -393,6 +393,8 @@ export default {
         description: 'Default values for new users',
         defaultBalance: 'Default Balance',
         defaultBalanceHint: 'Initial balance for new users',
+        defaultSecurityDeposit: 'Default Security Deposit',
+        defaultSecurityDepositHint: 'Granted after registration into the permanently frozen, non-refundable balance',
         affiliateRebateRate: 'Affiliate Rebate Rate',
         affiliateRebateRateHint:
           'Rebate percentage credited to inviter after recharge (0-100%, e.g. 10 means 10%)',

@@ -85,6 +85,16 @@ type defaultLimitedCreditGranterStub struct {
 	err   error
 }
 
+type defaultSecurityDepositGrantCall struct {
+	userID      int64
+	amountCents int64
+}
+
+type defaultSecurityDepositGranterStub struct {
+	calls []defaultSecurityDepositGrantCall
+	err   error
+}
+
 type refreshTokenCacheStub struct{}
 
 type userPlatformQuotaRepoStub struct {
@@ -144,6 +154,11 @@ func (s *defaultLimitedCreditGranterStub) GrantFromDefaultSettings(_ context.Con
 
 func (s *defaultLimitedCreditGranterStub) GrantFromAuthSourceSettings(ctx context.Context, userID int64, _ string, items []DefaultLimitedCreditSetting) ([]LimitedCreditGrant, error) {
 	return s.GrantFromDefaultSettings(ctx, userID, items)
+}
+
+func (s *defaultSecurityDepositGranterStub) GrantSignupDefaultSecurityDeposit(_ context.Context, userID, amountCents int64) error {
+	s.calls = append(s.calls, defaultSecurityDepositGrantCall{userID: userID, amountCents: amountCents})
+	return s.err
 }
 
 func (s *refreshTokenCacheStub) StoreRefreshToken(context.Context, string, *RefreshTokenData, time.Duration) error {
@@ -831,6 +846,57 @@ func TestAuthService_Register_DefaultLimitedCreditFailureDoesNotFailRegistration
 	require.NoError(t, err)
 	require.NotNil(t, user)
 	require.Len(t, granter.calls, 1)
+}
+
+func TestAuthService_Register_GrantsDefaultSecurityDeposit(t *testing.T) {
+	repo := &userRepoStub{nextID: 45}
+	granter := &defaultSecurityDepositGranterStub{}
+	svc := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:                 "true",
+		SettingKeyDefaultSecurityDeposit:              "100.25",
+		SettingKeyAuthSourceDefaultEmailGrantOnSignup: "false",
+	}, nil, nil)
+	svc.defaultSecurityDepositGranter = granter
+
+	_, user, err := svc.Register(context.Background(), "deposit-default@test.com", "password")
+
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Equal(t, []defaultSecurityDepositGrantCall{{userID: 45, amountCents: 10025}}, granter.calls)
+}
+
+func TestAuthService_Register_DefaultSecurityDepositFailureDoesNotFailRegistration(t *testing.T) {
+	repo := &userRepoStub{nextID: 46}
+	granter := &defaultSecurityDepositGranterStub{err: errors.New("grant failed")}
+	svc := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:                 "true",
+		SettingKeyDefaultSecurityDeposit:              "100",
+		SettingKeyAuthSourceDefaultEmailGrantOnSignup: "false",
+	}, nil, nil)
+	svc.defaultSecurityDepositGranter = granter
+
+	_, user, err := svc.Register(context.Background(), "deposit-failure@test.com", "password")
+
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Len(t, granter.calls, 1)
+}
+
+func TestAuthService_Register_SkipsInvalidDefaultSecurityDeposit(t *testing.T) {
+	repo := &userRepoStub{nextID: 47}
+	granter := &defaultSecurityDepositGranterStub{}
+	svc := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:                 "true",
+		SettingKeyDefaultSecurityDeposit:              "1000000000000",
+		SettingKeyAuthSourceDefaultEmailGrantOnSignup: "false",
+	}, nil, nil)
+	svc.defaultSecurityDepositGranter = granter
+
+	_, user, err := svc.Register(context.Background(), "deposit-invalid@test.com", "password")
+
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Empty(t, granter.calls)
 }
 
 func TestAuthService_Register_UsesEmailAuthSourceDefaultsWhenGrantEnabled(t *testing.T) {

@@ -71,22 +71,23 @@ type JWTClaims struct {
 
 // AuthService 认证服务
 type AuthService struct {
-	entClient                   *dbent.Client
-	userRepo                    UserRepository
-	redeemRepo                  RedeemCodeRepository
-	refreshTokenCache           RefreshTokenCache
-	cfg                         *config.Config
-	settingService              *SettingService
-	emailService                *EmailService
-	turnstileService            *TurnstileService
-	tencentCaptchaService       *TencentCaptchaService
-	aliyunCaptchaService        *AliyunCaptchaService
-	emailQueueService           *EmailQueueService
-	promoService                *PromoService
-	affiliateService            *AffiliateService
-	defaultSubAssigner          DefaultSubscriptionAssigner
-	defaultLimitedCreditGranter DefaultLimitedCreditGranter
-	userPlatformQuotaRepo       UserPlatformQuotaRepository
+	entClient                     *dbent.Client
+	userRepo                      UserRepository
+	redeemRepo                    RedeemCodeRepository
+	refreshTokenCache             RefreshTokenCache
+	cfg                           *config.Config
+	settingService                *SettingService
+	emailService                  *EmailService
+	turnstileService              *TurnstileService
+	tencentCaptchaService         *TencentCaptchaService
+	aliyunCaptchaService          *AliyunCaptchaService
+	emailQueueService             *EmailQueueService
+	promoService                  *PromoService
+	affiliateService              *AffiliateService
+	defaultSubAssigner            DefaultSubscriptionAssigner
+	defaultLimitedCreditGranter   DefaultLimitedCreditGranter
+	defaultSecurityDepositGranter DefaultSecurityDepositGranter
+	userPlatformQuotaRepo         UserPlatformQuotaRepository
 }
 
 type CaptchaProof struct {
@@ -100,6 +101,11 @@ type DefaultSubscriptionAssigner interface {
 	AssignOrExtendSubscription(ctx context.Context, input *AssignSubscriptionInput) (*UserSubscription, bool, error)
 }
 
+// DefaultSecurityDepositGranter 为注册成功用户发放永久冻结保证金。
+type DefaultSecurityDepositGranter interface {
+	GrantSignupDefaultSecurityDeposit(ctx context.Context, userID, amountCents int64) error
+}
+
 type AuthServiceOption func(*AuthService)
 
 // WithDefaultLimitedCreditGranter 配置新用户默认限时额度发放器。
@@ -109,12 +115,20 @@ func WithDefaultLimitedCreditGranter(granter DefaultLimitedCreditGranter) AuthSe
 	}
 }
 
+// WithDefaultSecurityDepositGranter 配置新用户默认永久冻结保证金发放器。
+func WithDefaultSecurityDepositGranter(granter DefaultSecurityDepositGranter) AuthServiceOption {
+	return func(service *AuthService) {
+		service.defaultSecurityDepositGranter = granter
+	}
+}
+
 type signupGrantPlan struct {
-	Balance        float64
-	Concurrency    int
-	Subscriptions  []DefaultSubscriptionSetting
-	LimitedCredits []DefaultLimitedCreditSetting
-	PlatformQuotas map[string]*DefaultPlatformQuotaSetting
+	Balance              float64
+	Concurrency          int
+	Subscriptions        []DefaultSubscriptionSetting
+	LimitedCredits       []DefaultLimitedCreditSetting
+	SecurityDepositCents int64
+	PlatformQuotas       map[string]*DefaultPlatformQuotaSetting
 }
 
 // NewAuthService 创建认证服务实例
@@ -917,14 +931,21 @@ func (s *AuthService) assignSubscriptions(ctx context.Context, userID int64, ite
 	}
 }
 
-// assignSignupEntitlements 为刚创建的用户发放全局默认订阅和限时额度。
+// assignSignupEntitlements 为刚创建的用户发放默认订阅、限时额度和永久冻结保证金。
 func (s *AuthService) assignSignupEntitlements(ctx context.Context, userID int64, plan signupGrantPlan) {
 	s.assignSubscriptions(ctx, userID, plan.Subscriptions, "auto assigned by signup defaults")
-	if s.defaultLimitedCreditGranter == nil || len(plan.LimitedCredits) == 0 || userID <= 0 {
+	if userID <= 0 {
 		return
 	}
-	if _, err := s.defaultLimitedCreditGranter.GrantFromDefaultSettings(ctx, userID, plan.LimitedCredits); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to grant default limited credits: user_id=%d err=%v", userID, err)
+	if s.defaultLimitedCreditGranter != nil && len(plan.LimitedCredits) > 0 {
+		if _, err := s.defaultLimitedCreditGranter.GrantFromDefaultSettings(ctx, userID, plan.LimitedCredits); err != nil {
+			logger.LegacyPrintf("service.auth", "[Auth] Failed to grant default limited credits: user_id=%d err=%v", userID, err)
+		}
+	}
+	if s.defaultSecurityDepositGranter != nil && plan.SecurityDepositCents > 0 {
+		if err := s.defaultSecurityDepositGranter.GrantSignupDefaultSecurityDeposit(ctx, userID, plan.SecurityDepositCents); err != nil {
+			logger.LegacyPrintf("service.auth", "[Auth] Failed to grant default security deposit: user_id=%d err=%v", userID, err)
+		}
 	}
 }
 
@@ -940,6 +961,7 @@ func (s *AuthService) resolveSignupGrantPlan(ctx context.Context, signupSource s
 
 	plan.Balance = s.settingService.GetDefaultBalance(ctx)
 	plan.Concurrency = s.settingService.GetDefaultConcurrency(ctx)
+	plan.SecurityDepositCents = s.settingService.GetDefaultSecurityDepositCents(ctx)
 	plan.Subscriptions = s.settingService.GetDefaultSubscriptions(ctx)
 	plan.LimitedCredits = s.settingService.GetDefaultLimitedCredits(ctx)
 

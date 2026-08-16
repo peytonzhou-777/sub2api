@@ -359,6 +359,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.DefaultBalance != after.DefaultBalance {
 		changed = append(changed, "default_balance")
 	}
+	if before.DefaultSecurityDeposit != after.DefaultSecurityDeposit {
+		changed = append(changed, service.SettingKeyDefaultSecurityDeposit)
+	}
 	if before.AffiliateRebateRate != after.AffiliateRebateRate {
 		changed = append(changed, "affiliate_rebate_rate")
 	}

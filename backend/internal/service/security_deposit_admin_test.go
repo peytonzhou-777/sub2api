@@ -42,6 +42,23 @@ func TestSecurityDepositAdminCredit_NormalizesOptionalReasonAndInvalidatesCache(
 	require.Equal(t, []int64{7}, cache.userIDs)
 }
 
+func TestSecurityDepositSignupDefault_UsesPermanentGrantWithStableIdempotency(t *testing.T) {
+	repo := &fakeSecurityDepositRepository{adminCreditResult: &AdminSecurityDepositMutationResult{
+		ActionID: 14, ActionType: SecurityDepositAdminActionAdd, UserID: 7,
+	}}
+	svc := newSecurityDepositAdminTestService(repo, true, nil)
+
+	err := svc.GrantSignupDefaultSecurityDeposit(context.Background(), 7, 10025)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(7), repo.adminCreditInput.UserID)
+	require.Equal(t, int64(7), repo.adminCreditInput.OperatorID)
+	require.Equal(t, int64(10025), repo.adminCreditInput.AmountCents)
+	require.Equal(t, SecurityDepositAdminActionAdd, repo.adminCreditInput.ActionType)
+	require.Equal(t, "signup-default-security-deposit-v1:user:7", repo.adminCreditInput.IdempotencyKey)
+	require.NotNil(t, repo.adminCreditInput.Reason)
+}
+
 func TestSecurityDepositAdminDeduct_PassesEnforcementAndKeepsPaidBucketOutsideContract(t *testing.T) {
 	repo := &fakeSecurityDepositRepository{adminDeductResult: &AdminSecurityDepositMutationResult{
 		ActionID: 11, ActionType: SecurityDepositAdminActionDeduct, UserID: 7, AmountCents: 5000,

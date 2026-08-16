@@ -52,7 +52,7 @@ func ProvideEmailQueueService(emailService *EmailService) *EmailQueueService {
 	return NewEmailQueueService(emailService, 3)
 }
 
-// ProvideAuthService 注入可选验证码服务和新用户默认限时额度发放器。
+// ProvideAuthService 注入可选验证码服务和新用户默认权益发放器。
 func ProvideAuthService(
 	entClient *dbent.Client,
 	userRepo UserRepository,
@@ -70,6 +70,7 @@ func ProvideAuthService(
 	affiliateService *AffiliateService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
 	limitedCreditService *LimitedCreditService,
+	securityDepositService *SecurityDepositService,
 ) *AuthService {
 	svc := NewAuthService(
 		entClient,
@@ -86,6 +87,7 @@ func ProvideAuthService(
 		affiliateService,
 		userPlatformQuotaRepo,
 		WithDefaultLimitedCreditGranter(limitedCreditService),
+		WithDefaultSecurityDepositGranter(securityDepositService),
 	)
 	svc.SetTencentCaptchaService(tencentCaptchaService)
 	svc.SetAliyunCaptchaService(aliyunCaptchaService)

@@ -398,6 +398,39 @@ func TestSettingService_UpdateSettings_DefaultLimitedCredits_PersistsMultipleGra
 	}, got)
 }
 
+func TestSettingService_UpdateSettings_DefaultSecurityDepositPersistsCNYAmount(t *testing.T) {
+	repo := &settingUpdateRepoStub{}
+	svc := NewSettingService(repo, &config.Config{})
+
+	err := svc.UpdateSettings(context.Background(), &SystemSettings{DefaultSecurityDeposit: 100.25})
+
+	require.NoError(t, err)
+	require.Equal(t, "100.25", repo.updates[SettingKeyDefaultSecurityDeposit])
+}
+
+func TestSettingService_UpdateSettings_DefaultSecurityDepositRejectsInvalidAmount(t *testing.T) {
+	for _, amount := range []float64{-1, 0.001, 1e12, math.NaN(), math.Inf(1)} {
+		repo := &settingUpdateRepoStub{}
+		svc := NewSettingService(repo, &config.Config{})
+
+		err := svc.UpdateSettings(context.Background(), &SystemSettings{DefaultSecurityDeposit: amount})
+
+		require.Error(t, err)
+		require.Equal(t, "INVALID_DEFAULT_SECURITY_DEPOSIT", infraerrors.Reason(err))
+		require.Nil(t, repo.updates)
+	}
+}
+
+func TestSettingService_ParseSettings_DefaultSecurityDepositRejectsInvalidStoredAmount(t *testing.T) {
+	svc := NewSettingService(&settingUpdateRepoStub{}, &config.Config{})
+
+	for _, amount := range []string{"-1", "1000000000000", "NaN", "+Inf"} {
+		settings := svc.parseSettings(map[string]string{SettingKeyDefaultSecurityDeposit: amount})
+
+		require.Zero(t, settings.DefaultSecurityDeposit)
+	}
+}
+
 func TestSettingService_UpdateSettings_DefaultLimitedCredits_RejectsInvalidValues(t *testing.T) {
 	tests := []struct {
 		name string

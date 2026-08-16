@@ -9,11 +9,12 @@ import (
 )
 
 const (
-	SecurityDepositAdminActionAdd          = "admin_add"
-	SecurityDepositAdminActionCompensation = "compensation"
-	SecurityDepositAdminActionDeduct       = "admin_deduct"
-	SecurityDepositAdminActionRevoke       = "admin_revoke"
-	SecurityDepositAdminActionKeyUnlock    = "key_unlock"
+	SecurityDepositAdminActionAdd                    = "admin_add"
+	SecurityDepositAdminActionCompensation           = "compensation"
+	SecurityDepositAdminActionDeduct                 = "admin_deduct"
+	SecurityDepositAdminActionRevoke                 = "admin_revoke"
+	SecurityDepositAdminActionKeyUnlock              = "key_unlock"
+	securityDepositSignupDefaultIdempotencyKeyPrefix = "signup-default-security-deposit-v1"
 )
 
 // AdminSecurityDepositCreditInput 表示管理员永久冻结发放或补偿。
@@ -109,6 +110,23 @@ func (s *SecurityDepositService) AdminCreditAdminGrant(ctx context.Context, inpu
 	}
 	s.invalidateSecurityDepositUser(ctx, input.UserID)
 	return result, nil
+}
+
+// GrantSignupDefaultSecurityDeposit 为注册成功用户幂等发放永久冻结保证金。
+func (s *SecurityDepositService) GrantSignupDefaultSecurityDeposit(ctx context.Context, userID, amountCents int64) error {
+	if userID <= 0 || amountCents <= 0 {
+		return nil
+	}
+	reason := "default security deposit granted on signup"
+	_, err := s.AdminCreditAdminGrant(ctx, AdminSecurityDepositCreditInput{
+		UserID:         userID,
+		OperatorID:     userID,
+		AmountCents:    amountCents,
+		ActionType:     SecurityDepositAdminActionAdd,
+		Reason:         &reason,
+		IdempotencyKey: fmt.Sprintf("%s:user:%d", securityDepositSignupDefaultIdempotencyKeyPrefix, userID),
+	})
+	return err
 }
 
 // AdminDeductAdminGrant 仅扣除永久冻结发放桶，余额不足时整体失败。

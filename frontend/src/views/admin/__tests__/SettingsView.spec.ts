@@ -378,6 +378,7 @@ const baseSettingsResponse = {
   passkey_rp_id: "sub3.nebula-spaces.com",
   passkey_rp_origins: ["https://sub3.nebula-spaces.com"],
   default_balance: 0,
+  default_security_deposit: 0,
   default_concurrency: 1,
   default_subscriptions: [],
   default_limited_credits: [],
@@ -746,6 +747,26 @@ describe("admin SettingsView payment visible method controls", () => {
 
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({ compact_home_enabled: true }),
+    );
+  });
+
+  it("loads and saves the default permanently frozen security deposit", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      default_security_deposit: 88.5,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+
+    const input = wrapper.get('[data-testid="default-security-deposit"]');
+    expect((input.element as HTMLInputElement).value).toBe("88.5");
+
+    await input.setValue("100.25");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ default_security_deposit: 100.25 }),
     );
   });
 

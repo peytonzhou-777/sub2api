@@ -170,6 +170,7 @@ type SystemSettings struct {
 
 	DefaultConcurrency                int
 	DefaultBalance                    float64
+	DefaultSecurityDeposit            float64
 	RiskControlEnabled                bool
 	CyberSessionBlockEnabled          bool
 	CyberSessionBlockTTLSeconds       int

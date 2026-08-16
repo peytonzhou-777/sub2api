@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
@@ -130,6 +131,13 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 	if err := validateDefaultLimitedCredits(settings.DefaultLimitedCredits); err != nil {
 		return nil, err
+	}
+	if math.IsNaN(settings.DefaultSecurityDeposit) || math.IsInf(settings.DefaultSecurityDeposit, 0) || settings.DefaultSecurityDeposit < 0 || settings.DefaultSecurityDeposit >= maxDefaultSecurityDepositYuan {
+		return nil, infraerrors.BadRequest("INVALID_DEFAULT_SECURITY_DEPOSIT", "default_security_deposit must be a finite non-negative amount below 1e12")
+	}
+	defaultSecurityDeposit := strconv.FormatFloat(settings.DefaultSecurityDeposit, 'f', -1, 64)
+	if _, err := payment.YuanToFen(defaultSecurityDeposit); err != nil {
+		return nil, infraerrors.BadRequest("INVALID_DEFAULT_SECURITY_DEPOSIT", "default_security_deposit must not have more than 2 decimal places")
 	}
 	normalizedWhitelist, err := NormalizeRegistrationEmailSuffixWhitelist(settings.RegistrationEmailSuffixWhitelist)
 	if err != nil {
@@ -395,6 +403,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	// 默认配置
 	updates[SettingKeyDefaultConcurrency] = strconv.Itoa(settings.DefaultConcurrency)
 	updates[SettingKeyDefaultBalance] = strconv.FormatFloat(settings.DefaultBalance, 'f', 8, 64)
+	updates[SettingKeyDefaultSecurityDeposit] = strconv.FormatFloat(settings.DefaultSecurityDeposit, 'f', 2, 64)
 	settings.AffiliateRebateRate = clampAffiliateRebateRate(settings.AffiliateRebateRate)
 	updates[SettingKeyAffiliateRebateRate] = strconv.FormatFloat(settings.AffiliateRebateRate, 'f', 8, 64)
 	if settings.AffiliateRebateFreezeHours < 0 {

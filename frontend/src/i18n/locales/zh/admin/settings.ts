@@ -390,6 +390,8 @@ export default {
         description: '新用户的默认值',
         defaultBalance: '默认余额',
         defaultBalanceHint: '新用户的初始余额',
+        defaultSecurityDeposit: '默认保证金',
+        defaultSecurityDepositHint: '用户注册成功后自动发放至永久冻结区，不可退款',
         affiliateRebateRate: '邀请返利比例',
         affiliateRebateRateHint: '充值后返给邀请人的比例（0-100%，例如填写 10 表示返利 10%）',
         defaultConcurrency: '默认并发数',

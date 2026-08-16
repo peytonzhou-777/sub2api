@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/payment"
 )
 
 // IsRegistrationEnabled 检查是否开放注册
@@ -336,6 +338,22 @@ func (s *SettingService) GetDefaultBalance(ctx context.Context) float64 {
 		return v
 	}
 	return s.cfg.Default.UserBalance
+}
+
+// GetDefaultSecurityDepositCents 获取注册成功后发放至永久冻结区的默认保证金。
+func (s *SettingService) GetDefaultSecurityDepositCents(ctx context.Context) int64 {
+	if s == nil || s.settingRepo == nil {
+		return 0
+	}
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyDefaultSecurityDeposit)
+	if err != nil {
+		return 0
+	}
+	cents, err := payment.YuanToFen(value)
+	if err != nil || cents < 0 || cents >= maxDefaultSecurityDepositCents {
+		return 0
+	}
+	return cents
 }
 
 // GetDefaultUserRPMLimit 获取新用户默认 RPM 限制（0 = 不限制）。未配置则返回 0。
