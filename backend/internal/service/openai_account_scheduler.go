@@ -2821,14 +2821,14 @@ func openAIQuotaHeadroomFactor(account *Account, now time.Time) float64 {
 	if account == nil || len(account.Extra) == 0 || openAIQuotaHeadroomSnapshotStale(account.Extra, now) {
 		return openAIQuotaHeadroomNeutralFactor
 	}
-	primaryUsedPercent, ok := resolveAccountExtraNumber(account.Extra, "codex_primary_used_percent", "codex_7d_used_percent")
-	if !ok || openAIQuotaWindowResetAny(account.Extra, now, "primary", "7d") {
+	primaryUsedPercent, ok := resolveOpenAILimitedQuotaUsedPercent(account.Extra, "7d")
+	if !ok || openAIQuotaWindowReset(account.Extra, "7d", now) {
 		return openAIQuotaHeadroomNeutralFactor
 	}
 
 	factor := 1 - clamp01(primaryUsedPercent/100)
-	if secondaryUsedPercent, ok := resolveAccountExtraNumber(account.Extra, "codex_secondary_used_percent", "codex_5h_used_percent"); ok &&
-		!openAIQuotaWindowResetAny(account.Extra, now, "secondary", "5h") {
+	if secondaryUsedPercent, ok := resolveOpenAILimitedQuotaUsedPercent(account.Extra, "5h"); ok &&
+		!openAIQuotaWindowReset(account.Extra, "5h", now) {
 		secondaryRemaining := 1 - clamp01(secondaryUsedPercent/100)
 		if secondaryRemaining < openAIQuotaHeadroomSecondaryLowRemain {
 			factor *= openAIQuotaHeadroomNeutralFactor
@@ -2847,15 +2847,6 @@ func openAIQuotaHeadroomSnapshotStale(extra map[string]any, now time.Time) bool 
 		return true
 	}
 	return now.Sub(updatedAt) >= openAIQuotaHeadroomSnapshotStaleAfter
-}
-
-func openAIQuotaWindowResetAny(extra map[string]any, now time.Time, windows ...string) bool {
-	for _, window := range windows {
-		if openAIQuotaWindowReset(extra, window, now) {
-			return true
-		}
-	}
-	return false
 }
 
 func clamp01(value float64) float64 {

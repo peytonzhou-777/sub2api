@@ -879,9 +879,10 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_NoAvailableErrorReports
 			Schedulable: true,
 			Concurrency: 1,
 			Extra: map[string]any{
-				"codex_7d_used_percent":  95.0,
-				"codex_7d_reset_at":      time.Now().Add(24 * time.Hour).Format(time.RFC3339),
-				"codex_usage_updated_at": time.Now().Add(-time.Minute).Format(time.RFC3339),
+				"codex_7d_used_percent":   95.0,
+				"codex_7d_window_minutes": 10080,
+				"codex_7d_reset_at":       time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+				"codex_usage_updated_at":  time.Now().Add(-time.Minute).Format(time.RFC3339),
 			},
 		},
 	}
@@ -951,9 +952,10 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_NoAvailableErrorAggrega
 		Schedulable: true,
 		Concurrency: 1,
 		Extra: map[string]any{
-			"codex_7d_used_percent":  95.0,
-			"codex_7d_reset_at":      time.Now().Add(24 * time.Hour).Format(time.RFC3339),
-			"codex_usage_updated_at": time.Now().Add(-time.Minute).Format(time.RFC3339),
+			"codex_7d_used_percent":   95.0,
+			"codex_7d_window_minutes": 10080,
+			"codex_7d_reset_at":       time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+			"codex_usage_updated_at":  time.Now().Add(-time.Minute).Format(time.RFC3339),
 		},
 	}
 	mappingMiss := Account{
@@ -1587,6 +1589,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AutoPauseBy5hT
 		Priority:    0,
 		Extra: map[string]any{
 			"codex_5h_used_percent":   95.0,
+			"codex_5h_window_minutes": 300,
 			"auto_pause_5h_threshold": 0.95,
 		},
 	}
@@ -1611,6 +1614,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AllowsBelow5hT
 		Priority:    0,
 		Extra: map[string]any{
 			"codex_5h_used_percent":   80.0,
+			"codex_5h_window_minutes": 300,
 			"auto_pause_5h_threshold": 0.95,
 		},
 	}
@@ -1621,6 +1625,26 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AllowsBelow5hT
 	require.NoError(t, err)
 	require.NotNil(t, account)
 	require.Equal(t, int64(35101), account.ID)
+}
+
+func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_Disabled5hWindowDoesNotPause(t *testing.T) {
+	ctx := context.Background()
+	primary := Account{
+		ID: 35111, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 0,
+		Extra: map[string]any{
+			"codex_5h_used_percent":   100.0,
+			"codex_5h_window_minutes": 0,
+			"auto_pause_5h_threshold": 0.95,
+		},
+	}
+	secondary := Account{ID: 35112, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
+	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
+
+	account, err := svc.SelectAccountForModelWithExclusions(ctx, nil, "", "gpt-5.1", nil)
+	require.NoError(t, err)
+	require.NotNil(t, account)
+	require.Equal(t, int64(35111), account.ID)
 }
 
 func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AutoPauseBy7dThreshold(t *testing.T) {
@@ -1635,6 +1659,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AutoPauseBy7dT
 		Priority:    0,
 		Extra: map[string]any{
 			"codex_7d_used_percent":   95.0,
+			"codex_7d_window_minutes": 10080,
 			"auto_pause_7d_threshold": 0.95,
 		},
 	}
@@ -1670,7 +1695,8 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_UsesGlobalDefa
 		Concurrency: 1,
 		Priority:    0,
 		Extra: map[string]any{
-			"codex_5h_used_percent": 95.0,
+			"codex_5h_used_percent":   95.0,
+			"codex_5h_window_minutes": 300,
 		},
 	}
 	secondary := Account{ID: 35402, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
@@ -1699,8 +1725,9 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_PerAccountDisa
 		Concurrency: 1,
 		Priority:    0,
 		Extra: map[string]any{
-			"codex_5h_used_percent":  99.0,
-			"auto_pause_5h_disabled": true,
+			"codex_5h_used_percent":   99.0,
+			"codex_5h_window_minutes": 300,
+			"auto_pause_5h_disabled":  true,
 		},
 	}
 	secondary := Account{ID: 35702, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
@@ -1725,7 +1752,9 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_PerWindowDisab
 		Priority:    0,
 		Extra: map[string]any{
 			"codex_5h_used_percent":   99.0,
+			"codex_5h_window_minutes": 300,
 			"codex_7d_used_percent":   99.0,
+			"codex_7d_window_minutes": 10080,
 			"auto_pause_5h_disabled":  true,
 			"auto_pause_7d_threshold": 0.95,
 		},
@@ -1754,6 +1783,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_StaleUsageWind
 		Priority:    0,
 		Extra: map[string]any{
 			"codex_5h_used_percent":   99.0,
+			"codex_5h_window_minutes": 300,
 			"auto_pause_5h_threshold": 0.95,
 			"codex_5h_reset_at":       time.Now().Add(-time.Minute).Format(time.RFC3339),
 		},
@@ -1780,6 +1810,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_FreshUsageWind
 		Priority:    0,
 		Extra: map[string]any{
 			"codex_5h_used_percent":   99.0,
+			"codex_5h_window_minutes": 300,
 			"auto_pause_5h_threshold": 0.95,
 			"codex_5h_reset_at":       time.Now().Add(time.Hour).Format(time.RFC3339),
 		},
@@ -1810,6 +1841,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_StaleUsageSnap
 		Priority:    0,
 		Extra: map[string]any{
 			"codex_5h_used_percent":   99.0,
+			"codex_5h_window_minutes": 300,
 			"auto_pause_5h_threshold": 0.95,
 			// Window has NOT reset yet, so the reset guard stays inactive.
 			"codex_5h_reset_at": time.Now().Add(time.Hour).Format(time.RFC3339),
@@ -1841,6 +1873,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_FreshExhausted
 		Priority:    0,
 		Extra: map[string]any{
 			"codex_5h_used_percent":   99.0,
+			"codex_5h_window_minutes": 300,
 			"auto_pause_5h_threshold": 0.95,
 			"codex_5h_reset_at":       time.Now().Add(time.Hour).Format(time.RFC3339),
 			// Snapshot refreshed 1 minute ago: not stale, so the account stays paused.
@@ -3071,6 +3104,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_LoadBalanceTopKExcludes
 			Priority:    0,
 			Extra: map[string]any{
 				"codex_5h_used_percent":   96.0,
+				"codex_5h_window_minutes": 300,
 				"auto_pause_5h_threshold": 0.95,
 			},
 		},

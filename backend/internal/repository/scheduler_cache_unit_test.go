@@ -390,7 +390,7 @@ func TestSchedulerCacheMissingPrivacyFieldBecomesUnknownAndRequestsRefresh(t *te
 	require.True(t, accounts[0].SchedulerSnapshotNeedsRefresh)
 }
 
-func TestSchedulerCacheV4NamespaceIgnoresLegacyAccountKeys(t *testing.T) {
+func TestSchedulerCacheV5NamespaceIgnoresLegacyAccountKeys(t *testing.T) {
 	ctx := context.Background()
 	cache, mr := newSchedulerCacheUnitWithRedis(t)
 	legacy, err := json.Marshal(service.Account{
@@ -403,11 +403,12 @@ func TestSchedulerCacheV4NamespaceIgnoresLegacyAccountKeys(t *testing.T) {
 	mr.Set("sched:acc:842", string(legacy))
 	mr.Set("sched:v2:acc:842", string(legacy))
 	mr.Set("sched:v3:acc:842", string(legacy))
+	mr.Set("sched:v4:acc:842", string(legacy))
 
 	account, err := cache.GetAccount(ctx, 842)
 	require.NoError(t, err)
 	require.Nil(t, account)
-	require.Equal(t, "sched:v4:acc:842", schedulerAccountKey("842"))
+	require.Equal(t, "sched:v5:acc:842", schedulerAccountKey("842"))
 }
 
 func TestSchedulerCachePreservesDecisionSemantics(t *testing.T) {
@@ -602,6 +603,8 @@ func TestBuildSchedulerMetadataAccount_KeepsQuotaAutoPauseFields(t *testing.T) {
 		Extra: map[string]any{
 			"codex_5h_used_percent":        12.34,
 			"codex_7d_used_percent":        56.78,
+			"codex_5h_window_minutes":      0,
+			"codex_7d_window_minutes":      10080,
 			"codex_5h_reset_at":            "2026-05-29T10:00:00Z",
 			"codex_7d_reset_at":            "2026-06-01T10:00:00Z",
 			"codex_5h_reset_after_seconds": 300,
@@ -618,6 +621,8 @@ func TestBuildSchedulerMetadataAccount_KeepsQuotaAutoPauseFields(t *testing.T) {
 
 	require.Equal(t, 12.34, got.Extra["codex_5h_used_percent"])
 	require.Equal(t, 56.78, got.Extra["codex_7d_used_percent"])
+	require.Equal(t, 0, got.Extra["codex_5h_window_minutes"])
+	require.Equal(t, 10080, got.Extra["codex_7d_window_minutes"])
 	require.Equal(t, "2026-05-29T10:00:00Z", got.Extra["codex_5h_reset_at"])
 	require.Equal(t, "2026-06-01T10:00:00Z", got.Extra["codex_7d_reset_at"])
 	require.Equal(t, 300, got.Extra["codex_5h_reset_after_seconds"])

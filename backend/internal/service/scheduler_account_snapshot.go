@@ -7,7 +7,7 @@ import (
 
 // SchedulerAccountSnapshotSchemaVersion 是调度账号快照的结构版本。
 // 修改调度决策字段时必须递增版本，并切换缓存命名空间，避免旧快照被新代码解释。
-const SchedulerAccountSnapshotSchemaVersion = 4
+const SchedulerAccountSnapshotSchemaVersion = 5
 
 // SchedulerPrivacyStatus 是调度使用的隐私合规状态，而不是账号持久化状态。
 type SchedulerPrivacyStatus string
@@ -76,6 +76,8 @@ type SchedulerAccountExtraSnapshot struct {
 
 	Codex5HUsedPercent              any `json:"codex_5h_used_percent,omitempty"`
 	Codex7DUsedPercent              any `json:"codex_7d_used_percent,omitempty"`
+	Codex5HWindowMinutes            any `json:"codex_5h_window_minutes,omitempty"`
+	Codex7DWindowMinutes            any `json:"codex_7d_window_minutes,omitempty"`
 	CodexPrimaryUsedPercent         any `json:"codex_primary_used_percent,omitempty"`
 	CodexSecondaryUsedPercent       any `json:"codex_secondary_used_percent,omitempty"`
 	Codex5HResetAt                  any `json:"codex_5h_reset_at,omitempty"`
@@ -184,6 +186,8 @@ func newSchedulerAccountExtraSnapshot(extra map[string]any) *SchedulerAccountExt
 		OpenAICompactSupported:          extra["openai_compact_supported"],
 		Codex5HUsedPercent:              extra["codex_5h_used_percent"],
 		Codex7DUsedPercent:              extra["codex_7d_used_percent"],
+		Codex5HWindowMinutes:            extra["codex_5h_window_minutes"],
+		Codex7DWindowMinutes:            extra["codex_7d_window_minutes"],
 		CodexPrimaryUsedPercent:         extra["codex_primary_used_percent"],
 		CodexSecondaryUsedPercent:       extra["codex_secondary_used_percent"],
 		Codex5HResetAt:                  extra["codex_5h_reset_at"],
@@ -238,6 +242,7 @@ func (s *SchedulerAccountExtraSnapshot) toMap() map[string]any {
 		"openai_oauth_passthrough": s.OpenAIOAuthPassthrough, "openai_compact_mode": s.OpenAICompactMode,
 		"openai_compact_supported": s.OpenAICompactSupported,
 		"codex_5h_used_percent":    s.Codex5HUsedPercent, "codex_7d_used_percent": s.Codex7DUsedPercent,
+		"codex_5h_window_minutes": s.Codex5HWindowMinutes, "codex_7d_window_minutes": s.Codex7DWindowMinutes,
 		"codex_primary_used_percent": s.CodexPrimaryUsedPercent, "codex_secondary_used_percent": s.CodexSecondaryUsedPercent,
 		"codex_5h_reset_at": s.Codex5HResetAt, "codex_7d_reset_at": s.Codex7DResetAt,
 		"codex_5h_reset_after_seconds": s.Codex5HResetAfterSeconds, "codex_7d_reset_after_seconds": s.Codex7DResetAfterSeconds,

@@ -590,37 +590,32 @@ func buildCodexSparkWindowExtraUpdates(usage *OpenAIQuotaUsage, now time.Time) m
 	}
 
 	normalized := snap.Normalize()
-	if normalized == nil {
-		return nil
-	}
-
-	updates := make(map[string]any)
-	if normalized.Used5hPercent != nil {
+	updates := newClearedCodexUsageWindowUpdates()
+	if normalized != nil && normalized.Used5hPercent != nil {
 		updates["codex_5h_used_percent"] = *normalized.Used5hPercent
 	}
-	if normalized.Reset5hSeconds != nil {
+	if normalized != nil && normalized.Reset5hSeconds != nil {
 		updates["codex_5h_reset_after_seconds"] = *normalized.Reset5hSeconds
 	}
-	if normalized.Window5hMinutes != nil {
+	if normalized != nil && normalized.Window5hMinutes != nil {
 		updates["codex_5h_window_minutes"] = *normalized.Window5hMinutes
 	}
-	if normalized.Used7dPercent != nil {
+	if normalized != nil && normalized.Used7dPercent != nil {
 		updates["codex_7d_used_percent"] = *normalized.Used7dPercent
 	}
-	if normalized.Reset7dSeconds != nil {
+	if normalized != nil && normalized.Reset7dSeconds != nil {
 		updates["codex_7d_reset_after_seconds"] = *normalized.Reset7dSeconds
 	}
-	if normalized.Window7dMinutes != nil {
+	if normalized != nil && normalized.Window7dMinutes != nil {
 		updates["codex_7d_window_minutes"] = *normalized.Window7dMinutes
 	}
-	if r := codexResetAtRFC3339(now, normalized.Reset5hSeconds); r != nil {
-		updates["codex_5h_reset_at"] = *r
-	}
-	if r := codexResetAtRFC3339(now, normalized.Reset7dSeconds); r != nil {
-		updates["codex_7d_reset_at"] = *r
-	}
-	if len(updates) == 0 {
-		return nil
+	if normalized != nil {
+		if r := codexResetAtRFC3339(now, normalized.Reset5hSeconds); r != nil {
+			updates["codex_5h_reset_at"] = *r
+		}
+		if r := codexResetAtRFC3339(now, normalized.Reset7dSeconds); r != nil {
+			updates["codex_7d_reset_at"] = *r
+		}
 	}
 	updates["codex_usage_updated_at"] = now.Format(time.RFC3339)
 	return updates

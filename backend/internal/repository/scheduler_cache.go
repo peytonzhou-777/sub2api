@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	schedulerCacheNamespace        = "v4"
+	schedulerCacheNamespace        = "v5"
 	schedulerBucketSetKey          = "sched:" + schedulerCacheNamespace + ":buckets"
 	schedulerOutboxWatermarkKey    = "sched:" + schedulerCacheNamespace + ":outbox:watermark"
 	schedulerAccountPrefix         = "sched:" + schedulerCacheNamespace + ":acc:"

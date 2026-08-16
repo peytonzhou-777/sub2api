@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -551,6 +552,45 @@ func resolveAccountExtraNumber(extra map[string]any, keys ...string) (float64, b
 	return 0, false
 }
 
+type openAIQuotaWindowLimitState uint8
+
+const (
+	openAIQuotaWindowLimitUnknown openAIQuotaWindowLimitState = iota
+	openAIQuotaWindowUnlimited
+	openAIQuotaWindowLimited
+)
+
+// resolveOpenAIQuotaWindowLimitState 统一窗口容量语义：缺失或非正周期为无限制，只有正周期才是有效限额。
+func resolveOpenAIQuotaWindowLimitState(extra map[string]any, window string) openAIQuotaWindowLimitState {
+	if len(extra) == 0 {
+		return openAIQuotaWindowLimitUnknown
+	}
+	key := "codex_" + window + "_window_minutes"
+	raw, exists := extra[key]
+	if !exists || raw == nil {
+		return openAIQuotaWindowUnlimited
+	}
+	minutes, ok := resolveAccountExtraNumber(extra, key)
+	if !ok || math.IsNaN(minutes) || math.IsInf(minutes, 0) {
+		return openAIQuotaWindowLimitUnknown
+	}
+	if minutes <= 0 {
+		return openAIQuotaWindowUnlimited
+	}
+	return openAIQuotaWindowLimited
+}
+
+func resolveOpenAILimitedQuotaUsedPercent(extra map[string]any, window string) (float64, bool) {
+	if resolveOpenAIQuotaWindowLimitState(extra, window) != openAIQuotaWindowLimited {
+		return 0, false
+	}
+	value, ok := resolveAccountExtraNumber(extra, "codex_"+window+"_used_percent")
+	if !ok || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 100 {
+		return 0, false
+	}
+	return value, true
+}
+
 // resolveOpenAIQuotaUtilization returns the current utilization ratio (0..1) for the
 // given Codex usage window. ok=false means there is no usable signal to pause on:
 // either no snapshot exists, or the window has already rolled over so the cached
@@ -559,8 +599,8 @@ func resolveAccountExtraNumber(extra map[string]any, keys ...string) (float64, b
 // without this check an old used_percent would keep the account paused forever even
 // after the real window reset.
 func resolveOpenAIQuotaUtilization(extra map[string]any, window string, now time.Time) (float64, bool) {
-	usedPercent := readOpenAIQuotaUsedPercent(extra, window)
-	if usedPercent <= 0 {
+	usedPercent, ok := resolveOpenAILimitedQuotaUsedPercent(extra, window)
+	if !ok || usedPercent <= 0 {
 		return 0, false
 	}
 	if openAIQuotaWindowReset(extra, window, now) {

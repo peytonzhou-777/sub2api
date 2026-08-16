@@ -143,77 +143,57 @@ type NormalizedCodexLimits struct {
 	Window7dMinutes *int
 }
 
-// Normalize converts primary/secondary fields to canonical 5h/7d fields.
-// Strategy: Compare window_minutes to determine which is 5h vs 7d.
-// Returns nil if snapshot is nil or has no useful data.
+// Normalize converts positive primary/secondary windows to canonical 5h/7d fields.
+// Missing or non-positive window_minutes means that slot has no active quota limit.
 func (s *OpenAICodexUsageSnapshot) Normalize() *NormalizedCodexLimits {
 	if s == nil {
 		return nil
 	}
 
+	primaryValid := s.PrimaryWindowMinutes != nil && *s.PrimaryWindowMinutes > 0
+	secondaryValid := s.SecondaryWindowMinutes != nil && *s.SecondaryWindowMinutes > 0
+	if !primaryValid && !secondaryValid {
+		return nil
+	}
+
 	result := &NormalizedCodexLimits{}
-
-	primaryMins := 0
-	secondaryMins := 0
-	hasPrimaryWindow := false
-	hasSecondaryWindow := false
-
-	if s.PrimaryWindowMinutes != nil {
-		primaryMins = *s.PrimaryWindowMinutes
-		hasPrimaryWindow = true
+	assign5H := func(used *float64, reset *int, window *int) {
+		result.Used5hPercent = used
+		result.Reset5hSeconds = reset
+		result.Window5hMinutes = window
 	}
-	if s.SecondaryWindowMinutes != nil {
-		secondaryMins = *s.SecondaryWindowMinutes
-		hasSecondaryWindow = true
+	assign7D := func(used *float64, reset *int, window *int) {
+		result.Used7dPercent = used
+		result.Reset7dSeconds = reset
+		result.Window7dMinutes = window
 	}
-
-	// Determine mapping based on window_minutes
-	use5hFromPrimary := false
-	use7dFromPrimary := false
-
-	if hasPrimaryWindow && hasSecondaryWindow {
-		// Both known: smaller window is 5h, larger is 7d
-		if primaryMins < secondaryMins {
-			use5hFromPrimary = true
-		} else {
-			use7dFromPrimary = true
+	assignByDuration := func(used *float64, reset *int, window *int) {
+		if *window <= 360 {
+			assign5H(used, reset, window)
+			return
 		}
-	} else if hasPrimaryWindow {
-		// Only primary known: classify by threshold (<=360 min = 6h -> 5h window)
-		if primaryMins <= 360 {
-			use5hFromPrimary = true
-		} else {
-			use7dFromPrimary = true
-		}
-	} else if hasSecondaryWindow {
-		// Only secondary known: classify by threshold
-		if secondaryMins <= 360 {
-			// 5h from secondary, so primary (if any data) is 7d
-			use7dFromPrimary = true
-		} else {
-			// 7d from secondary, so primary (if any data) is 5h
-			use5hFromPrimary = true
-		}
-	} else {
-		// No window_minutes: fall back to legacy assumption (primary=7d, secondary=5h)
-		use7dFromPrimary = true
+		assign7D(used, reset, window)
 	}
 
-	// Assign values
-	if use5hFromPrimary {
-		result.Used5hPercent = s.PrimaryUsedPercent
-		result.Reset5hSeconds = s.PrimaryResetAfterSeconds
-		result.Window5hMinutes = s.PrimaryWindowMinutes
-		result.Used7dPercent = s.SecondaryUsedPercent
-		result.Reset7dSeconds = s.SecondaryResetAfterSeconds
-		result.Window7dMinutes = s.SecondaryWindowMinutes
-	} else if use7dFromPrimary {
-		result.Used7dPercent = s.PrimaryUsedPercent
-		result.Reset7dSeconds = s.PrimaryResetAfterSeconds
-		result.Window7dMinutes = s.PrimaryWindowMinutes
-		result.Used5hPercent = s.SecondaryUsedPercent
-		result.Reset5hSeconds = s.SecondaryResetAfterSeconds
-		result.Window5hMinutes = s.SecondaryWindowMinutes
+	switch {
+	case primaryValid && secondaryValid:
+		primaryMinutes := *s.PrimaryWindowMinutes
+		secondaryMinutes := *s.SecondaryWindowMinutes
+		switch {
+		case primaryMinutes < secondaryMinutes:
+			assign5H(s.PrimaryUsedPercent, s.PrimaryResetAfterSeconds, s.PrimaryWindowMinutes)
+			assign7D(s.SecondaryUsedPercent, s.SecondaryResetAfterSeconds, s.SecondaryWindowMinutes)
+		case primaryMinutes > secondaryMinutes:
+			assign7D(s.PrimaryUsedPercent, s.PrimaryResetAfterSeconds, s.PrimaryWindowMinutes)
+			assign5H(s.SecondaryUsedPercent, s.SecondaryResetAfterSeconds, s.SecondaryWindowMinutes)
+		default:
+			// 同周期的重复槽位无法同时代表 5h/7d，仅采信 primary。
+			assignByDuration(s.PrimaryUsedPercent, s.PrimaryResetAfterSeconds, s.PrimaryWindowMinutes)
+		}
+	case primaryValid:
+		assignByDuration(s.PrimaryUsedPercent, s.PrimaryResetAfterSeconds, s.PrimaryWindowMinutes)
+	case secondaryValid:
+		assignByDuration(s.SecondaryUsedPercent, s.SecondaryResetAfterSeconds, s.SecondaryWindowMinutes)
 	}
 
 	return result

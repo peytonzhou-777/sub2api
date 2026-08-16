@@ -218,10 +218,42 @@ func TestBuildCodexUsageExtraUpdates_WithoutNormalizedWindowFields(t *testing.T)
 	if got := updates["codex_usage_updated_at"]; got != "2026-02-20T09:15:00Z" {
 		t.Fatalf("codex_usage_updated_at = %v, want %s", got, "2026-02-20T09:15:00Z")
 	}
-	if _, ok := updates["codex_5h_reset_at"]; ok {
-		t.Fatalf("did not expect codex_5h_reset_at in updates: %v", updates["codex_5h_reset_at"])
+	if value, ok := updates["codex_5h_reset_at"]; !ok || value != nil {
+		t.Fatalf("codex_5h_reset_at = %v, want explicit nil", value)
 	}
-	if _, ok := updates["codex_7d_reset_at"]; ok {
-		t.Fatalf("did not expect codex_7d_reset_at in updates: %v", updates["codex_7d_reset_at"])
+	if value, ok := updates["codex_7d_reset_at"]; !ok || value != nil {
+		t.Fatalf("codex_7d_reset_at = %v, want explicit nil", value)
+	}
+}
+
+func TestBuildCodexUsageExtraUpdates_ClearsDisabled5hWindow(t *testing.T) {
+	primaryUsed, primaryReset, primaryWindow := 100.0, 600, 0
+	secondaryUsed, secondaryReset, secondaryWindow := 20.0, 86400, 10080
+	snapshot := &OpenAICodexUsageSnapshot{
+		PrimaryUsedPercent:         &primaryUsed,
+		PrimaryResetAfterSeconds:   &primaryReset,
+		PrimaryWindowMinutes:       &primaryWindow,
+		SecondaryUsedPercent:       &secondaryUsed,
+		SecondaryResetAfterSeconds: &secondaryReset,
+		SecondaryWindowMinutes:     &secondaryWindow,
+		UpdatedAt:                  "2026-02-20T09:15:00Z",
+	}
+
+	updates := buildCodexUsageExtraUpdates(snapshot, time.Time{})
+	for _, key := range []string{
+		"codex_5h_used_percent",
+		"codex_5h_reset_after_seconds",
+		"codex_5h_reset_at",
+		"codex_5h_window_minutes",
+	} {
+		if value, exists := updates[key]; !exists || value != nil {
+			t.Fatalf("%s = %v, want explicit nil to clear stale 5h state", key, value)
+		}
+	}
+	if got := updates["codex_7d_used_percent"]; got != 20.0 {
+		t.Fatalf("codex_7d_used_percent = %v, want 20.0", got)
+	}
+	if got := updates["codex_7d_window_minutes"]; got != 10080 {
+		t.Fatalf("codex_7d_window_minutes = %v, want 10080", got)
 	}
 }

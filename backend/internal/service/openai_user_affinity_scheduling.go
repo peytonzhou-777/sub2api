@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"log/slog"
-	"math"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
@@ -79,16 +78,25 @@ func (s *OpenAIGatewayService) classifyOpenAIUserAffinityResidentAdmission(ctx c
 }
 
 // readOpenAIUserAffinityQuotaAvailableRatio 只接受尚未 reset 且带更新时间的额度快照。
-// 未知容量不能用于新居民装箱。
+// 新鲜快照中缺失或非正窗口代表已知无限制；格式损坏才是未知容量。
 func readOpenAIUserAffinityQuotaAvailableRatio(extra map[string]any, window string, now time.Time) (float64, bool) {
-	if len(extra) == 0 || openAIQuotaWindowReset(extra, window, now) || openAICodexSnapshotStaleForPause(extra, now) {
+	if len(extra) == 0 || openAICodexSnapshotStaleForPause(extra, now) {
 		return 0, false
 	}
 	if _, ok := extra["codex_usage_updated_at"]; !ok {
 		return 0, false
 	}
-	usedPercent, ok := resolveAccountExtraNumber(extra, "codex_"+window+"_used_percent")
-	if !ok || math.IsNaN(usedPercent) || math.IsInf(usedPercent, 0) || usedPercent < 0 || usedPercent > 100 {
+	switch resolveOpenAIQuotaWindowLimitState(extra, window) {
+	case openAIQuotaWindowUnlimited:
+		return 1, true
+	case openAIQuotaWindowLimitUnknown:
+		return 0, false
+	}
+	if openAIQuotaWindowReset(extra, window, now) {
+		return 0, false
+	}
+	usedPercent, ok := resolveOpenAILimitedQuotaUsedPercent(extra, window)
+	if !ok {
 		return 0, false
 	}
 	return 1 - usedPercent/100, true

@@ -296,7 +296,7 @@ func TestNormalizedCodexLimits(t *testing.T) {
 }
 
 func TestNormalizedCodexLimits_OnlyPrimaryData(t *testing.T) {
-	// Test when only primary has data, no window_minutes
+	// 缺少 window_minutes 表示该窗口未启用，不再按旧顺序推断。
 	pUsed := 80.0
 	pReset := 50000
 
@@ -307,23 +307,8 @@ func TestNormalizedCodexLimits_OnlyPrimaryData(t *testing.T) {
 	}
 
 	normalized := snapshot.Normalize()
-	if normalized == nil {
-		t.Fatal("expected non-nil normalized")
-	}
-
-	// Legacy assumption: primary=7d, secondary=5h
-	if normalized.Used7dPercent == nil || *normalized.Used7dPercent != 80.0 {
-		t.Errorf("expected Used7dPercent=80, got %v", normalized.Used7dPercent)
-	}
-	if normalized.Reset7dSeconds == nil || *normalized.Reset7dSeconds != 50000 {
-		t.Errorf("expected Reset7dSeconds=50000, got %v", normalized.Reset7dSeconds)
-	}
-	// Secondary (5h) should be nil
-	if normalized.Used5hPercent != nil {
-		t.Errorf("expected Used5hPercent=nil, got %v", *normalized.Used5hPercent)
-	}
-	if normalized.Reset5hSeconds != nil {
-		t.Errorf("expected Reset5hSeconds=nil, got %v", *normalized.Reset5hSeconds)
+	if normalized != nil {
+		t.Fatalf("expected nil normalized limits for missing window, got %+v", normalized)
 	}
 }
 
@@ -375,7 +360,7 @@ func TestRateLimitService_HandleUpstreamError_403FallsBackToRawBody(t *testing.T
 }
 
 func TestNormalizedCodexLimits_OnlySecondaryData(t *testing.T) {
-	// Test when only secondary has data, no window_minutes
+	// 缺少 window_minutes 不能凭 primary/secondary 位置推断 5h/7d。
 	sUsed := 60.0
 	sReset := 3000
 
@@ -386,26 +371,13 @@ func TestNormalizedCodexLimits_OnlySecondaryData(t *testing.T) {
 	}
 
 	normalized := snapshot.Normalize()
-	if normalized == nil {
-		t.Fatal("expected non-nil normalized")
-	}
-
-	// Legacy assumption: primary=7d, secondary=5h
-	// So secondary goes to 5h
-	if normalized.Used5hPercent == nil || *normalized.Used5hPercent != 60.0 {
-		t.Errorf("expected Used5hPercent=60, got %v", normalized.Used5hPercent)
-	}
-	if normalized.Reset5hSeconds == nil || *normalized.Reset5hSeconds != 3000 {
-		t.Errorf("expected Reset5hSeconds=3000, got %v", normalized.Reset5hSeconds)
-	}
-	// Primary (7d) should be nil
-	if normalized.Used7dPercent != nil {
-		t.Errorf("expected Used7dPercent=nil, got %v", *normalized.Used7dPercent)
+	if normalized != nil {
+		t.Fatalf("expected nil normalized limits for missing window, got %+v", normalized)
 	}
 }
 
 func TestNormalizedCodexLimits_BothDataNoWindowMinutes(t *testing.T) {
-	// Test when both have data but no window_minutes
+	// 两个窗口都缺少周期时，不产生任何规范化限额。
 	pUsed := 100.0
 	pReset := 400000
 	sUsed := 50.0
@@ -420,23 +392,31 @@ func TestNormalizedCodexLimits_BothDataNoWindowMinutes(t *testing.T) {
 	}
 
 	normalized := snapshot.Normalize()
-	if normalized == nil {
-		t.Fatal("expected non-nil normalized")
+	if normalized != nil {
+		t.Fatalf("expected nil normalized limits for missing windows, got %+v", normalized)
+	}
+}
+
+func TestNormalizedCodexLimits_ZeroWindowIgnoredWhenOnly7DEnabled(t *testing.T) {
+	primaryUsed, primaryReset, primaryWindow := 100.0, 600, 0
+	secondaryUsed, secondaryReset, secondaryWindow := 25.0, 86400, 10080
+	snapshot := &OpenAICodexUsageSnapshot{
+		PrimaryUsedPercent:         &primaryUsed,
+		PrimaryResetAfterSeconds:   &primaryReset,
+		PrimaryWindowMinutes:       &primaryWindow,
+		SecondaryUsedPercent:       &secondaryUsed,
+		SecondaryResetAfterSeconds: &secondaryReset,
+		SecondaryWindowMinutes:     &secondaryWindow,
 	}
 
-	// Legacy assumption: primary=7d, secondary=5h
-	if normalized.Used7dPercent == nil || *normalized.Used7dPercent != 100.0 {
-		t.Errorf("expected Used7dPercent=100, got %v", normalized.Used7dPercent)
-	}
-	if normalized.Reset7dSeconds == nil || *normalized.Reset7dSeconds != 400000 {
-		t.Errorf("expected Reset7dSeconds=400000, got %v", normalized.Reset7dSeconds)
-	}
-	if normalized.Used5hPercent == nil || *normalized.Used5hPercent != 50.0 {
-		t.Errorf("expected Used5hPercent=50, got %v", normalized.Used5hPercent)
-	}
-	if normalized.Reset5hSeconds == nil || *normalized.Reset5hSeconds != 10000 {
-		t.Errorf("expected Reset5hSeconds=10000, got %v", normalized.Reset5hSeconds)
-	}
+	normalized := snapshot.Normalize()
+	require.NotNil(t, normalized)
+	require.Nil(t, normalized.Used5hPercent, "window_minutes=0 不得生成 5h 限额")
+	require.Nil(t, normalized.Window5hMinutes)
+	require.NotNil(t, normalized.Used7dPercent)
+	require.Equal(t, 25.0, *normalized.Used7dPercent)
+	require.NotNil(t, normalized.Window7dMinutes)
+	require.Equal(t, 10080, *normalized.Window7dMinutes)
 }
 
 func TestHandle429_AnthropicPlatformUnaffected(t *testing.T) {

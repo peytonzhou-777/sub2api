@@ -953,7 +953,7 @@ func buildCodexUsageExtraUpdates(snapshot *OpenAICodexUsageSnapshot, fallbackNow
 	}
 
 	baseTime := codexSnapshotBaseTime(snapshot, fallbackNow)
-	updates := make(map[string]any)
+	updates := newClearedCodexUsageWindowUpdates()
 
 	// 保存原始 primary/secondary 字段，便于排查问题
 	if snapshot.PrimaryUsedPercent != nil {
@@ -1008,6 +1008,20 @@ func buildCodexUsageExtraUpdates(snapshot *OpenAICodexUsageSnapshot, fallbackNow
 	}
 
 	return updates
+}
+
+// newClearedCodexUsageWindowUpdates 显式清除无效的规范窗口，避免旧 5h/7d 快照继续影响调度。
+func newClearedCodexUsageWindowUpdates() map[string]any {
+	return map[string]any{
+		"codex_5h_used_percent":        nil,
+		"codex_5h_reset_after_seconds": nil,
+		"codex_5h_reset_at":            nil,
+		"codex_5h_window_minutes":      nil,
+		"codex_7d_used_percent":        nil,
+		"codex_7d_reset_after_seconds": nil,
+		"codex_7d_reset_at":            nil,
+		"codex_7d_window_minutes":      nil,
+	}
 }
 
 // updateCodexUsageSnapshot saves the Codex usage snapshot to account's Extra field
