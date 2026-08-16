@@ -2504,26 +2504,30 @@ func init() {
 	resetrebateuseritemDescExclusionReason := resetrebateuseritemFields[11].Descriptor()
 	// resetrebateuseritem.DefaultExclusionReason holds the default value on creation for the exclusion_reason field.
 	resetrebateuseritem.DefaultExclusionReason = resetrebateuseritemDescExclusionReason.Default.(string)
+	// resetrebateuseritemDescSkipCountConsumed is the schema descriptor for skip_count_consumed field.
+	resetrebateuseritemDescSkipCountConsumed := resetrebateuseritemFields[12].Descriptor()
+	// resetrebateuseritem.DefaultSkipCountConsumed holds the default value on creation for the skip_count_consumed field.
+	resetrebateuseritem.DefaultSkipCountConsumed = resetrebateuseritemDescSkipCountConsumed.Default.(bool)
 	// resetrebateuseritemDescErrorCode is the schema descriptor for error_code field.
-	resetrebateuseritemDescErrorCode := resetrebateuseritemFields[12].Descriptor()
+	resetrebateuseritemDescErrorCode := resetrebateuseritemFields[13].Descriptor()
 	// resetrebateuseritem.DefaultErrorCode holds the default value on creation for the error_code field.
 	resetrebateuseritem.DefaultErrorCode = resetrebateuseritemDescErrorCode.Default.(string)
 	// resetrebateuseritem.ErrorCodeValidator is a validator for the "error_code" field. It is called by the builders before save.
 	resetrebateuseritem.ErrorCodeValidator = resetrebateuseritemDescErrorCode.Validators[0].(func(string) error)
 	// resetrebateuseritemDescErrorMessage is the schema descriptor for error_message field.
-	resetrebateuseritemDescErrorMessage := resetrebateuseritemFields[13].Descriptor()
+	resetrebateuseritemDescErrorMessage := resetrebateuseritemFields[14].Descriptor()
 	// resetrebateuseritem.DefaultErrorMessage holds the default value on creation for the error_message field.
 	resetrebateuseritem.DefaultErrorMessage = resetrebateuseritemDescErrorMessage.Default.(string)
 	// resetrebateuseritemDescAttemptCount is the schema descriptor for attempt_count field.
-	resetrebateuseritemDescAttemptCount := resetrebateuseritemFields[14].Descriptor()
+	resetrebateuseritemDescAttemptCount := resetrebateuseritemFields[15].Descriptor()
 	// resetrebateuseritem.DefaultAttemptCount holds the default value on creation for the attempt_count field.
 	resetrebateuseritem.DefaultAttemptCount = resetrebateuseritemDescAttemptCount.Default.(int)
 	// resetrebateuseritemDescCreatedAt is the schema descriptor for created_at field.
-	resetrebateuseritemDescCreatedAt := resetrebateuseritemFields[20].Descriptor()
+	resetrebateuseritemDescCreatedAt := resetrebateuseritemFields[21].Descriptor()
 	// resetrebateuseritem.DefaultCreatedAt holds the default value on creation for the created_at field.
 	resetrebateuseritem.DefaultCreatedAt = resetrebateuseritemDescCreatedAt.Default.(func() time.Time)
 	// resetrebateuseritemDescUpdatedAt is the schema descriptor for updated_at field.
-	resetrebateuseritemDescUpdatedAt := resetrebateuseritemFields[21].Descriptor()
+	resetrebateuseritemDescUpdatedAt := resetrebateuseritemFields[22].Descriptor()
 	// resetrebateuseritem.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	resetrebateuseritem.DefaultUpdatedAt = resetrebateuseritemDescUpdatedAt.Default.(func() time.Time)
 	// resetrebateuseritem.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -3369,6 +3373,12 @@ func init() {
 	userDescRpmLimit := userFields[20].Descriptor()
 	// user.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
 	user.DefaultRpmLimit = userDescRpmLimit.Default.(int)
+	// userDescResetRebateSkipCount is the schema descriptor for reset_rebate_skip_count field.
+	userDescResetRebateSkipCount := userFields[21].Descriptor()
+	// user.DefaultResetRebateSkipCount holds the default value on creation for the reset_rebate_skip_count field.
+	user.DefaultResetRebateSkipCount = userDescResetRebateSkipCount.Default.(int64)
+	// user.ResetRebateSkipCountValidator is a validator for the "reset_rebate_skip_count" field. It is called by the builders before save.
+	user.ResetRebateSkipCountValidator = userDescResetRebateSkipCount.Validators[0].(func(int64) error)
 	userallowedgroupFields := schema.UserAllowedGroup{}.Fields()
 	_ = userallowedgroupFields
 	// userallowedgroupDescCreatedAt is the schema descriptor for created_at field.

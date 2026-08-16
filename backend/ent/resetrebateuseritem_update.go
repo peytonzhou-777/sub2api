@@ -210,6 +210,20 @@ func (_u *ResetRebateUserItemUpdate) SetNillableExclusionReason(v *string) *Rese
 	return _u
 }
 
+// SetSkipCountConsumed sets the "skip_count_consumed" field.
+func (_u *ResetRebateUserItemUpdate) SetSkipCountConsumed(v bool) *ResetRebateUserItemUpdate {
+	_u.mutation.SetSkipCountConsumed(v)
+	return _u
+}
+
+// SetNillableSkipCountConsumed sets the "skip_count_consumed" field if the given value is not nil.
+func (_u *ResetRebateUserItemUpdate) SetNillableSkipCountConsumed(v *bool) *ResetRebateUserItemUpdate {
+	if v != nil {
+		_u.SetSkipCountConsumed(*v)
+	}
+	return _u
+}
+
 // SetErrorCode sets the "error_code" field.
 func (_u *ResetRebateUserItemUpdate) SetErrorCode(v string) *ResetRebateUserItemUpdate {
 	_u.mutation.SetErrorCode(v)
@@ -497,6 +511,9 @@ func (_u *ResetRebateUserItemUpdate) sqlSave(ctx context.Context) (_node int, er
 	if value, ok := _u.mutation.ExclusionReason(); ok {
 		_spec.SetField(resetrebateuseritem.FieldExclusionReason, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.SkipCountConsumed(); ok {
+		_spec.SetField(resetrebateuseritem.FieldSkipCountConsumed, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.ErrorCode(); ok {
 		_spec.SetField(resetrebateuseritem.FieldErrorCode, field.TypeString, value)
 	}
@@ -743,6 +760,20 @@ func (_u *ResetRebateUserItemUpdateOne) SetExclusionReason(v string) *ResetRebat
 func (_u *ResetRebateUserItemUpdateOne) SetNillableExclusionReason(v *string) *ResetRebateUserItemUpdateOne {
 	if v != nil {
 		_u.SetExclusionReason(*v)
+	}
+	return _u
+}
+
+// SetSkipCountConsumed sets the "skip_count_consumed" field.
+func (_u *ResetRebateUserItemUpdateOne) SetSkipCountConsumed(v bool) *ResetRebateUserItemUpdateOne {
+	_u.mutation.SetSkipCountConsumed(v)
+	return _u
+}
+
+// SetNillableSkipCountConsumed sets the "skip_count_consumed" field if the given value is not nil.
+func (_u *ResetRebateUserItemUpdateOne) SetNillableSkipCountConsumed(v *bool) *ResetRebateUserItemUpdateOne {
+	if v != nil {
+		_u.SetSkipCountConsumed(*v)
 	}
 	return _u
 }
@@ -1063,6 +1094,9 @@ func (_u *ResetRebateUserItemUpdateOne) sqlSave(ctx context.Context) (_node *Res
 	}
 	if value, ok := _u.mutation.ExclusionReason(); ok {
 		_spec.SetField(resetrebateuseritem.FieldExclusionReason, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SkipCountConsumed(); ok {
+		_spec.SetField(resetrebateuseritem.FieldSkipCountConsumed, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.ErrorCode(); ok {
 		_spec.SetField(resetrebateuseritem.FieldErrorCode, field.TypeString, value)

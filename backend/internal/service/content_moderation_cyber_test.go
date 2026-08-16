@@ -19,6 +19,25 @@ type cyberOrderingTestRepo struct {
 	emailSents []bool // EmailSent value captured at each CreateLog call
 }
 
+type cyberResetRebateSkipCounter struct {
+	UserRepository
+	mu      sync.Mutex
+	userIDs []int64
+}
+
+func (c *cyberResetRebateSkipCounter) IncrementResetRebateSkipCount(_ context.Context, userID int64) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.userIDs = append(c.userIDs, userID)
+	return nil
+}
+
+func (c *cyberResetRebateSkipCounter) snapshot() []int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]int64(nil), c.userIDs...)
+}
+
 func (r *cyberOrderingTestRepo) CreateLog(ctx context.Context, log *ContentModerationLog) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -67,6 +86,7 @@ func (r *cyberOrderingTestRepo) snapshotEmailSents() []bool {
 
 func TestRecordCyberPolicyEvent_DisabledWhenRiskControlOff(t *testing.T) {
 	repo := &contentModerationTestRepo{}
+	counter := &cyberResetRebateSkipCounter{}
 	svc := NewContentModerationService(
 		&contentModerationTestSettingRepo{values: map[string]string{
 			SettingKeyRiskControlEnabled: "false",
@@ -74,11 +94,12 @@ func TestRecordCyberPolicyEvent_DisabledWhenRiskControlOff(t *testing.T) {
 		repo,
 		nil,
 		nil,
-		nil,
+		counter,
 		nil,
 		nil,
 		nil,
 	)
+	require.NoError(t, svc.IncrementResetRebateSkipCountForCyber(context.Background(), 1))
 
 	svc.RecordCyberPolicyEvent(context.Background(), CyberPolicyRecordInput{
 		UserID:          1,
@@ -91,6 +112,7 @@ func TestRecordCyberPolicyEvent_DisabledWhenRiskControlOff(t *testing.T) {
 	})
 
 	require.Empty(t, repo.snapshotLogs(), "CreateLog must NOT be called when risk_control_enabled is off")
+	require.Equal(t, []int64{1}, counter.snapshot(), "官方 Cyber 告警不应受内容审核总开关影响")
 }
 
 func TestRecordCyberPolicyEvent_WritesLogWhenEnabled(t *testing.T) {

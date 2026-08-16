@@ -28,6 +28,7 @@ type resetRebateStatsUser struct {
 	Username        string
 	Status          string
 	Deleted         bool
+	SkipCount       int64
 	RawAmount       decimal.Decimal
 	Weighted        decimal.Decimal
 	Result          string
@@ -39,6 +40,19 @@ type resetRebateStatsContribution struct {
 	Account   resetRebateStatsAccount
 	RawAmount decimal.Decimal
 	Weighted  decimal.Decimal
+}
+
+func classifyResetRebateStatsUser(user *resetRebateStatsUser) (string, string) {
+	if user.Deleted {
+		return "excluded", "用户已删除，未发放"
+	}
+	if user.SkipCount > 0 {
+		return "excluded", ResetRebateExclusionSkipCount
+	}
+	if user.Weighted.Truncate(8).IsZero() {
+		return "excluded", "金额过小，未发放"
+	}
+	return "pending", ""
 }
 
 // runStatistics 只读取本地用量并生成不可变账号、用户和贡献快照。
@@ -96,6 +110,7 @@ func (s *ResetRebateService) runStatistics(ctx context.Context, batchID int64) e
 	rows, err := tx.QueryContext(ctx, `
 		SELECT account_item.account_id, usage_log.user_id, COALESCE(app_user.email,''),
 		       COALESCE(app_user.username,''), COALESCE(app_user.status,''), app_user.deleted_at IS NOT NULL,
+		       COALESCE(app_user.reset_rebate_skip_count, 0),
 		       COALESCE(SUM(usage_log.actual_cost),0)::text
 		FROM reset_rebate_account_items AS account_item
 		JOIN usage_logs AS usage_log
@@ -104,7 +119,7 @@ func (s *ResetRebateService) runStatistics(ctx context.Context, batchID int64) e
 		 AND usage_log.created_at<account_item.period_end
 		JOIN users AS app_user ON app_user.id=usage_log.user_id
 		WHERE account_item.batch_id=$1
-		GROUP BY account_item.account_id,usage_log.user_id,app_user.email,app_user.username,app_user.status,app_user.deleted_at
+		GROUP BY account_item.account_id,usage_log.user_id,app_user.email,app_user.username,app_user.status,app_user.deleted_at,app_user.reset_rebate_skip_count
 		HAVING COALESCE(SUM(usage_log.actual_cost),0)>0
 		ORDER BY account_item.account_id,usage_log.user_id`, batchID)
 	if err != nil {
@@ -113,8 +128,9 @@ func (s *ResetRebateService) runStatistics(ctx context.Context, batchID int64) e
 	for rows.Next() {
 		var accountID, userID int64
 		var email, username, userStatus, rawText string
+		var skipCount int64
 		var deleted bool
-		if err = rows.Scan(&accountID, &userID, &email, &username, &userStatus, &deleted, &rawText); err != nil {
+		if err = rows.Scan(&accountID, &userID, &email, &username, &userStatus, &deleted, &skipCount, &rawText); err != nil {
 			_ = rows.Close()
 			return err
 		}
@@ -132,7 +148,7 @@ func (s *ResetRebateService) runStatistics(ctx context.Context, batchID int64) e
 		contributions = append(contributions, resetRebateStatsContribution{UserID: userID, Account: account, RawAmount: raw, Weighted: weighted})
 		item := users[userID]
 		if item == nil {
-			item = &resetRebateStatsUser{UserID: userID, Email: email, Username: username, Status: userStatus, Deleted: deleted}
+			item = &resetRebateStatsUser{UserID: userID, Email: email, Username: username, Status: userStatus, Deleted: deleted, SkipCount: skipCount}
 			users[userID] = item
 		}
 		item.RawAmount = item.RawAmount.Add(raw)
@@ -157,12 +173,8 @@ func (s *ResetRebateService) runStatistics(ctx context.Context, batchID int64) e
 	eligibleCount, excludedCount := 0, 0
 	userSnapshots := make([]*resetRebateStatsUser, 0, len(users))
 	for _, user := range users {
-		result, exclusion := "pending", ""
-		if user.Deleted {
-			result, exclusion = "excluded", "用户已删除，未发放"
-			excludedCount++
-		} else if user.Weighted.Truncate(8).IsZero() {
-			result, exclusion = "excluded", "金额过小，未发放"
+		result, exclusion := classifyResetRebateStatsUser(user)
+		if result == "excluded" {
 			excludedCount++
 		} else {
 			eligibleCount++

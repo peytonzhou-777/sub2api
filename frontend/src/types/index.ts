@@ -109,6 +109,8 @@ export interface AdminUser extends User {
   limited_remaining_amount?: number
   // 用户专属分组倍率配置 (group_id -> rate_multiplier)
   group_rates?: Record<number, number>
+  // 官方 Cyber 告警导致的重置返额排除剩余计次
+  reset_rebate_skip_count?: number
   // 当前并发数（仅管理员列表接口返回）
   current_concurrency?: number
 }

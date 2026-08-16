@@ -904,6 +904,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'subscriptions', label: t('admin.users.columns.subscriptions'), sortable: false },
   { key: 'balance', label: t('admin.users.columns.permanentBalance'), sortable: true },
   { key: 'limited_remaining_amount', label: t('admin.users.columns.limitedBalance'), sortable: false },
+  { key: 'reset_rebate_skip_count', label: t('admin.users.columns.resetRebateSkipCount'), sortable: false },
   { key: 'balance_platform_quota', label: t('admin.users.columns.balancePlatformQuota'), sortable: false },
   { key: 'usage', label: t('admin.users.columns.usage'), sortable: false },
   { key: 'usage_anthropic', label: t('admin.users.columns.usageAnthropic'), sortable: false },

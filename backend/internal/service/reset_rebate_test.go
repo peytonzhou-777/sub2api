@@ -60,6 +60,17 @@ func TestNormalizeResetRebateReasonUsesConfirmedDefault(t *testing.T) {
 	require.Equal(t, ResetRebateDefaultReason, reason)
 }
 
+func TestResetRebateSkipCountExclusionSurvivesPreview(t *testing.T) {
+	statsUser := &resetRebateStatsUser{SkipCount: 2, Weighted: decimal.NewFromInt(10)}
+	result, reason := classifyResetRebateStatsUser(statsUser)
+	require.Equal(t, "excluded", result)
+	require.Equal(t, ResetRebateExclusionSkipCount, reason)
+
+	result, reason = classifyResetRebatePreviewUser(false, result, reason, decimal.NewFromInt(9))
+	require.Equal(t, "excluded", result)
+	require.Equal(t, ResetRebateExclusionSkipCount, reason)
+}
+
 func TestResetRebateUserFailureDoesNotStopRemainingUsers(t *testing.T) {
 	svc := &ResetRebateService{}
 	issued := make([]int64, 0, 3)

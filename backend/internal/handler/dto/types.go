@@ -50,6 +50,8 @@ type AdminUser struct {
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]rateMultiplier
 	GroupRates map[int64]float64 `json:"group_rates,omitempty"`
+	// ResetRebateSkipCount 是管理员可见的重置返额排除剩余计次。
+	ResetRebateSkipCount int64 `json:"reset_rebate_skip_count"`
 }
 
 type APIKey struct {

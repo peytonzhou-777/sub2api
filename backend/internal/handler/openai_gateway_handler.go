@@ -3233,6 +3233,7 @@ func (h *OpenAIGatewayHandler) recordCyberPolicyIfMarked(c *gin.Context, apiKey 
 	var groupID *int64
 	if apiKey != nil {
 		apiKeyID = apiKey.ID
+		userID = apiKey.UserID
 		apiKeyName = apiKey.Name
 		groupID = apiKey.GroupID
 		if apiKey.User != nil {
@@ -3267,6 +3268,12 @@ func (h *OpenAIGatewayHandler) recordCyberPolicyIfMarked(c *gin.Context, apiKey 
 	requestCtx := context.Background()
 	if c.Request != nil {
 		requestCtx = c.Request.Context()
+	}
+	// 返额排除计次属于权益处罚，必须在异步风控日志前同步提交。
+	if cmSvc != nil {
+		if err := cmSvc.IncrementResetRebateSkipCountForCyber(requestCtx, userID); err != nil {
+			logger.LegacyPrintf("handler.openai_gateway", "Cyber 返额排除计次失败 user=%d err=%v", userID, err)
+		}
 	}
 	// 处罚必须在现有异步内容审计副作用和请求并发槽释放前同步提交。
 	h.applySecurityDepositCyberPenalty(c, requestCtx, apiKey, mark, groupName, turnIndex)

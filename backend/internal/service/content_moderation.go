@@ -2985,6 +2985,19 @@ type CyberPolicyRecordInput struct {
 	UpstreamOutTok  int
 }
 
+// IncrementResetRebateSkipCountForCyber 同步记录官方 Cyber 告警产生的返额排除计次。
+// 该计次与内容审核开关、范围和异步日志写入解耦，避免进程退出时丢失权益处罚。
+func (s *ContentModerationService) IncrementResetRebateSkipCountForCyber(ctx context.Context, userID int64) error {
+	if s == nil || userID <= 0 {
+		return nil
+	}
+	counter, ok := s.userRepo.(ResetRebateSkipCounter)
+	if !ok {
+		return nil
+	}
+	return counter.IncrementResetRebateSkipCount(ctx, userID)
+}
+
 // RecordCyberPolicyEvent 把一次 cyber_policy 硬阻断写入风控中心日志、计入违规计数、
 // 并给用户发邮件。当前请求已由 gateway 透传给用户；本方法仅做事后记录/通知/计数。
 // 受 risk_control_enabled 总开关和内容审核 group/model scope 约束，

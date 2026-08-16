@@ -356,6 +356,20 @@ func (_c *UserCreate) SetNillableRpmLimit(v *int) *UserCreate {
 	return _c
 }
 
+// SetResetRebateSkipCount sets the "reset_rebate_skip_count" field.
+func (_c *UserCreate) SetResetRebateSkipCount(v int64) *UserCreate {
+	_c.mutation.SetResetRebateSkipCount(v)
+	return _c
+}
+
+// SetNillableResetRebateSkipCount sets the "reset_rebate_skip_count" field if the given value is not nil.
+func (_c *UserCreate) SetNillableResetRebateSkipCount(v *int64) *UserCreate {
+	if v != nil {
+		_c.SetResetRebateSkipCount(*v)
+	}
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *UserCreate) AddAPIKeyIDs(ids ...int64) *UserCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -688,6 +702,10 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultRpmLimit
 		_c.mutation.SetRpmLimit(v)
 	}
+	if _, ok := _c.mutation.ResetRebateSkipCount(); !ok {
+		v := user.DefaultResetRebateSkipCount
+		_c.mutation.SetResetRebateSkipCount(v)
+	}
 	return nil
 }
 
@@ -776,6 +794,14 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.RpmLimit(); !ok {
 		return &ValidationError{Name: "rpm_limit", err: errors.New(`ent: missing required field "User.rpm_limit"`)}
+	}
+	if _, ok := _c.mutation.ResetRebateSkipCount(); !ok {
+		return &ValidationError{Name: "reset_rebate_skip_count", err: errors.New(`ent: missing required field "User.reset_rebate_skip_count"`)}
+	}
+	if v, ok := _c.mutation.ResetRebateSkipCount(); ok {
+		if err := user.ResetRebateSkipCountValidator(v); err != nil {
+			return &ValidationError{Name: "reset_rebate_skip_count", err: fmt.Errorf(`ent: validator failed for field "User.reset_rebate_skip_count": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -899,6 +925,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RpmLimit(); ok {
 		_spec.SetField(user.FieldRpmLimit, field.TypeInt, value)
 		_node.RpmLimit = value
+	}
+	if value, ok := _c.mutation.ResetRebateSkipCount(); ok {
+		_spec.SetField(user.FieldResetRebateSkipCount, field.TypeInt64, value)
+		_node.ResetRebateSkipCount = value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -1544,6 +1574,24 @@ func (u *UserUpsert) AddRpmLimit(v int) *UserUpsert {
 	return u
 }
 
+// SetResetRebateSkipCount sets the "reset_rebate_skip_count" field.
+func (u *UserUpsert) SetResetRebateSkipCount(v int64) *UserUpsert {
+	u.Set(user.FieldResetRebateSkipCount, v)
+	return u
+}
+
+// UpdateResetRebateSkipCount sets the "reset_rebate_skip_count" field to the value that was provided on create.
+func (u *UserUpsert) UpdateResetRebateSkipCount() *UserUpsert {
+	u.SetExcluded(user.FieldResetRebateSkipCount)
+	return u
+}
+
+// AddResetRebateSkipCount adds v to the "reset_rebate_skip_count" field.
+func (u *UserUpsert) AddResetRebateSkipCount(v int64) *UserUpsert {
+	u.Add(user.FieldResetRebateSkipCount, v)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -1992,6 +2040,27 @@ func (u *UserUpsertOne) AddRpmLimit(v int) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateRpmLimit() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetResetRebateSkipCount sets the "reset_rebate_skip_count" field.
+func (u *UserUpsertOne) SetResetRebateSkipCount(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetResetRebateSkipCount(v)
+	})
+}
+
+// AddResetRebateSkipCount adds v to the "reset_rebate_skip_count" field.
+func (u *UserUpsertOne) AddResetRebateSkipCount(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddResetRebateSkipCount(v)
+	})
+}
+
+// UpdateResetRebateSkipCount sets the "reset_rebate_skip_count" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateResetRebateSkipCount() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateResetRebateSkipCount()
 	})
 }
 
@@ -2609,6 +2678,27 @@ func (u *UserUpsertBulk) AddRpmLimit(v int) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateRpmLimit() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetResetRebateSkipCount sets the "reset_rebate_skip_count" field.
+func (u *UserUpsertBulk) SetResetRebateSkipCount(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetResetRebateSkipCount(v)
+	})
+}
+
+// AddResetRebateSkipCount adds v to the "reset_rebate_skip_count" field.
+func (u *UserUpsertBulk) AddResetRebateSkipCount(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddResetRebateSkipCount(v)
+	})
+}
+
+// UpdateResetRebateSkipCount sets the "reset_rebate_skip_count" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateResetRebateSkipCount() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateResetRebateSkipCount()
 	})
 }
 

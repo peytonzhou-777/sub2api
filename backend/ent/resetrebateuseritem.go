@@ -41,6 +41,8 @@ type ResetRebateUserItem struct {
 	Result string `json:"result,omitempty"`
 	// ExclusionReason holds the value of the "exclusion_reason" field.
 	ExclusionReason string `json:"exclusion_reason,omitempty"`
+	// SkipCountConsumed holds the value of the "skip_count_consumed" field.
+	SkipCountConsumed bool `json:"skip_count_consumed,omitempty"`
 	// ErrorCode holds the value of the "error_code" field.
 	ErrorCode string `json:"error_code,omitempty"`
 	// ErrorMessage holds the value of the "error_message" field.
@@ -69,7 +71,7 @@ func (*ResetRebateUserItem) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case resetrebateuseritem.FieldUserDeleted:
+		case resetrebateuseritem.FieldUserDeleted, resetrebateuseritem.FieldSkipCountConsumed:
 			values[i] = new(sql.NullBool)
 		case resetrebateuseritem.FieldID, resetrebateuseritem.FieldBatchID, resetrebateuseritem.FieldUserID, resetrebateuseritem.FieldAttemptCount, resetrebateuseritem.FieldGrantID:
 			values[i] = new(sql.NullInt64)
@@ -169,6 +171,12 @@ func (_m *ResetRebateUserItem) assignValues(columns []string, values []any) erro
 				return fmt.Errorf("unexpected type %T for field exclusion_reason", values[i])
 			} else if value.Valid {
 				_m.ExclusionReason = value.String
+			}
+		case resetrebateuseritem.FieldSkipCountConsumed:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field skip_count_consumed", values[i])
+			} else if value.Valid {
+				_m.SkipCountConsumed = value.Bool
 			}
 		case resetrebateuseritem.FieldErrorCode:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -306,6 +314,9 @@ func (_m *ResetRebateUserItem) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("exclusion_reason=")
 	builder.WriteString(_m.ExclusionReason)
+	builder.WriteString(", ")
+	builder.WriteString("skip_count_consumed=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SkipCountConsumed))
 	builder.WriteString(", ")
 	builder.WriteString("error_code=")
 	builder.WriteString(_m.ErrorCode)

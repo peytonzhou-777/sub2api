@@ -528,6 +528,7 @@ export default {
         balance: 'Balance',
         permanentBalance: 'Permanent Credit',
         limitedBalance: 'Limited-time Credit',
+        resetRebateSkipCount: 'Rebate Exclusions',
         balancePlatformQuota: 'Balance (Platform Quota)',
         usage: 'Usage',
         usageAnthropic: 'Usage (Claude)',

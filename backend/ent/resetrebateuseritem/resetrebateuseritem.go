@@ -37,6 +37,8 @@ const (
 	FieldResult = "result"
 	// FieldExclusionReason holds the string denoting the exclusion_reason field in the database.
 	FieldExclusionReason = "exclusion_reason"
+	// FieldSkipCountConsumed holds the string denoting the skip_count_consumed field in the database.
+	FieldSkipCountConsumed = "skip_count_consumed"
 	// FieldErrorCode holds the string denoting the error_code field in the database.
 	FieldErrorCode = "error_code"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
@@ -76,6 +78,7 @@ var Columns = []string{
 	FieldActualIssuedAmount,
 	FieldResult,
 	FieldExclusionReason,
+	FieldSkipCountConsumed,
 	FieldErrorCode,
 	FieldErrorMessage,
 	FieldAttemptCount,
@@ -127,6 +130,8 @@ var (
 	ResultValidator func(string) error
 	// DefaultExclusionReason holds the default value on creation for the "exclusion_reason" field.
 	DefaultExclusionReason string
+	// DefaultSkipCountConsumed holds the default value on creation for the "skip_count_consumed" field.
+	DefaultSkipCountConsumed bool
 	// DefaultErrorCode holds the default value on creation for the "error_code" field.
 	DefaultErrorCode string
 	// ErrorCodeValidator is a validator for the "error_code" field. It is called by the builders before save.
@@ -209,6 +214,11 @@ func ByResult(opts ...sql.OrderTermOption) OrderOption {
 // ByExclusionReason orders the results by the exclusion_reason field.
 func ByExclusionReason(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldExclusionReason, opts...).ToFunc()
+}
+
+// BySkipCountConsumed orders the results by the skip_count_consumed field.
+func BySkipCountConsumed(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSkipCountConsumed, opts...).ToFunc()
 }
 
 // ByErrorCode orders the results by the error_code field.

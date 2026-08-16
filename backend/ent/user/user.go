@@ -63,6 +63,8 @@ const (
 	FieldTotalRecharged = "total_recharged"
 	// FieldRpmLimit holds the string denoting the rpm_limit field in the database.
 	FieldRpmLimit = "rpm_limit"
+	// FieldResetRebateSkipCount holds the string denoting the reset_rebate_skip_count field in the database.
+	FieldResetRebateSkipCount = "reset_rebate_skip_count"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeRedeemCodes holds the string denoting the redeem_codes edge name in mutations.
@@ -236,6 +238,7 @@ var Columns = []string{
 	FieldBalanceNotifyExtraEmails,
 	FieldTotalRecharged,
 	FieldRpmLimit,
+	FieldResetRebateSkipCount,
 }
 
 var (
@@ -308,6 +311,10 @@ var (
 	DefaultTotalRecharged float64
 	// DefaultRpmLimit holds the default value on creation for the "rpm_limit" field.
 	DefaultRpmLimit int
+	// DefaultResetRebateSkipCount holds the default value on creation for the "reset_rebate_skip_count" field.
+	DefaultResetRebateSkipCount int64
+	// ResetRebateSkipCountValidator is a validator for the "reset_rebate_skip_count" field. It is called by the builders before save.
+	ResetRebateSkipCountValidator func(int64) error
 )
 
 // OrderOption defines the ordering options for the User queries.
@@ -436,6 +443,11 @@ func ByTotalRecharged(opts ...sql.OrderTermOption) OrderOption {
 // ByRpmLimit orders the results by the rpm_limit field.
 func ByRpmLimit(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRpmLimit, opts...).ToFunc()
+}
+
+// ByResetRebateSkipCount orders the results by the reset_rebate_skip_count field.
+func ByResetRebateSkipCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResetRebateSkipCount, opts...).ToFunc()
 }
 
 // ByAPIKeysCount orders the results by api_keys count.

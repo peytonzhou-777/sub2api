@@ -34,6 +34,7 @@ type userRepository struct {
 }
 
 var _ service.RedeemUserAdjustmentRepository = (*userRepository)(nil)
+var _ service.ResetRebateSkipCounter = (*userRepository)(nil)
 
 func NewUserRepository(client *dbent.Client, sqlDB *sql.DB) service.UserRepository {
 	return newUserRepositoryWithSQL(client, sqlDB)
@@ -1616,6 +1617,20 @@ func (r *userRepository) DisableTotp(ctx context.Context, userID int64) error {
 		SetTotpEnabled(false).
 		ClearTotpEnabledAt().
 		ClearTotpSecretEncrypted().
+		Save(ctx)
+	if err != nil {
+		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+	}
+	return nil
+}
+
+// IncrementResetRebateSkipCount 原子增加用户的重置返额排除计次。
+func (r *userRepository) IncrementResetRebateSkipCount(ctx context.Context, userID int64) error {
+	if userID <= 0 {
+		return nil
+	}
+	_, err := clientFromContext(ctx, r.client).User.UpdateOneID(userID).
+		AddResetRebateSkipCount(1).
 		Save(ctx)
 	if err != nil {
 		return translatePersistenceError(err, service.ErrUserNotFound, nil)

@@ -174,6 +174,20 @@ func (_c *ResetRebateUserItemCreate) SetNillableExclusionReason(v *string) *Rese
 	return _c
 }
 
+// SetSkipCountConsumed sets the "skip_count_consumed" field.
+func (_c *ResetRebateUserItemCreate) SetSkipCountConsumed(v bool) *ResetRebateUserItemCreate {
+	_c.mutation.SetSkipCountConsumed(v)
+	return _c
+}
+
+// SetNillableSkipCountConsumed sets the "skip_count_consumed" field if the given value is not nil.
+func (_c *ResetRebateUserItemCreate) SetNillableSkipCountConsumed(v *bool) *ResetRebateUserItemCreate {
+	if v != nil {
+		_c.SetSkipCountConsumed(*v)
+	}
+	return _c
+}
+
 // SetErrorCode sets the "error_code" field.
 func (_c *ResetRebateUserItemCreate) SetErrorCode(v string) *ResetRebateUserItemCreate {
 	_c.mutation.SetErrorCode(v)
@@ -389,6 +403,10 @@ func (_c *ResetRebateUserItemCreate) defaults() {
 		v := resetrebateuseritem.DefaultExclusionReason
 		_c.mutation.SetExclusionReason(v)
 	}
+	if _, ok := _c.mutation.SkipCountConsumed(); !ok {
+		v := resetrebateuseritem.DefaultSkipCountConsumed
+		_c.mutation.SetSkipCountConsumed(v)
+	}
 	if _, ok := _c.mutation.ErrorCode(); !ok {
 		v := resetrebateuseritem.DefaultErrorCode
 		_c.mutation.SetErrorCode(v)
@@ -468,6 +486,9 @@ func (_c *ResetRebateUserItemCreate) check() error {
 	}
 	if _, ok := _c.mutation.ExclusionReason(); !ok {
 		return &ValidationError{Name: "exclusion_reason", err: errors.New(`ent: missing required field "ResetRebateUserItem.exclusion_reason"`)}
+	}
+	if _, ok := _c.mutation.SkipCountConsumed(); !ok {
+		return &ValidationError{Name: "skip_count_consumed", err: errors.New(`ent: missing required field "ResetRebateUserItem.skip_count_consumed"`)}
 	}
 	if _, ok := _c.mutation.ErrorCode(); !ok {
 		return &ValidationError{Name: "error_code", err: errors.New(`ent: missing required field "ResetRebateUserItem.error_code"`)}
@@ -563,6 +584,10 @@ func (_c *ResetRebateUserItemCreate) createSpec() (*ResetRebateUserItem, *sqlgra
 	if value, ok := _c.mutation.ExclusionReason(); ok {
 		_spec.SetField(resetrebateuseritem.FieldExclusionReason, field.TypeString, value)
 		_node.ExclusionReason = value
+	}
+	if value, ok := _c.mutation.SkipCountConsumed(); ok {
+		_spec.SetField(resetrebateuseritem.FieldSkipCountConsumed, field.TypeBool, value)
+		_node.SkipCountConsumed = value
 	}
 	if value, ok := _c.mutation.ErrorCode(); ok {
 		_spec.SetField(resetrebateuseritem.FieldErrorCode, field.TypeString, value)
@@ -809,6 +834,18 @@ func (u *ResetRebateUserItemUpsert) SetExclusionReason(v string) *ResetRebateUse
 // UpdateExclusionReason sets the "exclusion_reason" field to the value that was provided on create.
 func (u *ResetRebateUserItemUpsert) UpdateExclusionReason() *ResetRebateUserItemUpsert {
 	u.SetExcluded(resetrebateuseritem.FieldExclusionReason)
+	return u
+}
+
+// SetSkipCountConsumed sets the "skip_count_consumed" field.
+func (u *ResetRebateUserItemUpsert) SetSkipCountConsumed(v bool) *ResetRebateUserItemUpsert {
+	u.Set(resetrebateuseritem.FieldSkipCountConsumed, v)
+	return u
+}
+
+// UpdateSkipCountConsumed sets the "skip_count_consumed" field to the value that was provided on create.
+func (u *ResetRebateUserItemUpsert) UpdateSkipCountConsumed() *ResetRebateUserItemUpsert {
+	u.SetExcluded(resetrebateuseritem.FieldSkipCountConsumed)
 	return u
 }
 
@@ -1186,6 +1223,20 @@ func (u *ResetRebateUserItemUpsertOne) SetExclusionReason(v string) *ResetRebate
 func (u *ResetRebateUserItemUpsertOne) UpdateExclusionReason() *ResetRebateUserItemUpsertOne {
 	return u.Update(func(s *ResetRebateUserItemUpsert) {
 		s.UpdateExclusionReason()
+	})
+}
+
+// SetSkipCountConsumed sets the "skip_count_consumed" field.
+func (u *ResetRebateUserItemUpsertOne) SetSkipCountConsumed(v bool) *ResetRebateUserItemUpsertOne {
+	return u.Update(func(s *ResetRebateUserItemUpsert) {
+		s.SetSkipCountConsumed(v)
+	})
+}
+
+// UpdateSkipCountConsumed sets the "skip_count_consumed" field to the value that was provided on create.
+func (u *ResetRebateUserItemUpsertOne) UpdateSkipCountConsumed() *ResetRebateUserItemUpsertOne {
+	return u.Update(func(s *ResetRebateUserItemUpsert) {
+		s.UpdateSkipCountConsumed()
 	})
 }
 
@@ -1754,6 +1805,20 @@ func (u *ResetRebateUserItemUpsertBulk) SetExclusionReason(v string) *ResetRebat
 func (u *ResetRebateUserItemUpsertBulk) UpdateExclusionReason() *ResetRebateUserItemUpsertBulk {
 	return u.Update(func(s *ResetRebateUserItemUpsert) {
 		s.UpdateExclusionReason()
+	})
+}
+
+// SetSkipCountConsumed sets the "skip_count_consumed" field.
+func (u *ResetRebateUserItemUpsertBulk) SetSkipCountConsumed(v bool) *ResetRebateUserItemUpsertBulk {
+	return u.Update(func(s *ResetRebateUserItemUpsert) {
+		s.SetSkipCountConsumed(v)
+	})
+}
+
+// UpdateSkipCountConsumed sets the "skip_count_consumed" field to the value that was provided on create.
+func (u *ResetRebateUserItemUpsertBulk) UpdateSkipCountConsumed() *ResetRebateUserItemUpsertBulk {
+	return u.Update(func(s *ResetRebateUserItemUpsert) {
+		s.UpdateSkipCountConsumed()
 	})
 }
 

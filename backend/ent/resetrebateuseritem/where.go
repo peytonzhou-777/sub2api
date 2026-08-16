@@ -114,6 +114,11 @@ func ExclusionReason(v string) predicate.ResetRebateUserItem {
 	return predicate.ResetRebateUserItem(sql.FieldEQ(FieldExclusionReason, v))
 }
 
+// SkipCountConsumed applies equality check predicate on the "skip_count_consumed" field. It's identical to SkipCountConsumedEQ.
+func SkipCountConsumed(v bool) predicate.ResetRebateUserItem {
+	return predicate.ResetRebateUserItem(sql.FieldEQ(FieldSkipCountConsumed, v))
+}
+
 // ErrorCode applies equality check predicate on the "error_code" field. It's identical to ErrorCodeEQ.
 func ErrorCode(v string) predicate.ResetRebateUserItem {
 	return predicate.ResetRebateUserItem(sql.FieldEQ(FieldErrorCode, v))
@@ -837,6 +842,16 @@ func ExclusionReasonEqualFold(v string) predicate.ResetRebateUserItem {
 // ExclusionReasonContainsFold applies the ContainsFold predicate on the "exclusion_reason" field.
 func ExclusionReasonContainsFold(v string) predicate.ResetRebateUserItem {
 	return predicate.ResetRebateUserItem(sql.FieldContainsFold(FieldExclusionReason, v))
+}
+
+// SkipCountConsumedEQ applies the EQ predicate on the "skip_count_consumed" field.
+func SkipCountConsumedEQ(v bool) predicate.ResetRebateUserItem {
+	return predicate.ResetRebateUserItem(sql.FieldEQ(FieldSkipCountConsumed, v))
+}
+
+// SkipCountConsumedNEQ applies the NEQ predicate on the "skip_count_consumed" field.
+func SkipCountConsumedNEQ(v bool) predicate.ResetRebateUserItem {
+	return predicate.ResetRebateUserItem(sql.FieldNEQ(FieldSkipCountConsumed, v))
 }
 
 // ErrorCodeEQ applies the EQ predicate on the "error_code" field.

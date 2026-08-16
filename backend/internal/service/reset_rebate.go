@@ -19,25 +19,26 @@ import (
 )
 
 const (
-	ResetRebateMechanismV2       = 2
-	ResetRebateDefaultPayout     = 90
-	ResetRebateDefaultReason     = "官方重置！按账号重置天数返还消耗额度！"
-	ResetRebateStatusRunning     = "running"
-	ResetRebateStatusReady       = "ready"
-	ResetRebateStatusExecuting   = "executing"
-	ResetRebateStatusNotEligible = "not_eligible"
-	ResetRebateStatusPartial     = "partial"
-	ResetRebateStatusFailed      = "failed"
-	ResetRebateStatusExecuted    = "executed"
-	ResetRebateFailureStatistics = "statistics"
-	ResetRebateFailureExecution  = "execution"
-	ResetRebateRatioAuto         = "auto"
-	ResetRebateRatioManual       = "manual"
-	resetRebateExecutionInitial  = "initial"
-	resetRebateExecutionRetry    = "retry"
-	resetRebateValidity          = 168 * time.Hour
-	resetRebateTaskTimeout       = 30 * time.Minute
-	resetRebateExecutionTimeout  = 2 * time.Hour
+	ResetRebateMechanismV2        = 2
+	ResetRebateDefaultPayout      = 90
+	ResetRebateDefaultReason      = "官方重置！按账号重置天数返还消耗额度！"
+	ResetRebateStatusRunning      = "running"
+	ResetRebateStatusReady        = "ready"
+	ResetRebateStatusExecuting    = "executing"
+	ResetRebateStatusNotEligible  = "not_eligible"
+	ResetRebateStatusPartial      = "partial"
+	ResetRebateStatusFailed       = "failed"
+	ResetRebateStatusExecuted     = "executed"
+	ResetRebateFailureStatistics  = "statistics"
+	ResetRebateFailureExecution   = "execution"
+	ResetRebateRatioAuto          = "auto"
+	ResetRebateRatioManual        = "manual"
+	ResetRebateExclusionSkipCount = "用户存在不参与重置返额计次"
+	resetRebateExecutionInitial   = "initial"
+	resetRebateExecutionRetry     = "retry"
+	resetRebateValidity           = 168 * time.Hour
+	resetRebateTaskTimeout        = 30 * time.Minute
+	resetRebateExecutionTimeout   = 2 * time.Hour
 )
 
 var resetRebateHundred = decimal.NewFromInt(100)

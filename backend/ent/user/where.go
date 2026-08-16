@@ -175,6 +175,11 @@ func RpmLimit(v int) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldRpmLimit, v))
 }
 
+// ResetRebateSkipCount applies equality check predicate on the "reset_rebate_skip_count" field. It's identical to ResetRebateSkipCountEQ.
+func ResetRebateSkipCount(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldResetRebateSkipCount, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldCreatedAt, v))
@@ -1383,6 +1388,46 @@ func RpmLimitLT(v int) predicate.User {
 // RpmLimitLTE applies the LTE predicate on the "rpm_limit" field.
 func RpmLimitLTE(v int) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldRpmLimit, v))
+}
+
+// ResetRebateSkipCountEQ applies the EQ predicate on the "reset_rebate_skip_count" field.
+func ResetRebateSkipCountEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldResetRebateSkipCount, v))
+}
+
+// ResetRebateSkipCountNEQ applies the NEQ predicate on the "reset_rebate_skip_count" field.
+func ResetRebateSkipCountNEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldResetRebateSkipCount, v))
+}
+
+// ResetRebateSkipCountIn applies the In predicate on the "reset_rebate_skip_count" field.
+func ResetRebateSkipCountIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldIn(FieldResetRebateSkipCount, vs...))
+}
+
+// ResetRebateSkipCountNotIn applies the NotIn predicate on the "reset_rebate_skip_count" field.
+func ResetRebateSkipCountNotIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldResetRebateSkipCount, vs...))
+}
+
+// ResetRebateSkipCountGT applies the GT predicate on the "reset_rebate_skip_count" field.
+func ResetRebateSkipCountGT(v int64) predicate.User {
+	return predicate.User(sql.FieldGT(FieldResetRebateSkipCount, v))
+}
+
+// ResetRebateSkipCountGTE applies the GTE predicate on the "reset_rebate_skip_count" field.
+func ResetRebateSkipCountGTE(v int64) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldResetRebateSkipCount, v))
+}
+
+// ResetRebateSkipCountLT applies the LT predicate on the "reset_rebate_skip_count" field.
+func ResetRebateSkipCountLT(v int64) predicate.User {
+	return predicate.User(sql.FieldLT(FieldResetRebateSkipCount, v))
+}
+
+// ResetRebateSkipCountLTE applies the LTE predicate on the "reset_rebate_skip_count" field.
+func ResetRebateSkipCountLTE(v int64) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldResetRebateSkipCount, v))
 }
 
 // HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.

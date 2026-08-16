@@ -434,6 +434,27 @@ func (_u *UserUpdate) AddRpmLimit(v int) *UserUpdate {
 	return _u
 }
 
+// SetResetRebateSkipCount sets the "reset_rebate_skip_count" field.
+func (_u *UserUpdate) SetResetRebateSkipCount(v int64) *UserUpdate {
+	_u.mutation.ResetResetRebateSkipCount()
+	_u.mutation.SetResetRebateSkipCount(v)
+	return _u
+}
+
+// SetNillableResetRebateSkipCount sets the "reset_rebate_skip_count" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableResetRebateSkipCount(v *int64) *UserUpdate {
+	if v != nil {
+		_u.SetResetRebateSkipCount(*v)
+	}
+	return _u
+}
+
+// AddResetRebateSkipCount adds value to the "reset_rebate_skip_count" field.
+func (_u *UserUpdate) AddResetRebateSkipCount(v int64) *UserUpdate {
+	_u.mutation.AddResetRebateSkipCount(v)
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *UserUpdate) AddAPIKeyIDs(ids ...int64) *UserUpdate {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -1053,6 +1074,11 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "signup_source", err: fmt.Errorf(`ent: validator failed for field "User.signup_source": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ResetRebateSkipCount(); ok {
+		if err := user.ResetRebateSkipCountValidator(v); err != nil {
+			return &ValidationError{Name: "reset_rebate_skip_count", err: fmt.Errorf(`ent: validator failed for field "User.reset_rebate_skip_count": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -1172,6 +1198,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRpmLimit(); ok {
 		_spec.AddField(user.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.ResetRebateSkipCount(); ok {
+		_spec.SetField(user.FieldResetRebateSkipCount, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedResetRebateSkipCount(); ok {
+		_spec.AddField(user.FieldResetRebateSkipCount, field.TypeInt64, value)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -2272,6 +2304,27 @@ func (_u *UserUpdateOne) AddRpmLimit(v int) *UserUpdateOne {
 	return _u
 }
 
+// SetResetRebateSkipCount sets the "reset_rebate_skip_count" field.
+func (_u *UserUpdateOne) SetResetRebateSkipCount(v int64) *UserUpdateOne {
+	_u.mutation.ResetResetRebateSkipCount()
+	_u.mutation.SetResetRebateSkipCount(v)
+	return _u
+}
+
+// SetNillableResetRebateSkipCount sets the "reset_rebate_skip_count" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableResetRebateSkipCount(v *int64) *UserUpdateOne {
+	if v != nil {
+		_u.SetResetRebateSkipCount(*v)
+	}
+	return _u
+}
+
+// AddResetRebateSkipCount adds value to the "reset_rebate_skip_count" field.
+func (_u *UserUpdateOne) AddResetRebateSkipCount(v int64) *UserUpdateOne {
+	_u.mutation.AddResetRebateSkipCount(v)
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *UserUpdateOne) AddAPIKeyIDs(ids ...int64) *UserUpdateOne {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -2904,6 +2957,11 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "signup_source", err: fmt.Errorf(`ent: validator failed for field "User.signup_source": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ResetRebateSkipCount(); ok {
+		if err := user.ResetRebateSkipCountValidator(v); err != nil {
+			return &ValidationError{Name: "reset_rebate_skip_count", err: fmt.Errorf(`ent: validator failed for field "User.reset_rebate_skip_count": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -3040,6 +3098,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.AddedRpmLimit(); ok {
 		_spec.AddField(user.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.ResetRebateSkipCount(); ok {
+		_spec.SetField(user.FieldResetRebateSkipCount, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedResetRebateSkipCount(); ok {
+		_spec.AddField(user.FieldResetRebateSkipCount, field.TypeInt64, value)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{

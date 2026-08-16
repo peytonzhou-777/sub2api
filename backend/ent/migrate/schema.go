@@ -2023,6 +2023,7 @@ var (
 		{Name: "actual_issued_amount", Type: field.TypeString, Default: "0", SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
 		{Name: "result", Type: field.TypeString, Size: 20, Default: "pending"},
 		{Name: "exclusion_reason", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "skip_count_consumed", Type: field.TypeBool, Default: false},
 		{Name: "error_code", Type: field.TypeString, Size: 64, Default: ""},
 		{Name: "error_message", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "attempt_count", Type: field.TypeInt, Default: 0},
@@ -2686,6 +2687,7 @@ var (
 		{Name: "balance_notify_extra_emails", Type: field.TypeString, Default: "[]", SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "total_recharged", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
 		{Name: "rpm_limit", Type: field.TypeInt, Default: 0},
+		{Name: "reset_rebate_skip_count", Type: field.TypeInt64, Default: 0},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{

@@ -190,6 +190,12 @@ type UserRepository interface {
 	DisableTotp(ctx context.Context, userID int64) error
 }
 
+// ResetRebateSkipCounter 是返额与风控之间的可选原子计次能力。
+// 单独定义而不扩展 UserRepository，避免影响仅实现用户基础读写的测试替身。
+type ResetRebateSkipCounter interface {
+	IncrementResetRebateSkipCount(ctx context.Context, userID int64) error
+}
+
 // RegistrationEmailDomainRepository 是生产用户仓储为非白名单域名单账户兜底策略提供的可选能力。
 // 它独立于 UserRepository，避免无关测试桩和服务消费者实现注册专用方法。
 type RegistrationEmailDomainRepository interface {

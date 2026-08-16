@@ -20,6 +20,19 @@ type ResetRebatePreview struct {
 	Users *ResetRebatePage[ResetRebateUserView] `json:"users"`
 }
 
+func classifyResetRebatePreviewUser(deleted bool, currentResult, currentExclusion string, expected decimal.Decimal) (string, string) {
+	if deleted {
+		return "excluded", "用户已删除，未发放"
+	}
+	if currentResult == "excluded" && currentExclusion == ResetRebateExclusionSkipCount {
+		return "excluded", ResetRebateExclusionSkipCount
+	}
+	if expected.IsZero() {
+		return "excluded", "金额过小，未发放"
+	}
+	return "pending", ""
+}
+
 // Preview 冻结发放比例、原因和递增预览版本，并重算逐用户最终金额。
 func (s *ResetRebateService) Preview(ctx context.Context, batchID int64, payoutRatio, page, pageSize int, reason, search string) (*ResetRebatePreview, error) {
 	if payoutRatio < 1 || payoutRatio > 100 {
@@ -56,19 +69,22 @@ func (s *ResetRebateService) Preview(ctx context.Context, batchID int64, payoutR
 	if status != ResetRebateStatusReady {
 		return nil, infraerrors.New(http.StatusConflict, "RESET_REBATE_NOT_PREVIEWABLE", "batch is not ready for preview")
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id,weighted_amount::text,user_deleted FROM reset_rebate_user_items WHERE batch_id=$1 ORDER BY user_id`, batchID)
+	rows, err := tx.QueryContext(ctx, `SELECT id,weighted_amount::text,user_deleted,result,exclusion_reason
+		FROM reset_rebate_user_items WHERE batch_id=$1 ORDER BY user_id`, batchID)
 	if err != nil {
 		return nil, err
 	}
 	type previewRow struct {
-		id       int64
-		weighted string
-		deleted  bool
+		id              int64
+		weighted        string
+		deleted         bool
+		result          string
+		exclusionReason string
 	}
 	values := make([]previewRow, 0)
 	for rows.Next() {
 		var value previewRow
-		if err = rows.Scan(&value.id, &value.weighted, &value.deleted); err != nil {
+		if err = rows.Scan(&value.id, &value.weighted, &value.deleted, &value.result, &value.exclusionReason); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}
@@ -88,13 +104,8 @@ func (s *ResetRebateService) Preview(ctx context.Context, batchID int64, payoutR
 			return nil, parseErr
 		}
 		expected := weighted.Mul(ratio).Div(resetRebateHundred).Truncate(8)
-		result, exclusion := "pending", ""
-		if value.deleted {
-			result, exclusion = "excluded", "用户已删除，未发放"
-			excludedCount++
-			excludedTotal = excludedTotal.Add(expected)
-		} else if expected.IsZero() {
-			result, exclusion = "excluded", "金额过小，未发放"
+		result, exclusion := classifyResetRebatePreviewUser(value.deleted, value.result, value.exclusionReason, expected)
+		if result == "excluded" {
 			excludedCount++
 			excludedTotal = excludedTotal.Add(expected)
 		} else {
@@ -473,9 +484,14 @@ func (s *ResetRebateService) recordResetRebateUserFailure(ctx context.Context, b
 }
 
 func (s *ResetRebateService) refreshExecutionSummary(ctx context.Context, batchID int64) (*ResetRebateBatchView, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
 	var succeeded, excluded, failed int
 	var successAmount, failedAmount, excludedAmount string
-	err := s.db.QueryRowContext(ctx, `SELECT
+	err = tx.QueryRowContext(ctx, `SELECT
 		COUNT(*) FILTER(WHERE result='succeeded'),COUNT(*) FILTER(WHERE result='excluded'),COUNT(*) FILTER(WHERE result='failed'),
 		COALESCE(SUM(actual_issued_amount) FILTER(WHERE result='succeeded'),0)::text,
 		COALESCE(SUM(expected_amount) FILTER(WHERE result='failed'),0)::text,
@@ -490,13 +506,32 @@ func (s *ResetRebateService) refreshExecutionSummary(ctx context.Context, batchI
 	} else if failed > 0 {
 		status, stage = ResetRebateStatusFailed, ResetRebateFailureExecution
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE reset_rebate_batches SET status=$2,failure_stage=$3,execution_mode='',
+	_, err = tx.ExecContext(ctx, `UPDATE reset_rebate_batches SET status=$2,failure_stage=$3,execution_mode='',
 		successful_user_count=$4,excluded_user_count=$5,failed_user_count=$6,
 		successful_amount=$7,failed_amount=$8,excluded_amount=$9,
 		failure_code=CASE WHEN $6>0 THEN 'RESET_REBATE_USER_FAILURES' ELSE '' END,
 		failure_message=CASE WHEN $6>0 THEN '部分用户发放失败，请查看失败名单' ELSE '' END,updated_at=NOW() WHERE id=$1`,
 		batchID, status, stage, succeeded, excluded, failed, successAmount, failedAmount, excludedAmount)
 	if err != nil {
+		return nil, err
+	}
+	// 仅在批次进入终态时消费一次用户排除计次；快照标记保证重试或恢复不会重复扣减。
+	if _, err = tx.ExecContext(ctx, `UPDATE users AS app_user
+		SET reset_rebate_skip_count=GREATEST(app_user.reset_rebate_skip_count-1, 0), updated_at=NOW()
+		WHERE app_user.id IN (
+			SELECT item.user_id FROM reset_rebate_user_items AS item
+			WHERE item.batch_id=$1 AND item.result='excluded'
+			  AND item.exclusion_reason=$2 AND item.skip_count_consumed=FALSE
+		)`, batchID, ResetRebateExclusionSkipCount); err != nil {
+		return nil, err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE reset_rebate_user_items
+		SET skip_count_consumed=TRUE, updated_at=NOW()
+		WHERE batch_id=$1 AND result='excluded'
+		  AND exclusion_reason=$2 AND skip_count_consumed=FALSE`, batchID, ResetRebateExclusionSkipCount); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 	return s.GetBatch(ctx, batchID)

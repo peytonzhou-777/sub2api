@@ -57598,6 +57598,7 @@ type ResetRebateUserItemMutation struct {
 	actual_issued_amount *string
 	result               *string
 	exclusion_reason     *string
+	skip_count_consumed  *bool
 	error_code           *string
 	error_message        *string
 	attempt_count        *int
@@ -58186,6 +58187,42 @@ func (m *ResetRebateUserItemMutation) ResetExclusionReason() {
 	m.exclusion_reason = nil
 }
 
+// SetSkipCountConsumed sets the "skip_count_consumed" field.
+func (m *ResetRebateUserItemMutation) SetSkipCountConsumed(b bool) {
+	m.skip_count_consumed = &b
+}
+
+// SkipCountConsumed returns the value of the "skip_count_consumed" field in the mutation.
+func (m *ResetRebateUserItemMutation) SkipCountConsumed() (r bool, exists bool) {
+	v := m.skip_count_consumed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSkipCountConsumed returns the old "skip_count_consumed" field's value of the ResetRebateUserItem entity.
+// If the ResetRebateUserItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateUserItemMutation) OldSkipCountConsumed(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSkipCountConsumed is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSkipCountConsumed requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSkipCountConsumed: %w", err)
+	}
+	return oldValue.SkipCountConsumed, nil
+}
+
+// ResetSkipCountConsumed resets all changes to the "skip_count_consumed" field.
+func (m *ResetRebateUserItemMutation) ResetSkipCountConsumed() {
+	m.skip_count_consumed = nil
+}
+
 // SetErrorCode sets the "error_code" field.
 func (m *ResetRebateUserItemMutation) SetErrorCode(s string) {
 	m.error_code = &s
@@ -58686,7 +58723,7 @@ func (m *ResetRebateUserItemMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ResetRebateUserItemMutation) Fields() []string {
-	fields := make([]string, 0, 22)
+	fields := make([]string, 0, 23)
 	if m.batch_id != nil {
 		fields = append(fields, resetrebateuseritem.FieldBatchID)
 	}
@@ -58722,6 +58759,9 @@ func (m *ResetRebateUserItemMutation) Fields() []string {
 	}
 	if m.exclusion_reason != nil {
 		fields = append(fields, resetrebateuseritem.FieldExclusionReason)
+	}
+	if m.skip_count_consumed != nil {
+		fields = append(fields, resetrebateuseritem.FieldSkipCountConsumed)
 	}
 	if m.error_code != nil {
 		fields = append(fields, resetrebateuseritem.FieldErrorCode)
@@ -58785,6 +58825,8 @@ func (m *ResetRebateUserItemMutation) Field(name string) (ent.Value, bool) {
 		return m.Result()
 	case resetrebateuseritem.FieldExclusionReason:
 		return m.ExclusionReason()
+	case resetrebateuseritem.FieldSkipCountConsumed:
+		return m.SkipCountConsumed()
 	case resetrebateuseritem.FieldErrorCode:
 		return m.ErrorCode()
 	case resetrebateuseritem.FieldErrorMessage:
@@ -58838,6 +58880,8 @@ func (m *ResetRebateUserItemMutation) OldField(ctx context.Context, name string)
 		return m.OldResult(ctx)
 	case resetrebateuseritem.FieldExclusionReason:
 		return m.OldExclusionReason(ctx)
+	case resetrebateuseritem.FieldSkipCountConsumed:
+		return m.OldSkipCountConsumed(ctx)
 	case resetrebateuseritem.FieldErrorCode:
 		return m.OldErrorCode(ctx)
 	case resetrebateuseritem.FieldErrorMessage:
@@ -58950,6 +58994,13 @@ func (m *ResetRebateUserItemMutation) SetField(name string, value ent.Value) err
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetExclusionReason(v)
+		return nil
+	case resetrebateuseritem.FieldSkipCountConsumed:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSkipCountConsumed(v)
 		return nil
 	case resetrebateuseritem.FieldErrorCode:
 		v, ok := value.(string)
@@ -59189,6 +59240,9 @@ func (m *ResetRebateUserItemMutation) ResetField(name string) error {
 		return nil
 	case resetrebateuseritem.FieldExclusionReason:
 		m.ResetExclusionReason()
+		return nil
+	case resetrebateuseritem.FieldSkipCountConsumed:
+		m.ResetSkipCountConsumed()
 		return nil
 	case resetrebateuseritem.FieldErrorCode:
 		m.ResetErrorCode()
@@ -79069,6 +79123,8 @@ type UserMutation struct {
 	addtotal_recharged                   *float64
 	rpm_limit                            *int
 	addrpm_limit                         *int
+	reset_rebate_skip_count              *int64
+	addreset_rebate_skip_count           *int64
 	clearedFields                        map[string]struct{}
 	api_keys                             map[int64]struct{}
 	removedapi_keys                      map[int64]struct{}
@@ -80281,6 +80337,62 @@ func (m *UserMutation) ResetRpmLimit() {
 	m.addrpm_limit = nil
 }
 
+// SetResetRebateSkipCount sets the "reset_rebate_skip_count" field.
+func (m *UserMutation) SetResetRebateSkipCount(i int64) {
+	m.reset_rebate_skip_count = &i
+	m.addreset_rebate_skip_count = nil
+}
+
+// ResetRebateSkipCount returns the value of the "reset_rebate_skip_count" field in the mutation.
+func (m *UserMutation) ResetRebateSkipCount() (r int64, exists bool) {
+	v := m.reset_rebate_skip_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResetRebateSkipCount returns the old "reset_rebate_skip_count" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldResetRebateSkipCount(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResetRebateSkipCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResetRebateSkipCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResetRebateSkipCount: %w", err)
+	}
+	return oldValue.ResetRebateSkipCount, nil
+}
+
+// AddResetRebateSkipCount adds i to the "reset_rebate_skip_count" field.
+func (m *UserMutation) AddResetRebateSkipCount(i int64) {
+	if m.addreset_rebate_skip_count != nil {
+		*m.addreset_rebate_skip_count += i
+	} else {
+		m.addreset_rebate_skip_count = &i
+	}
+}
+
+// AddedResetRebateSkipCount returns the value that was added to the "reset_rebate_skip_count" field in this mutation.
+func (m *UserMutation) AddedResetRebateSkipCount() (r int64, exists bool) {
+	v := m.addreset_rebate_skip_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetResetRebateSkipCount resets all changes to the "reset_rebate_skip_count" field.
+func (m *UserMutation) ResetResetRebateSkipCount() {
+	m.reset_rebate_skip_count = nil
+	m.addreset_rebate_skip_count = nil
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *UserMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -81125,7 +81237,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 25)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -81198,6 +81310,9 @@ func (m *UserMutation) Fields() []string {
 	if m.rpm_limit != nil {
 		fields = append(fields, user.FieldRpmLimit)
 	}
+	if m.reset_rebate_skip_count != nil {
+		fields = append(fields, user.FieldResetRebateSkipCount)
+	}
 	return fields
 }
 
@@ -81254,6 +81369,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.TotalRecharged()
 	case user.FieldRpmLimit:
 		return m.RpmLimit()
+	case user.FieldResetRebateSkipCount:
+		return m.ResetRebateSkipCount()
 	}
 	return nil, false
 }
@@ -81311,6 +81428,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldTotalRecharged(ctx)
 	case user.FieldRpmLimit:
 		return m.OldRpmLimit(ctx)
+	case user.FieldResetRebateSkipCount:
+		return m.OldResetRebateSkipCount(ctx)
 	}
 	return nil, fmt.Errorf("unknown User field %s", name)
 }
@@ -81488,6 +81607,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRpmLimit(v)
 		return nil
+	case user.FieldResetRebateSkipCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResetRebateSkipCount(v)
+		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)
 }
@@ -81514,6 +81640,9 @@ func (m *UserMutation) AddedFields() []string {
 	if m.addrpm_limit != nil {
 		fields = append(fields, user.FieldRpmLimit)
 	}
+	if m.addreset_rebate_skip_count != nil {
+		fields = append(fields, user.FieldResetRebateSkipCount)
+	}
 	return fields
 }
 
@@ -81534,6 +81663,8 @@ func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedTotalRecharged()
 	case user.FieldRpmLimit:
 		return m.AddedRpmLimit()
+	case user.FieldResetRebateSkipCount:
+		return m.AddedResetRebateSkipCount()
 	}
 	return nil, false
 }
@@ -81584,6 +81715,13 @@ func (m *UserMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRpmLimit(v)
+		return nil
+	case user.FieldResetRebateSkipCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddResetRebateSkipCount(v)
 		return nil
 	}
 	return fmt.Errorf("unknown User numeric field %s", name)
@@ -81722,6 +81860,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldRpmLimit:
 		m.ResetRpmLimit()
+		return nil
+	case user.FieldResetRebateSkipCount:
+		m.ResetResetRebateSkipCount()
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)

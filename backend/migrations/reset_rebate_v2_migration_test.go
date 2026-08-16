@@ -23,3 +23,12 @@ func TestMigration196AddsAccountResetRebateV2(t *testing.T) {
 	require.NotContains(t, sql, "available_count")
 	require.NotContains(t, sql, "suggested_ratio")
 }
+
+func TestMigration228AddsUserResetRebateSkipCount(t *testing.T) {
+	content, err := FS.ReadFile("228_reset_rebate_user_skip_count.sql")
+	require.NoError(t, err)
+	sql := string(content)
+	require.Contains(t, sql, "reset_rebate_skip_count BIGINT NOT NULL DEFAULT 0")
+	require.Contains(t, sql, "users_reset_rebate_skip_count_nonnegative")
+	require.Contains(t, sql, "skip_count_consumed BOOLEAN NOT NULL DEFAULT FALSE")
+}

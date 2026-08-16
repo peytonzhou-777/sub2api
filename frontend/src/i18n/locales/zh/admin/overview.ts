@@ -508,6 +508,7 @@ export default {
         balance: '余额',
         permanentBalance: '永久额度',
         limitedBalance: '限时额度',
+        resetRebateSkipCount: '返额排除计次',
         balancePlatformQuota: '余额(平台配额)',
         usage: '用量',
         usageAnthropic: '用量 (Claude)',

@@ -73,6 +73,7 @@ func UserFromServiceAdmin(u *service.User) *AdminUser {
 		LastUsedAt:             u.LastUsedAt,
 		LimitedRemainingAmount: u.LimitedRemainingAmount,
 		GroupRates:             u.GroupRates,
+		ResetRebateSkipCount:   u.ResetRebateSkipCount,
 	}
 }
 

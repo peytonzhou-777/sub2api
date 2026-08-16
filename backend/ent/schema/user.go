@@ -115,6 +115,11 @@ func (User) Fields() []ent.Field {
 		// 用户级每分钟请求数上限（0 = 不限制）。仅当所在分组未设置 rpm_limit 时作为兜底生效。
 		field.Int("rpm_limit").
 			Default(0),
+
+		// 官方 Cyber 告警触发后，用户后续若干次重置返额会被排除。
+		field.Int64("reset_rebate_skip_count").
+			Default(0).
+			Min(0),
 	}
 }
 
