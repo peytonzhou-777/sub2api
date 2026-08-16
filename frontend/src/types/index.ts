@@ -606,6 +606,7 @@ export interface Group {
   messages_dispatch_model_config?: OpenAIMessagesDispatchModelConfig
   require_oauth_only: boolean
   require_privacy_set: boolean
+  security_deposit_base_required_cents: number
   created_at: string
   updated_at: string
 }
@@ -710,7 +711,14 @@ export interface ApiKey {
   key: string
   name: string
   group_id: number | null
-  status: 'active' | 'inactive' | 'quota_exhausted' | 'expired'
+  status: 'active' | 'disabled' | 'inactive' | 'quota_exhausted' | 'expired' | 'security_locked'
+  security_locked_at?: string | null
+  security_lock_violation_id?: number | null
+  security_lock_reason?: string | null
+  disabled_reason?: string | null
+  disabled_financial_event_type?: string | null
+  disabled_financial_event_id?: number | null
+  disabled_at?: string | null
   ip_whitelist: string[]
   ip_blacklist: string[]
   last_used_at: string | null

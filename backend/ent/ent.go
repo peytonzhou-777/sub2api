@@ -52,6 +52,14 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseraccountitem"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuserattempt"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseritem"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositaccount"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositagreement"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositledger"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositlot"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositrefund"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositriskevent"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositriskprofile"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositviolation"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -167,6 +175,14 @@ func checkColumn(t, c string) error {
 			resetrebateuseraccountitem.Table:    resetrebateuseraccountitem.ValidColumn,
 			resetrebateuserattempt.Table:        resetrebateuserattempt.ValidColumn,
 			resetrebateuseritem.Table:           resetrebateuseritem.ValidColumn,
+			securitydepositaccount.Table:        securitydepositaccount.ValidColumn,
+			securitydepositagreement.Table:      securitydepositagreement.ValidColumn,
+			securitydepositledger.Table:         securitydepositledger.ValidColumn,
+			securitydepositlot.Table:            securitydepositlot.ValidColumn,
+			securitydepositrefund.Table:         securitydepositrefund.ValidColumn,
+			securitydepositriskevent.Table:      securitydepositriskevent.ValidColumn,
+			securitydepositriskprofile.Table:    securitydepositriskprofile.ValidColumn,
+			securitydepositviolation.Table:      securitydepositviolation.ValidColumn,
 			securitysecret.Table:                securitysecret.ValidColumn,
 			setting.Table:                       setting.ValidColumn,
 			subscriptionplan.Table:              subscriptionplan.ValidColumn,

@@ -40,10 +40,11 @@ const (
 	OrderStatusRefundFailed      = "REFUND_FAILED"
 )
 
-// Order types distinguish balance recharges from subscription purchases.
+// Order types distinguish each independent payment fulfillment path.
 const (
-	OrderTypeBalance      = "balance"
-	OrderTypeSubscription = "subscription"
+	OrderTypeBalance         = "balance"
+	OrderTypeSubscription    = "subscription"
+	OrderTypeSecurityDeposit = "security_deposit"
 )
 
 // Entity statuses shared across users, groups, etc.

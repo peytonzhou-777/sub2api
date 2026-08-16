@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
@@ -247,6 +248,33 @@ func TestAdminService_ListGroups_PassesSortParams(t *testing.T) {
 		SortBy:    "account_count",
 		SortOrder: "ASC",
 	}, repo.listWithFiltersParams)
+}
+
+func TestAdminService_CreateGroup_PersistsSecurityDepositThreshold(t *testing.T) {
+	repo := &groupRepoStubForAdmin{}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+		Name: "deposit-group", RateMultiplier: 1, SecurityDepositBaseRequiredCents: 10000,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(10000), group.SecurityDepositBaseRequiredCents)
+	require.Equal(t, int64(10000), repo.created.SecurityDepositBaseRequiredCents)
+}
+
+func TestAdminService_UpdateGroup_RejectsNegativeSecurityDepositThreshold(t *testing.T) {
+	repo := &groupRepoStubForAdmin{getByID: &Group{
+		ID: 7, Name: "deposit-group", Platform: PlatformAnthropic, RateMultiplier: 1,
+		Status: StatusActive, SecurityDepositBaseRequiredCents: 10000,
+	}}
+	svc := &adminServiceImpl{groupRepo: repo}
+	invalid := int64(-1)
+
+	_, err := svc.UpdateGroup(context.Background(), 7, &UpdateGroupInput{
+		SecurityDepositBaseRequiredCents: &invalid,
+	})
+	require.Equal(t, "INVALID_SECURITY_DEPOSIT_THRESHOLD", infraerrors.Reason(err))
+	require.Nil(t, repo.updated)
 }
 
 // TestAdminService_CreateGroup_WithImagePricing 测试创建分组时 ImagePrice 字段正确传递

@@ -47,6 +47,7 @@ func ProvideAdminHandlers(
 	auditLogHandler *admin.AuditLogHandler,
 	resetRebateHandler *admin.ResetRebateHandler,
 	recurringCreditHandler *admin.RecurringCreditHandler,
+	securityDepositHandler *admin.SecurityDepositHandler,
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
 	ollamaCloudUsage *service.OllamaCloudUsageService,
 ) *AdminHandlers {
@@ -89,6 +90,7 @@ func ProvideAdminHandlers(
 		AuditLog:               auditLogHandler,
 		ResetRebate:            resetRebateHandler,
 		RecurringCredit:        recurringCreditHandler,
+		SecurityDeposit:        securityDepositHandler,
 	}
 }
 
@@ -127,6 +129,7 @@ func ProvideOpenAIGatewayHandler(
 	contentModerationService *service.ContentModerationService,
 	opsService *service.OpsService,
 	grokQuotaService *service.GrokQuotaService,
+	securityDepositService *service.SecurityDepositService,
 	cfg *config.Config,
 	coordinator *securityaudit.Coordinator,
 ) *OpenAIGatewayHandler {
@@ -134,6 +137,7 @@ func ProvideOpenAIGatewayHandler(
 		usageRecordWorkerPool, errorPassthroughService, contentModerationService, opsService, cfg)
 	h.securityAuditCoordinator = coordinator
 	h.grokMediaEligibilityProber = grokQuotaService
+	h.securityDepositService = securityDepositService
 	return h
 }
 
@@ -194,6 +198,7 @@ func ProvideHandlers(
 	modelPlazaHandler *ModelPlazaHandler,
 	asyncImageHandler *AsyncImageHandler,
 	batchImageHandler *BatchImageHandler,
+	securityDepositHandler *SecurityDepositHandler,
 	_ *service.IdempotencyCoordinator,
 	_ *service.IdempotencyCleanupService,
 ) *Handlers {
@@ -221,6 +226,7 @@ func ProvideHandlers(
 		ModelPlaza:       modelPlazaHandler,
 		AsyncImage:       asyncImageHandler,
 		BatchImage:       batchImageHandler,
+		SecurityDeposit:  securityDepositHandler,
 	}
 }
 
@@ -249,6 +255,7 @@ var ProviderSet = wire.NewSet(
 	NewModelPlazaHandler,
 	NewAsyncImageHandler,
 	ProvideBatchImageHandler,
+	NewSecurityDepositHandler,
 
 	// Admin handlers
 	admin.NewDashboardHandler,
@@ -286,6 +293,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewAuditLogHandler,
 	admin.NewResetRebateHandler,
 	admin.NewRecurringCreditHandler,
+	admin.NewSecurityDepositHandler,
 
 	// AdminHandlers and Handlers constructors
 	ProvideAdminHandlers,

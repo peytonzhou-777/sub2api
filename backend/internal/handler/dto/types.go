@@ -53,21 +53,28 @@ type AdminUser struct {
 }
 
 type APIKey struct {
-	ID          int64      `json:"id"`
-	UserID      int64      `json:"user_id"`
-	Key         string     `json:"key"`
-	Name        string     `json:"name"`
-	GroupID     *int64     `json:"group_id"`
-	Status      string     `json:"status"`
-	IPWhitelist []string   `json:"ip_whitelist"`
-	IPBlacklist []string   `json:"ip_blacklist"`
-	LastUsedAt  *time.Time `json:"last_used_at"`
-	LastUsedIP  *string    `json:"last_used_ip"`
-	Quota       float64    `json:"quota"`      // Quota limit in USD (0 = unlimited)
-	QuotaUsed   float64    `json:"quota_used"` // Used quota amount in USD
-	ExpiresAt   *time.Time `json:"expires_at"` // Expiration time (nil = never expires)
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID                         int64      `json:"id"`
+	UserID                     int64      `json:"user_id"`
+	Key                        string     `json:"key"`
+	Name                       string     `json:"name"`
+	GroupID                    *int64     `json:"group_id"`
+	Status                     string     `json:"status"`
+	SecurityLockedAt           *time.Time `json:"security_locked_at,omitempty"`
+	SecurityLockViolationID    *int64     `json:"security_lock_violation_id,omitempty"`
+	SecurityLockReason         *string    `json:"security_lock_reason,omitempty"`
+	DisabledReason             *string    `json:"disabled_reason,omitempty"`
+	DisabledFinancialEventType *string    `json:"disabled_financial_event_type,omitempty"`
+	DisabledFinancialEventID   *int64     `json:"disabled_financial_event_id,omitempty"`
+	DisabledAt                 *time.Time `json:"disabled_at,omitempty"`
+	IPWhitelist                []string   `json:"ip_whitelist"`
+	IPBlacklist                []string   `json:"ip_blacklist"`
+	LastUsedAt                 *time.Time `json:"last_used_at"`
+	LastUsedIP                 *string    `json:"last_used_ip"`
+	Quota                      float64    `json:"quota"`      // Quota limit in USD (0 = unlimited)
+	QuotaUsed                  float64    `json:"quota_used"` // Used quota amount in USD
+	ExpiresAt                  *time.Time `json:"expires_at"` // Expiration time (nil = never expires)
+	CreatedAt                  time.Time  `json:"created_at"`
+	UpdatedAt                  time.Time  `json:"updated_at"`
 	// CurrentConcurrency is the real-time active request count for this API key.
 	CurrentConcurrency int `json:"current_concurrency"`
 
@@ -150,6 +157,8 @@ type Group struct {
 
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制），设置后覆盖用户级 rpm_limit。
 	RPMLimit int `json:"rpm_limit"`
+	// SecurityDepositBaseRequiredCents 用户侧仅需基础门槛，不下发内部协议覆盖配置。
+	SecurityDepositBaseRequiredCents int64 `json:"security_deposit_base_required_cents"`
 	// MaxReasoningEffort OpenAI/Codex 请求的推理强度上限，空字符串表示不限制。
 	MaxReasoningEffort string `json:"max_reasoning_effort"`
 	// ReasoningEffortMappings OpenAI/Codex 推理强度精确映射。

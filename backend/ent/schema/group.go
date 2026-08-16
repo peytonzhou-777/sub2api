@@ -68,6 +68,14 @@ func (Group) Fields() []ent.Field {
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),
+		field.Int64("security_deposit_base_required_cents").
+			Default(0).
+			Min(0).
+			Comment("网络安全保证金基础门槛，单位为人民币分；0 表示不启用"),
+		field.String("security_deposit_policy_version").
+			MaxLen(64).
+			Default("").
+			Comment("分组保证金协议版本；空字符串表示使用全局当前版本"),
 		field.String("duplicate_operation_id").
 			MaxLen(64).
 			Optional().

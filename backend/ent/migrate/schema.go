@@ -18,6 +18,13 @@ var (
 		{Name: "key", Type: field.TypeString, Unique: true, Size: 128},
 		{Name: "name", Type: field.TypeString, Size: 100},
 		{Name: "status", Type: field.TypeString, Size: 20, Default: "active"},
+		{Name: "security_locked_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "security_lock_violation_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "security_lock_reason", Type: field.TypeString, Nullable: true, Size: 64},
+		{Name: "disabled_reason", Type: field.TypeString, Nullable: true, Size: 64},
+		{Name: "disabled_financial_event_type", Type: field.TypeString, Nullable: true, Size: 32},
+		{Name: "disabled_financial_event_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "disabled_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
 		{Name: "ip_whitelist", Type: field.TypeJSON, Nullable: true},
 		{Name: "ip_blacklist", Type: field.TypeJSON, Nullable: true},
@@ -44,13 +51,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "api_keys_groups_api_keys",
-				Columns:    []*schema.Column{APIKeysColumns[22]},
+				Columns:    []*schema.Column{APIKeysColumns[29]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "api_keys_users_api_keys",
-				Columns:    []*schema.Column{APIKeysColumns[23]},
+				Columns:    []*schema.Column{APIKeysColumns[30]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -59,12 +66,12 @@ var (
 			{
 				Name:    "apikey_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[23]},
+				Columns: []*schema.Column{APIKeysColumns[30]},
 			},
 			{
 				Name:    "apikey_group_id",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[22]},
+				Columns: []*schema.Column{APIKeysColumns[29]},
 			},
 			{
 				Name:    "apikey_status",
@@ -79,17 +86,27 @@ var (
 			{
 				Name:    "apikey_last_used_at",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[7]},
+				Columns: []*schema.Column{APIKeysColumns[14]},
 			},
 			{
 				Name:    "apikey_quota_quota_used",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[10], APIKeysColumns[11]},
+				Columns: []*schema.Column{APIKeysColumns[17], APIKeysColumns[18]},
 			},
 			{
 				Name:    "apikey_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[12]},
+				Columns: []*schema.Column{APIKeysColumns[19]},
+			},
+			{
+				Name:    "apikey_security_lock_violation_id",
+				Unique:  false,
+				Columns: []*schema.Column{APIKeysColumns[8]},
+			},
+			{
+				Name:    "apikey_disabled_financial_event_type_disabled_financial_event_id",
+				Unique:  false,
+				Columns: []*schema.Column{APIKeysColumns[11], APIKeysColumns[12]},
 			},
 		},
 	}
@@ -960,6 +977,8 @@ var (
 		{Name: "peak_rate_multiplier", Type: field.TypeFloat64, Default: 1, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
 		{Name: "is_exclusive", Type: field.TypeBool, Default: false},
 		{Name: "status", Type: field.TypeString, Size: 20, Default: "active"},
+		{Name: "security_deposit_base_required_cents", Type: field.TypeInt64, Default: 0},
+		{Name: "security_deposit_policy_version", Type: field.TypeString, Size: 64, Default: ""},
 		{Name: "duplicate_operation_id", Type: field.TypeString, Nullable: true, Size: 64},
 		{Name: "platform", Type: field.TypeString, Size: 50, Default: "anthropic"},
 		{Name: "subscription_type", Type: field.TypeString, Size: 20, Default: "standard"},
@@ -1025,12 +1044,12 @@ var (
 			{
 				Name:    "group_platform",
 				Unique:  false,
-				Columns: []*schema.Column{GroupsColumns[14]},
+				Columns: []*schema.Column{GroupsColumns[16]},
 			},
 			{
 				Name:    "group_subscription_type",
 				Unique:  false,
-				Columns: []*schema.Column{GroupsColumns[15]},
+				Columns: []*schema.Column{GroupsColumns[17]},
 			},
 			{
 				Name:    "group_is_exclusive",
@@ -1045,12 +1064,12 @@ var (
 			{
 				Name:    "group_sort_order",
 				Unique:  false,
-				Columns: []*schema.Column{GroupsColumns[49]},
+				Columns: []*schema.Column{GroupsColumns[51]},
 			},
 			{
 				Name:    "idx_groups_duplicate_operation_id_active",
 				Unique:  true,
-				Columns: []*schema.Column{GroupsColumns[13]},
+				Columns: []*schema.Column{GroupsColumns[15]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "duplicate_operation_id IS NOT NULL AND deleted_at IS NULL",
 				},
@@ -2033,6 +2052,332 @@ var (
 			},
 		},
 	}
+	// SecurityDepositAccountsColumns holds the columns for the "security_deposit_accounts" table.
+	SecurityDepositAccountsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "bucket_type", Type: field.TypeEnum, Enums: []string{"paid", "admin_grant"}},
+		{Name: "currency", Type: field.TypeString, Size: 3, Default: "CNY"},
+		{Name: "balance_cents", Type: field.TypeInt64, Default: 0},
+		{Name: "refund_reserved_cents", Type: field.TypeInt64, Default: 0},
+		{Name: "version", Type: field.TypeInt64, Default: 1},
+	}
+	// SecurityDepositAccountsTable holds the schema information for the "security_deposit_accounts" table.
+	SecurityDepositAccountsTable = &schema.Table{
+		Name:       "security_deposit_accounts",
+		Columns:    SecurityDepositAccountsColumns,
+		PrimaryKey: []*schema.Column{SecurityDepositAccountsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "securitydepositaccount_user_id_bucket_type",
+				Unique:  true,
+				Columns: []*schema.Column{SecurityDepositAccountsColumns[3], SecurityDepositAccountsColumns[4]},
+			},
+			{
+				Name:    "securitydepositaccount_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositAccountsColumns[3]},
+			},
+		},
+	}
+	// SecurityDepositAgreementsColumns holds the columns for the "security_deposit_agreements" table.
+	SecurityDepositAgreementsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "policy_version", Type: field.TypeString, Size: 64},
+		{Name: "content_hash", Type: field.TypeString, Size: 128},
+		{Name: "group_id", Type: field.TypeInt64},
+		{Name: "base_required_snapshot_cents", Type: field.TypeInt64},
+		{Name: "risk_multiplier_snapshot", Type: field.TypeInt64},
+		{Name: "required_snapshot_cents", Type: field.TypeInt64},
+		{Name: "accepted_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "client_ip", Type: field.TypeString, Size: 64},
+		{Name: "user_agent", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+	}
+	// SecurityDepositAgreementsTable holds the schema information for the "security_deposit_agreements" table.
+	SecurityDepositAgreementsTable = &schema.Table{
+		Name:       "security_deposit_agreements",
+		Columns:    SecurityDepositAgreementsColumns,
+		PrimaryKey: []*schema.Column{SecurityDepositAgreementsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "securitydepositagreement_user_id_group_id_policy_version_content_hash",
+				Unique:  true,
+				Columns: []*schema.Column{SecurityDepositAgreementsColumns[1], SecurityDepositAgreementsColumns[4], SecurityDepositAgreementsColumns[2], SecurityDepositAgreementsColumns[3]},
+			},
+			{
+				Name:    "securitydepositagreement_user_id_accepted_at",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositAgreementsColumns[1], SecurityDepositAgreementsColumns[8]},
+			},
+		},
+	}
+	// SecurityDepositLedgerColumns holds the columns for the "security_deposit_ledger" table.
+	SecurityDepositLedgerColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "lot_id", Type: field.TypeInt64},
+		{Name: "bucket_type", Type: field.TypeEnum, Enums: []string{"paid", "admin_grant"}},
+		{Name: "entry_type", Type: field.TypeEnum, Enums: []string{"payment_credit", "admin_add", "compensation", "forfeit", "refund_reserve", "refund_release", "refund_success", "admin_deduct", "admin_revoke"}},
+		{Name: "delta_cents", Type: field.TypeInt64, Default: 0},
+		{Name: "reserved_delta_cents", Type: field.TypeInt64, Default: 0},
+		{Name: "bucket_balance_after_cents", Type: field.TypeInt64},
+		{Name: "bucket_reserved_after_cents", Type: field.TypeInt64},
+		{Name: "group_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "api_key_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "violation_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "refund_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "payment_order_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "operator_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "reason", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "idempotency_key", Type: field.TypeString, Unique: true, Size: 191},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// SecurityDepositLedgerTable holds the schema information for the "security_deposit_ledger" table.
+	SecurityDepositLedgerTable = &schema.Table{
+		Name:       "security_deposit_ledger",
+		Columns:    SecurityDepositLedgerColumns,
+		PrimaryKey: []*schema.Column{SecurityDepositLedgerColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "securitydepositledger_user_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositLedgerColumns[1], SecurityDepositLedgerColumns[17]},
+			},
+			{
+				Name:    "securitydepositledger_lot_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositLedgerColumns[2], SecurityDepositLedgerColumns[17]},
+			},
+			{
+				Name:    "securitydepositledger_violation_id",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositLedgerColumns[11]},
+			},
+			{
+				Name:    "securitydepositledger_refund_id",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositLedgerColumns[12]},
+			},
+		},
+	}
+	// SecurityDepositLotsColumns holds the columns for the "security_deposit_lots" table.
+	SecurityDepositLotsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "bucket_type", Type: field.TypeEnum, Enums: []string{"paid", "admin_grant"}},
+		{Name: "source_type", Type: field.TypeEnum, Enums: []string{"payment", "admin", "compensation"}},
+		{Name: "payment_order_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "original_cents", Type: field.TypeInt64},
+		{Name: "remaining_cents", Type: field.TypeInt64},
+		{Name: "refund_reserved_cents", Type: field.TypeInt64, Default: 0},
+		{Name: "forfeited_cents", Type: field.TypeInt64, Default: 0},
+		{Name: "refunded_cents", Type: field.TypeInt64, Default: 0},
+		{Name: "admin_deducted_cents", Type: field.TypeInt64, Default: 0},
+		{Name: "revoked_cents", Type: field.TypeInt64, Default: 0},
+		{Name: "currency", Type: field.TypeString, Size: 3, Default: "CNY"},
+		{Name: "locked_until", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "refund_policy", Type: field.TypeEnum, Enums: []string{"timed_original_channel", "never"}},
+		{Name: "status", Type: field.TypeString, Size: 32, Default: "active"},
+		{Name: "source_reference", Type: field.TypeString, Nullable: true, Size: 191},
+		{Name: "notes", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// SecurityDepositLotsTable holds the schema information for the "security_deposit_lots" table.
+	SecurityDepositLotsTable = &schema.Table{
+		Name:       "security_deposit_lots",
+		Columns:    SecurityDepositLotsColumns,
+		PrimaryKey: []*schema.Column{SecurityDepositLotsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "securitydepositlot_payment_order_id",
+				Unique:  true,
+				Columns: []*schema.Column{SecurityDepositLotsColumns[6]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "payment_order_id IS NOT NULL",
+				},
+			},
+			{
+				Name:    "securitydepositlot_user_id_bucket_type_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositLotsColumns[3], SecurityDepositLotsColumns[4], SecurityDepositLotsColumns[1]},
+			},
+			{
+				Name:    "securitydepositlot_user_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositLotsColumns[3], SecurityDepositLotsColumns[17]},
+			},
+		},
+	}
+	// SecurityDepositRefundsColumns holds the columns for the "security_deposit_refunds" table.
+	SecurityDepositRefundsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "refund_id", Type: field.TypeString, Unique: true, Size: 64},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "lot_id", Type: field.TypeInt64},
+		{Name: "payment_order_id", Type: field.TypeInt64},
+		{Name: "principal_cents", Type: field.TypeInt64},
+		{Name: "gateway_amount", Type: field.TypeString, Size: 64},
+		{Name: "gateway_currency", Type: field.TypeString, Size: 3, Default: "CNY"},
+		{Name: "mode", Type: field.TypeEnum, Enums: []string{"automatic_original_channel", "manual_external"}},
+		{Name: "state", Type: field.TypeString, Size: 32},
+		{Name: "requested_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "reason", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "quote_hash", Type: field.TypeString, Size: 128},
+		{Name: "idempotency_key", Type: field.TypeString, Unique: true, Size: 191},
+		{Name: "provider_request_id", Type: field.TypeString, Nullable: true, Size: 191},
+		{Name: "provider_response_snapshot", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "external_refund_id", Type: field.TypeString, Nullable: true, Size: 191},
+		{Name: "external_refunded_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "external_evidence", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "submitted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "completed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// SecurityDepositRefundsTable holds the schema information for the "security_deposit_refunds" table.
+	SecurityDepositRefundsTable = &schema.Table{
+		Name:       "security_deposit_refunds",
+		Columns:    SecurityDepositRefundsColumns,
+		PrimaryKey: []*schema.Column{SecurityDepositRefundsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "securitydepositrefund_user_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositRefundsColumns[2], SecurityDepositRefundsColumns[19]},
+			},
+			{
+				Name:    "securitydepositrefund_lot_id_state",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositRefundsColumns[3], SecurityDepositRefundsColumns[9]},
+			},
+			{
+				Name:    "securitydepositrefund_payment_order_id",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositRefundsColumns[4]},
+			},
+			{
+				Name:    "securitydepositrefund_external_refund_id",
+				Unique:  true,
+				Columns: []*schema.Column{SecurityDepositRefundsColumns[16]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "external_refund_id IS NOT NULL",
+				},
+			},
+		},
+	}
+	// SecurityDepositRiskEventsColumns holds the columns for the "security_deposit_risk_events" table.
+	SecurityDepositRiskEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "event_type", Type: field.TypeEnum, Enums: []string{"cyber_escalation", "admin_adjustment"}},
+		{Name: "violation_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "strike_count_before", Type: field.TypeInt64},
+		{Name: "strike_count_after", Type: field.TypeInt64},
+		{Name: "multiplier_before", Type: field.TypeInt64},
+		{Name: "multiplier_after", Type: field.TypeInt64},
+		{Name: "operator_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "reason", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "idempotency_key", Type: field.TypeString, Unique: true, Size: 191},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// SecurityDepositRiskEventsTable holds the schema information for the "security_deposit_risk_events" table.
+	SecurityDepositRiskEventsTable = &schema.Table{
+		Name:       "security_deposit_risk_events",
+		Columns:    SecurityDepositRiskEventsColumns,
+		PrimaryKey: []*schema.Column{SecurityDepositRiskEventsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "securitydepositriskevent_user_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositRiskEventsColumns[1], SecurityDepositRiskEventsColumns[11]},
+			},
+			{
+				Name:    "securitydepositriskevent_violation_id",
+				Unique:  true,
+				Columns: []*schema.Column{SecurityDepositRiskEventsColumns[3]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "violation_id IS NOT NULL",
+				},
+			},
+		},
+	}
+	// SecurityDepositRiskProfilesColumns holds the columns for the "security_deposit_risk_profiles" table.
+	SecurityDepositRiskProfilesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "user_id", Type: field.TypeInt64, Unique: true},
+		{Name: "cyber_strike_count", Type: field.TypeInt64, Default: 0},
+		{Name: "risk_multiplier", Type: field.TypeInt64, Default: 1},
+		{Name: "last_violation_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "version", Type: field.TypeInt64, Default: 1},
+	}
+	// SecurityDepositRiskProfilesTable holds the schema information for the "security_deposit_risk_profiles" table.
+	SecurityDepositRiskProfilesTable = &schema.Table{
+		Name:       "security_deposit_risk_profiles",
+		Columns:    SecurityDepositRiskProfilesColumns,
+		PrimaryKey: []*schema.Column{SecurityDepositRiskProfilesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "securitydepositriskprofile_last_violation_id",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositRiskProfilesColumns[6]},
+			},
+		},
+	}
+	// SecurityDepositViolationsColumns holds the columns for the "security_deposit_violations" table.
+	SecurityDepositViolationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "event_key", Type: field.TypeString, Unique: true, Size: 191},
+		{Name: "request_id", Type: field.TypeString, Size: 191},
+		{Name: "upstream_response_id", Type: field.TypeString, Nullable: true, Size: 191},
+		{Name: "turn_index", Type: field.TypeInt64, Nullable: true},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "api_key_id", Type: field.TypeInt64},
+		{Name: "group_id", Type: field.TypeInt64},
+		{Name: "policy_code", Type: field.TypeString, Size: 64},
+		{Name: "detector_version", Type: field.TypeString, Size: 64},
+		{Name: "base_required_snapshot_cents", Type: field.TypeInt64},
+		{Name: "risk_multiplier_before", Type: field.TypeInt64},
+		{Name: "required_snapshot_cents", Type: field.TypeInt64},
+		{Name: "risk_multiplier_after", Type: field.TypeInt64},
+		{Name: "forfeited_cents", Type: field.TypeInt64, Default: 0},
+		{Name: "shortfall_cents", Type: field.TypeInt64, Default: 0},
+		{Name: "state", Type: field.TypeString, Size: 32},
+		{Name: "error_code", Type: field.TypeString, Nullable: true, Size: 64},
+		{Name: "retry_count", Type: field.TypeInt, Default: 0},
+		{Name: "api_key_name_snapshot", Type: field.TypeString, Size: 100},
+		{Name: "group_name_snapshot", Type: field.TypeString, Size: 100},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "processed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// SecurityDepositViolationsTable holds the schema information for the "security_deposit_violations" table.
+	SecurityDepositViolationsTable = &schema.Table{
+		Name:       "security_deposit_violations",
+		Columns:    SecurityDepositViolationsColumns,
+		PrimaryKey: []*schema.Column{SecurityDepositViolationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "securitydepositviolation_user_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositViolationsColumns[5], SecurityDepositViolationsColumns[21]},
+			},
+			{
+				Name:    "securitydepositviolation_api_key_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositViolationsColumns[6], SecurityDepositViolationsColumns[21]},
+			},
+			{
+				Name:    "securitydepositviolation_state_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SecurityDepositViolationsColumns[16], SecurityDepositViolationsColumns[21]},
+			},
+		},
+	}
 	// SecuritySecretsColumns holds the columns for the "security_secrets" table.
 	SecuritySecretsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -2848,6 +3193,14 @@ var (
 		ResetRebateUserAccountItemsTable,
 		ResetRebateUserAttemptsTable,
 		ResetRebateUserItemsTable,
+		SecurityDepositAccountsTable,
+		SecurityDepositAgreementsTable,
+		SecurityDepositLedgerTable,
+		SecurityDepositLotsTable,
+		SecurityDepositRefundsTable,
+		SecurityDepositRiskEventsTable,
+		SecurityDepositRiskProfilesTable,
+		SecurityDepositViolationsTable,
 		SecuritySecretsTable,
 		SettingsTable,
 		SubscriptionPlansTable,
@@ -3009,6 +3362,30 @@ func init() {
 	}
 	ResetRebateUserItemsTable.Annotation = &entsql.Annotation{
 		Table: "reset_rebate_user_items",
+	}
+	SecurityDepositAccountsTable.Annotation = &entsql.Annotation{
+		Table: "security_deposit_accounts",
+	}
+	SecurityDepositAgreementsTable.Annotation = &entsql.Annotation{
+		Table: "security_deposit_agreements",
+	}
+	SecurityDepositLedgerTable.Annotation = &entsql.Annotation{
+		Table: "security_deposit_ledger",
+	}
+	SecurityDepositLotsTable.Annotation = &entsql.Annotation{
+		Table: "security_deposit_lots",
+	}
+	SecurityDepositRefundsTable.Annotation = &entsql.Annotation{
+		Table: "security_deposit_refunds",
+	}
+	SecurityDepositRiskEventsTable.Annotation = &entsql.Annotation{
+		Table: "security_deposit_risk_events",
+	}
+	SecurityDepositRiskProfilesTable.Annotation = &entsql.Annotation{
+		Table: "security_deposit_risk_profiles",
+	}
+	SecurityDepositViolationsTable.Annotation = &entsql.Annotation{
+		Table: "security_deposit_violations",
 	}
 	SecuritySecretsTable.Annotation = &entsql.Annotation{
 		Table: "security_secrets",

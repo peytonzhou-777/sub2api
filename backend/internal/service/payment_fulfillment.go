@@ -263,7 +263,13 @@ func (s *PaymentService) executeFulfillment(ctx context.Context, oid int64) erro
 	if o.OrderType == payment.OrderTypeSubscription {
 		return s.ExecuteSubscriptionFulfillment(ctx, oid)
 	}
-	return s.ExecuteBalanceFulfillment(ctx, oid)
+	if o.OrderType == payment.OrderTypeSecurityDeposit {
+		return s.ExecuteSecurityDepositFulfillment(ctx, oid)
+	}
+	if o.OrderType == payment.OrderTypeBalance {
+		return s.ExecuteBalanceFulfillment(ctx, oid)
+	}
+	return infraerrors.BadRequest("INVALID_ORDER_TYPE", "unsupported payment order type")
 }
 
 func (s *PaymentService) ExecuteBalanceFulfillment(ctx context.Context, oid int64) error {

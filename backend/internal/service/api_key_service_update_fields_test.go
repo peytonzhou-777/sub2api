@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -130,4 +131,64 @@ func TestUpdateQuotaUsed_ExhaustedMarkOnlyDeclaresStatus(t *testing.T) {
 
 	require.NoError(t, svc.UpdateQuotaUsed(context.Background(), 1, 5))
 	require.Equal(t, []APIKeyUpdateFields{{Status: true}}, repo.updateFields)
+}
+
+type rejectingSecurityDepositGate struct {
+	calls []struct {
+		userID  int64
+		groupID int64
+	}
+}
+
+func (g *rejectingSecurityDepositGate) CheckAccess(_ context.Context, userID, groupID int64) (*SecurityDepositAccessGrant, error) {
+	g.calls = append(g.calls, struct {
+		userID  int64
+		groupID int64
+	}{userID: userID, groupID: groupID})
+	return nil, infraerrors.Forbidden("SECURITY_DEPOSIT_REQUIRED", "security deposit is insufficient")
+}
+
+func TestAPIKeyUpdate_EnablingKeyCannotBypassSecurityDepositGate(t *testing.T) {
+	groupID := int64(9)
+	status := StatusAPIKeyActive
+	svc, repo := newUpdateFieldsAPIKeyService(&APIKey{
+		ID: 1, UserID: 7, Key: "sk-test", GroupID: &groupID, Status: StatusAPIKeyDisabled,
+	})
+	gate := &rejectingSecurityDepositGate{}
+	svc.SetSecurityDepositGate(gate)
+
+	_, err := svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{Status: &status})
+	require.Equal(t, "SECURITY_DEPOSIT_REQUIRED", infraerrors.Reason(err))
+	require.Empty(t, repo.updateFields)
+	require.Len(t, gate.calls, 1)
+	require.Equal(t, int64(9), gate.calls[0].groupID)
+}
+
+func TestAPIKeyUpdate_AutomaticReactivationCannotBypassSecurityDepositGate(t *testing.T) {
+	groupID := int64(9)
+	quota := 500.0
+	svc, repo := newUpdateFieldsAPIKeyService(&APIKey{
+		ID: 1, UserID: 7, Key: "sk-test", GroupID: &groupID,
+		Status: StatusAPIKeyQuotaExhausted, Quota: 100, QuotaUsed: 100,
+	})
+	gate := &rejectingSecurityDepositGate{}
+	svc.SetSecurityDepositGate(gate)
+
+	_, err := svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{Quota: &quota})
+	require.Equal(t, "SECURITY_DEPOSIT_REQUIRED", infraerrors.Reason(err))
+	require.Empty(t, repo.updateFields)
+	require.Len(t, gate.calls, 1)
+}
+
+func TestAPIKeyUpdate_UserCannotUnlockSecurityLockedKey(t *testing.T) {
+	status := StatusAPIKeyActive
+	svc, repo := newUpdateFieldsAPIKeyService(&APIKey{
+		ID: 1, UserID: 7, Key: "sk-security-locked", Status: StatusAPIKeySecurityLocked,
+	})
+
+	_, err := svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{Status: &status})
+
+	require.Error(t, err)
+	require.Equal(t, "API_KEY_SECURITY_LOCKED", infraerrors.Reason(err))
+	require.Empty(t, repo.updateFields)
 }

@@ -115,6 +115,16 @@ func Status(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldStatus, v))
 }
 
+// SecurityDepositBaseRequiredCents applies equality check predicate on the "security_deposit_base_required_cents" field. It's identical to SecurityDepositBaseRequiredCentsEQ.
+func SecurityDepositBaseRequiredCents(v int64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldSecurityDepositBaseRequiredCents, v))
+}
+
+// SecurityDepositPolicyVersion applies equality check predicate on the "security_deposit_policy_version" field. It's identical to SecurityDepositPolicyVersionEQ.
+func SecurityDepositPolicyVersion(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldSecurityDepositPolicyVersion, v))
+}
+
 // DuplicateOperationID applies equality check predicate on the "duplicate_operation_id" field. It's identical to DuplicateOperationIDEQ.
 func DuplicateOperationID(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldDuplicateOperationID, v))
@@ -893,6 +903,111 @@ func StatusEqualFold(v string) predicate.Group {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.Group {
 	return predicate.Group(sql.FieldContainsFold(FieldStatus, v))
+}
+
+// SecurityDepositBaseRequiredCentsEQ applies the EQ predicate on the "security_deposit_base_required_cents" field.
+func SecurityDepositBaseRequiredCentsEQ(v int64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldSecurityDepositBaseRequiredCents, v))
+}
+
+// SecurityDepositBaseRequiredCentsNEQ applies the NEQ predicate on the "security_deposit_base_required_cents" field.
+func SecurityDepositBaseRequiredCentsNEQ(v int64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldSecurityDepositBaseRequiredCents, v))
+}
+
+// SecurityDepositBaseRequiredCentsIn applies the In predicate on the "security_deposit_base_required_cents" field.
+func SecurityDepositBaseRequiredCentsIn(vs ...int64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldSecurityDepositBaseRequiredCents, vs...))
+}
+
+// SecurityDepositBaseRequiredCentsNotIn applies the NotIn predicate on the "security_deposit_base_required_cents" field.
+func SecurityDepositBaseRequiredCentsNotIn(vs ...int64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldSecurityDepositBaseRequiredCents, vs...))
+}
+
+// SecurityDepositBaseRequiredCentsGT applies the GT predicate on the "security_deposit_base_required_cents" field.
+func SecurityDepositBaseRequiredCentsGT(v int64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldSecurityDepositBaseRequiredCents, v))
+}
+
+// SecurityDepositBaseRequiredCentsGTE applies the GTE predicate on the "security_deposit_base_required_cents" field.
+func SecurityDepositBaseRequiredCentsGTE(v int64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldSecurityDepositBaseRequiredCents, v))
+}
+
+// SecurityDepositBaseRequiredCentsLT applies the LT predicate on the "security_deposit_base_required_cents" field.
+func SecurityDepositBaseRequiredCentsLT(v int64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldSecurityDepositBaseRequiredCents, v))
+}
+
+// SecurityDepositBaseRequiredCentsLTE applies the LTE predicate on the "security_deposit_base_required_cents" field.
+func SecurityDepositBaseRequiredCentsLTE(v int64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldSecurityDepositBaseRequiredCents, v))
+}
+
+// SecurityDepositPolicyVersionEQ applies the EQ predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldSecurityDepositPolicyVersion, v))
+}
+
+// SecurityDepositPolicyVersionNEQ applies the NEQ predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionNEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldSecurityDepositPolicyVersion, v))
+}
+
+// SecurityDepositPolicyVersionIn applies the In predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldSecurityDepositPolicyVersion, vs...))
+}
+
+// SecurityDepositPolicyVersionNotIn applies the NotIn predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionNotIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldSecurityDepositPolicyVersion, vs...))
+}
+
+// SecurityDepositPolicyVersionGT applies the GT predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionGT(v string) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldSecurityDepositPolicyVersion, v))
+}
+
+// SecurityDepositPolicyVersionGTE applies the GTE predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionGTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldSecurityDepositPolicyVersion, v))
+}
+
+// SecurityDepositPolicyVersionLT applies the LT predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionLT(v string) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldSecurityDepositPolicyVersion, v))
+}
+
+// SecurityDepositPolicyVersionLTE applies the LTE predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionLTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldSecurityDepositPolicyVersion, v))
+}
+
+// SecurityDepositPolicyVersionContains applies the Contains predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionContains(v string) predicate.Group {
+	return predicate.Group(sql.FieldContains(FieldSecurityDepositPolicyVersion, v))
+}
+
+// SecurityDepositPolicyVersionHasPrefix applies the HasPrefix predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionHasPrefix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasPrefix(FieldSecurityDepositPolicyVersion, v))
+}
+
+// SecurityDepositPolicyVersionHasSuffix applies the HasSuffix predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionHasSuffix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasSuffix(FieldSecurityDepositPolicyVersion, v))
+}
+
+// SecurityDepositPolicyVersionEqualFold applies the EqualFold predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionEqualFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldEqualFold(FieldSecurityDepositPolicyVersion, v))
+}
+
+// SecurityDepositPolicyVersionContainsFold applies the ContainsFold predicate on the "security_deposit_policy_version" field.
+func SecurityDepositPolicyVersionContainsFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldContainsFold(FieldSecurityDepositPolicyVersion, v))
 }
 
 // DuplicateOperationIDEQ applies the EQ predicate on the "duplicate_operation_id" field.

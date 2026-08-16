@@ -706,6 +706,16 @@
 
               <!-- Deposit -->
               <button
+                @click="handleSecurityDeposit(user); closeActionMenu()"
+                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                data-test="manage-security-deposit"
+              >
+                <Icon name="shield" size="sm" class="text-amber-500" :stroke-width="2" />
+                {{ t('admin.users.securityDeposit.menuItem') }}
+              </button>
+
+              <!-- Deposit -->
+              <button
                 @click="handleDeposit(user); closeActionMenu()"
                 class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
               >
@@ -775,6 +785,7 @@
       @success="loadUsers"
     />
     <UserApiKeysModal :show="showApiKeysModal" :user="viewingUser" @close="closeApiKeysModal" />
+    <UserSecurityDepositModal :show="showSecurityDepositModal" :user="securityDepositUser" @close="closeSecurityDepositModal" />
     <UserAllowedGroupsModal :show="showAllowedGroupsModal" :user="allowedGroupsUser" @close="closeAllowedGroupsModal" @success="loadUsers" />
     <UserBalanceModal :show="showBalanceModal" :user="balanceUser" :operation="balanceOperation" @close="closeBalanceModal" @success="loadUsers" />
     <UserBalanceHistoryModal :show="showBalanceHistoryModal" :user="balanceHistoryUser" @close="closeBalanceHistoryModal" @deposit="handleDepositFromHistory" @withdraw="handleWithdrawFromHistory" />
@@ -826,6 +837,7 @@ import UserEditModal from '@/components/admin/user/UserEditModal.vue'
 import BulkEditUserModal from '@/components/admin/user/BulkEditUserModal.vue'
 import UserPlatformQuotaModal from '@/components/admin/user/UserPlatformQuotaModal.vue'
 import UserApiKeysModal from '@/components/admin/user/UserApiKeysModal.vue'
+import UserSecurityDepositModal from '@/components/admin/user/UserSecurityDepositModal.vue'
 import UserAllowedGroupsModal from '@/components/admin/user/UserAllowedGroupsModal.vue'
 import UserBalanceModal from '@/components/admin/user/UserBalanceModal.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
@@ -1344,11 +1356,13 @@ const showEditModal = ref(false)
 const showBulkEditModal = ref(false)
 const showDeleteDialog = ref(false)
 const showApiKeysModal = ref(false)
+const showSecurityDepositModal = ref(false)
 const showAttributesModal = ref(false)
 const showPlatformQuotaModal = ref(false)
 const editingUser = ref<AdminUser | null>(null)
 const deletingUser = ref<AdminUser | null>(null)
 const viewingUser = ref<AdminUser | null>(null)
+const securityDepositUser = ref<AdminUser | null>(null)
 const platformQuotaUser = ref<AdminUser | null>(null)
 const userAffinityUserID = ref<number | null>(null)
 
@@ -1763,6 +1777,16 @@ const handleViewApiKeys = (user: AdminUser) => {
 const closeApiKeysModal = () => {
   showApiKeysModal.value = false
   viewingUser.value = null
+}
+
+const handleSecurityDeposit = (user: AdminUser) => {
+  securityDepositUser.value = user
+  showSecurityDepositModal.value = true
+}
+
+const closeSecurityDepositModal = () => {
+  showSecurityDepositModal.value = false
+  securityDepositUser.value = null
 }
 
 const handleAllowedGroups = (user: AdminUser) => {

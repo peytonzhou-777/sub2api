@@ -214,6 +214,11 @@ type RefundBillingFence interface {
 	IsRefundBillingLocked(ctx context.Context, userID int64) (bool, error)
 }
 
+// SecurityDepositAccessGate 提供密钥写入与模型请求共享的保证金准入检查。
+type SecurityDepositAccessGate interface {
+	CheckAccess(ctx context.Context, userID, groupID int64) (*SecurityDepositAccessGrant, error)
+}
+
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
 	Name        string   `json:"name"`
@@ -298,6 +303,7 @@ type APIKeyService struct {
 	cache                     APIKeyCache
 	rateLimitCacheInvalid     RateLimitCacheInvalidator // optional: invalidate Redis rate limit cache
 	concurrencyService        *ConcurrencyService
+	securityDepositGate       SecurityDepositAccessGate
 	cfg                       *config.Config
 	authCacheL1               *ristretto.Cache
 	authNegativeCacheL1       *ristretto.Cache
@@ -376,6 +382,19 @@ func (s *APIKeyService) SetConcurrencyService(concurrencyService *ConcurrencySer
 	s.concurrencyService = concurrencyService
 }
 
+// SetSecurityDepositGate 注入保证金 Gate，保持 APIKeyService 构造器对现有测试桩兼容。
+func (s *APIKeyService) SetSecurityDepositGate(gate SecurityDepositAccessGate) {
+	s.securityDepositGate = gate
+}
+
+// CheckSecurityDepositAccess 供两套 API Key 鉴权中间件执行同一权威准入规则。
+func (s *APIKeyService) CheckSecurityDepositAccess(ctx context.Context, userID, groupID int64) (*SecurityDepositAccessGrant, error) {
+	if s.securityDepositGate == nil || groupID <= 0 {
+		return nil, nil
+	}
+	return s.securityDepositGate.CheckAccess(ctx, userID, groupID)
+}
+
 // AcquireRefundBillingLock 建立账户退款期间的分布式计费栅栏。
 func (s *APIKeyService) AcquireRefundBillingLock(ctx context.Context, userID int64, refundID string) error {
 	fence, ok := s.cache.(RefundBillingFence)
@@ -392,6 +411,26 @@ func (s *APIKeyService) ReleaseRefundBillingLock(ctx context.Context, userID int
 		return fmt.Errorf("refund billing fence is not supported")
 	}
 	return fence.ReleaseRefundBillingLock(ctx, userID, refundID)
+}
+
+// GetUserConcurrency 暴露退款排空所需的用户在途请求数。
+func (s *APIKeyService) GetUserConcurrency(ctx context.Context, userID int64) (int, error) {
+	if s == nil || s.concurrencyService == nil || s.concurrencyService.cache == nil {
+		return 0, infraerrors.ServiceUnavailable("REFUND_DRAIN_UNAVAILABLE", "cannot verify active API requests")
+	}
+	return s.concurrencyService.cache.GetUserConcurrency(ctx, userID)
+}
+
+// GetUserWaitingCount 暴露退款排空所需的用户等待请求数。
+func (s *APIKeyService) GetUserWaitingCount(ctx context.Context, userID int64) (int, error) {
+	if s == nil || s.concurrencyService == nil || s.concurrencyService.cache == nil {
+		return 0, infraerrors.ServiceUnavailable("REFUND_DRAIN_UNAVAILABLE", "cannot verify queued API requests")
+	}
+	reader, ok := s.concurrencyService.cache.(accountRefundWaitReader)
+	if !ok || reader == nil {
+		return 0, infraerrors.ServiceUnavailable("REFUND_DRAIN_UNAVAILABLE", "cannot verify queued API requests")
+	}
+	return reader.GetUserWaitingCount(ctx, userID)
 }
 
 // IsRefundBillingLocked 查询用户是否正在账户清退。
@@ -526,6 +565,9 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		// 检查用户是否可以绑定该分组
 		if !s.canUserBindGroup(ctx, user, group) {
 			return nil, ErrGroupNotAllowed
+		}
+		if _, err := s.CheckSecurityDepositAccess(ctx, userID, *req.GroupID); err != nil {
+			return nil, err
 		}
 	}
 
@@ -824,6 +866,9 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	// 下面若干分支会顺带把 Status 改回 active（配额扩容、清除过期等），
 	// 所以用原始值比对来决定是否写 status，而不是只看 req.Status。
 	originalStatus := apiKey.Status
+	if originalStatus == StatusAPIKeySecurityLocked && req.Status != nil && *req.Status != StatusAPIKeySecurityLocked {
+		return nil, infraerrors.Forbidden("API_KEY_SECURITY_LOCKED", "security-locked API key requires administrator review")
+	}
 
 	// 更新字段
 	if req.Name != nil {
@@ -930,6 +975,14 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	// 上面的自动复活分支可能改了 status，这里统一登记。
 	if apiKey.Status != originalStatus {
 		fields.Status = true
+	}
+
+	// 换组和任何形式的 active 恢复都必须经过同一 Gate；其他普通编辑不额外阻断。
+	needsDepositCheck := req.GroupID != nil || (apiKey.Status == StatusActive && originalStatus != StatusActive)
+	if needsDepositCheck && apiKey.GroupID != nil {
+		if _, err := s.CheckSecurityDepositAccess(ctx, userID, *apiKey.GroupID); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := s.apiKeyRepo.Update(ctx, apiKey, fields); err != nil {

@@ -125,6 +125,29 @@ func (s *APIKeyRepoSuite) TestGetByKeyForAuth_PreservesMessagesDispatchModelConf
 	s.Require().Equal("gpt-5.4-nano", got.Group.MessagesDispatchModelConfig.ExactModelMappings["claude-sonnet-4.5"])
 }
 
+func (s *APIKeyRepoSuite) TestGetByKeyForAuthPreservesSecurityDepositPolicy() {
+	user := s.mustCreateUser("getbykey-auth-deposit@test.com")
+	group, err := s.client.Group.Create().
+		SetName("g-auth-deposit").
+		SetPlatform(service.PlatformOpenAI).
+		SetStatus(service.StatusActive).
+		SetSubscriptionType(service.SubscriptionTypeStandard).
+		SetRateMultiplier(1).
+		SetSecurityDepositBaseRequiredCents(12345).
+		SetSecurityDepositPolicyVersion("deposit-v2").
+		Save(s.ctx)
+	s.Require().NoError(err)
+	key := &service.APIKey{UserID: user.ID, Key: "sk-getbykey-auth-deposit", Name: "Deposit Key", GroupID: &group.ID, Status: service.StatusActive}
+	s.Require().NoError(s.repo.Create(s.ctx, key))
+
+	got, err := s.repo.GetByKeyForAuth(s.ctx, key.Key)
+
+	s.Require().NoError(err)
+	s.Require().NotNil(got.Group)
+	s.Require().Equal(int64(12345), got.Group.SecurityDepositBaseRequiredCents)
+	s.Require().Equal("deposit-v2", got.Group.SecurityDepositPolicyVersion)
+}
+
 // --- Update ---
 
 func (s *APIKeyRepoSuite) TestUpdate() {
@@ -169,6 +192,31 @@ func (s *APIKeyRepoSuite) TestUpdate_ClearGroupID() {
 	got, err := s.repo.GetByID(s.ctx, key.ID)
 	s.Require().NoError(err)
 	s.Require().Nil(got.GroupID, "expected GroupID to be cleared")
+}
+
+func (s *APIKeyRepoSuite) TestDisableActiveSecurityDepositKeysDoesNotOverwriteOtherStatuses() {
+	user := s.mustCreateUser("deposit-disable@test.com")
+	group := s.mustCreateGroup("g-deposit-disable")
+	active := s.mustCreateApiKey(user.ID, "sk-deposit-active", "Active", &group.ID)
+	disabled := s.mustCreateApiKey(user.ID, "sk-deposit-disabled", "Disabled", &group.ID)
+	disabled.Status = service.StatusAPIKeyDisabled
+	s.Require().NoError(s.repo.Update(s.ctx, disabled, service.APIKeyUpdateFields{Status: true}))
+
+	rows, err := s.repo.DisableActiveSecurityDepositKeys(s.ctx, []int64{active.ID, disabled.ID}, "refund", 81, time.Now().UTC())
+
+	s.Require().NoError(err)
+	s.Require().Len(rows, 1)
+	s.Require().Equal(active.ID, rows[0].ID)
+	activeRow, err := s.repo.GetByID(s.ctx, active.ID)
+	s.Require().NoError(err)
+	s.Require().Equal(service.StatusAPIKeyDisabled, activeRow.Status)
+	s.Require().NotNil(activeRow.DisabledReason)
+	s.Require().Equal(service.DisabledReasonSecurityDepositInsufficient, *activeRow.DisabledReason)
+	s.Require().NotNil(activeRow.DisabledFinancialEventID)
+	s.Require().Equal(int64(81), *activeRow.DisabledFinancialEventID)
+	disabledRow, err := s.repo.GetByID(s.ctx, disabled.ID)
+	s.Require().NoError(err)
+	s.Require().Nil(disabledRow.DisabledReason, "已有非 active 状态不能被保证金原因覆盖")
 }
 
 // --- Delete ---

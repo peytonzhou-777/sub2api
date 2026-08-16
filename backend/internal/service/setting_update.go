@@ -488,6 +488,28 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	// 风控中心功能开关
 	updates[SettingKeyRiskControlEnabled] = strconv.FormatBool(settings.RiskControlEnabled)
+	if settings.SecurityDepositFreezeHours < 0 || settings.SecurityDepositFreezeHours > maxSecurityDepositFreezeHours {
+		return nil, infraerrors.BadRequest("INVALID_SECURITY_DEPOSIT_FREEZE_HOURS", "security deposit freeze hours must be between 0 and 8760")
+	}
+	maxRiskMultiplier := settings.SecurityDepositMaxRiskMultiplier
+	if maxRiskMultiplier == 0 {
+		maxRiskMultiplier = defaultSecurityDepositMaxRiskMultiplier
+	}
+	if maxRiskMultiplier < 1 || maxRiskMultiplier > 100 {
+		return nil, infraerrors.BadRequest("INVALID_SECURITY_DEPOSIT_MAX_RISK_MULTIPLIER", "security deposit max risk multiplier must be between 1 and 100")
+	}
+	updates[SettingKeySecurityDepositEnforcementEnabled] = strconv.FormatBool(settings.SecurityDepositEnforcementEnabled)
+	updates[SettingKeySecurityDepositSelfRefundEnabled] = strconv.FormatBool(settings.SecurityDepositSelfRefundEnabled)
+	penaltyMode := normalizeSecurityDepositPenaltyMode(settings.SecurityDepositPenaltyMode)
+	if strings.TrimSpace(settings.SecurityDepositPenaltyMode) != "" && penaltyMode != strings.ToLower(strings.TrimSpace(settings.SecurityDepositPenaltyMode)) {
+		return nil, infraerrors.BadRequest("INVALID_SECURITY_DEPOSIT_PENALTY_MODE", "security deposit penalty mode must be off, shadow, or enforce")
+	}
+	updates[SettingKeySecurityDepositPenaltyMode] = penaltyMode
+	updates[SettingKeySecurityDepositFreezeHours] = strconv.Itoa(settings.SecurityDepositFreezeHours)
+	updates[SettingKeySecurityDepositMaxRiskMultiplier] = strconv.FormatInt(maxRiskMultiplier, 10)
+	updates[SettingKeySecurityDepositPolicyVersion] = strings.TrimSpace(settings.SecurityDepositPolicyVersion)
+	updates[SettingKeySecurityDepositAgreementContentZH] = strings.TrimSpace(settings.SecurityDepositAgreementContentZH)
+	updates[SettingKeySecurityDepositAgreementContentEN] = strings.TrimSpace(settings.SecurityDepositAgreementContentEN)
 
 	// cyber 会话屏蔽开关 + TTL
 	updates[SettingKeyCyberSessionBlockEnabled] = strconv.FormatBool(settings.CyberSessionBlockEnabled)

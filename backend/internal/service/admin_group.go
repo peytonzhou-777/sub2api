@@ -299,6 +299,9 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	if input.RateMultiplier <= 0 {
 		return nil, errors.New("rate_multiplier must be > 0")
 	}
+	if input.SecurityDepositBaseRequiredCents < 0 {
+		return nil, infraerrors.BadRequest("INVALID_SECURITY_DEPOSIT_THRESHOLD", "security_deposit_base_required_cents must be non-negative")
+	}
 
 	platform := NormalizeGroupPlatform(input.Platform)
 	modelPricing, err := normalizeGroupModelPricing(platform, input.ModelPricing)
@@ -453,61 +456,62 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	}
 
 	group := &Group{
-		Name:                            input.Name,
-		Description:                     input.Description,
-		Platform:                        platform,
-		RateMultiplier:                  input.RateMultiplier,
-		IsExclusive:                     input.IsExclusive,
-		Status:                          StatusActive,
-		SubscriptionType:                subscriptionType,
-		DailyLimitUSD:                   dailyLimit,
-		WeeklyLimitUSD:                  weeklyLimit,
-		MonthlyLimitUSD:                 monthlyLimit,
-		LongContextPricingEnabled:       input.LongContextPricingEnabled,
-		ModelPricing:                    modelPricing,
-		AllowImageGeneration:            allowImageGeneration,
-		AllowBatchImageGeneration:       allowBatchImageGeneration,
-		ImageRateIndependent:            input.ImageRateIndependent,
-		ImageRateMultiplier:             imageRateMultiplier,
-		BatchImageDiscountMultiplier:    batchImageDiscountMultiplier,
-		BatchImageHoldMultiplier:        batchImageHoldMultiplier,
-		VideoRateIndependent:            input.VideoRateIndependent,
-		VideoRateMultiplier:             videoRateMultiplier,
-		PeakRateEnabled:                 peakRateEnabled,
-		PeakStart:                       peakStart,
-		PeakEnd:                         peakEnd,
-		PeakRateMultiplier:              peakRateMultiplier,
-		ProfitControlEnabled:            profitControlEnabled,
-		ProfitMinMargin:                 profitMinMargin,
-		ProfitSafetyBuffer:              profitSafetyBuffer,
-		ImagePrice1K:                    imagePrice1K,
-		ImagePrice2K:                    imagePrice2K,
-		ImagePrice4K:                    imagePrice4K,
-		VideoPrice480P:                  videoPrice480P,
-		VideoPrice720P:                  videoPrice720P,
-		VideoPrice1080P:                 videoPrice1080P,
-		VideoModelPrices:                NormalizeVideoModelPrices(input.VideoModelPrices),
-		WebSearchPricePerCall:           webSearchPricePerCall,
-		SearchPricePer1k:                searchPricePer1k,
-		AudioRealtimePricePerMin:        audioRealtimePricePerMin,
-		AudioTTSPricePerMillionChars:    audioTTSPricePerMillionChars,
-		AudioSTTPricePerHour:            audioSTTPricePerHour,
-		ClaudeCodeOnly:                  input.ClaudeCodeOnly,
-		FallbackGroupID:                 input.FallbackGroupID,
-		FallbackGroupIDOnInvalidRequest: fallbackOnInvalidRequest,
-		ModelRouting:                    input.ModelRouting,
-		MCPXMLInject:                    mcpXMLInject,
-		SupportedModelScopes:            input.SupportedModelScopes,
-		AllowMessagesDispatch:           input.AllowMessagesDispatch,
-		AllowLive:                       input.AllowLive,
-		RequireOAuthOnly:                input.RequireOAuthOnly,
-		RequirePrivacySet:               input.RequirePrivacySet,
-		DefaultMappedModel:              input.DefaultMappedModel,
-		MessagesDispatchModelConfig:     normalizeOpenAIMessagesDispatchModelConfig(input.MessagesDispatchModelConfig),
-		ModelsListConfig:                normalizeGroupModelsListConfig(input.ModelsListConfig),
-		RPMLimit:                        input.RPMLimit,
-		MaxReasoningEffort:              maxReasoningEffort,
-		ReasoningEffortMappings:         reasoningEffortMappings,
+		Name:                             input.Name,
+		Description:                      input.Description,
+		Platform:                         platform,
+		RateMultiplier:                   input.RateMultiplier,
+		IsExclusive:                      input.IsExclusive,
+		Status:                           StatusActive,
+		SubscriptionType:                 subscriptionType,
+		DailyLimitUSD:                    dailyLimit,
+		WeeklyLimitUSD:                   weeklyLimit,
+		MonthlyLimitUSD:                  monthlyLimit,
+		LongContextPricingEnabled:        input.LongContextPricingEnabled,
+		ModelPricing:                     modelPricing,
+		AllowImageGeneration:             allowImageGeneration,
+		AllowBatchImageGeneration:        allowBatchImageGeneration,
+		ImageRateIndependent:             input.ImageRateIndependent,
+		ImageRateMultiplier:              imageRateMultiplier,
+		BatchImageDiscountMultiplier:     batchImageDiscountMultiplier,
+		BatchImageHoldMultiplier:         batchImageHoldMultiplier,
+		VideoRateIndependent:             input.VideoRateIndependent,
+		VideoRateMultiplier:              videoRateMultiplier,
+		PeakRateEnabled:                  peakRateEnabled,
+		PeakStart:                        peakStart,
+		PeakEnd:                          peakEnd,
+		PeakRateMultiplier:               peakRateMultiplier,
+		ProfitControlEnabled:             profitControlEnabled,
+		ProfitMinMargin:                  profitMinMargin,
+		ProfitSafetyBuffer:               profitSafetyBuffer,
+		ImagePrice1K:                     imagePrice1K,
+		ImagePrice2K:                     imagePrice2K,
+		ImagePrice4K:                     imagePrice4K,
+		VideoPrice480P:                   videoPrice480P,
+		VideoPrice720P:                   videoPrice720P,
+		VideoPrice1080P:                  videoPrice1080P,
+		VideoModelPrices:                 NormalizeVideoModelPrices(input.VideoModelPrices),
+		WebSearchPricePerCall:            webSearchPricePerCall,
+		SearchPricePer1k:                 searchPricePer1k,
+		AudioRealtimePricePerMin:         audioRealtimePricePerMin,
+		AudioTTSPricePerMillionChars:     audioTTSPricePerMillionChars,
+		AudioSTTPricePerHour:             audioSTTPricePerHour,
+		ClaudeCodeOnly:                   input.ClaudeCodeOnly,
+		FallbackGroupID:                  input.FallbackGroupID,
+		FallbackGroupIDOnInvalidRequest:  fallbackOnInvalidRequest,
+		ModelRouting:                     input.ModelRouting,
+		MCPXMLInject:                     mcpXMLInject,
+		SupportedModelScopes:             input.SupportedModelScopes,
+		AllowMessagesDispatch:            input.AllowMessagesDispatch,
+		AllowLive:                        input.AllowLive,
+		RequireOAuthOnly:                 input.RequireOAuthOnly,
+		RequirePrivacySet:                input.RequirePrivacySet,
+		DefaultMappedModel:               input.DefaultMappedModel,
+		MessagesDispatchModelConfig:      normalizeOpenAIMessagesDispatchModelConfig(input.MessagesDispatchModelConfig),
+		ModelsListConfig:                 normalizeGroupModelsListConfig(input.ModelsListConfig),
+		RPMLimit:                         input.RPMLimit,
+		MaxReasoningEffort:               maxReasoningEffort,
+		ReasoningEffortMappings:          reasoningEffortMappings,
+		SecurityDepositBaseRequiredCents: input.SecurityDepositBaseRequiredCents,
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 	if group.Platform != PlatformOpenAI {
@@ -758,6 +762,12 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.ProfitSafetyBuffer != nil {
 		group.ProfitSafetyBuffer = *input.ProfitSafetyBuffer
+	}
+	if input.SecurityDepositBaseRequiredCents != nil {
+		if *input.SecurityDepositBaseRequiredCents < 0 {
+			return nil, infraerrors.BadRequest("INVALID_SECURITY_DEPOSIT_THRESHOLD", "security_deposit_base_required_cents must be non-negative")
+		}
+		group.SecurityDepositBaseRequiredCents = *input.SecurityDepositBaseRequiredCents
 	}
 	// 利润控制与高峰同一收口：按合并后的最终平台归一化（转到不支持平台时静默重置），
 	// 再对合并后的最终配置统一校验，防止部分字段更新拼出非法组合入库。

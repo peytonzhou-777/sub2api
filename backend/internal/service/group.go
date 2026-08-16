@@ -110,6 +110,10 @@ type Group struct {
 	// 一旦设置即接管该分组用户的限流（覆盖用户级 rpm_limit），可被 user-group rpm_override 进一步覆盖。
 	RPMLimit int
 
+	// 保证金基础门槛以人民币分存储；0 表示该分组不启用保证金。
+	SecurityDepositBaseRequiredCents int64
+	SecurityDepositPolicyVersion     string
+
 	// MaxReasoningEffort limits the effective OpenAI/Codex reasoning effort.
 	// Empty means unlimited; supported values are minimal/low/medium/high/xhigh/max.
 	MaxReasoningEffort string

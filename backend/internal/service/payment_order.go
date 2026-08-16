@@ -32,6 +32,10 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if normalized := NormalizeVisibleMethod(req.PaymentType); normalized != "" {
 		req.PaymentType = normalized
 	}
+	if req.SecurityDeposit != nil {
+		snapshot := *req.SecurityDeposit
+		req.SecurityDeposit = &snapshot
+	}
 	cfg, err := s.configService.GetPaymentConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get payment config: %w", err)
@@ -83,6 +87,9 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if err := s.validateSelectedCreateOrderInstance(ctx, req, sel); err != nil {
 		return nil, err
 	}
+	if err := s.validateSecurityDepositPaymentSelection(ctx, req, sel); err != nil {
+		return nil, err
+	}
 	selectedCurrency := payment.DefaultPaymentCurrency
 	if sel != nil {
 		selectedCurrency = paymentProviderConfigCurrency(sel.ProviderKey, sel.Config)
@@ -92,6 +99,9 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 		if err != nil {
 			return nil, err
 		}
+	}
+	if req.OrderType == payment.OrderTypeSecurityDeposit && selectedCurrency != payment.DefaultPaymentCurrency {
+		return nil, infraerrors.BadRequest("SECURITY_DEPOSIT_CURRENCY_NOT_SUPPORTED", "security deposits only support CNY")
 	}
 	if err := validateSelectedCreateOrderAmountCurrency(payAmountStr, sel); err != nil {
 		return nil, err
@@ -123,6 +133,17 @@ func (s *PaymentService) validateOrderInput(ctx context.Context, req CreateOrder
 	}
 	if req.OrderType == payment.OrderTypeSubscription {
 		return s.validateSubOrder(ctx, req)
+	}
+	if req.OrderType == payment.OrderTypeSecurityDeposit {
+		if req.SecurityDeposit == nil || req.SecurityDeposit.PrincipalCents <= 0 || req.SecurityDeposit.Currency != payment.DefaultPaymentCurrency {
+			return nil, infraerrors.BadRequest("INVALID_SECURITY_DEPOSIT_ORDER", "security deposit order requires a valid server quote")
+		}
+		expected := decimal.NewFromInt(req.SecurityDeposit.PrincipalCents).Shift(-2)
+		if !decimal.NewFromFloat(req.Amount).Equal(expected) {
+			return nil, infraerrors.BadRequest("INVALID_SECURITY_DEPOSIT_ORDER", "security deposit amount does not match the server quote")
+		}
+	} else if req.OrderType != payment.OrderTypeBalance {
+		return nil, infraerrors.BadRequest("INVALID_ORDER_TYPE", "unsupported payment order type")
 	}
 	if math.IsNaN(req.Amount) || math.IsInf(req.Amount, 0) || req.Amount <= 0 {
 		return nil, infraerrors.BadRequest("INVALID_AMOUNT", "amount must be a positive number")
@@ -293,6 +314,9 @@ func buildPaymentOrderProviderSnapshot(sel *payment.InstanceSelection, req Creat
 
 	snapshot := map[string]any{}
 	snapshot["schema_version"] = 2
+	if req.OrderType == payment.OrderTypeSecurityDeposit && req.SecurityDeposit != nil {
+		snapshot["security_deposit"] = req.SecurityDeposit
+	}
 
 	instanceID := strings.TrimSpace(sel.InstanceID)
 	if instanceID != "" {
@@ -365,6 +389,9 @@ func (s *PaymentService) checkDailyLimit(ctx context.Context, tx *dbent.Tx, user
 	}
 	var used float64
 	for _, o := range orders {
+		if o.OrderType == payment.OrderTypeSecurityDeposit {
+			continue
+		}
 		if o.OrderType == payment.OrderTypeBalance {
 			used += o.PayAmount
 			continue
@@ -395,6 +422,9 @@ func (s *PaymentService) selectCreateOrderInstance(ctx context.Context, req Crea
 }
 
 func (s *PaymentService) prepareCreateOrderSelectionContext(ctx context.Context, req CreateOrderRequest) (context.Context, error) {
+	if req.OrderType == payment.OrderTypeSecurityDeposit {
+		ctx = payment.WithRefundEnabledOnly(ctx)
+	}
 	if !requestNeedsWeChatJSAPICompatibility(req) {
 		return ctx, nil
 	}
@@ -445,7 +475,7 @@ func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.Paymen
 		return nil, infraerrors.ServiceUnavailable("PAYMENT_PROVIDER_MISCONFIGURED", "provider_misconfigured").
 			WithMetadata(map[string]string{"provider": sel.ProviderKey, "instance_id": sel.InstanceID})
 	}
-	subject := s.buildPaymentSubject(plan, limitAmount, cfg, sel)
+	subject := s.buildPaymentSubject(plan, limitAmount, cfg, sel, req.OrderType)
 	outTradeNo := order.OutTradeNo
 	canonicalReturnURL, err := CanonicalizeReturnURL(req.ReturnURL, req.SrcHost, req.SrcURL)
 	if err != nil {
@@ -563,7 +593,17 @@ func selectedInstanceSupportedTypes(sel *payment.InstanceSelection) string {
 	return sel.SupportedTypes
 }
 
-func (s *PaymentService) buildPaymentSubject(plan *dbent.SubscriptionPlan, limitAmount float64, cfg *PaymentConfig, sel *payment.InstanceSelection) string {
+func (s *PaymentService) buildPaymentSubject(plan *dbent.SubscriptionPlan, limitAmount float64, cfg *PaymentConfig, sel *payment.InstanceSelection, orderTypes ...string) string {
+	orderType := payment.OrderTypeBalance
+	if plan != nil {
+		orderType = payment.OrderTypeSubscription
+	}
+	if len(orderTypes) > 0 {
+		orderType = orderTypes[0]
+	}
+	if orderType == payment.OrderTypeSecurityDeposit {
+		return applyPaymentProductNameAffix("Sub2API Security Deposit", cfg)
+	}
 	if plan != nil {
 		productName := plan.ProductName
 		if productName == "" {
@@ -655,6 +695,30 @@ func (s *PaymentService) validateSelectedCreateOrderInstance(ctx context.Context
 	if selectedAppID == "" || selectedAppID != expectedAppID {
 		return infraerrors.TooManyRequests("NO_AVAILABLE_INSTANCE", "selected payment instance is not compatible with the current WeChat OAuth app")
 	}
+	return nil
+}
+
+// validateSecurityDepositPaymentSelection 保证收款时渠道已具备原路退款能力，并快照实例开关。
+func (s *PaymentService) validateSecurityDepositPaymentSelection(ctx context.Context, req CreateOrderRequest, sel *payment.InstanceSelection) error {
+	if req.OrderType != payment.OrderTypeSecurityDeposit {
+		return nil
+	}
+	if req.SecurityDeposit == nil || sel == nil || s.configService == nil || s.configService.entClient == nil {
+		return infraerrors.BadRequest("INVALID_SECURITY_DEPOSIT_ORDER", "security deposit payment selection is invalid")
+	}
+	instanceID, err := strconv.ParseInt(strings.TrimSpace(sel.InstanceID), 10, 64)
+	if err != nil || instanceID <= 0 {
+		return infraerrors.ServiceUnavailable("PAYMENT_GATEWAY_ERROR", "selected payment instance is invalid")
+	}
+	instance, err := s.configService.entClient.PaymentProviderInstance.Get(ctx, instanceID)
+	if err != nil {
+		return infraerrors.ServiceUnavailable("PAYMENT_GATEWAY_ERROR", "selected payment instance is unavailable")
+	}
+	if !instance.RefundEnabled {
+		return infraerrors.Conflict("SECURITY_DEPOSIT_PROVIDER_REFUND_DISABLED", "selected payment instance does not allow refunds")
+	}
+	req.SecurityDeposit.ProviderRefundEnabled = instance.RefundEnabled
+	req.SecurityDeposit.ProviderAllowUserRefund = instance.AllowUserRefund
 	return nil
 }
 

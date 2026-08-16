@@ -88,7 +88,9 @@
         </div>
         <!-- Actions -->
         <div class="flex gap-3">
-          <button class="btn btn-secondary flex-1" @click="router.push('/purchase')">{{ t('payment.result.backToRecharge') }}</button>
+          <button class="btn btn-secondary flex-1" @click="router.push(resultBackPath)">
+            {{ isSecurityDepositOrder ? t('payment.result.backToKeys') : t('payment.result.backToRecharge') }}
+          </button>
           <button class="btn btn-primary flex-1" @click="router.push('/orders')">{{ t('payment.result.viewOrders') }}</button>
         </div>
       </template>
@@ -174,9 +176,15 @@ const isPending = computed(() => {
   return isPendingStatus(order.value?.status)
 })
 
+const isSecurityDepositOrder = computed(() => {
+  return hasOrderId(order.value) && order.value.order_type === 'security_deposit'
+})
+
+const resultBackPath = computed(() => isSecurityDepositOrder.value ? '/keys' : '/purchase')
+
 const statusTitle = computed(() => {
   if (isSuccess.value) {
-    return t('payment.result.success')
+    return isSecurityDepositOrder.value ? t('payment.result.securityDepositSuccess') : t('payment.result.success')
   }
   if (isPending.value) {
     return t('payment.result.processing')

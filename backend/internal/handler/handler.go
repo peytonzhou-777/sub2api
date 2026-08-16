@@ -43,6 +43,7 @@ type AdminHandlers struct {
 	AuditLog               *admin.AuditLogHandler
 	ResetRebate            *admin.ResetRebateHandler
 	RecurringCredit        *admin.RecurringCreditHandler
+	SecurityDeposit        *admin.SecurityDepositHandler
 }
 
 // Handlers contains all HTTP handlers
@@ -70,6 +71,7 @@ type Handlers struct {
 	ModelPlaza       *ModelPlazaHandler
 	AsyncImage       *AsyncImageHandler
 	BatchImage       *BatchImageHandler
+	SecurityDeposit  *SecurityDepositHandler
 }
 
 // BuildInfo contains build-time information

@@ -126,6 +126,27 @@ func RegisterAdminRoutes(
 
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
+
+		// 保证金查询与高风险管理员资金操作。
+		registerSecurityDepositRoutes(admin, h, stepUpAuth)
+	}
+}
+
+func registerSecurityDepositRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAuth middleware.StepUpAuthMiddleware) {
+	securityDeposits := admin.Group("/security-deposits")
+	{
+		securityDeposits.GET("/users", h.Admin.SecurityDeposit.ListUsers)
+		securityDeposits.GET("/users/:id", h.Admin.SecurityDeposit.GetUser)
+		securityDeposits.POST("/users/:id/credits", gin.HandlerFunc(stepUpAuth), h.Admin.SecurityDeposit.Credit)
+		securityDeposits.POST("/users/:id/deductions", gin.HandlerFunc(stepUpAuth), h.Admin.SecurityDeposit.Deduct)
+		securityDeposits.POST("/users/:id/lots/:lot_id/revoke", gin.HandlerFunc(stepUpAuth), h.Admin.SecurityDeposit.RevokeLot)
+		securityDeposits.POST("/users/:id/lots/:lot_id/refunds/automatic", gin.HandlerFunc(stepUpAuth), h.Admin.SecurityDeposit.AutomaticRefundLot)
+		securityDeposits.POST("/users/:id/lots/:lot_id/refunds/manual", gin.HandlerFunc(stepUpAuth), h.Admin.SecurityDeposit.ReserveManualRefundLot)
+		securityDeposits.POST("/users/:id/refunds/:refund_id/complete-manual", gin.HandlerFunc(stepUpAuth), h.Admin.SecurityDeposit.CompleteManualRefund)
+		securityDeposits.POST("/users/:id/refunds/:refund_id/cancel", gin.HandlerFunc(stepUpAuth), h.Admin.SecurityDeposit.CancelRefund)
+		securityDeposits.POST("/users/:id/refunds/:refund_id/query", gin.HandlerFunc(stepUpAuth), h.Admin.SecurityDeposit.QueryRefund)
+		securityDeposits.POST("/users/:id/refunds/:refund_id/review-failed", gin.HandlerFunc(stepUpAuth), h.Admin.SecurityDeposit.FailAutomaticRefundReview)
+		securityDeposits.POST("/users/:id/api-keys/:key_id/unlock", gin.HandlerFunc(stepUpAuth), h.Admin.SecurityDeposit.UnlockAPIKey)
 	}
 }
 

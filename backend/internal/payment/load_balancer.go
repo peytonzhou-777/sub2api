@@ -47,7 +47,10 @@ type DefaultLoadBalancer struct {
 
 type contextKey string
 
-const wxpayJSAPIAppIDContextKey contextKey = "payment.wxpay.jsapi_app_id"
+const (
+	wxpayJSAPIAppIDContextKey   contextKey = "payment.wxpay.jsapi_app_id"
+	refundEnabledOnlyContextKey contextKey = "payment.refund_enabled_only"
+)
 
 // NewDefaultLoadBalancer creates a new load balancer.
 func NewDefaultLoadBalancer(db *dbent.Client, encryptionKey []byte) *DefaultLoadBalancer {
@@ -60,6 +63,19 @@ func WithWxpayJSAPIAppID(ctx context.Context, appID string) context.Context {
 		return ctx
 	}
 	return context.WithValue(ctx, wxpayJSAPIAppIDContextKey, appID)
+}
+
+// WithRefundEnabledOnly 要求负载均衡只选择已启用原路退款的支付实例。
+func WithRefundEnabledOnly(ctx context.Context) context.Context {
+	return context.WithValue(ctx, refundEnabledOnlyContextKey, true)
+}
+
+func refundEnabledOnlyFromContext(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	required, _ := ctx.Value(refundEnabledOnlyContextKey).(bool)
+	return required
 }
 
 func wxpayJSAPIAppIDFromContext(ctx context.Context) string {
@@ -137,7 +153,11 @@ func (lb *DefaultLoadBalancer) queryEnabledInstances(
 
 	var matched []*dbent.PaymentProviderInstance
 	expectedWxpayJSAPIAppID := wxpayJSAPIAppIDFromContext(ctx)
+	refundEnabledOnly := refundEnabledOnlyFromContext(ctx)
 	for _, inst := range instances {
+		if refundEnabledOnly && !inst.RefundEnabled {
+			continue
+		}
 		// Stripe: match by provider_key because supported_types lists sub-types (card,link,alipay,wxpay),
 		// not "stripe" itself. The checkout page aggregates all sub-types under "stripe".
 		if paymentType == TypeStripe {

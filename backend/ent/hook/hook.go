@@ -489,6 +489,102 @@ func (f ResetRebateUserItemFunc) Mutate(ctx context.Context, m ent.Mutation) (en
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ResetRebateUserItemMutation", m)
 }
 
+// The SecurityDepositAccountFunc type is an adapter to allow the use of ordinary
+// function as SecurityDepositAccount mutator.
+type SecurityDepositAccountFunc func(context.Context, *ent.SecurityDepositAccountMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SecurityDepositAccountFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SecurityDepositAccountMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SecurityDepositAccountMutation", m)
+}
+
+// The SecurityDepositAgreementFunc type is an adapter to allow the use of ordinary
+// function as SecurityDepositAgreement mutator.
+type SecurityDepositAgreementFunc func(context.Context, *ent.SecurityDepositAgreementMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SecurityDepositAgreementFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SecurityDepositAgreementMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SecurityDepositAgreementMutation", m)
+}
+
+// The SecurityDepositLedgerFunc type is an adapter to allow the use of ordinary
+// function as SecurityDepositLedger mutator.
+type SecurityDepositLedgerFunc func(context.Context, *ent.SecurityDepositLedgerMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SecurityDepositLedgerFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SecurityDepositLedgerMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SecurityDepositLedgerMutation", m)
+}
+
+// The SecurityDepositLotFunc type is an adapter to allow the use of ordinary
+// function as SecurityDepositLot mutator.
+type SecurityDepositLotFunc func(context.Context, *ent.SecurityDepositLotMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SecurityDepositLotFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SecurityDepositLotMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SecurityDepositLotMutation", m)
+}
+
+// The SecurityDepositRefundFunc type is an adapter to allow the use of ordinary
+// function as SecurityDepositRefund mutator.
+type SecurityDepositRefundFunc func(context.Context, *ent.SecurityDepositRefundMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SecurityDepositRefundFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SecurityDepositRefundMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SecurityDepositRefundMutation", m)
+}
+
+// The SecurityDepositRiskEventFunc type is an adapter to allow the use of ordinary
+// function as SecurityDepositRiskEvent mutator.
+type SecurityDepositRiskEventFunc func(context.Context, *ent.SecurityDepositRiskEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SecurityDepositRiskEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SecurityDepositRiskEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SecurityDepositRiskEventMutation", m)
+}
+
+// The SecurityDepositRiskProfileFunc type is an adapter to allow the use of ordinary
+// function as SecurityDepositRiskProfile mutator.
+type SecurityDepositRiskProfileFunc func(context.Context, *ent.SecurityDepositRiskProfileMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SecurityDepositRiskProfileFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SecurityDepositRiskProfileMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SecurityDepositRiskProfileMutation", m)
+}
+
+// The SecurityDepositViolationFunc type is an adapter to allow the use of ordinary
+// function as SecurityDepositViolation mutator.
+type SecurityDepositViolationFunc func(context.Context, *ent.SecurityDepositViolationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SecurityDepositViolationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SecurityDepositViolationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SecurityDepositViolationMutation", m)
+}
+
 // The SecuritySecretFunc type is an adapter to allow the use of ordinary
 // function as SecuritySecret mutator.
 type SecuritySecretFunc func(context.Context, *ent.SecuritySecretMutation) (ent.Value, error)

@@ -209,6 +209,41 @@ func (_u *GroupUpdate) SetNillableStatus(v *string) *GroupUpdate {
 	return _u
 }
 
+// SetSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field.
+func (_u *GroupUpdate) SetSecurityDepositBaseRequiredCents(v int64) *GroupUpdate {
+	_u.mutation.ResetSecurityDepositBaseRequiredCents()
+	_u.mutation.SetSecurityDepositBaseRequiredCents(v)
+	return _u
+}
+
+// SetNillableSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableSecurityDepositBaseRequiredCents(v *int64) *GroupUpdate {
+	if v != nil {
+		_u.SetSecurityDepositBaseRequiredCents(*v)
+	}
+	return _u
+}
+
+// AddSecurityDepositBaseRequiredCents adds value to the "security_deposit_base_required_cents" field.
+func (_u *GroupUpdate) AddSecurityDepositBaseRequiredCents(v int64) *GroupUpdate {
+	_u.mutation.AddSecurityDepositBaseRequiredCents(v)
+	return _u
+}
+
+// SetSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field.
+func (_u *GroupUpdate) SetSecurityDepositPolicyVersion(v string) *GroupUpdate {
+	_u.mutation.SetSecurityDepositPolicyVersion(v)
+	return _u
+}
+
+// SetNillableSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableSecurityDepositPolicyVersion(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetSecurityDepositPolicyVersion(*v)
+	}
+	return _u
+}
+
 // SetPlatform sets the "platform" field.
 func (_u *GroupUpdate) SetPlatform(v string) *GroupUpdate {
 	_u.mutation.SetPlatform(v)
@@ -1447,6 +1482,16 @@ func (_u *GroupUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Group.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SecurityDepositBaseRequiredCents(); ok {
+		if err := group.SecurityDepositBaseRequiredCentsValidator(v); err != nil {
+			return &ValidationError{Name: "security_deposit_base_required_cents", err: fmt.Errorf(`ent: validator failed for field "Group.security_deposit_base_required_cents": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SecurityDepositPolicyVersion(); ok {
+		if err := group.SecurityDepositPolicyVersionValidator(v); err != nil {
+			return &ValidationError{Name: "security_deposit_policy_version", err: fmt.Errorf(`ent: validator failed for field "Group.security_deposit_policy_version": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Platform(); ok {
 		if err := group.PlatformValidator(v); err != nil {
 			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "Group.platform": %w`, err)}
@@ -1546,6 +1591,15 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(group.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SecurityDepositBaseRequiredCents(); ok {
+		_spec.SetField(group.FieldSecurityDepositBaseRequiredCents, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSecurityDepositBaseRequiredCents(); ok {
+		_spec.AddField(group.FieldSecurityDepositBaseRequiredCents, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.SecurityDepositPolicyVersion(); ok {
+		_spec.SetField(group.FieldSecurityDepositPolicyVersion, field.TypeString, value)
 	}
 	if _u.mutation.DuplicateOperationIDCleared() {
 		_spec.ClearField(group.FieldDuplicateOperationID, field.TypeString)
@@ -2326,6 +2380,41 @@ func (_u *GroupUpdateOne) SetStatus(v string) *GroupUpdateOne {
 func (_u *GroupUpdateOne) SetNillableStatus(v *string) *GroupUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
+	}
+	return _u
+}
+
+// SetSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field.
+func (_u *GroupUpdateOne) SetSecurityDepositBaseRequiredCents(v int64) *GroupUpdateOne {
+	_u.mutation.ResetSecurityDepositBaseRequiredCents()
+	_u.mutation.SetSecurityDepositBaseRequiredCents(v)
+	return _u
+}
+
+// SetNillableSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableSecurityDepositBaseRequiredCents(v *int64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetSecurityDepositBaseRequiredCents(*v)
+	}
+	return _u
+}
+
+// AddSecurityDepositBaseRequiredCents adds value to the "security_deposit_base_required_cents" field.
+func (_u *GroupUpdateOne) AddSecurityDepositBaseRequiredCents(v int64) *GroupUpdateOne {
+	_u.mutation.AddSecurityDepositBaseRequiredCents(v)
+	return _u
+}
+
+// SetSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field.
+func (_u *GroupUpdateOne) SetSecurityDepositPolicyVersion(v string) *GroupUpdateOne {
+	_u.mutation.SetSecurityDepositPolicyVersion(v)
+	return _u
+}
+
+// SetNillableSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableSecurityDepositPolicyVersion(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetSecurityDepositPolicyVersion(*v)
 	}
 	return _u
 }
@@ -3581,6 +3670,16 @@ func (_u *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Group.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SecurityDepositBaseRequiredCents(); ok {
+		if err := group.SecurityDepositBaseRequiredCentsValidator(v); err != nil {
+			return &ValidationError{Name: "security_deposit_base_required_cents", err: fmt.Errorf(`ent: validator failed for field "Group.security_deposit_base_required_cents": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SecurityDepositPolicyVersion(); ok {
+		if err := group.SecurityDepositPolicyVersionValidator(v); err != nil {
+			return &ValidationError{Name: "security_deposit_policy_version", err: fmt.Errorf(`ent: validator failed for field "Group.security_deposit_policy_version": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Platform(); ok {
 		if err := group.PlatformValidator(v); err != nil {
 			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "Group.platform": %w`, err)}
@@ -3697,6 +3796,15 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(group.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SecurityDepositBaseRequiredCents(); ok {
+		_spec.SetField(group.FieldSecurityDepositBaseRequiredCents, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSecurityDepositBaseRequiredCents(); ok {
+		_spec.AddField(group.FieldSecurityDepositBaseRequiredCents, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.SecurityDepositPolicyVersion(); ok {
+		_spec.SetField(group.FieldSecurityDepositPolicyVersion, field.TypeString, value)
 	}
 	if _u.mutation.DuplicateOperationIDCleared() {
 		_spec.ClearField(group.FieldDuplicateOperationID, field.TypeString)

@@ -44,6 +44,26 @@
             </div>
             <div class="flex items-center gap-1"><span>{{ t('admin.users.columns.created') }}: {{ formatDateTime(key.created_at) }}</span></div>
           </div>
+          <div v-if="key.status === 'security_locked'" class="mt-3 border-t border-red-100 pt-3 dark:border-red-900/40">
+            <button
+              v-if="unlockKeyId !== key.id"
+              class="btn btn-danger btn-sm"
+              :disabled="unlockingKeyIds.has(key.id)"
+              data-test="security-deposit-unlock-key"
+              @click="startUnlock(key.id)"
+            >
+              {{ t('admin.users.securityDeposit.unlockKey') }}
+            </button>
+            <div v-else class="space-y-2">
+              <label class="input-label">{{ t('admin.users.securityDeposit.reasonOptional') }}</label>
+              <input v-model="unlockReason" class="input" maxlength="1000" :placeholder="t('admin.users.securityDeposit.unlockReasonPlaceholder')" />
+              <p class="text-xs text-amber-700 dark:text-amber-300">{{ t('admin.users.securityDeposit.unlockHint') }}</p>
+              <div class="flex justify-end gap-2">
+                <button class="btn btn-secondary btn-sm" :disabled="unlockingKeyIds.has(key.id)" @click="cancelUnlock">{{ t('common.cancel') }}</button>
+                <button class="btn btn-danger btn-sm" :disabled="unlockingKeyIds.has(key.id)" @click="unlockKey(key)">{{ t('common.confirm') }}</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -125,6 +145,9 @@ const apiKeys = ref<ApiKey[]>([])
 const allGroups = ref<AdminGroup[]>([])
 const loading = ref(false)
 const updatingKeyIds = ref(new Set<number>())
+const unlockingKeyIds = ref(new Set<number>())
+const unlockKeyId = ref<number | null>(null)
+const unlockReason = ref('')
 const groupSelectorKeyId = ref<number | null>(null)
 const dropdownPosition = ref<{ top: number; left: number } | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -223,6 +246,41 @@ const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
     appStore.showError(error?.message || t('admin.users.groupChangeFailed'))
   } finally {
     updatingKeyIds.value.delete(key.id)
+  }
+}
+
+const startUnlock = (keyId: number) => {
+  unlockKeyId.value = keyId
+  unlockReason.value = ''
+}
+
+const cancelUnlock = () => {
+  unlockKeyId.value = null
+  unlockReason.value = ''
+}
+
+// 安全解锁只恢复为 disabled，用户仍需在满足门槛后显式启用。
+const unlockKey = async (key: ApiKey) => {
+  if (!props.user || key.status !== 'security_locked') return
+  unlockingKeyIds.value.add(key.id)
+  try {
+    const result = await adminAPI.securityDeposits.unlockApiKey(props.user.id, key.id, unlockReason.value.trim())
+    const index = apiKeys.value.findIndex((item) => item.id === key.id)
+    if (index !== -1) {
+      apiKeys.value[index] = {
+        ...apiKeys.value[index],
+        status: result.status,
+        security_locked_at: null,
+        security_lock_violation_id: null,
+        security_lock_reason: null,
+      }
+    }
+    cancelUnlock()
+    appStore.showSuccess(t('admin.users.securityDeposit.unlockSucceeded'))
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.detail || t('admin.users.securityDeposit.unlockFailed'))
+  } finally {
+    unlockingKeyIds.value.delete(key.id)
   }
 }
 

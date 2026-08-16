@@ -8,6 +8,7 @@ import GroupsView from '@/views/admin/GroupsView.vue'
 const {
   listGroups,
   duplicateGroup,
+  createGroup,
   getModelsListCandidates,
   getUsageSummary,
   getCapacitySummary,
@@ -17,6 +18,7 @@ const {
 } = vi.hoisted(() => ({
   listGroups: vi.fn(),
   duplicateGroup: vi.fn(),
+  createGroup: vi.fn(),
   getModelsListCandidates: vi.fn(),
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
@@ -35,7 +37,7 @@ vi.mock('@/api/admin', () => ({
       getCapacitySummary,
       getLiveCapability,
       getAll: vi.fn(),
-      create: vi.fn(),
+      create: createGroup,
       update: vi.fn(),
       delete: vi.fn(),
       updateSortOrder: vi.fn()
@@ -73,6 +75,7 @@ const sourceGroup: AdminGroup = {
   platform: 'openai',
   rate_multiplier: 1,
   rpm_limit: 0,
+  security_deposit_base_required_cents: 0,
   is_exclusive: false,
   status: 'active',
   subscription_type: 'standard',
@@ -136,6 +139,11 @@ const DataTableStub = defineComponent({
   template: '<div><div v-for="row in data" :key="row.id"><slot name="cell-actions" :row="row" /></div></div>'
 })
 
+const BaseDialogStub = defineComponent({
+  props: { show: { type: Boolean, default: false } },
+  template: '<div v-if="show"><slot /><slot name="footer" /></div>'
+})
+
 function mountView() {
   return mount(GroupsView, {
     global: {
@@ -144,7 +152,7 @@ function mountView() {
         TablePageLayout: TablePageLayoutStub,
         DataTable: DataTableStub,
         Pagination: true,
-        BaseDialog: true,
+        BaseDialog: BaseDialogStub,
         ConfirmDialog: true,
         EmptyState: true,
         Select: true,
@@ -166,6 +174,7 @@ describe('GroupsView duplicate action', () => {
     for (const fn of [
       listGroups,
       duplicateGroup,
+      createGroup,
       getModelsListCandidates,
       getUsageSummary,
       getCapacitySummary,
@@ -193,6 +202,7 @@ describe('GroupsView duplicate action', () => {
     getUsageSummary.mockResolvedValue([])
     getCapacitySummary.mockResolvedValue([])
     getLiveCapability.mockResolvedValue({ supported: false })
+    createGroup.mockResolvedValue({ ...sourceGroup, id: 44 })
   })
 
   afterEach(() => {
@@ -210,6 +220,27 @@ describe('GroupsView duplicate action', () => {
     expect(duplicateGroup).toHaveBeenCalledWith(42)
     expect(showSuccess).toHaveBeenCalledWith('admin.groups.duplicateSuccess')
     expect(listGroups).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('converts the security deposit threshold from yuan to integer cents', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-tour="groups-create-btn"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    await wrapper.get('[data-tour="group-form-name"]').setValue('Deposit Group')
+    await wrapper.get('[data-testid="create-security-deposit-threshold"]').setValue('100.25')
+    await wrapper.get('#create-group-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(createGroup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Deposit Group',
+        security_deposit_base_required_cents: 10025
+      })
+    )
+    expect(createGroup.mock.calls[0][0]).not.toHaveProperty('security_deposit_required_yuan')
     wrapper.unmount()
   })
 

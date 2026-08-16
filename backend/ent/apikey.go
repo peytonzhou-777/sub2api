@@ -36,6 +36,20 @@ type APIKey struct {
 	GroupID *int64 `json:"group_id,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
+	// SecurityLockedAt holds the value of the "security_locked_at" field.
+	SecurityLockedAt *time.Time `json:"security_locked_at,omitempty"`
+	// SecurityLockViolationID holds the value of the "security_lock_violation_id" field.
+	SecurityLockViolationID *int64 `json:"security_lock_violation_id,omitempty"`
+	// SecurityLockReason holds the value of the "security_lock_reason" field.
+	SecurityLockReason *string `json:"security_lock_reason,omitempty"`
+	// DisabledReason holds the value of the "disabled_reason" field.
+	DisabledReason *string `json:"disabled_reason,omitempty"`
+	// DisabledFinancialEventType holds the value of the "disabled_financial_event_type" field.
+	DisabledFinancialEventType *string `json:"disabled_financial_event_type,omitempty"`
+	// DisabledFinancialEventID holds the value of the "disabled_financial_event_id" field.
+	DisabledFinancialEventID *int64 `json:"disabled_financial_event_id,omitempty"`
+	// DisabledAt holds the value of the "disabled_at" field.
+	DisabledAt *time.Time `json:"disabled_at,omitempty"`
 	// Last usage time of this API key
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	// Allowed IPs/CIDRs, e.g. ["192.168.1.100", "10.0.0.0/8"]
@@ -125,11 +139,11 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case apikey.FieldQuota, apikey.FieldQuotaUsed, apikey.FieldRateLimit5h, apikey.FieldRateLimit1d, apikey.FieldRateLimit7d, apikey.FieldUsage5h, apikey.FieldUsage1d, apikey.FieldUsage7d:
 			values[i] = new(sql.NullFloat64)
-		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID:
+		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID, apikey.FieldSecurityLockViolationID, apikey.FieldDisabledFinancialEventID:
 			values[i] = new(sql.NullInt64)
-		case apikey.FieldKey, apikey.FieldName, apikey.FieldStatus:
+		case apikey.FieldKey, apikey.FieldName, apikey.FieldStatus, apikey.FieldSecurityLockReason, apikey.FieldDisabledReason, apikey.FieldDisabledFinancialEventType:
 			values[i] = new(sql.NullString)
-		case apikey.FieldCreatedAt, apikey.FieldUpdatedAt, apikey.FieldDeletedAt, apikey.FieldLastUsedAt, apikey.FieldExpiresAt, apikey.FieldWindow5hStart, apikey.FieldWindow1dStart, apikey.FieldWindow7dStart:
+		case apikey.FieldCreatedAt, apikey.FieldUpdatedAt, apikey.FieldDeletedAt, apikey.FieldSecurityLockedAt, apikey.FieldDisabledAt, apikey.FieldLastUsedAt, apikey.FieldExpiresAt, apikey.FieldWindow5hStart, apikey.FieldWindow1dStart, apikey.FieldWindow7dStart:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -201,6 +215,55 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
+			}
+		case apikey.FieldSecurityLockedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field security_locked_at", values[i])
+			} else if value.Valid {
+				_m.SecurityLockedAt = new(time.Time)
+				*_m.SecurityLockedAt = value.Time
+			}
+		case apikey.FieldSecurityLockViolationID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field security_lock_violation_id", values[i])
+			} else if value.Valid {
+				_m.SecurityLockViolationID = new(int64)
+				*_m.SecurityLockViolationID = value.Int64
+			}
+		case apikey.FieldSecurityLockReason:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field security_lock_reason", values[i])
+			} else if value.Valid {
+				_m.SecurityLockReason = new(string)
+				*_m.SecurityLockReason = value.String
+			}
+		case apikey.FieldDisabledReason:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field disabled_reason", values[i])
+			} else if value.Valid {
+				_m.DisabledReason = new(string)
+				*_m.DisabledReason = value.String
+			}
+		case apikey.FieldDisabledFinancialEventType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field disabled_financial_event_type", values[i])
+			} else if value.Valid {
+				_m.DisabledFinancialEventType = new(string)
+				*_m.DisabledFinancialEventType = value.String
+			}
+		case apikey.FieldDisabledFinancialEventID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field disabled_financial_event_id", values[i])
+			} else if value.Valid {
+				_m.DisabledFinancialEventID = new(int64)
+				*_m.DisabledFinancialEventID = value.Int64
+			}
+		case apikey.FieldDisabledAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field disabled_at", values[i])
+			} else if value.Valid {
+				_m.DisabledAt = new(time.Time)
+				*_m.DisabledAt = value.Time
 			}
 		case apikey.FieldLastUsedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -379,6 +442,41 @@ func (_m *APIKey) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
+	builder.WriteString(", ")
+	if v := _m.SecurityLockedAt; v != nil {
+		builder.WriteString("security_locked_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.SecurityLockViolationID; v != nil {
+		builder.WriteString("security_lock_violation_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.SecurityLockReason; v != nil {
+		builder.WriteString("security_lock_reason=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.DisabledReason; v != nil {
+		builder.WriteString("disabled_reason=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.DisabledFinancialEventType; v != nil {
+		builder.WriteString("disabled_financial_event_type=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.DisabledFinancialEventID; v != nil {
+		builder.WriteString("disabled_financial_event_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.DisabledAt; v != nil {
+		builder.WriteString("disabled_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	if v := _m.LastUsedAt; v != nil {
 		builder.WriteString("last_used_at=")

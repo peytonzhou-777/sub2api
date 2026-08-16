@@ -328,7 +328,15 @@ type SystemSettings struct {
 	ModelPlazaDescription string `json:"model_plaza_description"`
 
 	// 风控中心功能开关
-	RiskControlEnabled bool `json:"risk_control_enabled"`
+	RiskControlEnabled                bool   `json:"risk_control_enabled"`
+	SecurityDepositEnforcementEnabled bool   `json:"security_deposit_enforcement_enabled"`
+	SecurityDepositSelfRefundEnabled  bool   `json:"security_deposit_self_refund_enabled"`
+	SecurityDepositPenaltyMode        string `json:"security_deposit_penalty_mode"`
+	SecurityDepositFreezeHours        int    `json:"security_deposit_freeze_hours"`
+	SecurityDepositMaxRiskMultiplier  int64  `json:"security_deposit_max_risk_multiplier"`
+	SecurityDepositPolicyVersion      string `json:"security_deposit_policy_version"`
+	SecurityDepositAgreementContentZH string `json:"security_deposit_agreement_content_zh"`
+	SecurityDepositAgreementContentEN string `json:"security_deposit_agreement_content_en"`
 
 	// cyber 会话屏蔽开关 + TTL
 	CyberSessionBlockEnabled    bool `json:"cyber_session_block_enabled"`

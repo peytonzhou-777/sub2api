@@ -113,6 +113,104 @@ func (_c *APIKeyCreate) SetNillableStatus(v *string) *APIKeyCreate {
 	return _c
 }
 
+// SetSecurityLockedAt sets the "security_locked_at" field.
+func (_c *APIKeyCreate) SetSecurityLockedAt(v time.Time) *APIKeyCreate {
+	_c.mutation.SetSecurityLockedAt(v)
+	return _c
+}
+
+// SetNillableSecurityLockedAt sets the "security_locked_at" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableSecurityLockedAt(v *time.Time) *APIKeyCreate {
+	if v != nil {
+		_c.SetSecurityLockedAt(*v)
+	}
+	return _c
+}
+
+// SetSecurityLockViolationID sets the "security_lock_violation_id" field.
+func (_c *APIKeyCreate) SetSecurityLockViolationID(v int64) *APIKeyCreate {
+	_c.mutation.SetSecurityLockViolationID(v)
+	return _c
+}
+
+// SetNillableSecurityLockViolationID sets the "security_lock_violation_id" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableSecurityLockViolationID(v *int64) *APIKeyCreate {
+	if v != nil {
+		_c.SetSecurityLockViolationID(*v)
+	}
+	return _c
+}
+
+// SetSecurityLockReason sets the "security_lock_reason" field.
+func (_c *APIKeyCreate) SetSecurityLockReason(v string) *APIKeyCreate {
+	_c.mutation.SetSecurityLockReason(v)
+	return _c
+}
+
+// SetNillableSecurityLockReason sets the "security_lock_reason" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableSecurityLockReason(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetSecurityLockReason(*v)
+	}
+	return _c
+}
+
+// SetDisabledReason sets the "disabled_reason" field.
+func (_c *APIKeyCreate) SetDisabledReason(v string) *APIKeyCreate {
+	_c.mutation.SetDisabledReason(v)
+	return _c
+}
+
+// SetNillableDisabledReason sets the "disabled_reason" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableDisabledReason(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetDisabledReason(*v)
+	}
+	return _c
+}
+
+// SetDisabledFinancialEventType sets the "disabled_financial_event_type" field.
+func (_c *APIKeyCreate) SetDisabledFinancialEventType(v string) *APIKeyCreate {
+	_c.mutation.SetDisabledFinancialEventType(v)
+	return _c
+}
+
+// SetNillableDisabledFinancialEventType sets the "disabled_financial_event_type" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableDisabledFinancialEventType(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetDisabledFinancialEventType(*v)
+	}
+	return _c
+}
+
+// SetDisabledFinancialEventID sets the "disabled_financial_event_id" field.
+func (_c *APIKeyCreate) SetDisabledFinancialEventID(v int64) *APIKeyCreate {
+	_c.mutation.SetDisabledFinancialEventID(v)
+	return _c
+}
+
+// SetNillableDisabledFinancialEventID sets the "disabled_financial_event_id" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableDisabledFinancialEventID(v *int64) *APIKeyCreate {
+	if v != nil {
+		_c.SetDisabledFinancialEventID(*v)
+	}
+	return _c
+}
+
+// SetDisabledAt sets the "disabled_at" field.
+func (_c *APIKeyCreate) SetDisabledAt(v time.Time) *APIKeyCreate {
+	_c.mutation.SetDisabledAt(v)
+	return _c
+}
+
+// SetNillableDisabledAt sets the "disabled_at" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableDisabledAt(v *time.Time) *APIKeyCreate {
+	if v != nil {
+		_c.SetDisabledAt(*v)
+	}
+	return _c
+}
+
 // SetLastUsedAt sets the "last_used_at" field.
 func (_c *APIKeyCreate) SetLastUsedAt(v time.Time) *APIKeyCreate {
 	_c.mutation.SetLastUsedAt(v)
@@ -457,6 +555,21 @@ func (_c *APIKeyCreate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.SecurityLockReason(); ok {
+		if err := apikey.SecurityLockReasonValidator(v); err != nil {
+			return &ValidationError{Name: "security_lock_reason", err: fmt.Errorf(`ent: validator failed for field "APIKey.security_lock_reason": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.DisabledReason(); ok {
+		if err := apikey.DisabledReasonValidator(v); err != nil {
+			return &ValidationError{Name: "disabled_reason", err: fmt.Errorf(`ent: validator failed for field "APIKey.disabled_reason": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.DisabledFinancialEventType(); ok {
+		if err := apikey.DisabledFinancialEventTypeValidator(v); err != nil {
+			return &ValidationError{Name: "disabled_financial_event_type", err: fmt.Errorf(`ent: validator failed for field "APIKey.disabled_financial_event_type": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Quota(); !ok {
 		return &ValidationError{Name: "quota", err: errors.New(`ent: missing required field "APIKey.quota"`)}
 	}
@@ -534,6 +647,34 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.SecurityLockedAt(); ok {
+		_spec.SetField(apikey.FieldSecurityLockedAt, field.TypeTime, value)
+		_node.SecurityLockedAt = &value
+	}
+	if value, ok := _c.mutation.SecurityLockViolationID(); ok {
+		_spec.SetField(apikey.FieldSecurityLockViolationID, field.TypeInt64, value)
+		_node.SecurityLockViolationID = &value
+	}
+	if value, ok := _c.mutation.SecurityLockReason(); ok {
+		_spec.SetField(apikey.FieldSecurityLockReason, field.TypeString, value)
+		_node.SecurityLockReason = &value
+	}
+	if value, ok := _c.mutation.DisabledReason(); ok {
+		_spec.SetField(apikey.FieldDisabledReason, field.TypeString, value)
+		_node.DisabledReason = &value
+	}
+	if value, ok := _c.mutation.DisabledFinancialEventType(); ok {
+		_spec.SetField(apikey.FieldDisabledFinancialEventType, field.TypeString, value)
+		_node.DisabledFinancialEventType = &value
+	}
+	if value, ok := _c.mutation.DisabledFinancialEventID(); ok {
+		_spec.SetField(apikey.FieldDisabledFinancialEventID, field.TypeInt64, value)
+		_node.DisabledFinancialEventID = &value
+	}
+	if value, ok := _c.mutation.DisabledAt(); ok {
+		_spec.SetField(apikey.FieldDisabledAt, field.TypeTime, value)
+		_node.DisabledAt = &value
 	}
 	if value, ok := _c.mutation.LastUsedAt(); ok {
 		_spec.SetField(apikey.FieldLastUsedAt, field.TypeTime, value)
@@ -790,6 +931,144 @@ func (u *APIKeyUpsert) SetStatus(v string) *APIKeyUpsert {
 // UpdateStatus sets the "status" field to the value that was provided on create.
 func (u *APIKeyUpsert) UpdateStatus() *APIKeyUpsert {
 	u.SetExcluded(apikey.FieldStatus)
+	return u
+}
+
+// SetSecurityLockedAt sets the "security_locked_at" field.
+func (u *APIKeyUpsert) SetSecurityLockedAt(v time.Time) *APIKeyUpsert {
+	u.Set(apikey.FieldSecurityLockedAt, v)
+	return u
+}
+
+// UpdateSecurityLockedAt sets the "security_locked_at" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateSecurityLockedAt() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldSecurityLockedAt)
+	return u
+}
+
+// ClearSecurityLockedAt clears the value of the "security_locked_at" field.
+func (u *APIKeyUpsert) ClearSecurityLockedAt() *APIKeyUpsert {
+	u.SetNull(apikey.FieldSecurityLockedAt)
+	return u
+}
+
+// SetSecurityLockViolationID sets the "security_lock_violation_id" field.
+func (u *APIKeyUpsert) SetSecurityLockViolationID(v int64) *APIKeyUpsert {
+	u.Set(apikey.FieldSecurityLockViolationID, v)
+	return u
+}
+
+// UpdateSecurityLockViolationID sets the "security_lock_violation_id" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateSecurityLockViolationID() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldSecurityLockViolationID)
+	return u
+}
+
+// AddSecurityLockViolationID adds v to the "security_lock_violation_id" field.
+func (u *APIKeyUpsert) AddSecurityLockViolationID(v int64) *APIKeyUpsert {
+	u.Add(apikey.FieldSecurityLockViolationID, v)
+	return u
+}
+
+// ClearSecurityLockViolationID clears the value of the "security_lock_violation_id" field.
+func (u *APIKeyUpsert) ClearSecurityLockViolationID() *APIKeyUpsert {
+	u.SetNull(apikey.FieldSecurityLockViolationID)
+	return u
+}
+
+// SetSecurityLockReason sets the "security_lock_reason" field.
+func (u *APIKeyUpsert) SetSecurityLockReason(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldSecurityLockReason, v)
+	return u
+}
+
+// UpdateSecurityLockReason sets the "security_lock_reason" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateSecurityLockReason() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldSecurityLockReason)
+	return u
+}
+
+// ClearSecurityLockReason clears the value of the "security_lock_reason" field.
+func (u *APIKeyUpsert) ClearSecurityLockReason() *APIKeyUpsert {
+	u.SetNull(apikey.FieldSecurityLockReason)
+	return u
+}
+
+// SetDisabledReason sets the "disabled_reason" field.
+func (u *APIKeyUpsert) SetDisabledReason(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldDisabledReason, v)
+	return u
+}
+
+// UpdateDisabledReason sets the "disabled_reason" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateDisabledReason() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldDisabledReason)
+	return u
+}
+
+// ClearDisabledReason clears the value of the "disabled_reason" field.
+func (u *APIKeyUpsert) ClearDisabledReason() *APIKeyUpsert {
+	u.SetNull(apikey.FieldDisabledReason)
+	return u
+}
+
+// SetDisabledFinancialEventType sets the "disabled_financial_event_type" field.
+func (u *APIKeyUpsert) SetDisabledFinancialEventType(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldDisabledFinancialEventType, v)
+	return u
+}
+
+// UpdateDisabledFinancialEventType sets the "disabled_financial_event_type" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateDisabledFinancialEventType() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldDisabledFinancialEventType)
+	return u
+}
+
+// ClearDisabledFinancialEventType clears the value of the "disabled_financial_event_type" field.
+func (u *APIKeyUpsert) ClearDisabledFinancialEventType() *APIKeyUpsert {
+	u.SetNull(apikey.FieldDisabledFinancialEventType)
+	return u
+}
+
+// SetDisabledFinancialEventID sets the "disabled_financial_event_id" field.
+func (u *APIKeyUpsert) SetDisabledFinancialEventID(v int64) *APIKeyUpsert {
+	u.Set(apikey.FieldDisabledFinancialEventID, v)
+	return u
+}
+
+// UpdateDisabledFinancialEventID sets the "disabled_financial_event_id" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateDisabledFinancialEventID() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldDisabledFinancialEventID)
+	return u
+}
+
+// AddDisabledFinancialEventID adds v to the "disabled_financial_event_id" field.
+func (u *APIKeyUpsert) AddDisabledFinancialEventID(v int64) *APIKeyUpsert {
+	u.Add(apikey.FieldDisabledFinancialEventID, v)
+	return u
+}
+
+// ClearDisabledFinancialEventID clears the value of the "disabled_financial_event_id" field.
+func (u *APIKeyUpsert) ClearDisabledFinancialEventID() *APIKeyUpsert {
+	u.SetNull(apikey.FieldDisabledFinancialEventID)
+	return u
+}
+
+// SetDisabledAt sets the "disabled_at" field.
+func (u *APIKeyUpsert) SetDisabledAt(v time.Time) *APIKeyUpsert {
+	u.Set(apikey.FieldDisabledAt, v)
+	return u
+}
+
+// UpdateDisabledAt sets the "disabled_at" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateDisabledAt() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldDisabledAt)
+	return u
+}
+
+// ClearDisabledAt clears the value of the "disabled_at" field.
+func (u *APIKeyUpsert) ClearDisabledAt() *APIKeyUpsert {
+	u.SetNull(apikey.FieldDisabledAt)
 	return u
 }
 
@@ -1217,6 +1496,167 @@ func (u *APIKeyUpsertOne) SetStatus(v string) *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) UpdateStatus() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetSecurityLockedAt sets the "security_locked_at" field.
+func (u *APIKeyUpsertOne) SetSecurityLockedAt(v time.Time) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetSecurityLockedAt(v)
+	})
+}
+
+// UpdateSecurityLockedAt sets the "security_locked_at" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateSecurityLockedAt() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateSecurityLockedAt()
+	})
+}
+
+// ClearSecurityLockedAt clears the value of the "security_locked_at" field.
+func (u *APIKeyUpsertOne) ClearSecurityLockedAt() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearSecurityLockedAt()
+	})
+}
+
+// SetSecurityLockViolationID sets the "security_lock_violation_id" field.
+func (u *APIKeyUpsertOne) SetSecurityLockViolationID(v int64) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetSecurityLockViolationID(v)
+	})
+}
+
+// AddSecurityLockViolationID adds v to the "security_lock_violation_id" field.
+func (u *APIKeyUpsertOne) AddSecurityLockViolationID(v int64) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddSecurityLockViolationID(v)
+	})
+}
+
+// UpdateSecurityLockViolationID sets the "security_lock_violation_id" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateSecurityLockViolationID() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateSecurityLockViolationID()
+	})
+}
+
+// ClearSecurityLockViolationID clears the value of the "security_lock_violation_id" field.
+func (u *APIKeyUpsertOne) ClearSecurityLockViolationID() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearSecurityLockViolationID()
+	})
+}
+
+// SetSecurityLockReason sets the "security_lock_reason" field.
+func (u *APIKeyUpsertOne) SetSecurityLockReason(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetSecurityLockReason(v)
+	})
+}
+
+// UpdateSecurityLockReason sets the "security_lock_reason" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateSecurityLockReason() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateSecurityLockReason()
+	})
+}
+
+// ClearSecurityLockReason clears the value of the "security_lock_reason" field.
+func (u *APIKeyUpsertOne) ClearSecurityLockReason() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearSecurityLockReason()
+	})
+}
+
+// SetDisabledReason sets the "disabled_reason" field.
+func (u *APIKeyUpsertOne) SetDisabledReason(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetDisabledReason(v)
+	})
+}
+
+// UpdateDisabledReason sets the "disabled_reason" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateDisabledReason() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateDisabledReason()
+	})
+}
+
+// ClearDisabledReason clears the value of the "disabled_reason" field.
+func (u *APIKeyUpsertOne) ClearDisabledReason() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearDisabledReason()
+	})
+}
+
+// SetDisabledFinancialEventType sets the "disabled_financial_event_type" field.
+func (u *APIKeyUpsertOne) SetDisabledFinancialEventType(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetDisabledFinancialEventType(v)
+	})
+}
+
+// UpdateDisabledFinancialEventType sets the "disabled_financial_event_type" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateDisabledFinancialEventType() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateDisabledFinancialEventType()
+	})
+}
+
+// ClearDisabledFinancialEventType clears the value of the "disabled_financial_event_type" field.
+func (u *APIKeyUpsertOne) ClearDisabledFinancialEventType() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearDisabledFinancialEventType()
+	})
+}
+
+// SetDisabledFinancialEventID sets the "disabled_financial_event_id" field.
+func (u *APIKeyUpsertOne) SetDisabledFinancialEventID(v int64) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetDisabledFinancialEventID(v)
+	})
+}
+
+// AddDisabledFinancialEventID adds v to the "disabled_financial_event_id" field.
+func (u *APIKeyUpsertOne) AddDisabledFinancialEventID(v int64) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddDisabledFinancialEventID(v)
+	})
+}
+
+// UpdateDisabledFinancialEventID sets the "disabled_financial_event_id" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateDisabledFinancialEventID() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateDisabledFinancialEventID()
+	})
+}
+
+// ClearDisabledFinancialEventID clears the value of the "disabled_financial_event_id" field.
+func (u *APIKeyUpsertOne) ClearDisabledFinancialEventID() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearDisabledFinancialEventID()
+	})
+}
+
+// SetDisabledAt sets the "disabled_at" field.
+func (u *APIKeyUpsertOne) SetDisabledAt(v time.Time) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetDisabledAt(v)
+	})
+}
+
+// UpdateDisabledAt sets the "disabled_at" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateDisabledAt() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateDisabledAt()
+	})
+}
+
+// ClearDisabledAt clears the value of the "disabled_at" field.
+func (u *APIKeyUpsertOne) ClearDisabledAt() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearDisabledAt()
 	})
 }
 
@@ -1855,6 +2295,167 @@ func (u *APIKeyUpsertBulk) SetStatus(v string) *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) UpdateStatus() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetSecurityLockedAt sets the "security_locked_at" field.
+func (u *APIKeyUpsertBulk) SetSecurityLockedAt(v time.Time) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetSecurityLockedAt(v)
+	})
+}
+
+// UpdateSecurityLockedAt sets the "security_locked_at" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateSecurityLockedAt() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateSecurityLockedAt()
+	})
+}
+
+// ClearSecurityLockedAt clears the value of the "security_locked_at" field.
+func (u *APIKeyUpsertBulk) ClearSecurityLockedAt() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearSecurityLockedAt()
+	})
+}
+
+// SetSecurityLockViolationID sets the "security_lock_violation_id" field.
+func (u *APIKeyUpsertBulk) SetSecurityLockViolationID(v int64) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetSecurityLockViolationID(v)
+	})
+}
+
+// AddSecurityLockViolationID adds v to the "security_lock_violation_id" field.
+func (u *APIKeyUpsertBulk) AddSecurityLockViolationID(v int64) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddSecurityLockViolationID(v)
+	})
+}
+
+// UpdateSecurityLockViolationID sets the "security_lock_violation_id" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateSecurityLockViolationID() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateSecurityLockViolationID()
+	})
+}
+
+// ClearSecurityLockViolationID clears the value of the "security_lock_violation_id" field.
+func (u *APIKeyUpsertBulk) ClearSecurityLockViolationID() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearSecurityLockViolationID()
+	})
+}
+
+// SetSecurityLockReason sets the "security_lock_reason" field.
+func (u *APIKeyUpsertBulk) SetSecurityLockReason(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetSecurityLockReason(v)
+	})
+}
+
+// UpdateSecurityLockReason sets the "security_lock_reason" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateSecurityLockReason() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateSecurityLockReason()
+	})
+}
+
+// ClearSecurityLockReason clears the value of the "security_lock_reason" field.
+func (u *APIKeyUpsertBulk) ClearSecurityLockReason() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearSecurityLockReason()
+	})
+}
+
+// SetDisabledReason sets the "disabled_reason" field.
+func (u *APIKeyUpsertBulk) SetDisabledReason(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetDisabledReason(v)
+	})
+}
+
+// UpdateDisabledReason sets the "disabled_reason" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateDisabledReason() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateDisabledReason()
+	})
+}
+
+// ClearDisabledReason clears the value of the "disabled_reason" field.
+func (u *APIKeyUpsertBulk) ClearDisabledReason() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearDisabledReason()
+	})
+}
+
+// SetDisabledFinancialEventType sets the "disabled_financial_event_type" field.
+func (u *APIKeyUpsertBulk) SetDisabledFinancialEventType(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetDisabledFinancialEventType(v)
+	})
+}
+
+// UpdateDisabledFinancialEventType sets the "disabled_financial_event_type" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateDisabledFinancialEventType() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateDisabledFinancialEventType()
+	})
+}
+
+// ClearDisabledFinancialEventType clears the value of the "disabled_financial_event_type" field.
+func (u *APIKeyUpsertBulk) ClearDisabledFinancialEventType() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearDisabledFinancialEventType()
+	})
+}
+
+// SetDisabledFinancialEventID sets the "disabled_financial_event_id" field.
+func (u *APIKeyUpsertBulk) SetDisabledFinancialEventID(v int64) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetDisabledFinancialEventID(v)
+	})
+}
+
+// AddDisabledFinancialEventID adds v to the "disabled_financial_event_id" field.
+func (u *APIKeyUpsertBulk) AddDisabledFinancialEventID(v int64) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddDisabledFinancialEventID(v)
+	})
+}
+
+// UpdateDisabledFinancialEventID sets the "disabled_financial_event_id" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateDisabledFinancialEventID() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateDisabledFinancialEventID()
+	})
+}
+
+// ClearDisabledFinancialEventID clears the value of the "disabled_financial_event_id" field.
+func (u *APIKeyUpsertBulk) ClearDisabledFinancialEventID() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearDisabledFinancialEventID()
+	})
+}
+
+// SetDisabledAt sets the "disabled_at" field.
+func (u *APIKeyUpsertBulk) SetDisabledAt(v time.Time) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetDisabledAt(v)
+	})
+}
+
+// UpdateDisabledAt sets the "disabled_at" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateDisabledAt() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateDisabledAt()
+	})
+}
+
+// ClearDisabledAt clears the value of the "disabled_at" field.
+func (u *APIKeyUpsertBulk) ClearDisabledAt() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearDisabledAt()
 	})
 }
 

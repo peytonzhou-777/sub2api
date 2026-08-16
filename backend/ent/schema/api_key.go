@@ -47,6 +47,32 @@ func (APIKey) Fields() []ent.Field {
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),
+		field.Time("security_locked_at").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
+		field.Int64("security_lock_violation_id").
+			Optional().
+			Nillable(),
+		field.String("security_lock_reason").
+			Optional().
+			Nillable().
+			MaxLen(64),
+		field.String("disabled_reason").
+			Optional().
+			Nillable().
+			MaxLen(64),
+		field.String("disabled_financial_event_type").
+			Optional().
+			Nillable().
+			MaxLen(32),
+		field.Int64("disabled_financial_event_id").
+			Optional().
+			Nillable(),
+		field.Time("disabled_at").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
 		field.Time("last_used_at").
 			Optional().
 			Nillable().
@@ -144,5 +170,7 @@ func (APIKey) Indexes() []ent.Index {
 		// Index for quota queries
 		index.Fields("quota", "quota_used"),
 		index.Fields("expires_at"),
+		index.Fields("security_lock_violation_id"),
+		index.Fields("disabled_financial_event_type", "disabled_financial_event_id"),
 	}
 }

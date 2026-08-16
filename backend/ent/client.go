@@ -55,6 +55,14 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseraccountitem"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuserattempt"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseritem"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositaccount"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositagreement"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositledger"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositlot"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositrefund"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositriskevent"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositriskprofile"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositviolation"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -159,6 +167,22 @@ type Client struct {
 	ResetRebateUserAttempt *ResetRebateUserAttemptClient
 	// ResetRebateUserItem is the client for interacting with the ResetRebateUserItem builders.
 	ResetRebateUserItem *ResetRebateUserItemClient
+	// SecurityDepositAccount is the client for interacting with the SecurityDepositAccount builders.
+	SecurityDepositAccount *SecurityDepositAccountClient
+	// SecurityDepositAgreement is the client for interacting with the SecurityDepositAgreement builders.
+	SecurityDepositAgreement *SecurityDepositAgreementClient
+	// SecurityDepositLedger is the client for interacting with the SecurityDepositLedger builders.
+	SecurityDepositLedger *SecurityDepositLedgerClient
+	// SecurityDepositLot is the client for interacting with the SecurityDepositLot builders.
+	SecurityDepositLot *SecurityDepositLotClient
+	// SecurityDepositRefund is the client for interacting with the SecurityDepositRefund builders.
+	SecurityDepositRefund *SecurityDepositRefundClient
+	// SecurityDepositRiskEvent is the client for interacting with the SecurityDepositRiskEvent builders.
+	SecurityDepositRiskEvent *SecurityDepositRiskEventClient
+	// SecurityDepositRiskProfile is the client for interacting with the SecurityDepositRiskProfile builders.
+	SecurityDepositRiskProfile *SecurityDepositRiskProfileClient
+	// SecurityDepositViolation is the client for interacting with the SecurityDepositViolation builders.
+	SecurityDepositViolation *SecurityDepositViolationClient
 	// SecuritySecret is the client for interacting with the SecuritySecret builders.
 	SecuritySecret *SecuritySecretClient
 	// Setting is the client for interacting with the Setting builders.
@@ -240,6 +264,14 @@ func (c *Client) init() {
 	c.ResetRebateUserAccountItem = NewResetRebateUserAccountItemClient(c.config)
 	c.ResetRebateUserAttempt = NewResetRebateUserAttemptClient(c.config)
 	c.ResetRebateUserItem = NewResetRebateUserItemClient(c.config)
+	c.SecurityDepositAccount = NewSecurityDepositAccountClient(c.config)
+	c.SecurityDepositAgreement = NewSecurityDepositAgreementClient(c.config)
+	c.SecurityDepositLedger = NewSecurityDepositLedgerClient(c.config)
+	c.SecurityDepositLot = NewSecurityDepositLotClient(c.config)
+	c.SecurityDepositRefund = NewSecurityDepositRefundClient(c.config)
+	c.SecurityDepositRiskEvent = NewSecurityDepositRiskEventClient(c.config)
+	c.SecurityDepositRiskProfile = NewSecurityDepositRiskProfileClient(c.config)
+	c.SecurityDepositViolation = NewSecurityDepositViolationClient(c.config)
 	c.SecuritySecret = NewSecuritySecretClient(c.config)
 	c.Setting = NewSettingClient(c.config)
 	c.SubscriptionPlan = NewSubscriptionPlanClient(c.config)
@@ -387,6 +419,14 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ResetRebateUserAccountItem:    NewResetRebateUserAccountItemClient(cfg),
 		ResetRebateUserAttempt:        NewResetRebateUserAttemptClient(cfg),
 		ResetRebateUserItem:           NewResetRebateUserItemClient(cfg),
+		SecurityDepositAccount:        NewSecurityDepositAccountClient(cfg),
+		SecurityDepositAgreement:      NewSecurityDepositAgreementClient(cfg),
+		SecurityDepositLedger:         NewSecurityDepositLedgerClient(cfg),
+		SecurityDepositLot:            NewSecurityDepositLotClient(cfg),
+		SecurityDepositRefund:         NewSecurityDepositRefundClient(cfg),
+		SecurityDepositRiskEvent:      NewSecurityDepositRiskEventClient(cfg),
+		SecurityDepositRiskProfile:    NewSecurityDepositRiskProfileClient(cfg),
+		SecurityDepositViolation:      NewSecurityDepositViolationClient(cfg),
 		SecuritySecret:                NewSecuritySecretClient(cfg),
 		Setting:                       NewSettingClient(cfg),
 		SubscriptionPlan:              NewSubscriptionPlanClient(cfg),
@@ -461,6 +501,14 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ResetRebateUserAccountItem:    NewResetRebateUserAccountItemClient(cfg),
 		ResetRebateUserAttempt:        NewResetRebateUserAttemptClient(cfg),
 		ResetRebateUserItem:           NewResetRebateUserItemClient(cfg),
+		SecurityDepositAccount:        NewSecurityDepositAccountClient(cfg),
+		SecurityDepositAgreement:      NewSecurityDepositAgreementClient(cfg),
+		SecurityDepositLedger:         NewSecurityDepositLedgerClient(cfg),
+		SecurityDepositLot:            NewSecurityDepositLotClient(cfg),
+		SecurityDepositRefund:         NewSecurityDepositRefundClient(cfg),
+		SecurityDepositRiskEvent:      NewSecurityDepositRiskEventClient(cfg),
+		SecurityDepositRiskProfile:    NewSecurityDepositRiskProfileClient(cfg),
+		SecurityDepositViolation:      NewSecurityDepositViolationClient(cfg),
 		SecuritySecret:                NewSecuritySecretClient(cfg),
 		Setting:                       NewSettingClient(cfg),
 		SubscriptionPlan:              NewSubscriptionPlanClient(cfg),
@@ -517,7 +565,10 @@ func (c *Client) Use(hooks ...Hook) {
 		c.RecurringCreditBatch, c.RecurringCreditTask, c.RecurringCreditTaskAudit,
 		c.RecurringCreditUserItem, c.RedeemCode, c.ResetRebateAccountItem,
 		c.ResetRebateBatch, c.ResetRebateUserAccountItem, c.ResetRebateUserAttempt,
-		c.ResetRebateUserItem, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
+		c.ResetRebateUserItem, c.SecurityDepositAccount, c.SecurityDepositAgreement,
+		c.SecurityDepositLedger, c.SecurityDepositLot, c.SecurityDepositRefund,
+		c.SecurityDepositRiskEvent, c.SecurityDepositRiskProfile,
+		c.SecurityDepositViolation, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
 		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
 		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
 		c.UserCreditGrantEventTrigger, c.UserLimitedCreditGrant,
@@ -543,7 +594,10 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.RecurringCreditBatch, c.RecurringCreditTask, c.RecurringCreditTaskAudit,
 		c.RecurringCreditUserItem, c.RedeemCode, c.ResetRebateAccountItem,
 		c.ResetRebateBatch, c.ResetRebateUserAccountItem, c.ResetRebateUserAttempt,
-		c.ResetRebateUserItem, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
+		c.ResetRebateUserItem, c.SecurityDepositAccount, c.SecurityDepositAgreement,
+		c.SecurityDepositLedger, c.SecurityDepositLot, c.SecurityDepositRefund,
+		c.SecurityDepositRiskEvent, c.SecurityDepositRiskProfile,
+		c.SecurityDepositViolation, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
 		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
 		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
 		c.UserCreditGrantEventTrigger, c.UserLimitedCreditGrant,
@@ -636,6 +690,22 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ResetRebateUserAttempt.mutate(ctx, m)
 	case *ResetRebateUserItemMutation:
 		return c.ResetRebateUserItem.mutate(ctx, m)
+	case *SecurityDepositAccountMutation:
+		return c.SecurityDepositAccount.mutate(ctx, m)
+	case *SecurityDepositAgreementMutation:
+		return c.SecurityDepositAgreement.mutate(ctx, m)
+	case *SecurityDepositLedgerMutation:
+		return c.SecurityDepositLedger.mutate(ctx, m)
+	case *SecurityDepositLotMutation:
+		return c.SecurityDepositLot.mutate(ctx, m)
+	case *SecurityDepositRefundMutation:
+		return c.SecurityDepositRefund.mutate(ctx, m)
+	case *SecurityDepositRiskEventMutation:
+		return c.SecurityDepositRiskEvent.mutate(ctx, m)
+	case *SecurityDepositRiskProfileMutation:
+		return c.SecurityDepositRiskProfile.mutate(ctx, m)
+	case *SecurityDepositViolationMutation:
+		return c.SecurityDepositViolation.mutate(ctx, m)
 	case *SecuritySecretMutation:
 		return c.SecuritySecret.mutate(ctx, m)
 	case *SettingMutation:
@@ -6674,6 +6744,1070 @@ func (c *ResetRebateUserItemClient) mutate(ctx context.Context, m *ResetRebateUs
 	}
 }
 
+// SecurityDepositAccountClient is a client for the SecurityDepositAccount schema.
+type SecurityDepositAccountClient struct {
+	config
+}
+
+// NewSecurityDepositAccountClient returns a client for the SecurityDepositAccount from the given config.
+func NewSecurityDepositAccountClient(c config) *SecurityDepositAccountClient {
+	return &SecurityDepositAccountClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `securitydepositaccount.Hooks(f(g(h())))`.
+func (c *SecurityDepositAccountClient) Use(hooks ...Hook) {
+	c.hooks.SecurityDepositAccount = append(c.hooks.SecurityDepositAccount, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `securitydepositaccount.Intercept(f(g(h())))`.
+func (c *SecurityDepositAccountClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SecurityDepositAccount = append(c.inters.SecurityDepositAccount, interceptors...)
+}
+
+// Create returns a builder for creating a SecurityDepositAccount entity.
+func (c *SecurityDepositAccountClient) Create() *SecurityDepositAccountCreate {
+	mutation := newSecurityDepositAccountMutation(c.config, OpCreate)
+	return &SecurityDepositAccountCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SecurityDepositAccount entities.
+func (c *SecurityDepositAccountClient) CreateBulk(builders ...*SecurityDepositAccountCreate) *SecurityDepositAccountCreateBulk {
+	return &SecurityDepositAccountCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SecurityDepositAccountClient) MapCreateBulk(slice any, setFunc func(*SecurityDepositAccountCreate, int)) *SecurityDepositAccountCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SecurityDepositAccountCreateBulk{err: fmt.Errorf("calling to SecurityDepositAccountClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SecurityDepositAccountCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SecurityDepositAccountCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SecurityDepositAccount.
+func (c *SecurityDepositAccountClient) Update() *SecurityDepositAccountUpdate {
+	mutation := newSecurityDepositAccountMutation(c.config, OpUpdate)
+	return &SecurityDepositAccountUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SecurityDepositAccountClient) UpdateOne(_m *SecurityDepositAccount) *SecurityDepositAccountUpdateOne {
+	mutation := newSecurityDepositAccountMutation(c.config, OpUpdateOne, withSecurityDepositAccount(_m))
+	return &SecurityDepositAccountUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SecurityDepositAccountClient) UpdateOneID(id int64) *SecurityDepositAccountUpdateOne {
+	mutation := newSecurityDepositAccountMutation(c.config, OpUpdateOne, withSecurityDepositAccountID(id))
+	return &SecurityDepositAccountUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SecurityDepositAccount.
+func (c *SecurityDepositAccountClient) Delete() *SecurityDepositAccountDelete {
+	mutation := newSecurityDepositAccountMutation(c.config, OpDelete)
+	return &SecurityDepositAccountDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SecurityDepositAccountClient) DeleteOne(_m *SecurityDepositAccount) *SecurityDepositAccountDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SecurityDepositAccountClient) DeleteOneID(id int64) *SecurityDepositAccountDeleteOne {
+	builder := c.Delete().Where(securitydepositaccount.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SecurityDepositAccountDeleteOne{builder}
+}
+
+// Query returns a query builder for SecurityDepositAccount.
+func (c *SecurityDepositAccountClient) Query() *SecurityDepositAccountQuery {
+	return &SecurityDepositAccountQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSecurityDepositAccount},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SecurityDepositAccount entity by its id.
+func (c *SecurityDepositAccountClient) Get(ctx context.Context, id int64) (*SecurityDepositAccount, error) {
+	return c.Query().Where(securitydepositaccount.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SecurityDepositAccountClient) GetX(ctx context.Context, id int64) *SecurityDepositAccount {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SecurityDepositAccountClient) Hooks() []Hook {
+	return c.hooks.SecurityDepositAccount
+}
+
+// Interceptors returns the client interceptors.
+func (c *SecurityDepositAccountClient) Interceptors() []Interceptor {
+	return c.inters.SecurityDepositAccount
+}
+
+func (c *SecurityDepositAccountClient) mutate(ctx context.Context, m *SecurityDepositAccountMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SecurityDepositAccountCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SecurityDepositAccountUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SecurityDepositAccountUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SecurityDepositAccountDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SecurityDepositAccount mutation op: %q", m.Op())
+	}
+}
+
+// SecurityDepositAgreementClient is a client for the SecurityDepositAgreement schema.
+type SecurityDepositAgreementClient struct {
+	config
+}
+
+// NewSecurityDepositAgreementClient returns a client for the SecurityDepositAgreement from the given config.
+func NewSecurityDepositAgreementClient(c config) *SecurityDepositAgreementClient {
+	return &SecurityDepositAgreementClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `securitydepositagreement.Hooks(f(g(h())))`.
+func (c *SecurityDepositAgreementClient) Use(hooks ...Hook) {
+	c.hooks.SecurityDepositAgreement = append(c.hooks.SecurityDepositAgreement, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `securitydepositagreement.Intercept(f(g(h())))`.
+func (c *SecurityDepositAgreementClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SecurityDepositAgreement = append(c.inters.SecurityDepositAgreement, interceptors...)
+}
+
+// Create returns a builder for creating a SecurityDepositAgreement entity.
+func (c *SecurityDepositAgreementClient) Create() *SecurityDepositAgreementCreate {
+	mutation := newSecurityDepositAgreementMutation(c.config, OpCreate)
+	return &SecurityDepositAgreementCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SecurityDepositAgreement entities.
+func (c *SecurityDepositAgreementClient) CreateBulk(builders ...*SecurityDepositAgreementCreate) *SecurityDepositAgreementCreateBulk {
+	return &SecurityDepositAgreementCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SecurityDepositAgreementClient) MapCreateBulk(slice any, setFunc func(*SecurityDepositAgreementCreate, int)) *SecurityDepositAgreementCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SecurityDepositAgreementCreateBulk{err: fmt.Errorf("calling to SecurityDepositAgreementClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SecurityDepositAgreementCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SecurityDepositAgreementCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SecurityDepositAgreement.
+func (c *SecurityDepositAgreementClient) Update() *SecurityDepositAgreementUpdate {
+	mutation := newSecurityDepositAgreementMutation(c.config, OpUpdate)
+	return &SecurityDepositAgreementUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SecurityDepositAgreementClient) UpdateOne(_m *SecurityDepositAgreement) *SecurityDepositAgreementUpdateOne {
+	mutation := newSecurityDepositAgreementMutation(c.config, OpUpdateOne, withSecurityDepositAgreement(_m))
+	return &SecurityDepositAgreementUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SecurityDepositAgreementClient) UpdateOneID(id int64) *SecurityDepositAgreementUpdateOne {
+	mutation := newSecurityDepositAgreementMutation(c.config, OpUpdateOne, withSecurityDepositAgreementID(id))
+	return &SecurityDepositAgreementUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SecurityDepositAgreement.
+func (c *SecurityDepositAgreementClient) Delete() *SecurityDepositAgreementDelete {
+	mutation := newSecurityDepositAgreementMutation(c.config, OpDelete)
+	return &SecurityDepositAgreementDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SecurityDepositAgreementClient) DeleteOne(_m *SecurityDepositAgreement) *SecurityDepositAgreementDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SecurityDepositAgreementClient) DeleteOneID(id int64) *SecurityDepositAgreementDeleteOne {
+	builder := c.Delete().Where(securitydepositagreement.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SecurityDepositAgreementDeleteOne{builder}
+}
+
+// Query returns a query builder for SecurityDepositAgreement.
+func (c *SecurityDepositAgreementClient) Query() *SecurityDepositAgreementQuery {
+	return &SecurityDepositAgreementQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSecurityDepositAgreement},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SecurityDepositAgreement entity by its id.
+func (c *SecurityDepositAgreementClient) Get(ctx context.Context, id int64) (*SecurityDepositAgreement, error) {
+	return c.Query().Where(securitydepositagreement.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SecurityDepositAgreementClient) GetX(ctx context.Context, id int64) *SecurityDepositAgreement {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SecurityDepositAgreementClient) Hooks() []Hook {
+	return c.hooks.SecurityDepositAgreement
+}
+
+// Interceptors returns the client interceptors.
+func (c *SecurityDepositAgreementClient) Interceptors() []Interceptor {
+	return c.inters.SecurityDepositAgreement
+}
+
+func (c *SecurityDepositAgreementClient) mutate(ctx context.Context, m *SecurityDepositAgreementMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SecurityDepositAgreementCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SecurityDepositAgreementUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SecurityDepositAgreementUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SecurityDepositAgreementDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SecurityDepositAgreement mutation op: %q", m.Op())
+	}
+}
+
+// SecurityDepositLedgerClient is a client for the SecurityDepositLedger schema.
+type SecurityDepositLedgerClient struct {
+	config
+}
+
+// NewSecurityDepositLedgerClient returns a client for the SecurityDepositLedger from the given config.
+func NewSecurityDepositLedgerClient(c config) *SecurityDepositLedgerClient {
+	return &SecurityDepositLedgerClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `securitydepositledger.Hooks(f(g(h())))`.
+func (c *SecurityDepositLedgerClient) Use(hooks ...Hook) {
+	c.hooks.SecurityDepositLedger = append(c.hooks.SecurityDepositLedger, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `securitydepositledger.Intercept(f(g(h())))`.
+func (c *SecurityDepositLedgerClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SecurityDepositLedger = append(c.inters.SecurityDepositLedger, interceptors...)
+}
+
+// Create returns a builder for creating a SecurityDepositLedger entity.
+func (c *SecurityDepositLedgerClient) Create() *SecurityDepositLedgerCreate {
+	mutation := newSecurityDepositLedgerMutation(c.config, OpCreate)
+	return &SecurityDepositLedgerCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SecurityDepositLedger entities.
+func (c *SecurityDepositLedgerClient) CreateBulk(builders ...*SecurityDepositLedgerCreate) *SecurityDepositLedgerCreateBulk {
+	return &SecurityDepositLedgerCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SecurityDepositLedgerClient) MapCreateBulk(slice any, setFunc func(*SecurityDepositLedgerCreate, int)) *SecurityDepositLedgerCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SecurityDepositLedgerCreateBulk{err: fmt.Errorf("calling to SecurityDepositLedgerClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SecurityDepositLedgerCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SecurityDepositLedgerCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SecurityDepositLedger.
+func (c *SecurityDepositLedgerClient) Update() *SecurityDepositLedgerUpdate {
+	mutation := newSecurityDepositLedgerMutation(c.config, OpUpdate)
+	return &SecurityDepositLedgerUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SecurityDepositLedgerClient) UpdateOne(_m *SecurityDepositLedger) *SecurityDepositLedgerUpdateOne {
+	mutation := newSecurityDepositLedgerMutation(c.config, OpUpdateOne, withSecurityDepositLedger(_m))
+	return &SecurityDepositLedgerUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SecurityDepositLedgerClient) UpdateOneID(id int64) *SecurityDepositLedgerUpdateOne {
+	mutation := newSecurityDepositLedgerMutation(c.config, OpUpdateOne, withSecurityDepositLedgerID(id))
+	return &SecurityDepositLedgerUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SecurityDepositLedger.
+func (c *SecurityDepositLedgerClient) Delete() *SecurityDepositLedgerDelete {
+	mutation := newSecurityDepositLedgerMutation(c.config, OpDelete)
+	return &SecurityDepositLedgerDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SecurityDepositLedgerClient) DeleteOne(_m *SecurityDepositLedger) *SecurityDepositLedgerDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SecurityDepositLedgerClient) DeleteOneID(id int64) *SecurityDepositLedgerDeleteOne {
+	builder := c.Delete().Where(securitydepositledger.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SecurityDepositLedgerDeleteOne{builder}
+}
+
+// Query returns a query builder for SecurityDepositLedger.
+func (c *SecurityDepositLedgerClient) Query() *SecurityDepositLedgerQuery {
+	return &SecurityDepositLedgerQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSecurityDepositLedger},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SecurityDepositLedger entity by its id.
+func (c *SecurityDepositLedgerClient) Get(ctx context.Context, id int64) (*SecurityDepositLedger, error) {
+	return c.Query().Where(securitydepositledger.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SecurityDepositLedgerClient) GetX(ctx context.Context, id int64) *SecurityDepositLedger {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SecurityDepositLedgerClient) Hooks() []Hook {
+	return c.hooks.SecurityDepositLedger
+}
+
+// Interceptors returns the client interceptors.
+func (c *SecurityDepositLedgerClient) Interceptors() []Interceptor {
+	return c.inters.SecurityDepositLedger
+}
+
+func (c *SecurityDepositLedgerClient) mutate(ctx context.Context, m *SecurityDepositLedgerMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SecurityDepositLedgerCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SecurityDepositLedgerUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SecurityDepositLedgerUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SecurityDepositLedgerDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SecurityDepositLedger mutation op: %q", m.Op())
+	}
+}
+
+// SecurityDepositLotClient is a client for the SecurityDepositLot schema.
+type SecurityDepositLotClient struct {
+	config
+}
+
+// NewSecurityDepositLotClient returns a client for the SecurityDepositLot from the given config.
+func NewSecurityDepositLotClient(c config) *SecurityDepositLotClient {
+	return &SecurityDepositLotClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `securitydepositlot.Hooks(f(g(h())))`.
+func (c *SecurityDepositLotClient) Use(hooks ...Hook) {
+	c.hooks.SecurityDepositLot = append(c.hooks.SecurityDepositLot, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `securitydepositlot.Intercept(f(g(h())))`.
+func (c *SecurityDepositLotClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SecurityDepositLot = append(c.inters.SecurityDepositLot, interceptors...)
+}
+
+// Create returns a builder for creating a SecurityDepositLot entity.
+func (c *SecurityDepositLotClient) Create() *SecurityDepositLotCreate {
+	mutation := newSecurityDepositLotMutation(c.config, OpCreate)
+	return &SecurityDepositLotCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SecurityDepositLot entities.
+func (c *SecurityDepositLotClient) CreateBulk(builders ...*SecurityDepositLotCreate) *SecurityDepositLotCreateBulk {
+	return &SecurityDepositLotCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SecurityDepositLotClient) MapCreateBulk(slice any, setFunc func(*SecurityDepositLotCreate, int)) *SecurityDepositLotCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SecurityDepositLotCreateBulk{err: fmt.Errorf("calling to SecurityDepositLotClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SecurityDepositLotCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SecurityDepositLotCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SecurityDepositLot.
+func (c *SecurityDepositLotClient) Update() *SecurityDepositLotUpdate {
+	mutation := newSecurityDepositLotMutation(c.config, OpUpdate)
+	return &SecurityDepositLotUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SecurityDepositLotClient) UpdateOne(_m *SecurityDepositLot) *SecurityDepositLotUpdateOne {
+	mutation := newSecurityDepositLotMutation(c.config, OpUpdateOne, withSecurityDepositLot(_m))
+	return &SecurityDepositLotUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SecurityDepositLotClient) UpdateOneID(id int64) *SecurityDepositLotUpdateOne {
+	mutation := newSecurityDepositLotMutation(c.config, OpUpdateOne, withSecurityDepositLotID(id))
+	return &SecurityDepositLotUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SecurityDepositLot.
+func (c *SecurityDepositLotClient) Delete() *SecurityDepositLotDelete {
+	mutation := newSecurityDepositLotMutation(c.config, OpDelete)
+	return &SecurityDepositLotDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SecurityDepositLotClient) DeleteOne(_m *SecurityDepositLot) *SecurityDepositLotDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SecurityDepositLotClient) DeleteOneID(id int64) *SecurityDepositLotDeleteOne {
+	builder := c.Delete().Where(securitydepositlot.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SecurityDepositLotDeleteOne{builder}
+}
+
+// Query returns a query builder for SecurityDepositLot.
+func (c *SecurityDepositLotClient) Query() *SecurityDepositLotQuery {
+	return &SecurityDepositLotQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSecurityDepositLot},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SecurityDepositLot entity by its id.
+func (c *SecurityDepositLotClient) Get(ctx context.Context, id int64) (*SecurityDepositLot, error) {
+	return c.Query().Where(securitydepositlot.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SecurityDepositLotClient) GetX(ctx context.Context, id int64) *SecurityDepositLot {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SecurityDepositLotClient) Hooks() []Hook {
+	return c.hooks.SecurityDepositLot
+}
+
+// Interceptors returns the client interceptors.
+func (c *SecurityDepositLotClient) Interceptors() []Interceptor {
+	return c.inters.SecurityDepositLot
+}
+
+func (c *SecurityDepositLotClient) mutate(ctx context.Context, m *SecurityDepositLotMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SecurityDepositLotCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SecurityDepositLotUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SecurityDepositLotUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SecurityDepositLotDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SecurityDepositLot mutation op: %q", m.Op())
+	}
+}
+
+// SecurityDepositRefundClient is a client for the SecurityDepositRefund schema.
+type SecurityDepositRefundClient struct {
+	config
+}
+
+// NewSecurityDepositRefundClient returns a client for the SecurityDepositRefund from the given config.
+func NewSecurityDepositRefundClient(c config) *SecurityDepositRefundClient {
+	return &SecurityDepositRefundClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `securitydepositrefund.Hooks(f(g(h())))`.
+func (c *SecurityDepositRefundClient) Use(hooks ...Hook) {
+	c.hooks.SecurityDepositRefund = append(c.hooks.SecurityDepositRefund, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `securitydepositrefund.Intercept(f(g(h())))`.
+func (c *SecurityDepositRefundClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SecurityDepositRefund = append(c.inters.SecurityDepositRefund, interceptors...)
+}
+
+// Create returns a builder for creating a SecurityDepositRefund entity.
+func (c *SecurityDepositRefundClient) Create() *SecurityDepositRefundCreate {
+	mutation := newSecurityDepositRefundMutation(c.config, OpCreate)
+	return &SecurityDepositRefundCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SecurityDepositRefund entities.
+func (c *SecurityDepositRefundClient) CreateBulk(builders ...*SecurityDepositRefundCreate) *SecurityDepositRefundCreateBulk {
+	return &SecurityDepositRefundCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SecurityDepositRefundClient) MapCreateBulk(slice any, setFunc func(*SecurityDepositRefundCreate, int)) *SecurityDepositRefundCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SecurityDepositRefundCreateBulk{err: fmt.Errorf("calling to SecurityDepositRefundClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SecurityDepositRefundCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SecurityDepositRefundCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SecurityDepositRefund.
+func (c *SecurityDepositRefundClient) Update() *SecurityDepositRefundUpdate {
+	mutation := newSecurityDepositRefundMutation(c.config, OpUpdate)
+	return &SecurityDepositRefundUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SecurityDepositRefundClient) UpdateOne(_m *SecurityDepositRefund) *SecurityDepositRefundUpdateOne {
+	mutation := newSecurityDepositRefundMutation(c.config, OpUpdateOne, withSecurityDepositRefund(_m))
+	return &SecurityDepositRefundUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SecurityDepositRefundClient) UpdateOneID(id int64) *SecurityDepositRefundUpdateOne {
+	mutation := newSecurityDepositRefundMutation(c.config, OpUpdateOne, withSecurityDepositRefundID(id))
+	return &SecurityDepositRefundUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SecurityDepositRefund.
+func (c *SecurityDepositRefundClient) Delete() *SecurityDepositRefundDelete {
+	mutation := newSecurityDepositRefundMutation(c.config, OpDelete)
+	return &SecurityDepositRefundDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SecurityDepositRefundClient) DeleteOne(_m *SecurityDepositRefund) *SecurityDepositRefundDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SecurityDepositRefundClient) DeleteOneID(id int64) *SecurityDepositRefundDeleteOne {
+	builder := c.Delete().Where(securitydepositrefund.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SecurityDepositRefundDeleteOne{builder}
+}
+
+// Query returns a query builder for SecurityDepositRefund.
+func (c *SecurityDepositRefundClient) Query() *SecurityDepositRefundQuery {
+	return &SecurityDepositRefundQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSecurityDepositRefund},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SecurityDepositRefund entity by its id.
+func (c *SecurityDepositRefundClient) Get(ctx context.Context, id int64) (*SecurityDepositRefund, error) {
+	return c.Query().Where(securitydepositrefund.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SecurityDepositRefundClient) GetX(ctx context.Context, id int64) *SecurityDepositRefund {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SecurityDepositRefundClient) Hooks() []Hook {
+	return c.hooks.SecurityDepositRefund
+}
+
+// Interceptors returns the client interceptors.
+func (c *SecurityDepositRefundClient) Interceptors() []Interceptor {
+	return c.inters.SecurityDepositRefund
+}
+
+func (c *SecurityDepositRefundClient) mutate(ctx context.Context, m *SecurityDepositRefundMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SecurityDepositRefundCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SecurityDepositRefundUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SecurityDepositRefundUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SecurityDepositRefundDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SecurityDepositRefund mutation op: %q", m.Op())
+	}
+}
+
+// SecurityDepositRiskEventClient is a client for the SecurityDepositRiskEvent schema.
+type SecurityDepositRiskEventClient struct {
+	config
+}
+
+// NewSecurityDepositRiskEventClient returns a client for the SecurityDepositRiskEvent from the given config.
+func NewSecurityDepositRiskEventClient(c config) *SecurityDepositRiskEventClient {
+	return &SecurityDepositRiskEventClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `securitydepositriskevent.Hooks(f(g(h())))`.
+func (c *SecurityDepositRiskEventClient) Use(hooks ...Hook) {
+	c.hooks.SecurityDepositRiskEvent = append(c.hooks.SecurityDepositRiskEvent, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `securitydepositriskevent.Intercept(f(g(h())))`.
+func (c *SecurityDepositRiskEventClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SecurityDepositRiskEvent = append(c.inters.SecurityDepositRiskEvent, interceptors...)
+}
+
+// Create returns a builder for creating a SecurityDepositRiskEvent entity.
+func (c *SecurityDepositRiskEventClient) Create() *SecurityDepositRiskEventCreate {
+	mutation := newSecurityDepositRiskEventMutation(c.config, OpCreate)
+	return &SecurityDepositRiskEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SecurityDepositRiskEvent entities.
+func (c *SecurityDepositRiskEventClient) CreateBulk(builders ...*SecurityDepositRiskEventCreate) *SecurityDepositRiskEventCreateBulk {
+	return &SecurityDepositRiskEventCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SecurityDepositRiskEventClient) MapCreateBulk(slice any, setFunc func(*SecurityDepositRiskEventCreate, int)) *SecurityDepositRiskEventCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SecurityDepositRiskEventCreateBulk{err: fmt.Errorf("calling to SecurityDepositRiskEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SecurityDepositRiskEventCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SecurityDepositRiskEventCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SecurityDepositRiskEvent.
+func (c *SecurityDepositRiskEventClient) Update() *SecurityDepositRiskEventUpdate {
+	mutation := newSecurityDepositRiskEventMutation(c.config, OpUpdate)
+	return &SecurityDepositRiskEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SecurityDepositRiskEventClient) UpdateOne(_m *SecurityDepositRiskEvent) *SecurityDepositRiskEventUpdateOne {
+	mutation := newSecurityDepositRiskEventMutation(c.config, OpUpdateOne, withSecurityDepositRiskEvent(_m))
+	return &SecurityDepositRiskEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SecurityDepositRiskEventClient) UpdateOneID(id int64) *SecurityDepositRiskEventUpdateOne {
+	mutation := newSecurityDepositRiskEventMutation(c.config, OpUpdateOne, withSecurityDepositRiskEventID(id))
+	return &SecurityDepositRiskEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SecurityDepositRiskEvent.
+func (c *SecurityDepositRiskEventClient) Delete() *SecurityDepositRiskEventDelete {
+	mutation := newSecurityDepositRiskEventMutation(c.config, OpDelete)
+	return &SecurityDepositRiskEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SecurityDepositRiskEventClient) DeleteOne(_m *SecurityDepositRiskEvent) *SecurityDepositRiskEventDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SecurityDepositRiskEventClient) DeleteOneID(id int64) *SecurityDepositRiskEventDeleteOne {
+	builder := c.Delete().Where(securitydepositriskevent.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SecurityDepositRiskEventDeleteOne{builder}
+}
+
+// Query returns a query builder for SecurityDepositRiskEvent.
+func (c *SecurityDepositRiskEventClient) Query() *SecurityDepositRiskEventQuery {
+	return &SecurityDepositRiskEventQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSecurityDepositRiskEvent},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SecurityDepositRiskEvent entity by its id.
+func (c *SecurityDepositRiskEventClient) Get(ctx context.Context, id int64) (*SecurityDepositRiskEvent, error) {
+	return c.Query().Where(securitydepositriskevent.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SecurityDepositRiskEventClient) GetX(ctx context.Context, id int64) *SecurityDepositRiskEvent {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SecurityDepositRiskEventClient) Hooks() []Hook {
+	return c.hooks.SecurityDepositRiskEvent
+}
+
+// Interceptors returns the client interceptors.
+func (c *SecurityDepositRiskEventClient) Interceptors() []Interceptor {
+	return c.inters.SecurityDepositRiskEvent
+}
+
+func (c *SecurityDepositRiskEventClient) mutate(ctx context.Context, m *SecurityDepositRiskEventMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SecurityDepositRiskEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SecurityDepositRiskEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SecurityDepositRiskEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SecurityDepositRiskEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SecurityDepositRiskEvent mutation op: %q", m.Op())
+	}
+}
+
+// SecurityDepositRiskProfileClient is a client for the SecurityDepositRiskProfile schema.
+type SecurityDepositRiskProfileClient struct {
+	config
+}
+
+// NewSecurityDepositRiskProfileClient returns a client for the SecurityDepositRiskProfile from the given config.
+func NewSecurityDepositRiskProfileClient(c config) *SecurityDepositRiskProfileClient {
+	return &SecurityDepositRiskProfileClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `securitydepositriskprofile.Hooks(f(g(h())))`.
+func (c *SecurityDepositRiskProfileClient) Use(hooks ...Hook) {
+	c.hooks.SecurityDepositRiskProfile = append(c.hooks.SecurityDepositRiskProfile, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `securitydepositriskprofile.Intercept(f(g(h())))`.
+func (c *SecurityDepositRiskProfileClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SecurityDepositRiskProfile = append(c.inters.SecurityDepositRiskProfile, interceptors...)
+}
+
+// Create returns a builder for creating a SecurityDepositRiskProfile entity.
+func (c *SecurityDepositRiskProfileClient) Create() *SecurityDepositRiskProfileCreate {
+	mutation := newSecurityDepositRiskProfileMutation(c.config, OpCreate)
+	return &SecurityDepositRiskProfileCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SecurityDepositRiskProfile entities.
+func (c *SecurityDepositRiskProfileClient) CreateBulk(builders ...*SecurityDepositRiskProfileCreate) *SecurityDepositRiskProfileCreateBulk {
+	return &SecurityDepositRiskProfileCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SecurityDepositRiskProfileClient) MapCreateBulk(slice any, setFunc func(*SecurityDepositRiskProfileCreate, int)) *SecurityDepositRiskProfileCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SecurityDepositRiskProfileCreateBulk{err: fmt.Errorf("calling to SecurityDepositRiskProfileClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SecurityDepositRiskProfileCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SecurityDepositRiskProfileCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SecurityDepositRiskProfile.
+func (c *SecurityDepositRiskProfileClient) Update() *SecurityDepositRiskProfileUpdate {
+	mutation := newSecurityDepositRiskProfileMutation(c.config, OpUpdate)
+	return &SecurityDepositRiskProfileUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SecurityDepositRiskProfileClient) UpdateOne(_m *SecurityDepositRiskProfile) *SecurityDepositRiskProfileUpdateOne {
+	mutation := newSecurityDepositRiskProfileMutation(c.config, OpUpdateOne, withSecurityDepositRiskProfile(_m))
+	return &SecurityDepositRiskProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SecurityDepositRiskProfileClient) UpdateOneID(id int64) *SecurityDepositRiskProfileUpdateOne {
+	mutation := newSecurityDepositRiskProfileMutation(c.config, OpUpdateOne, withSecurityDepositRiskProfileID(id))
+	return &SecurityDepositRiskProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SecurityDepositRiskProfile.
+func (c *SecurityDepositRiskProfileClient) Delete() *SecurityDepositRiskProfileDelete {
+	mutation := newSecurityDepositRiskProfileMutation(c.config, OpDelete)
+	return &SecurityDepositRiskProfileDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SecurityDepositRiskProfileClient) DeleteOne(_m *SecurityDepositRiskProfile) *SecurityDepositRiskProfileDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SecurityDepositRiskProfileClient) DeleteOneID(id int64) *SecurityDepositRiskProfileDeleteOne {
+	builder := c.Delete().Where(securitydepositriskprofile.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SecurityDepositRiskProfileDeleteOne{builder}
+}
+
+// Query returns a query builder for SecurityDepositRiskProfile.
+func (c *SecurityDepositRiskProfileClient) Query() *SecurityDepositRiskProfileQuery {
+	return &SecurityDepositRiskProfileQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSecurityDepositRiskProfile},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SecurityDepositRiskProfile entity by its id.
+func (c *SecurityDepositRiskProfileClient) Get(ctx context.Context, id int64) (*SecurityDepositRiskProfile, error) {
+	return c.Query().Where(securitydepositriskprofile.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SecurityDepositRiskProfileClient) GetX(ctx context.Context, id int64) *SecurityDepositRiskProfile {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SecurityDepositRiskProfileClient) Hooks() []Hook {
+	return c.hooks.SecurityDepositRiskProfile
+}
+
+// Interceptors returns the client interceptors.
+func (c *SecurityDepositRiskProfileClient) Interceptors() []Interceptor {
+	return c.inters.SecurityDepositRiskProfile
+}
+
+func (c *SecurityDepositRiskProfileClient) mutate(ctx context.Context, m *SecurityDepositRiskProfileMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SecurityDepositRiskProfileCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SecurityDepositRiskProfileUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SecurityDepositRiskProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SecurityDepositRiskProfileDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SecurityDepositRiskProfile mutation op: %q", m.Op())
+	}
+}
+
+// SecurityDepositViolationClient is a client for the SecurityDepositViolation schema.
+type SecurityDepositViolationClient struct {
+	config
+}
+
+// NewSecurityDepositViolationClient returns a client for the SecurityDepositViolation from the given config.
+func NewSecurityDepositViolationClient(c config) *SecurityDepositViolationClient {
+	return &SecurityDepositViolationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `securitydepositviolation.Hooks(f(g(h())))`.
+func (c *SecurityDepositViolationClient) Use(hooks ...Hook) {
+	c.hooks.SecurityDepositViolation = append(c.hooks.SecurityDepositViolation, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `securitydepositviolation.Intercept(f(g(h())))`.
+func (c *SecurityDepositViolationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SecurityDepositViolation = append(c.inters.SecurityDepositViolation, interceptors...)
+}
+
+// Create returns a builder for creating a SecurityDepositViolation entity.
+func (c *SecurityDepositViolationClient) Create() *SecurityDepositViolationCreate {
+	mutation := newSecurityDepositViolationMutation(c.config, OpCreate)
+	return &SecurityDepositViolationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SecurityDepositViolation entities.
+func (c *SecurityDepositViolationClient) CreateBulk(builders ...*SecurityDepositViolationCreate) *SecurityDepositViolationCreateBulk {
+	return &SecurityDepositViolationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SecurityDepositViolationClient) MapCreateBulk(slice any, setFunc func(*SecurityDepositViolationCreate, int)) *SecurityDepositViolationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SecurityDepositViolationCreateBulk{err: fmt.Errorf("calling to SecurityDepositViolationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SecurityDepositViolationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SecurityDepositViolationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SecurityDepositViolation.
+func (c *SecurityDepositViolationClient) Update() *SecurityDepositViolationUpdate {
+	mutation := newSecurityDepositViolationMutation(c.config, OpUpdate)
+	return &SecurityDepositViolationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SecurityDepositViolationClient) UpdateOne(_m *SecurityDepositViolation) *SecurityDepositViolationUpdateOne {
+	mutation := newSecurityDepositViolationMutation(c.config, OpUpdateOne, withSecurityDepositViolation(_m))
+	return &SecurityDepositViolationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SecurityDepositViolationClient) UpdateOneID(id int64) *SecurityDepositViolationUpdateOne {
+	mutation := newSecurityDepositViolationMutation(c.config, OpUpdateOne, withSecurityDepositViolationID(id))
+	return &SecurityDepositViolationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SecurityDepositViolation.
+func (c *SecurityDepositViolationClient) Delete() *SecurityDepositViolationDelete {
+	mutation := newSecurityDepositViolationMutation(c.config, OpDelete)
+	return &SecurityDepositViolationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SecurityDepositViolationClient) DeleteOne(_m *SecurityDepositViolation) *SecurityDepositViolationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SecurityDepositViolationClient) DeleteOneID(id int64) *SecurityDepositViolationDeleteOne {
+	builder := c.Delete().Where(securitydepositviolation.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SecurityDepositViolationDeleteOne{builder}
+}
+
+// Query returns a query builder for SecurityDepositViolation.
+func (c *SecurityDepositViolationClient) Query() *SecurityDepositViolationQuery {
+	return &SecurityDepositViolationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSecurityDepositViolation},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SecurityDepositViolation entity by its id.
+func (c *SecurityDepositViolationClient) Get(ctx context.Context, id int64) (*SecurityDepositViolation, error) {
+	return c.Query().Where(securitydepositviolation.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SecurityDepositViolationClient) GetX(ctx context.Context, id int64) *SecurityDepositViolation {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SecurityDepositViolationClient) Hooks() []Hook {
+	return c.hooks.SecurityDepositViolation
+}
+
+// Interceptors returns the client interceptors.
+func (c *SecurityDepositViolationClient) Interceptors() []Interceptor {
+	return c.inters.SecurityDepositViolation
+}
+
+func (c *SecurityDepositViolationClient) mutate(ctx context.Context, m *SecurityDepositViolationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SecurityDepositViolationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SecurityDepositViolationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SecurityDepositViolationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SecurityDepositViolationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SecurityDepositViolation mutation op: %q", m.Op())
+	}
+}
+
 // SecuritySecretClient is a client for the SecuritySecret schema.
 type SecuritySecretClient struct {
 	config
@@ -9266,10 +10400,13 @@ type (
 		RecurringCreditTask, RecurringCreditTaskAudit, RecurringCreditUserItem,
 		RedeemCode, ResetRebateAccountItem, ResetRebateBatch,
 		ResetRebateUserAccountItem, ResetRebateUserAttempt, ResetRebateUserItem,
-		SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
-		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
-		UserAttributeValue, UserCreditGrantEventTrigger, UserLimitedCreditGrant,
-		UserLimitedCreditLedger, UserPlatformQuota, UserSubscription []ent.Hook
+		SecurityDepositAccount, SecurityDepositAgreement, SecurityDepositLedger,
+		SecurityDepositLot, SecurityDepositRefund, SecurityDepositRiskEvent,
+		SecurityDepositRiskProfile, SecurityDepositViolation, SecuritySecret, Setting,
+		SubscriptionPlan, TLSFingerprintProfile, UsageCleanupTask, UsageLog, User,
+		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
+		UserCreditGrantEventTrigger, UserLimitedCreditGrant, UserLimitedCreditLedger,
+		UserPlatformQuota, UserSubscription []ent.Hook
 	}
 	inters struct {
 		APIKey, Account, AccountGroup, AccountUsageWindowHistory, Announcement,
@@ -9283,10 +10420,13 @@ type (
 		RecurringCreditTask, RecurringCreditTaskAudit, RecurringCreditUserItem,
 		RedeemCode, ResetRebateAccountItem, ResetRebateBatch,
 		ResetRebateUserAccountItem, ResetRebateUserAttempt, ResetRebateUserItem,
-		SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
-		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
-		UserAttributeValue, UserCreditGrantEventTrigger, UserLimitedCreditGrant,
-		UserLimitedCreditLedger, UserPlatformQuota, UserSubscription []ent.Interceptor
+		SecurityDepositAccount, SecurityDepositAgreement, SecurityDepositLedger,
+		SecurityDepositLot, SecurityDepositRefund, SecurityDepositRiskEvent,
+		SecurityDepositRiskProfile, SecurityDepositViolation, SecuritySecret, Setting,
+		SubscriptionPlan, TLSFingerprintProfile, UsageCleanupTask, UsageLog, User,
+		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
+		UserCreditGrantEventTrigger, UserLimitedCreditGrant, UserLimitedCreditLedger,
+		UserPlatformQuota, UserSubscription []ent.Interceptor
 	}
 )
 

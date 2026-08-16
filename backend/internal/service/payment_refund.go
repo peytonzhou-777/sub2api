@@ -159,6 +159,9 @@ func (s *PaymentService) PrepareRefund(ctx context.Context, oid int64, amt float
 	if err != nil {
 		return nil, nil, infraerrors.NotFound("NOT_FOUND", "order not found")
 	}
+	if o.OrderType == payment.OrderTypeSecurityDeposit {
+		return nil, nil, infraerrors.BadRequest("SECURITY_DEPOSIT_REFUND_REQUIRES_DEDICATED_FLOW", "security deposit refunds require the dedicated audited flow")
+	}
 	ok := []string{OrderStatusCompleted, OrderStatusRefundRequested, OrderStatusRefundFailed}
 	if !psSliceContains(ok, o.Status) {
 		return nil, nil, infraerrors.BadRequest("INVALID_STATUS", "order status does not allow refund")
@@ -375,6 +378,9 @@ func (s *PaymentService) QueryAndFinalizeRefund(ctx context.Context, oid int64) 
 	o, err := s.entClient.PaymentOrder.Get(ctx, oid)
 	if err != nil {
 		return nil, infraerrors.NotFound("NOT_FOUND", "order not found")
+	}
+	if o.OrderType == payment.OrderTypeSecurityDeposit {
+		return nil, infraerrors.BadRequest("SECURITY_DEPOSIT_REFUND_REQUIRES_DEDICATED_FLOW", "security deposit refunds require the dedicated audited flow")
 	}
 	if o.Status != OrderStatusRefundPending {
 		return nil, infraerrors.BadRequest("INVALID_STATUS", "only refund pending orders can be finalized")

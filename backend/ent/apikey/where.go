@@ -95,6 +95,41 @@ func Status(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldStatus, v))
 }
 
+// SecurityLockedAt applies equality check predicate on the "security_locked_at" field. It's identical to SecurityLockedAtEQ.
+func SecurityLockedAt(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldSecurityLockedAt, v))
+}
+
+// SecurityLockViolationID applies equality check predicate on the "security_lock_violation_id" field. It's identical to SecurityLockViolationIDEQ.
+func SecurityLockViolationID(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldSecurityLockViolationID, v))
+}
+
+// SecurityLockReason applies equality check predicate on the "security_lock_reason" field. It's identical to SecurityLockReasonEQ.
+func SecurityLockReason(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldSecurityLockReason, v))
+}
+
+// DisabledReason applies equality check predicate on the "disabled_reason" field. It's identical to DisabledReasonEQ.
+func DisabledReason(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDisabledReason, v))
+}
+
+// DisabledFinancialEventType applies equality check predicate on the "disabled_financial_event_type" field. It's identical to DisabledFinancialEventTypeEQ.
+func DisabledFinancialEventType(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDisabledFinancialEventType, v))
+}
+
+// DisabledFinancialEventID applies equality check predicate on the "disabled_financial_event_id" field. It's identical to DisabledFinancialEventIDEQ.
+func DisabledFinancialEventID(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDisabledFinancialEventID, v))
+}
+
+// DisabledAt applies equality check predicate on the "disabled_at" field. It's identical to DisabledAtEQ.
+func DisabledAt(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDisabledAt, v))
+}
+
 // LastUsedAt applies equality check predicate on the "last_used_at" field. It's identical to LastUsedAtEQ.
 func LastUsedAt(v time.Time) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldLastUsedAt, v))
@@ -533,6 +568,431 @@ func StatusEqualFold(v string) predicate.APIKey {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldContainsFold(FieldStatus, v))
+}
+
+// SecurityLockedAtEQ applies the EQ predicate on the "security_locked_at" field.
+func SecurityLockedAtEQ(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldSecurityLockedAt, v))
+}
+
+// SecurityLockedAtNEQ applies the NEQ predicate on the "security_locked_at" field.
+func SecurityLockedAtNEQ(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldSecurityLockedAt, v))
+}
+
+// SecurityLockedAtIn applies the In predicate on the "security_locked_at" field.
+func SecurityLockedAtIn(vs ...time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldSecurityLockedAt, vs...))
+}
+
+// SecurityLockedAtNotIn applies the NotIn predicate on the "security_locked_at" field.
+func SecurityLockedAtNotIn(vs ...time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldSecurityLockedAt, vs...))
+}
+
+// SecurityLockedAtGT applies the GT predicate on the "security_locked_at" field.
+func SecurityLockedAtGT(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldSecurityLockedAt, v))
+}
+
+// SecurityLockedAtGTE applies the GTE predicate on the "security_locked_at" field.
+func SecurityLockedAtGTE(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldSecurityLockedAt, v))
+}
+
+// SecurityLockedAtLT applies the LT predicate on the "security_locked_at" field.
+func SecurityLockedAtLT(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldSecurityLockedAt, v))
+}
+
+// SecurityLockedAtLTE applies the LTE predicate on the "security_locked_at" field.
+func SecurityLockedAtLTE(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldSecurityLockedAt, v))
+}
+
+// SecurityLockedAtIsNil applies the IsNil predicate on the "security_locked_at" field.
+func SecurityLockedAtIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldSecurityLockedAt))
+}
+
+// SecurityLockedAtNotNil applies the NotNil predicate on the "security_locked_at" field.
+func SecurityLockedAtNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldSecurityLockedAt))
+}
+
+// SecurityLockViolationIDEQ applies the EQ predicate on the "security_lock_violation_id" field.
+func SecurityLockViolationIDEQ(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldSecurityLockViolationID, v))
+}
+
+// SecurityLockViolationIDNEQ applies the NEQ predicate on the "security_lock_violation_id" field.
+func SecurityLockViolationIDNEQ(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldSecurityLockViolationID, v))
+}
+
+// SecurityLockViolationIDIn applies the In predicate on the "security_lock_violation_id" field.
+func SecurityLockViolationIDIn(vs ...int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldSecurityLockViolationID, vs...))
+}
+
+// SecurityLockViolationIDNotIn applies the NotIn predicate on the "security_lock_violation_id" field.
+func SecurityLockViolationIDNotIn(vs ...int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldSecurityLockViolationID, vs...))
+}
+
+// SecurityLockViolationIDGT applies the GT predicate on the "security_lock_violation_id" field.
+func SecurityLockViolationIDGT(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldSecurityLockViolationID, v))
+}
+
+// SecurityLockViolationIDGTE applies the GTE predicate on the "security_lock_violation_id" field.
+func SecurityLockViolationIDGTE(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldSecurityLockViolationID, v))
+}
+
+// SecurityLockViolationIDLT applies the LT predicate on the "security_lock_violation_id" field.
+func SecurityLockViolationIDLT(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldSecurityLockViolationID, v))
+}
+
+// SecurityLockViolationIDLTE applies the LTE predicate on the "security_lock_violation_id" field.
+func SecurityLockViolationIDLTE(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldSecurityLockViolationID, v))
+}
+
+// SecurityLockViolationIDIsNil applies the IsNil predicate on the "security_lock_violation_id" field.
+func SecurityLockViolationIDIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldSecurityLockViolationID))
+}
+
+// SecurityLockViolationIDNotNil applies the NotNil predicate on the "security_lock_violation_id" field.
+func SecurityLockViolationIDNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldSecurityLockViolationID))
+}
+
+// SecurityLockReasonEQ applies the EQ predicate on the "security_lock_reason" field.
+func SecurityLockReasonEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldSecurityLockReason, v))
+}
+
+// SecurityLockReasonNEQ applies the NEQ predicate on the "security_lock_reason" field.
+func SecurityLockReasonNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldSecurityLockReason, v))
+}
+
+// SecurityLockReasonIn applies the In predicate on the "security_lock_reason" field.
+func SecurityLockReasonIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldSecurityLockReason, vs...))
+}
+
+// SecurityLockReasonNotIn applies the NotIn predicate on the "security_lock_reason" field.
+func SecurityLockReasonNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldSecurityLockReason, vs...))
+}
+
+// SecurityLockReasonGT applies the GT predicate on the "security_lock_reason" field.
+func SecurityLockReasonGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldSecurityLockReason, v))
+}
+
+// SecurityLockReasonGTE applies the GTE predicate on the "security_lock_reason" field.
+func SecurityLockReasonGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldSecurityLockReason, v))
+}
+
+// SecurityLockReasonLT applies the LT predicate on the "security_lock_reason" field.
+func SecurityLockReasonLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldSecurityLockReason, v))
+}
+
+// SecurityLockReasonLTE applies the LTE predicate on the "security_lock_reason" field.
+func SecurityLockReasonLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldSecurityLockReason, v))
+}
+
+// SecurityLockReasonContains applies the Contains predicate on the "security_lock_reason" field.
+func SecurityLockReasonContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldSecurityLockReason, v))
+}
+
+// SecurityLockReasonHasPrefix applies the HasPrefix predicate on the "security_lock_reason" field.
+func SecurityLockReasonHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldSecurityLockReason, v))
+}
+
+// SecurityLockReasonHasSuffix applies the HasSuffix predicate on the "security_lock_reason" field.
+func SecurityLockReasonHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldSecurityLockReason, v))
+}
+
+// SecurityLockReasonIsNil applies the IsNil predicate on the "security_lock_reason" field.
+func SecurityLockReasonIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldSecurityLockReason))
+}
+
+// SecurityLockReasonNotNil applies the NotNil predicate on the "security_lock_reason" field.
+func SecurityLockReasonNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldSecurityLockReason))
+}
+
+// SecurityLockReasonEqualFold applies the EqualFold predicate on the "security_lock_reason" field.
+func SecurityLockReasonEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldSecurityLockReason, v))
+}
+
+// SecurityLockReasonContainsFold applies the ContainsFold predicate on the "security_lock_reason" field.
+func SecurityLockReasonContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldSecurityLockReason, v))
+}
+
+// DisabledReasonEQ applies the EQ predicate on the "disabled_reason" field.
+func DisabledReasonEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDisabledReason, v))
+}
+
+// DisabledReasonNEQ applies the NEQ predicate on the "disabled_reason" field.
+func DisabledReasonNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldDisabledReason, v))
+}
+
+// DisabledReasonIn applies the In predicate on the "disabled_reason" field.
+func DisabledReasonIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldDisabledReason, vs...))
+}
+
+// DisabledReasonNotIn applies the NotIn predicate on the "disabled_reason" field.
+func DisabledReasonNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldDisabledReason, vs...))
+}
+
+// DisabledReasonGT applies the GT predicate on the "disabled_reason" field.
+func DisabledReasonGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldDisabledReason, v))
+}
+
+// DisabledReasonGTE applies the GTE predicate on the "disabled_reason" field.
+func DisabledReasonGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldDisabledReason, v))
+}
+
+// DisabledReasonLT applies the LT predicate on the "disabled_reason" field.
+func DisabledReasonLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldDisabledReason, v))
+}
+
+// DisabledReasonLTE applies the LTE predicate on the "disabled_reason" field.
+func DisabledReasonLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldDisabledReason, v))
+}
+
+// DisabledReasonContains applies the Contains predicate on the "disabled_reason" field.
+func DisabledReasonContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldDisabledReason, v))
+}
+
+// DisabledReasonHasPrefix applies the HasPrefix predicate on the "disabled_reason" field.
+func DisabledReasonHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldDisabledReason, v))
+}
+
+// DisabledReasonHasSuffix applies the HasSuffix predicate on the "disabled_reason" field.
+func DisabledReasonHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldDisabledReason, v))
+}
+
+// DisabledReasonIsNil applies the IsNil predicate on the "disabled_reason" field.
+func DisabledReasonIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldDisabledReason))
+}
+
+// DisabledReasonNotNil applies the NotNil predicate on the "disabled_reason" field.
+func DisabledReasonNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldDisabledReason))
+}
+
+// DisabledReasonEqualFold applies the EqualFold predicate on the "disabled_reason" field.
+func DisabledReasonEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldDisabledReason, v))
+}
+
+// DisabledReasonContainsFold applies the ContainsFold predicate on the "disabled_reason" field.
+func DisabledReasonContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldDisabledReason, v))
+}
+
+// DisabledFinancialEventTypeEQ applies the EQ predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDisabledFinancialEventType, v))
+}
+
+// DisabledFinancialEventTypeNEQ applies the NEQ predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldDisabledFinancialEventType, v))
+}
+
+// DisabledFinancialEventTypeIn applies the In predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldDisabledFinancialEventType, vs...))
+}
+
+// DisabledFinancialEventTypeNotIn applies the NotIn predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldDisabledFinancialEventType, vs...))
+}
+
+// DisabledFinancialEventTypeGT applies the GT predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldDisabledFinancialEventType, v))
+}
+
+// DisabledFinancialEventTypeGTE applies the GTE predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldDisabledFinancialEventType, v))
+}
+
+// DisabledFinancialEventTypeLT applies the LT predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldDisabledFinancialEventType, v))
+}
+
+// DisabledFinancialEventTypeLTE applies the LTE predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldDisabledFinancialEventType, v))
+}
+
+// DisabledFinancialEventTypeContains applies the Contains predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldDisabledFinancialEventType, v))
+}
+
+// DisabledFinancialEventTypeHasPrefix applies the HasPrefix predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldDisabledFinancialEventType, v))
+}
+
+// DisabledFinancialEventTypeHasSuffix applies the HasSuffix predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldDisabledFinancialEventType, v))
+}
+
+// DisabledFinancialEventTypeIsNil applies the IsNil predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldDisabledFinancialEventType))
+}
+
+// DisabledFinancialEventTypeNotNil applies the NotNil predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldDisabledFinancialEventType))
+}
+
+// DisabledFinancialEventTypeEqualFold applies the EqualFold predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldDisabledFinancialEventType, v))
+}
+
+// DisabledFinancialEventTypeContainsFold applies the ContainsFold predicate on the "disabled_financial_event_type" field.
+func DisabledFinancialEventTypeContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldDisabledFinancialEventType, v))
+}
+
+// DisabledFinancialEventIDEQ applies the EQ predicate on the "disabled_financial_event_id" field.
+func DisabledFinancialEventIDEQ(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDisabledFinancialEventID, v))
+}
+
+// DisabledFinancialEventIDNEQ applies the NEQ predicate on the "disabled_financial_event_id" field.
+func DisabledFinancialEventIDNEQ(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldDisabledFinancialEventID, v))
+}
+
+// DisabledFinancialEventIDIn applies the In predicate on the "disabled_financial_event_id" field.
+func DisabledFinancialEventIDIn(vs ...int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldDisabledFinancialEventID, vs...))
+}
+
+// DisabledFinancialEventIDNotIn applies the NotIn predicate on the "disabled_financial_event_id" field.
+func DisabledFinancialEventIDNotIn(vs ...int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldDisabledFinancialEventID, vs...))
+}
+
+// DisabledFinancialEventIDGT applies the GT predicate on the "disabled_financial_event_id" field.
+func DisabledFinancialEventIDGT(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldDisabledFinancialEventID, v))
+}
+
+// DisabledFinancialEventIDGTE applies the GTE predicate on the "disabled_financial_event_id" field.
+func DisabledFinancialEventIDGTE(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldDisabledFinancialEventID, v))
+}
+
+// DisabledFinancialEventIDLT applies the LT predicate on the "disabled_financial_event_id" field.
+func DisabledFinancialEventIDLT(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldDisabledFinancialEventID, v))
+}
+
+// DisabledFinancialEventIDLTE applies the LTE predicate on the "disabled_financial_event_id" field.
+func DisabledFinancialEventIDLTE(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldDisabledFinancialEventID, v))
+}
+
+// DisabledFinancialEventIDIsNil applies the IsNil predicate on the "disabled_financial_event_id" field.
+func DisabledFinancialEventIDIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldDisabledFinancialEventID))
+}
+
+// DisabledFinancialEventIDNotNil applies the NotNil predicate on the "disabled_financial_event_id" field.
+func DisabledFinancialEventIDNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldDisabledFinancialEventID))
+}
+
+// DisabledAtEQ applies the EQ predicate on the "disabled_at" field.
+func DisabledAtEQ(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDisabledAt, v))
+}
+
+// DisabledAtNEQ applies the NEQ predicate on the "disabled_at" field.
+func DisabledAtNEQ(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldDisabledAt, v))
+}
+
+// DisabledAtIn applies the In predicate on the "disabled_at" field.
+func DisabledAtIn(vs ...time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldDisabledAt, vs...))
+}
+
+// DisabledAtNotIn applies the NotIn predicate on the "disabled_at" field.
+func DisabledAtNotIn(vs ...time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldDisabledAt, vs...))
+}
+
+// DisabledAtGT applies the GT predicate on the "disabled_at" field.
+func DisabledAtGT(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldDisabledAt, v))
+}
+
+// DisabledAtGTE applies the GTE predicate on the "disabled_at" field.
+func DisabledAtGTE(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldDisabledAt, v))
+}
+
+// DisabledAtLT applies the LT predicate on the "disabled_at" field.
+func DisabledAtLT(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldDisabledAt, v))
+}
+
+// DisabledAtLTE applies the LTE predicate on the "disabled_at" field.
+func DisabledAtLTE(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldDisabledAt, v))
+}
+
+// DisabledAtIsNil applies the IsNil predicate on the "disabled_at" field.
+func DisabledAtIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldDisabledAt))
+}
+
+// DisabledAtNotNil applies the NotNil predicate on the "disabled_at" field.
+func DisabledAtNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldDisabledAt))
 }
 
 // LastUsedAtEQ applies the EQ predicate on the "last_used_at" field.

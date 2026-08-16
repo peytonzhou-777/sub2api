@@ -366,7 +366,15 @@ type UpdateSettingsRequest struct {
 	AffiliateEnabled *bool `json:"affiliate_enabled"`
 
 	// 风控中心功能开关
-	RiskControlEnabled *bool `json:"risk_control_enabled"`
+	RiskControlEnabled                *bool   `json:"risk_control_enabled"`
+	SecurityDepositEnforcementEnabled *bool   `json:"security_deposit_enforcement_enabled"`
+	SecurityDepositSelfRefundEnabled  *bool   `json:"security_deposit_self_refund_enabled"`
+	SecurityDepositPenaltyMode        *string `json:"security_deposit_penalty_mode"`
+	SecurityDepositFreezeHours        *int    `json:"security_deposit_freeze_hours"`
+	SecurityDepositMaxRiskMultiplier  *int64  `json:"security_deposit_max_risk_multiplier"`
+	SecurityDepositPolicyVersion      *string `json:"security_deposit_policy_version"`
+	SecurityDepositAgreementContentZH *string `json:"security_deposit_agreement_content_zh"`
+	SecurityDepositAgreementContentEN *string `json:"security_deposit_agreement_content_en"`
 
 	// cyber 会话屏蔽开关 + TTL
 	CyberSessionBlockEnabled    *bool `json:"cyber_session_block_enabled"`
@@ -2001,6 +2009,19 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.RiskControlEnabled
 		}(),
+		SecurityDepositEnforcementEnabled: boolValueOrDefault(req.SecurityDepositEnforcementEnabled, previousSettings.SecurityDepositEnforcementEnabled),
+		SecurityDepositSelfRefundEnabled:  boolValueOrDefault(req.SecurityDepositSelfRefundEnabled, previousSettings.SecurityDepositSelfRefundEnabled),
+		SecurityDepositPenaltyMode:        stringSetting(req.SecurityDepositPenaltyMode, previousSettings.SecurityDepositPenaltyMode),
+		SecurityDepositFreezeHours:        intValueOrDefault(req.SecurityDepositFreezeHours, previousSettings.SecurityDepositFreezeHours),
+		SecurityDepositMaxRiskMultiplier: func() int64 {
+			if req.SecurityDepositMaxRiskMultiplier != nil {
+				return *req.SecurityDepositMaxRiskMultiplier
+			}
+			return previousSettings.SecurityDepositMaxRiskMultiplier
+		}(),
+		SecurityDepositPolicyVersion:      stringSetting(req.SecurityDepositPolicyVersion, previousSettings.SecurityDepositPolicyVersion),
+		SecurityDepositAgreementContentZH: stringSetting(req.SecurityDepositAgreementContentZH, previousSettings.SecurityDepositAgreementContentZH),
+		SecurityDepositAgreementContentEN: stringSetting(req.SecurityDepositAgreementContentEN, previousSettings.SecurityDepositAgreementContentEN),
 		CyberSessionBlockEnabled: func() bool {
 			if req.CyberSessionBlockEnabled != nil {
 				return *req.CyberSessionBlockEnabled
@@ -2428,11 +2449,19 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 
-		RiskControlEnabled:          updatedSettings.RiskControlEnabled,
-		CyberSessionBlockEnabled:    updatedSettings.CyberSessionBlockEnabled,
-		CyberSessionBlockTTLSeconds: updatedSettings.CyberSessionBlockTTLSeconds,
-		AccountSchedulingThresholds: updatedSettings.AccountSchedulingThresholds,
-		AllowUserViewErrorRequests:  updatedSettings.AllowUserViewErrorRequests,
+		RiskControlEnabled:                updatedSettings.RiskControlEnabled,
+		SecurityDepositEnforcementEnabled: updatedSettings.SecurityDepositEnforcementEnabled,
+		SecurityDepositSelfRefundEnabled:  updatedSettings.SecurityDepositSelfRefundEnabled,
+		SecurityDepositPenaltyMode:        updatedSettings.SecurityDepositPenaltyMode,
+		SecurityDepositFreezeHours:        updatedSettings.SecurityDepositFreezeHours,
+		SecurityDepositMaxRiskMultiplier:  updatedSettings.SecurityDepositMaxRiskMultiplier,
+		SecurityDepositPolicyVersion:      updatedSettings.SecurityDepositPolicyVersion,
+		SecurityDepositAgreementContentZH: updatedSettings.SecurityDepositAgreementContentZH,
+		SecurityDepositAgreementContentEN: updatedSettings.SecurityDepositAgreementContentEN,
+		CyberSessionBlockEnabled:          updatedSettings.CyberSessionBlockEnabled,
+		CyberSessionBlockTTLSeconds:       updatedSettings.CyberSessionBlockTTLSeconds,
+		AccountSchedulingThresholds:       updatedSettings.AccountSchedulingThresholds,
+		AllowUserViewErrorRequests:        updatedSettings.AllowUserViewErrorRequests,
 	}
 	if fastPolicy, err := h.settingService.GetOpenAIFastPolicySettings(c.Request.Context()); err != nil {
 		slog.Error("openai_fast_policy_settings_get_failed", "error", err)

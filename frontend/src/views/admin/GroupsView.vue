@@ -619,6 +619,22 @@
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
         </div>
+        <div>
+          <label class="input-label">{{
+            t("admin.groups.form.securityDepositRequired")
+          }}</label>
+          <input
+            v-model.number="createForm.security_deposit_required_yuan"
+            type="number"
+            min="0"
+            step="0.01"
+            class="input"
+            data-testid="create-security-deposit-threshold"
+          />
+          <p class="input-hint">
+            {{ t("admin.groups.form.securityDepositRequiredHint") }}
+          </p>
+        </div>
         <ReasoningEffortPolicyFields
           v-if="supportsReasoningEffortPolicyPlatform(createForm.platform)"
           ref="createReasoningEffortPolicyRef"
@@ -2342,6 +2358,22 @@
             :placeholder="t('admin.groups.form.rpmLimitPlaceholder')"
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
+        </div>
+        <div>
+          <label class="input-label">{{
+            t("admin.groups.form.securityDepositRequired")
+          }}</label>
+          <input
+            v-model.number="editForm.security_deposit_required_yuan"
+            type="number"
+            min="0"
+            step="0.01"
+            class="input"
+            data-testid="edit-security-deposit-threshold"
+          />
+          <p class="input-hint">
+            {{ t("admin.groups.form.securityDepositRequiredHint") }}
+          </p>
         </div>
         <ReasoningEffortPolicyFields
           v-if="supportsReasoningEffortPolicyPlatform(editForm.platform)"
@@ -5022,6 +5054,7 @@ const createForm = reactive({
   description: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+  security_deposit_required_yuan: 0,
   is_exclusive: false,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
@@ -5382,6 +5415,7 @@ const editForm = reactive({
   description: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+  security_deposit_required_yuan: 0,
   is_exclusive: false,
   status: "active" as "active" | "inactive",
   subscription_type: "standard" as SubscriptionType,
@@ -5887,6 +5921,7 @@ const closeCreateModal = () => {
   createForm.mcp_xml_inject = true;
   createForm.copy_accounts_from_group_ids = [];
   createForm.rpm_limit = 0;
+  createForm.security_deposit_required_yuan = 0;
   createForm.max_reasoning_effort = "";
   createForm.reasoning_effort_mappings = [];
   createReasoningEffortPolicyRef.value?.resetValidation();
@@ -6008,9 +6043,13 @@ const handleCreateGroup = async () => {
       profit_safety_buffer: percentToDecimal(
         createForm.profit_safety_buffer_percent,
       ),
+      security_deposit_base_required_cents: Math.round(
+        Math.max(0, Number(createForm.security_deposit_required_yuan) || 0) * 100,
+      ),
     };
     delete (requestData as Record<string, unknown>).profit_min_margin_percent;
     delete (requestData as Record<string, unknown>).profit_safety_buffer_percent;
+    delete (requestData as Record<string, unknown>).security_deposit_required_yuan;
     // v-model.number 清空输入框时产生 ""，转为 null 让后端设为无限制
     const emptyToNull = (v: any) => (v === "" ? null : v);
     requestData.daily_limit_usd = emptyToNull(requestData.daily_limit_usd);
@@ -6083,6 +6122,8 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.description = group.description || "";
   editForm.platform = group.platform;
   editForm.rate_multiplier = group.rate_multiplier;
+  editForm.security_deposit_required_yuan =
+    (group.security_deposit_base_required_cents || 0) / 100;
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
   editForm.subscription_type = group.subscription_type || "standard";
@@ -6191,6 +6232,7 @@ const closeEditModal = () => {
   editForm.profit_min_margin_percent = 0;
   editForm.profit_safety_buffer_percent = 0;
   editForm.video_rate_independent = false;
+  editForm.security_deposit_required_yuan = 0;
   editForm.video_rate_multiplier = 1;
   editForm.video_price_480p = null;
   editForm.video_price_720p = null;
@@ -6281,9 +6323,13 @@ const handleUpdateGroup = async () => {
       profit_safety_buffer: percentToDecimal(
         editForm.profit_safety_buffer_percent,
       ),
+      security_deposit_base_required_cents: Math.round(
+        Math.max(0, Number(editForm.security_deposit_required_yuan) || 0) * 100,
+      ),
     };
     delete (payload as Record<string, unknown>).profit_min_margin_percent;
     delete (payload as Record<string, unknown>).profit_safety_buffer_percent;
+    delete (payload as Record<string, unknown>).security_deposit_required_yuan;
     // v-model.number 清空输入框时产生 ""，转为 null 让后端设为无限制
     const emptyToNull = (v: any) => (v === "" ? null : v);
     payload.daily_limit_usd = emptyToNull(payload.daily_limit_usd);

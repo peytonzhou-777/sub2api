@@ -31,6 +31,20 @@ const (
 	FieldGroupID = "group_id"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldSecurityLockedAt holds the string denoting the security_locked_at field in the database.
+	FieldSecurityLockedAt = "security_locked_at"
+	// FieldSecurityLockViolationID holds the string denoting the security_lock_violation_id field in the database.
+	FieldSecurityLockViolationID = "security_lock_violation_id"
+	// FieldSecurityLockReason holds the string denoting the security_lock_reason field in the database.
+	FieldSecurityLockReason = "security_lock_reason"
+	// FieldDisabledReason holds the string denoting the disabled_reason field in the database.
+	FieldDisabledReason = "disabled_reason"
+	// FieldDisabledFinancialEventType holds the string denoting the disabled_financial_event_type field in the database.
+	FieldDisabledFinancialEventType = "disabled_financial_event_type"
+	// FieldDisabledFinancialEventID holds the string denoting the disabled_financial_event_id field in the database.
+	FieldDisabledFinancialEventID = "disabled_financial_event_id"
+	// FieldDisabledAt holds the string denoting the disabled_at field in the database.
+	FieldDisabledAt = "disabled_at"
 	// FieldLastUsedAt holds the string denoting the last_used_at field in the database.
 	FieldLastUsedAt = "last_used_at"
 	// FieldIPWhitelist holds the string denoting the ip_whitelist field in the database.
@@ -103,6 +117,13 @@ var Columns = []string{
 	FieldName,
 	FieldGroupID,
 	FieldStatus,
+	FieldSecurityLockedAt,
+	FieldSecurityLockViolationID,
+	FieldSecurityLockReason,
+	FieldDisabledReason,
+	FieldDisabledFinancialEventType,
+	FieldDisabledFinancialEventID,
+	FieldDisabledAt,
 	FieldLastUsedAt,
 	FieldIPWhitelist,
 	FieldIPBlacklist,
@@ -152,6 +173,12 @@ var (
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// SecurityLockReasonValidator is a validator for the "security_lock_reason" field. It is called by the builders before save.
+	SecurityLockReasonValidator func(string) error
+	// DisabledReasonValidator is a validator for the "disabled_reason" field. It is called by the builders before save.
+	DisabledReasonValidator func(string) error
+	// DisabledFinancialEventTypeValidator is a validator for the "disabled_financial_event_type" field. It is called by the builders before save.
+	DisabledFinancialEventTypeValidator func(string) error
 	// DefaultQuota holds the default value on creation for the "quota" field.
 	DefaultQuota float64
 	// DefaultQuotaUsed holds the default value on creation for the "quota_used" field.
@@ -216,6 +243,41 @@ func ByGroupID(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// BySecurityLockedAt orders the results by the security_locked_at field.
+func BySecurityLockedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSecurityLockedAt, opts...).ToFunc()
+}
+
+// BySecurityLockViolationID orders the results by the security_lock_violation_id field.
+func BySecurityLockViolationID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSecurityLockViolationID, opts...).ToFunc()
+}
+
+// BySecurityLockReason orders the results by the security_lock_reason field.
+func BySecurityLockReason(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSecurityLockReason, opts...).ToFunc()
+}
+
+// ByDisabledReason orders the results by the disabled_reason field.
+func ByDisabledReason(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDisabledReason, opts...).ToFunc()
+}
+
+// ByDisabledFinancialEventType orders the results by the disabled_financial_event_type field.
+func ByDisabledFinancialEventType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDisabledFinancialEventType, opts...).ToFunc()
+}
+
+// ByDisabledFinancialEventID orders the results by the disabled_financial_event_id field.
+func ByDisabledFinancialEventID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDisabledFinancialEventID, opts...).ToFunc()
+}
+
+// ByDisabledAt orders the results by the disabled_at field.
+func ByDisabledAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDisabledAt, opts...).ToFunc()
 }
 
 // ByLastUsedAt orders the results by the last_used_at field.

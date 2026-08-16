@@ -190,6 +190,34 @@ func (_c *GroupCreate) SetNillableStatus(v *string) *GroupCreate {
 	return _c
 }
 
+// SetSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field.
+func (_c *GroupCreate) SetSecurityDepositBaseRequiredCents(v int64) *GroupCreate {
+	_c.mutation.SetSecurityDepositBaseRequiredCents(v)
+	return _c
+}
+
+// SetNillableSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableSecurityDepositBaseRequiredCents(v *int64) *GroupCreate {
+	if v != nil {
+		_c.SetSecurityDepositBaseRequiredCents(*v)
+	}
+	return _c
+}
+
+// SetSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field.
+func (_c *GroupCreate) SetSecurityDepositPolicyVersion(v string) *GroupCreate {
+	_c.mutation.SetSecurityDepositPolicyVersion(v)
+	return _c
+}
+
+// SetNillableSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableSecurityDepositPolicyVersion(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetSecurityDepositPolicyVersion(*v)
+	}
+	return _c
+}
+
 // SetDuplicateOperationID sets the "duplicate_operation_id" field.
 func (_c *GroupCreate) SetDuplicateOperationID(v string) *GroupCreate {
 	_c.mutation.SetDuplicateOperationID(v)
@@ -1019,6 +1047,14 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.SecurityDepositBaseRequiredCents(); !ok {
+		v := group.DefaultSecurityDepositBaseRequiredCents
+		_c.mutation.SetSecurityDepositBaseRequiredCents(v)
+	}
+	if _, ok := _c.mutation.SecurityDepositPolicyVersion(); !ok {
+		v := group.DefaultSecurityDepositPolicyVersion
+		_c.mutation.SetSecurityDepositPolicyVersion(v)
+	}
 	if _, ok := _c.mutation.Platform(); !ok {
 		v := group.DefaultPlatform
 		_c.mutation.SetPlatform(v)
@@ -1192,6 +1228,22 @@ func (_c *GroupCreate) check() error {
 	if v, ok := _c.mutation.Status(); ok {
 		if err := group.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Group.status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SecurityDepositBaseRequiredCents(); !ok {
+		return &ValidationError{Name: "security_deposit_base_required_cents", err: errors.New(`ent: missing required field "Group.security_deposit_base_required_cents"`)}
+	}
+	if v, ok := _c.mutation.SecurityDepositBaseRequiredCents(); ok {
+		if err := group.SecurityDepositBaseRequiredCentsValidator(v); err != nil {
+			return &ValidationError{Name: "security_deposit_base_required_cents", err: fmt.Errorf(`ent: validator failed for field "Group.security_deposit_base_required_cents": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SecurityDepositPolicyVersion(); !ok {
+		return &ValidationError{Name: "security_deposit_policy_version", err: errors.New(`ent: missing required field "Group.security_deposit_policy_version"`)}
+	}
+	if v, ok := _c.mutation.SecurityDepositPolicyVersion(); ok {
+		if err := group.SecurityDepositPolicyVersionValidator(v); err != nil {
+			return &ValidationError{Name: "security_deposit_policy_version", err: fmt.Errorf(`ent: validator failed for field "Group.security_deposit_policy_version": %w`, err)}
 		}
 	}
 	if v, ok := _c.mutation.DuplicateOperationID(); ok {
@@ -1403,6 +1455,14 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(group.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.SecurityDepositBaseRequiredCents(); ok {
+		_spec.SetField(group.FieldSecurityDepositBaseRequiredCents, field.TypeInt64, value)
+		_node.SecurityDepositBaseRequiredCents = value
+	}
+	if value, ok := _c.mutation.SecurityDepositPolicyVersion(); ok {
+		_spec.SetField(group.FieldSecurityDepositPolicyVersion, field.TypeString, value)
+		_node.SecurityDepositPolicyVersion = value
 	}
 	if value, ok := _c.mutation.DuplicateOperationID(); ok {
 		_spec.SetField(group.FieldDuplicateOperationID, field.TypeString, value)
@@ -1913,6 +1973,36 @@ func (u *GroupUpsert) SetStatus(v string) *GroupUpsert {
 // UpdateStatus sets the "status" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateStatus() *GroupUpsert {
 	u.SetExcluded(group.FieldStatus)
+	return u
+}
+
+// SetSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field.
+func (u *GroupUpsert) SetSecurityDepositBaseRequiredCents(v int64) *GroupUpsert {
+	u.Set(group.FieldSecurityDepositBaseRequiredCents, v)
+	return u
+}
+
+// UpdateSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateSecurityDepositBaseRequiredCents() *GroupUpsert {
+	u.SetExcluded(group.FieldSecurityDepositBaseRequiredCents)
+	return u
+}
+
+// AddSecurityDepositBaseRequiredCents adds v to the "security_deposit_base_required_cents" field.
+func (u *GroupUpsert) AddSecurityDepositBaseRequiredCents(v int64) *GroupUpsert {
+	u.Add(group.FieldSecurityDepositBaseRequiredCents, v)
+	return u
+}
+
+// SetSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field.
+func (u *GroupUpsert) SetSecurityDepositPolicyVersion(v string) *GroupUpsert {
+	u.Set(group.FieldSecurityDepositPolicyVersion, v)
+	return u
+}
+
+// UpdateSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateSecurityDepositPolicyVersion() *GroupUpsert {
+	u.SetExcluded(group.FieldSecurityDepositPolicyVersion)
 	return u
 }
 
@@ -2995,6 +3085,41 @@ func (u *GroupUpsertOne) SetStatus(v string) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateStatus() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field.
+func (u *GroupUpsertOne) SetSecurityDepositBaseRequiredCents(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetSecurityDepositBaseRequiredCents(v)
+	})
+}
+
+// AddSecurityDepositBaseRequiredCents adds v to the "security_deposit_base_required_cents" field.
+func (u *GroupUpsertOne) AddSecurityDepositBaseRequiredCents(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddSecurityDepositBaseRequiredCents(v)
+	})
+}
+
+// UpdateSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateSecurityDepositBaseRequiredCents() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateSecurityDepositBaseRequiredCents()
+	})
+}
+
+// SetSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field.
+func (u *GroupUpsertOne) SetSecurityDepositPolicyVersion(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetSecurityDepositPolicyVersion(v)
+	})
+}
+
+// UpdateSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateSecurityDepositPolicyVersion() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateSecurityDepositPolicyVersion()
 	})
 }
 
@@ -4385,6 +4510,41 @@ func (u *GroupUpsertBulk) SetStatus(v string) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateStatus() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field.
+func (u *GroupUpsertBulk) SetSecurityDepositBaseRequiredCents(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetSecurityDepositBaseRequiredCents(v)
+	})
+}
+
+// AddSecurityDepositBaseRequiredCents adds v to the "security_deposit_base_required_cents" field.
+func (u *GroupUpsertBulk) AddSecurityDepositBaseRequiredCents(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddSecurityDepositBaseRequiredCents(v)
+	})
+}
+
+// UpdateSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateSecurityDepositBaseRequiredCents() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateSecurityDepositBaseRequiredCents()
+	})
+}
+
+// SetSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field.
+func (u *GroupUpsertBulk) SetSecurityDepositPolicyVersion(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetSecurityDepositPolicyVersion(v)
+	})
+}
+
+// UpdateSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateSecurityDepositPolicyVersion() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateSecurityDepositPolicyVersion()
 	})
 }
 

@@ -171,6 +171,14 @@ const (
 	SettingKeyLoginAgreementMode                  = "login_agreement_mode"                  // 条款确认展示模式：modal / checkbox
 	SettingKeyLoginAgreementUpdatedAt             = "login_agreement_updated_at"            // 条款更新日期（展示用）
 	SettingKeyLoginAgreementDocuments             = "login_agreement_documents"             // 条款文档列表（JSON，Markdown 内容）
+	SettingKeySecurityDepositPolicyVersion        = "security_deposit_policy_version"
+	SettingKeySecurityDepositAgreementContentZH   = "security_deposit_agreement_content_zh"
+	SettingKeySecurityDepositAgreementContentEN   = "security_deposit_agreement_content_en"
+	SettingKeySecurityDepositFreezeHours          = "security_deposit_freeze_hours"
+	SettingKeySecurityDepositMaxRiskMultiplier    = "security_deposit_max_risk_multiplier"
+	SettingKeySecurityDepositEnforcementEnabled   = "security_deposit_enforcement_enabled"
+	SettingKeySecurityDepositSelfRefundEnabled    = "security_deposit_self_refund_enabled"
+	SettingKeySecurityDepositPenaltyMode          = "security_deposit_penalty_mode"
 
 	// 邮件服务设置
 	SettingKeySMTPHost     = "smtp_host"      // SMTP服务器地址

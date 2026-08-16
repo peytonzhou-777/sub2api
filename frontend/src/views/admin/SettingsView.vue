@@ -8379,6 +8379,120 @@
             </div>
           </div>
 
+          <div class="card">
+            <div
+              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+            >
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.payment.securityDepositTitle") }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.payment.securityDepositDescription") }}
+              </p>
+            </div>
+            <div class="space-y-6 p-6">
+              <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <label class="font-medium text-gray-900 dark:text-white">
+                      {{ t("admin.settings.payment.securityDepositEnforcement") }}
+                    </label>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.payment.securityDepositEnforcementHint") }}
+                    </p>
+                  </div>
+                  <Toggle v-model="form.security_deposit_enforcement_enabled" />
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <label class="font-medium text-gray-900 dark:text-white">
+                      {{ t("admin.settings.payment.securityDepositSelfRefund") }}
+                    </label>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.payment.securityDepositSelfRefundHint") }}
+                    </p>
+                  </div>
+                  <Toggle v-model="form.security_deposit_self_refund_enabled" />
+                </div>
+                <div>
+                  <label class="input-label">{{
+                    t("admin.settings.payment.securityDepositPenaltyMode")
+                  }}</label>
+                  <select v-model="form.security_deposit_penalty_mode" class="input">
+                    <option value="off">
+                      {{ t("admin.settings.payment.securityDepositPenaltyOff") }}
+                    </option>
+                    <option value="shadow">
+                      {{ t("admin.settings.payment.securityDepositPenaltyShadow") }}
+                    </option>
+                    <option value="enforce">
+                      {{ t("admin.settings.payment.securityDepositPenaltyEnforce") }}
+                    </option>
+                  </select>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.payment.securityDepositPenaltyModeHint") }}
+                  </p>
+                </div>
+                <div>
+                  <label class="input-label">{{
+                    t("admin.settings.payment.securityDepositFreezeHours")
+                  }}</label>
+                  <input
+                    v-model.number="form.security_deposit_freeze_hours"
+                    type="number"
+                    min="0"
+                    max="8760"
+                    step="1"
+                    class="input"
+                  />
+                </div>
+                <div>
+                  <label class="input-label">{{
+                    t("admin.settings.payment.securityDepositMaxRiskMultiplier")
+                  }}</label>
+                  <input
+                    v-model.number="form.security_deposit_max_risk_multiplier"
+                    type="number"
+                    min="1"
+                    max="100"
+                    step="1"
+                    class="input"
+                  />
+                </div>
+                <div class="md:col-span-2">
+                  <label class="input-label">{{
+                    t("admin.settings.payment.securityDepositPolicyVersion")
+                  }}</label>
+                  <input
+                    v-model="form.security_deposit_policy_version"
+                    type="text"
+                    class="input"
+                  />
+                </div>
+                <div>
+                  <label class="input-label">{{
+                    t("admin.settings.payment.securityDepositAgreementZh")
+                  }}</label>
+                  <textarea
+                    v-model="form.security_deposit_agreement_content_zh"
+                    rows="12"
+                    class="input font-mono text-xs"
+                  ></textarea>
+                </div>
+                <div>
+                  <label class="input-label">{{
+                    t("admin.settings.payment.securityDepositAgreementEn")
+                  }}</label>
+                  <textarea
+                    v-model="form.security_deposit_agreement_content_en"
+                    rows="12"
+                    class="input font-mono text-xs"
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Provider Management -->
           <PaymentProviderList
             v-if="form.payment_enabled"
@@ -9686,6 +9800,14 @@ const form = reactive<SettingsForm>({
   payment_balance_recharge_multiplier: 1,
   payment_subscription_usd_to_cny_rate: 0,
   payment_recharge_fee_rate: 0,
+  security_deposit_enforcement_enabled: false,
+  security_deposit_self_refund_enabled: false,
+  security_deposit_penalty_mode: "off",
+  security_deposit_freeze_hours: 24,
+  security_deposit_max_risk_multiplier: 8,
+  security_deposit_policy_version: "2026-08-16-v1",
+  security_deposit_agreement_content_zh: "",
+  security_deposit_agreement_content_en: "",
   payment_enabled_types: [],
   payment_help_image_url: "",
   payment_help_text: "",
@@ -11557,6 +11679,25 @@ async function saveSettings() {
       payment_subscription_usd_to_cny_rate:
         Number(form.payment_subscription_usd_to_cny_rate) || 0,
       payment_recharge_fee_rate: Number(form.payment_recharge_fee_rate) || 0,
+      security_deposit_enforcement_enabled:
+        form.security_deposit_enforcement_enabled,
+      security_deposit_self_refund_enabled:
+        form.security_deposit_self_refund_enabled,
+      security_deposit_penalty_mode: form.security_deposit_penalty_mode,
+      security_deposit_freeze_hours: Math.max(
+        0,
+        Math.min(8760, Number(form.security_deposit_freeze_hours) || 0),
+      ),
+      security_deposit_max_risk_multiplier: Math.max(
+        1,
+        Math.min(100, Number(form.security_deposit_max_risk_multiplier) || 1),
+      ),
+      security_deposit_policy_version:
+        form.security_deposit_policy_version.trim(),
+      security_deposit_agreement_content_zh:
+        form.security_deposit_agreement_content_zh.trim(),
+      security_deposit_agreement_content_en:
+        form.security_deposit_agreement_content_en.trim(),
       payment_enabled_types: form.payment_enabled_types,
       payment_load_balance_strategy: form.payment_load_balance_strategy,
       payment_product_name_prefix: form.payment_product_name_prefix,

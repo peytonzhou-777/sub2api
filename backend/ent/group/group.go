@@ -40,6 +40,10 @@ const (
 	FieldIsExclusive = "is_exclusive"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldSecurityDepositBaseRequiredCents holds the string denoting the security_deposit_base_required_cents field in the database.
+	FieldSecurityDepositBaseRequiredCents = "security_deposit_base_required_cents"
+	// FieldSecurityDepositPolicyVersion holds the string denoting the security_deposit_policy_version field in the database.
+	FieldSecurityDepositPolicyVersion = "security_deposit_policy_version"
 	// FieldDuplicateOperationID holds the string denoting the duplicate_operation_id field in the database.
 	FieldDuplicateOperationID = "duplicate_operation_id"
 	// FieldPlatform holds the string denoting the platform field in the database.
@@ -227,6 +231,8 @@ var Columns = []string{
 	FieldPeakRateMultiplier,
 	FieldIsExclusive,
 	FieldStatus,
+	FieldSecurityDepositBaseRequiredCents,
+	FieldSecurityDepositPolicyVersion,
 	FieldDuplicateOperationID,
 	FieldPlatform,
 	FieldSubscriptionType,
@@ -334,6 +340,14 @@ var (
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultSecurityDepositBaseRequiredCents holds the default value on creation for the "security_deposit_base_required_cents" field.
+	DefaultSecurityDepositBaseRequiredCents int64
+	// SecurityDepositBaseRequiredCentsValidator is a validator for the "security_deposit_base_required_cents" field. It is called by the builders before save.
+	SecurityDepositBaseRequiredCentsValidator func(int64) error
+	// DefaultSecurityDepositPolicyVersion holds the default value on creation for the "security_deposit_policy_version" field.
+	DefaultSecurityDepositPolicyVersion string
+	// SecurityDepositPolicyVersionValidator is a validator for the "security_deposit_policy_version" field. It is called by the builders before save.
+	SecurityDepositPolicyVersionValidator func(string) error
 	// DuplicateOperationIDValidator is a validator for the "duplicate_operation_id" field. It is called by the builders before save.
 	DuplicateOperationIDValidator func(string) error
 	// DefaultPlatform holds the default value on creation for the "platform" field.
@@ -480,6 +494,16 @@ func ByIsExclusive(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// BySecurityDepositBaseRequiredCents orders the results by the security_deposit_base_required_cents field.
+func BySecurityDepositBaseRequiredCents(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSecurityDepositBaseRequiredCents, opts...).ToFunc()
+}
+
+// BySecurityDepositPolicyVersion orders the results by the security_deposit_policy_version field.
+func BySecurityDepositPolicyVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSecurityDepositPolicyVersion, opts...).ToFunc()
 }
 
 // ByDuplicateOperationID orders the results by the duplicate_operation_id field.

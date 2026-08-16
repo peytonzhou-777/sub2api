@@ -49,6 +49,14 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseraccountitem"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuserattempt"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseritem"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositaccount"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositagreement"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositledger"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositlot"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositrefund"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositriskevent"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositriskprofile"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositviolation"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -1202,6 +1210,222 @@ func (f TraverseResetRebateUserItem) Traverse(ctx context.Context, q ent.Query) 
 	return fmt.Errorf("unexpected query type %T. expect *ent.ResetRebateUserItemQuery", q)
 }
 
+// The SecurityDepositAccountFunc type is an adapter to allow the use of ordinary function as a Querier.
+type SecurityDepositAccountFunc func(context.Context, *ent.SecurityDepositAccountQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f SecurityDepositAccountFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.SecurityDepositAccountQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositAccountQuery", q)
+}
+
+// The TraverseSecurityDepositAccount type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseSecurityDepositAccount func(context.Context, *ent.SecurityDepositAccountQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseSecurityDepositAccount) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseSecurityDepositAccount) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.SecurityDepositAccountQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositAccountQuery", q)
+}
+
+// The SecurityDepositAgreementFunc type is an adapter to allow the use of ordinary function as a Querier.
+type SecurityDepositAgreementFunc func(context.Context, *ent.SecurityDepositAgreementQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f SecurityDepositAgreementFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.SecurityDepositAgreementQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositAgreementQuery", q)
+}
+
+// The TraverseSecurityDepositAgreement type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseSecurityDepositAgreement func(context.Context, *ent.SecurityDepositAgreementQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseSecurityDepositAgreement) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseSecurityDepositAgreement) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.SecurityDepositAgreementQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositAgreementQuery", q)
+}
+
+// The SecurityDepositLedgerFunc type is an adapter to allow the use of ordinary function as a Querier.
+type SecurityDepositLedgerFunc func(context.Context, *ent.SecurityDepositLedgerQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f SecurityDepositLedgerFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.SecurityDepositLedgerQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositLedgerQuery", q)
+}
+
+// The TraverseSecurityDepositLedger type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseSecurityDepositLedger func(context.Context, *ent.SecurityDepositLedgerQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseSecurityDepositLedger) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseSecurityDepositLedger) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.SecurityDepositLedgerQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositLedgerQuery", q)
+}
+
+// The SecurityDepositLotFunc type is an adapter to allow the use of ordinary function as a Querier.
+type SecurityDepositLotFunc func(context.Context, *ent.SecurityDepositLotQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f SecurityDepositLotFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.SecurityDepositLotQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositLotQuery", q)
+}
+
+// The TraverseSecurityDepositLot type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseSecurityDepositLot func(context.Context, *ent.SecurityDepositLotQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseSecurityDepositLot) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseSecurityDepositLot) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.SecurityDepositLotQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositLotQuery", q)
+}
+
+// The SecurityDepositRefundFunc type is an adapter to allow the use of ordinary function as a Querier.
+type SecurityDepositRefundFunc func(context.Context, *ent.SecurityDepositRefundQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f SecurityDepositRefundFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.SecurityDepositRefundQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositRefundQuery", q)
+}
+
+// The TraverseSecurityDepositRefund type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseSecurityDepositRefund func(context.Context, *ent.SecurityDepositRefundQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseSecurityDepositRefund) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseSecurityDepositRefund) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.SecurityDepositRefundQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositRefundQuery", q)
+}
+
+// The SecurityDepositRiskEventFunc type is an adapter to allow the use of ordinary function as a Querier.
+type SecurityDepositRiskEventFunc func(context.Context, *ent.SecurityDepositRiskEventQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f SecurityDepositRiskEventFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.SecurityDepositRiskEventQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositRiskEventQuery", q)
+}
+
+// The TraverseSecurityDepositRiskEvent type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseSecurityDepositRiskEvent func(context.Context, *ent.SecurityDepositRiskEventQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseSecurityDepositRiskEvent) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseSecurityDepositRiskEvent) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.SecurityDepositRiskEventQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositRiskEventQuery", q)
+}
+
+// The SecurityDepositRiskProfileFunc type is an adapter to allow the use of ordinary function as a Querier.
+type SecurityDepositRiskProfileFunc func(context.Context, *ent.SecurityDepositRiskProfileQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f SecurityDepositRiskProfileFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.SecurityDepositRiskProfileQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositRiskProfileQuery", q)
+}
+
+// The TraverseSecurityDepositRiskProfile type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseSecurityDepositRiskProfile func(context.Context, *ent.SecurityDepositRiskProfileQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseSecurityDepositRiskProfile) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseSecurityDepositRiskProfile) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.SecurityDepositRiskProfileQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositRiskProfileQuery", q)
+}
+
+// The SecurityDepositViolationFunc type is an adapter to allow the use of ordinary function as a Querier.
+type SecurityDepositViolationFunc func(context.Context, *ent.SecurityDepositViolationQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f SecurityDepositViolationFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.SecurityDepositViolationQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositViolationQuery", q)
+}
+
+// The TraverseSecurityDepositViolation type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseSecurityDepositViolation func(context.Context, *ent.SecurityDepositViolationQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseSecurityDepositViolation) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseSecurityDepositViolation) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.SecurityDepositViolationQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.SecurityDepositViolationQuery", q)
+}
+
 // The SecuritySecretFunc type is an adapter to allow the use of ordinary function as a Querier.
 type SecuritySecretFunc func(context.Context, *ent.SecuritySecretQuery) (ent.Value, error)
 
@@ -1690,6 +1914,22 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.ResetRebateUserAttemptQuery, predicate.ResetRebateUserAttempt, resetrebateuserattempt.OrderOption]{typ: ent.TypeResetRebateUserAttempt, tq: q}, nil
 	case *ent.ResetRebateUserItemQuery:
 		return &query[*ent.ResetRebateUserItemQuery, predicate.ResetRebateUserItem, resetrebateuseritem.OrderOption]{typ: ent.TypeResetRebateUserItem, tq: q}, nil
+	case *ent.SecurityDepositAccountQuery:
+		return &query[*ent.SecurityDepositAccountQuery, predicate.SecurityDepositAccount, securitydepositaccount.OrderOption]{typ: ent.TypeSecurityDepositAccount, tq: q}, nil
+	case *ent.SecurityDepositAgreementQuery:
+		return &query[*ent.SecurityDepositAgreementQuery, predicate.SecurityDepositAgreement, securitydepositagreement.OrderOption]{typ: ent.TypeSecurityDepositAgreement, tq: q}, nil
+	case *ent.SecurityDepositLedgerQuery:
+		return &query[*ent.SecurityDepositLedgerQuery, predicate.SecurityDepositLedger, securitydepositledger.OrderOption]{typ: ent.TypeSecurityDepositLedger, tq: q}, nil
+	case *ent.SecurityDepositLotQuery:
+		return &query[*ent.SecurityDepositLotQuery, predicate.SecurityDepositLot, securitydepositlot.OrderOption]{typ: ent.TypeSecurityDepositLot, tq: q}, nil
+	case *ent.SecurityDepositRefundQuery:
+		return &query[*ent.SecurityDepositRefundQuery, predicate.SecurityDepositRefund, securitydepositrefund.OrderOption]{typ: ent.TypeSecurityDepositRefund, tq: q}, nil
+	case *ent.SecurityDepositRiskEventQuery:
+		return &query[*ent.SecurityDepositRiskEventQuery, predicate.SecurityDepositRiskEvent, securitydepositriskevent.OrderOption]{typ: ent.TypeSecurityDepositRiskEvent, tq: q}, nil
+	case *ent.SecurityDepositRiskProfileQuery:
+		return &query[*ent.SecurityDepositRiskProfileQuery, predicate.SecurityDepositRiskProfile, securitydepositriskprofile.OrderOption]{typ: ent.TypeSecurityDepositRiskProfile, tq: q}, nil
+	case *ent.SecurityDepositViolationQuery:
+		return &query[*ent.SecurityDepositViolationQuery, predicate.SecurityDepositViolation, securitydepositviolation.OrderOption]{typ: ent.TypeSecurityDepositViolation, tq: q}, nil
 	case *ent.SecuritySecretQuery:
 		return &query[*ent.SecuritySecretQuery, predicate.SecuritySecret, securitysecret.OrderOption]{typ: ent.TypeSecuritySecret, tq: q}, nil
 	case *ent.SettingQuery:

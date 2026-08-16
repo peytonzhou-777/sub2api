@@ -117,7 +117,9 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetPeakRateMultiplier(groupIn.PeakRateMultiplier).
 		SetProfitControlEnabled(groupIn.ProfitControlEnabled).
 		SetProfitMinMargin(groupIn.ProfitMinMargin).
-		SetProfitSafetyBuffer(groupIn.ProfitSafetyBuffer)
+		SetProfitSafetyBuffer(groupIn.ProfitSafetyBuffer).
+		SetSecurityDepositBaseRequiredCents(groupIn.SecurityDepositBaseRequiredCents).
+		SetSecurityDepositPolicyVersion(groupIn.SecurityDepositPolicyVersion)
 	if groupIn.DuplicateOperationID != "" {
 		builder = builder.SetDuplicateOperationID(groupIn.DuplicateOperationID)
 	}

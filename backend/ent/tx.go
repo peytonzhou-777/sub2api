@@ -94,6 +94,22 @@ type Tx struct {
 	ResetRebateUserAttempt *ResetRebateUserAttemptClient
 	// ResetRebateUserItem is the client for interacting with the ResetRebateUserItem builders.
 	ResetRebateUserItem *ResetRebateUserItemClient
+	// SecurityDepositAccount is the client for interacting with the SecurityDepositAccount builders.
+	SecurityDepositAccount *SecurityDepositAccountClient
+	// SecurityDepositAgreement is the client for interacting with the SecurityDepositAgreement builders.
+	SecurityDepositAgreement *SecurityDepositAgreementClient
+	// SecurityDepositLedger is the client for interacting with the SecurityDepositLedger builders.
+	SecurityDepositLedger *SecurityDepositLedgerClient
+	// SecurityDepositLot is the client for interacting with the SecurityDepositLot builders.
+	SecurityDepositLot *SecurityDepositLotClient
+	// SecurityDepositRefund is the client for interacting with the SecurityDepositRefund builders.
+	SecurityDepositRefund *SecurityDepositRefundClient
+	// SecurityDepositRiskEvent is the client for interacting with the SecurityDepositRiskEvent builders.
+	SecurityDepositRiskEvent *SecurityDepositRiskEventClient
+	// SecurityDepositRiskProfile is the client for interacting with the SecurityDepositRiskProfile builders.
+	SecurityDepositRiskProfile *SecurityDepositRiskProfileClient
+	// SecurityDepositViolation is the client for interacting with the SecurityDepositViolation builders.
+	SecurityDepositViolation *SecurityDepositViolationClient
 	// SecuritySecret is the client for interacting with the SecuritySecret builders.
 	SecuritySecret *SecuritySecretClient
 	// Setting is the client for interacting with the Setting builders.
@@ -295,6 +311,14 @@ func (tx *Tx) init() {
 	tx.ResetRebateUserAccountItem = NewResetRebateUserAccountItemClient(tx.config)
 	tx.ResetRebateUserAttempt = NewResetRebateUserAttemptClient(tx.config)
 	tx.ResetRebateUserItem = NewResetRebateUserItemClient(tx.config)
+	tx.SecurityDepositAccount = NewSecurityDepositAccountClient(tx.config)
+	tx.SecurityDepositAgreement = NewSecurityDepositAgreementClient(tx.config)
+	tx.SecurityDepositLedger = NewSecurityDepositLedgerClient(tx.config)
+	tx.SecurityDepositLot = NewSecurityDepositLotClient(tx.config)
+	tx.SecurityDepositRefund = NewSecurityDepositRefundClient(tx.config)
+	tx.SecurityDepositRiskEvent = NewSecurityDepositRiskEventClient(tx.config)
+	tx.SecurityDepositRiskProfile = NewSecurityDepositRiskProfileClient(tx.config)
+	tx.SecurityDepositViolation = NewSecurityDepositViolationClient(tx.config)
 	tx.SecuritySecret = NewSecuritySecretClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)
 	tx.SubscriptionPlan = NewSubscriptionPlanClient(tx.config)

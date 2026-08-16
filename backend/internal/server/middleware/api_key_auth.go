@@ -9,6 +9,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -185,6 +186,12 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		// authenticated key and must remain available after the completed
 		// generation consumes the key's remaining balance.
 		skipBilling := c.Request.URL.Path == "/v1/usage" || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
+		if !skipBilling {
+			if err := attachSecurityDepositAccessGrant(c, apiKeyService, apiKey); err != nil {
+				AbortWithError(c, infraerrors.Code(err), infraerrors.Reason(err), infraerrors.Message(err))
+				return
+			}
+		}
 
 		// ── 4. SimpleMode → early return ─────────────────────────────
 
@@ -300,6 +307,23 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 
 		c.Next()
 	}
+}
+
+// attachSecurityDepositAccessGrant 对模型执行请求检查保证金，并把可信快照写入请求上下文。
+func attachSecurityDepositAccessGrant(c *gin.Context, apiKeyService *service.APIKeyService, apiKey *service.APIKey) error {
+	if c == nil || c.Request == nil || apiKeyService == nil || apiKey == nil || apiKey.User == nil || apiKey.GroupID == nil {
+		return nil
+	}
+	grant, err := apiKeyService.CheckSecurityDepositAccess(c.Request.Context(), apiKey.User.ID, *apiKey.GroupID)
+	if err != nil {
+		return err
+	}
+	if grant == nil {
+		return nil
+	}
+	ctx := context.WithValue(c.Request.Context(), ctxkey.SecurityDepositAccessGrant, grant)
+	c.Request = c.Request.WithContext(ctx)
+	return nil
 }
 
 func apiKeyHeadersTooLarge(c *gin.Context) bool {

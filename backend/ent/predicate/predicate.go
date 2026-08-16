@@ -126,6 +126,30 @@ type ResetRebateUserAttempt func(*sql.Selector)
 // ResetRebateUserItem is the predicate function for resetrebateuseritem builders.
 type ResetRebateUserItem func(*sql.Selector)
 
+// SecurityDepositAccount is the predicate function for securitydepositaccount builders.
+type SecurityDepositAccount func(*sql.Selector)
+
+// SecurityDepositAgreement is the predicate function for securitydepositagreement builders.
+type SecurityDepositAgreement func(*sql.Selector)
+
+// SecurityDepositLedger is the predicate function for securitydepositledger builders.
+type SecurityDepositLedger func(*sql.Selector)
+
+// SecurityDepositLot is the predicate function for securitydepositlot builders.
+type SecurityDepositLot func(*sql.Selector)
+
+// SecurityDepositRefund is the predicate function for securitydepositrefund builders.
+type SecurityDepositRefund func(*sql.Selector)
+
+// SecurityDepositRiskEvent is the predicate function for securitydepositriskevent builders.
+type SecurityDepositRiskEvent func(*sql.Selector)
+
+// SecurityDepositRiskProfile is the predicate function for securitydepositriskprofile builders.
+type SecurityDepositRiskProfile func(*sql.Selector)
+
+// SecurityDepositViolation is the predicate function for securitydepositviolation builders.
+type SecurityDepositViolation func(*sql.Selector)
+
 // SecuritySecret is the predicate function for securitysecret builders.
 type SecuritySecret func(*sql.Selector)
 

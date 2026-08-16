@@ -120,6 +120,30 @@ export default {
     groupChangedSuccess: '分组更换成功',
     failedToChangeGroup: '更换分组失败',
     groupRequired: '请选择分组',
+    securityDeposit: {
+      loading: '正在查询保证金',
+      available: '保证金可用',
+      required: '需保证金 {amount}',
+      personalRequired: '个人门槛 {amount}（{multiplier}x）',
+      current: '当前 {amount}',
+      shortfall: '还需 {amount}',
+      dialogTitle: '缴纳安全保证金',
+      group: '所选分组',
+      currentBalance: '当前保证金',
+      baseRequired: '基础门槛',
+      riskMultiplierLabel: '当前风险倍率',
+      personalThreshold: '个人有效门槛',
+      amountDue: '本次应缴差额',
+      agreementTitle: '网络安全使用规则（{version}）',
+      acceptAgreement: '我已完整阅读并同意遵守网络安全使用规则，知悉违规可能导致保证金扣除及密钥禁用。',
+      freezeHint: '缴纳成功后，本笔保证金将在 {hours} 小时内不可退款；冻结期间仍计入分组资格，也可因官方网安策略违规被扣除。',
+      noPaymentMethod: '当前没有支持本次保证金金额的人民币支付方式。',
+      payAction: '同意规则并缴纳 {amount}',
+      quoteChanged: '保证金金额或规则已变化，已刷新最新报价。',
+      paymentUnavailable: '当前支付方式无法完成保证金缴纳，请更换支付方式。',
+      wechatUnavailable: '当前微信环境无法调起支付，请重新打开页面或更换支付方式。',
+      loadFailed: '保证金信息加载失败，请稍后重试。'
+    },
     usage: '用量',
     today: '今日',
     total: '近30天',
@@ -260,8 +284,10 @@ export default {
     status: {
       active: '活跃',
       inactive: '已停用',
+	  disabled: '保证金不足已禁用',
       quota_exhausted: '额度耗尽',
-      expired: '已过期'
+	  expired: '已过期',
+	  security_locked: '网安策略锁定'
     }
   },
 

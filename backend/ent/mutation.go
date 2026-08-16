@@ -53,6 +53,14 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseraccountitem"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuserattempt"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseritem"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositaccount"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositagreement"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositledger"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositlot"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositrefund"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositriskevent"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositriskprofile"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositviolation"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -120,6 +128,14 @@ const (
 	TypeResetRebateUserAccountItem    = "ResetRebateUserAccountItem"
 	TypeResetRebateUserAttempt        = "ResetRebateUserAttempt"
 	TypeResetRebateUserItem           = "ResetRebateUserItem"
+	TypeSecurityDepositAccount        = "SecurityDepositAccount"
+	TypeSecurityDepositAgreement      = "SecurityDepositAgreement"
+	TypeSecurityDepositLedger         = "SecurityDepositLedger"
+	TypeSecurityDepositLot            = "SecurityDepositLot"
+	TypeSecurityDepositRefund         = "SecurityDepositRefund"
+	TypeSecurityDepositRiskEvent      = "SecurityDepositRiskEvent"
+	TypeSecurityDepositRiskProfile    = "SecurityDepositRiskProfile"
+	TypeSecurityDepositViolation      = "SecurityDepositViolation"
 	TypeSecuritySecret                = "SecuritySecret"
 	TypeSetting                       = "Setting"
 	TypeSubscriptionPlan              = "SubscriptionPlan"
@@ -140,51 +156,60 @@ const (
 // APIKeyMutation represents an operation that mutates the APIKey nodes in the graph.
 type APIKeyMutation struct {
 	config
-	op                 Op
-	typ                string
-	id                 *int64
-	created_at         *time.Time
-	updated_at         *time.Time
-	deleted_at         *time.Time
-	key                *string
-	name               *string
-	status             *string
-	last_used_at       *time.Time
-	ip_whitelist       *[]string
-	appendip_whitelist []string
-	ip_blacklist       *[]string
-	appendip_blacklist []string
-	quota              *float64
-	addquota           *float64
-	quota_used         *float64
-	addquota_used      *float64
-	expires_at         *time.Time
-	rate_limit_5h      *float64
-	addrate_limit_5h   *float64
-	rate_limit_1d      *float64
-	addrate_limit_1d   *float64
-	rate_limit_7d      *float64
-	addrate_limit_7d   *float64
-	usage_5h           *float64
-	addusage_5h        *float64
-	usage_1d           *float64
-	addusage_1d        *float64
-	usage_7d           *float64
-	addusage_7d        *float64
-	window_5h_start    *time.Time
-	window_1d_start    *time.Time
-	window_7d_start    *time.Time
-	clearedFields      map[string]struct{}
-	user               *int64
-	cleareduser        bool
-	group              *int64
-	clearedgroup       bool
-	usage_logs         map[int64]struct{}
-	removedusage_logs  map[int64]struct{}
-	clearedusage_logs  bool
-	done               bool
-	oldValue           func(context.Context) (*APIKey, error)
-	predicates         []predicate.APIKey
+	op                             Op
+	typ                            string
+	id                             *int64
+	created_at                     *time.Time
+	updated_at                     *time.Time
+	deleted_at                     *time.Time
+	key                            *string
+	name                           *string
+	status                         *string
+	security_locked_at             *time.Time
+	security_lock_violation_id     *int64
+	addsecurity_lock_violation_id  *int64
+	security_lock_reason           *string
+	disabled_reason                *string
+	disabled_financial_event_type  *string
+	disabled_financial_event_id    *int64
+	adddisabled_financial_event_id *int64
+	disabled_at                    *time.Time
+	last_used_at                   *time.Time
+	ip_whitelist                   *[]string
+	appendip_whitelist             []string
+	ip_blacklist                   *[]string
+	appendip_blacklist             []string
+	quota                          *float64
+	addquota                       *float64
+	quota_used                     *float64
+	addquota_used                  *float64
+	expires_at                     *time.Time
+	rate_limit_5h                  *float64
+	addrate_limit_5h               *float64
+	rate_limit_1d                  *float64
+	addrate_limit_1d               *float64
+	rate_limit_7d                  *float64
+	addrate_limit_7d               *float64
+	usage_5h                       *float64
+	addusage_5h                    *float64
+	usage_1d                       *float64
+	addusage_1d                    *float64
+	usage_7d                       *float64
+	addusage_7d                    *float64
+	window_5h_start                *time.Time
+	window_1d_start                *time.Time
+	window_7d_start                *time.Time
+	clearedFields                  map[string]struct{}
+	user                           *int64
+	cleareduser                    bool
+	group                          *int64
+	clearedgroup                   bool
+	usage_logs                     map[int64]struct{}
+	removedusage_logs              map[int64]struct{}
+	clearedusage_logs              bool
+	done                           bool
+	oldValue                       func(context.Context) (*APIKey, error)
+	predicates                     []predicate.APIKey
 }
 
 var _ ent.Mutation = (*APIKeyMutation)(nil)
@@ -597,6 +622,391 @@ func (m *APIKeyMutation) OldStatus(ctx context.Context) (v string, err error) {
 // ResetStatus resets all changes to the "status" field.
 func (m *APIKeyMutation) ResetStatus() {
 	m.status = nil
+}
+
+// SetSecurityLockedAt sets the "security_locked_at" field.
+func (m *APIKeyMutation) SetSecurityLockedAt(t time.Time) {
+	m.security_locked_at = &t
+}
+
+// SecurityLockedAt returns the value of the "security_locked_at" field in the mutation.
+func (m *APIKeyMutation) SecurityLockedAt() (r time.Time, exists bool) {
+	v := m.security_locked_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSecurityLockedAt returns the old "security_locked_at" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldSecurityLockedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSecurityLockedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSecurityLockedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSecurityLockedAt: %w", err)
+	}
+	return oldValue.SecurityLockedAt, nil
+}
+
+// ClearSecurityLockedAt clears the value of the "security_locked_at" field.
+func (m *APIKeyMutation) ClearSecurityLockedAt() {
+	m.security_locked_at = nil
+	m.clearedFields[apikey.FieldSecurityLockedAt] = struct{}{}
+}
+
+// SecurityLockedAtCleared returns if the "security_locked_at" field was cleared in this mutation.
+func (m *APIKeyMutation) SecurityLockedAtCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldSecurityLockedAt]
+	return ok
+}
+
+// ResetSecurityLockedAt resets all changes to the "security_locked_at" field.
+func (m *APIKeyMutation) ResetSecurityLockedAt() {
+	m.security_locked_at = nil
+	delete(m.clearedFields, apikey.FieldSecurityLockedAt)
+}
+
+// SetSecurityLockViolationID sets the "security_lock_violation_id" field.
+func (m *APIKeyMutation) SetSecurityLockViolationID(i int64) {
+	m.security_lock_violation_id = &i
+	m.addsecurity_lock_violation_id = nil
+}
+
+// SecurityLockViolationID returns the value of the "security_lock_violation_id" field in the mutation.
+func (m *APIKeyMutation) SecurityLockViolationID() (r int64, exists bool) {
+	v := m.security_lock_violation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSecurityLockViolationID returns the old "security_lock_violation_id" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldSecurityLockViolationID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSecurityLockViolationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSecurityLockViolationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSecurityLockViolationID: %w", err)
+	}
+	return oldValue.SecurityLockViolationID, nil
+}
+
+// AddSecurityLockViolationID adds i to the "security_lock_violation_id" field.
+func (m *APIKeyMutation) AddSecurityLockViolationID(i int64) {
+	if m.addsecurity_lock_violation_id != nil {
+		*m.addsecurity_lock_violation_id += i
+	} else {
+		m.addsecurity_lock_violation_id = &i
+	}
+}
+
+// AddedSecurityLockViolationID returns the value that was added to the "security_lock_violation_id" field in this mutation.
+func (m *APIKeyMutation) AddedSecurityLockViolationID() (r int64, exists bool) {
+	v := m.addsecurity_lock_violation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearSecurityLockViolationID clears the value of the "security_lock_violation_id" field.
+func (m *APIKeyMutation) ClearSecurityLockViolationID() {
+	m.security_lock_violation_id = nil
+	m.addsecurity_lock_violation_id = nil
+	m.clearedFields[apikey.FieldSecurityLockViolationID] = struct{}{}
+}
+
+// SecurityLockViolationIDCleared returns if the "security_lock_violation_id" field was cleared in this mutation.
+func (m *APIKeyMutation) SecurityLockViolationIDCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldSecurityLockViolationID]
+	return ok
+}
+
+// ResetSecurityLockViolationID resets all changes to the "security_lock_violation_id" field.
+func (m *APIKeyMutation) ResetSecurityLockViolationID() {
+	m.security_lock_violation_id = nil
+	m.addsecurity_lock_violation_id = nil
+	delete(m.clearedFields, apikey.FieldSecurityLockViolationID)
+}
+
+// SetSecurityLockReason sets the "security_lock_reason" field.
+func (m *APIKeyMutation) SetSecurityLockReason(s string) {
+	m.security_lock_reason = &s
+}
+
+// SecurityLockReason returns the value of the "security_lock_reason" field in the mutation.
+func (m *APIKeyMutation) SecurityLockReason() (r string, exists bool) {
+	v := m.security_lock_reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSecurityLockReason returns the old "security_lock_reason" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldSecurityLockReason(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSecurityLockReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSecurityLockReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSecurityLockReason: %w", err)
+	}
+	return oldValue.SecurityLockReason, nil
+}
+
+// ClearSecurityLockReason clears the value of the "security_lock_reason" field.
+func (m *APIKeyMutation) ClearSecurityLockReason() {
+	m.security_lock_reason = nil
+	m.clearedFields[apikey.FieldSecurityLockReason] = struct{}{}
+}
+
+// SecurityLockReasonCleared returns if the "security_lock_reason" field was cleared in this mutation.
+func (m *APIKeyMutation) SecurityLockReasonCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldSecurityLockReason]
+	return ok
+}
+
+// ResetSecurityLockReason resets all changes to the "security_lock_reason" field.
+func (m *APIKeyMutation) ResetSecurityLockReason() {
+	m.security_lock_reason = nil
+	delete(m.clearedFields, apikey.FieldSecurityLockReason)
+}
+
+// SetDisabledReason sets the "disabled_reason" field.
+func (m *APIKeyMutation) SetDisabledReason(s string) {
+	m.disabled_reason = &s
+}
+
+// DisabledReason returns the value of the "disabled_reason" field in the mutation.
+func (m *APIKeyMutation) DisabledReason() (r string, exists bool) {
+	v := m.disabled_reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDisabledReason returns the old "disabled_reason" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldDisabledReason(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDisabledReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDisabledReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDisabledReason: %w", err)
+	}
+	return oldValue.DisabledReason, nil
+}
+
+// ClearDisabledReason clears the value of the "disabled_reason" field.
+func (m *APIKeyMutation) ClearDisabledReason() {
+	m.disabled_reason = nil
+	m.clearedFields[apikey.FieldDisabledReason] = struct{}{}
+}
+
+// DisabledReasonCleared returns if the "disabled_reason" field was cleared in this mutation.
+func (m *APIKeyMutation) DisabledReasonCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldDisabledReason]
+	return ok
+}
+
+// ResetDisabledReason resets all changes to the "disabled_reason" field.
+func (m *APIKeyMutation) ResetDisabledReason() {
+	m.disabled_reason = nil
+	delete(m.clearedFields, apikey.FieldDisabledReason)
+}
+
+// SetDisabledFinancialEventType sets the "disabled_financial_event_type" field.
+func (m *APIKeyMutation) SetDisabledFinancialEventType(s string) {
+	m.disabled_financial_event_type = &s
+}
+
+// DisabledFinancialEventType returns the value of the "disabled_financial_event_type" field in the mutation.
+func (m *APIKeyMutation) DisabledFinancialEventType() (r string, exists bool) {
+	v := m.disabled_financial_event_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDisabledFinancialEventType returns the old "disabled_financial_event_type" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldDisabledFinancialEventType(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDisabledFinancialEventType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDisabledFinancialEventType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDisabledFinancialEventType: %w", err)
+	}
+	return oldValue.DisabledFinancialEventType, nil
+}
+
+// ClearDisabledFinancialEventType clears the value of the "disabled_financial_event_type" field.
+func (m *APIKeyMutation) ClearDisabledFinancialEventType() {
+	m.disabled_financial_event_type = nil
+	m.clearedFields[apikey.FieldDisabledFinancialEventType] = struct{}{}
+}
+
+// DisabledFinancialEventTypeCleared returns if the "disabled_financial_event_type" field was cleared in this mutation.
+func (m *APIKeyMutation) DisabledFinancialEventTypeCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldDisabledFinancialEventType]
+	return ok
+}
+
+// ResetDisabledFinancialEventType resets all changes to the "disabled_financial_event_type" field.
+func (m *APIKeyMutation) ResetDisabledFinancialEventType() {
+	m.disabled_financial_event_type = nil
+	delete(m.clearedFields, apikey.FieldDisabledFinancialEventType)
+}
+
+// SetDisabledFinancialEventID sets the "disabled_financial_event_id" field.
+func (m *APIKeyMutation) SetDisabledFinancialEventID(i int64) {
+	m.disabled_financial_event_id = &i
+	m.adddisabled_financial_event_id = nil
+}
+
+// DisabledFinancialEventID returns the value of the "disabled_financial_event_id" field in the mutation.
+func (m *APIKeyMutation) DisabledFinancialEventID() (r int64, exists bool) {
+	v := m.disabled_financial_event_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDisabledFinancialEventID returns the old "disabled_financial_event_id" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldDisabledFinancialEventID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDisabledFinancialEventID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDisabledFinancialEventID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDisabledFinancialEventID: %w", err)
+	}
+	return oldValue.DisabledFinancialEventID, nil
+}
+
+// AddDisabledFinancialEventID adds i to the "disabled_financial_event_id" field.
+func (m *APIKeyMutation) AddDisabledFinancialEventID(i int64) {
+	if m.adddisabled_financial_event_id != nil {
+		*m.adddisabled_financial_event_id += i
+	} else {
+		m.adddisabled_financial_event_id = &i
+	}
+}
+
+// AddedDisabledFinancialEventID returns the value that was added to the "disabled_financial_event_id" field in this mutation.
+func (m *APIKeyMutation) AddedDisabledFinancialEventID() (r int64, exists bool) {
+	v := m.adddisabled_financial_event_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDisabledFinancialEventID clears the value of the "disabled_financial_event_id" field.
+func (m *APIKeyMutation) ClearDisabledFinancialEventID() {
+	m.disabled_financial_event_id = nil
+	m.adddisabled_financial_event_id = nil
+	m.clearedFields[apikey.FieldDisabledFinancialEventID] = struct{}{}
+}
+
+// DisabledFinancialEventIDCleared returns if the "disabled_financial_event_id" field was cleared in this mutation.
+func (m *APIKeyMutation) DisabledFinancialEventIDCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldDisabledFinancialEventID]
+	return ok
+}
+
+// ResetDisabledFinancialEventID resets all changes to the "disabled_financial_event_id" field.
+func (m *APIKeyMutation) ResetDisabledFinancialEventID() {
+	m.disabled_financial_event_id = nil
+	m.adddisabled_financial_event_id = nil
+	delete(m.clearedFields, apikey.FieldDisabledFinancialEventID)
+}
+
+// SetDisabledAt sets the "disabled_at" field.
+func (m *APIKeyMutation) SetDisabledAt(t time.Time) {
+	m.disabled_at = &t
+}
+
+// DisabledAt returns the value of the "disabled_at" field in the mutation.
+func (m *APIKeyMutation) DisabledAt() (r time.Time, exists bool) {
+	v := m.disabled_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDisabledAt returns the old "disabled_at" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldDisabledAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDisabledAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDisabledAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDisabledAt: %w", err)
+	}
+	return oldValue.DisabledAt, nil
+}
+
+// ClearDisabledAt clears the value of the "disabled_at" field.
+func (m *APIKeyMutation) ClearDisabledAt() {
+	m.disabled_at = nil
+	m.clearedFields[apikey.FieldDisabledAt] = struct{}{}
+}
+
+// DisabledAtCleared returns if the "disabled_at" field was cleared in this mutation.
+func (m *APIKeyMutation) DisabledAtCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldDisabledAt]
+	return ok
+}
+
+// ResetDisabledAt resets all changes to the "disabled_at" field.
+func (m *APIKeyMutation) ResetDisabledAt() {
+	m.disabled_at = nil
+	delete(m.clearedFields, apikey.FieldDisabledAt)
 }
 
 // SetLastUsedAt sets the "last_used_at" field.
@@ -1564,7 +1974,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 30)
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
 	}
@@ -1588,6 +1998,27 @@ func (m *APIKeyMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, apikey.FieldStatus)
+	}
+	if m.security_locked_at != nil {
+		fields = append(fields, apikey.FieldSecurityLockedAt)
+	}
+	if m.security_lock_violation_id != nil {
+		fields = append(fields, apikey.FieldSecurityLockViolationID)
+	}
+	if m.security_lock_reason != nil {
+		fields = append(fields, apikey.FieldSecurityLockReason)
+	}
+	if m.disabled_reason != nil {
+		fields = append(fields, apikey.FieldDisabledReason)
+	}
+	if m.disabled_financial_event_type != nil {
+		fields = append(fields, apikey.FieldDisabledFinancialEventType)
+	}
+	if m.disabled_financial_event_id != nil {
+		fields = append(fields, apikey.FieldDisabledFinancialEventID)
+	}
+	if m.disabled_at != nil {
+		fields = append(fields, apikey.FieldDisabledAt)
 	}
 	if m.last_used_at != nil {
 		fields = append(fields, apikey.FieldLastUsedAt)
@@ -1658,6 +2089,20 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.GroupID()
 	case apikey.FieldStatus:
 		return m.Status()
+	case apikey.FieldSecurityLockedAt:
+		return m.SecurityLockedAt()
+	case apikey.FieldSecurityLockViolationID:
+		return m.SecurityLockViolationID()
+	case apikey.FieldSecurityLockReason:
+		return m.SecurityLockReason()
+	case apikey.FieldDisabledReason:
+		return m.DisabledReason()
+	case apikey.FieldDisabledFinancialEventType:
+		return m.DisabledFinancialEventType()
+	case apikey.FieldDisabledFinancialEventID:
+		return m.DisabledFinancialEventID()
+	case apikey.FieldDisabledAt:
+		return m.DisabledAt()
 	case apikey.FieldLastUsedAt:
 		return m.LastUsedAt()
 	case apikey.FieldIPWhitelist:
@@ -1713,6 +2158,20 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldGroupID(ctx)
 	case apikey.FieldStatus:
 		return m.OldStatus(ctx)
+	case apikey.FieldSecurityLockedAt:
+		return m.OldSecurityLockedAt(ctx)
+	case apikey.FieldSecurityLockViolationID:
+		return m.OldSecurityLockViolationID(ctx)
+	case apikey.FieldSecurityLockReason:
+		return m.OldSecurityLockReason(ctx)
+	case apikey.FieldDisabledReason:
+		return m.OldDisabledReason(ctx)
+	case apikey.FieldDisabledFinancialEventType:
+		return m.OldDisabledFinancialEventType(ctx)
+	case apikey.FieldDisabledFinancialEventID:
+		return m.OldDisabledFinancialEventID(ctx)
+	case apikey.FieldDisabledAt:
+		return m.OldDisabledAt(ctx)
 	case apikey.FieldLastUsedAt:
 		return m.OldLastUsedAt(ctx)
 	case apikey.FieldIPWhitelist:
@@ -1807,6 +2266,55 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case apikey.FieldSecurityLockedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSecurityLockedAt(v)
+		return nil
+	case apikey.FieldSecurityLockViolationID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSecurityLockViolationID(v)
+		return nil
+	case apikey.FieldSecurityLockReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSecurityLockReason(v)
+		return nil
+	case apikey.FieldDisabledReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDisabledReason(v)
+		return nil
+	case apikey.FieldDisabledFinancialEventType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDisabledFinancialEventType(v)
+		return nil
+	case apikey.FieldDisabledFinancialEventID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDisabledFinancialEventID(v)
+		return nil
+	case apikey.FieldDisabledAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDisabledAt(v)
 		return nil
 	case apikey.FieldLastUsedAt:
 		v, ok := value.(time.Time)
@@ -1921,6 +2429,12 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *APIKeyMutation) AddedFields() []string {
 	var fields []string
+	if m.addsecurity_lock_violation_id != nil {
+		fields = append(fields, apikey.FieldSecurityLockViolationID)
+	}
+	if m.adddisabled_financial_event_id != nil {
+		fields = append(fields, apikey.FieldDisabledFinancialEventID)
+	}
 	if m.addquota != nil {
 		fields = append(fields, apikey.FieldQuota)
 	}
@@ -1953,6 +2467,10 @@ func (m *APIKeyMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *APIKeyMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case apikey.FieldSecurityLockViolationID:
+		return m.AddedSecurityLockViolationID()
+	case apikey.FieldDisabledFinancialEventID:
+		return m.AddedDisabledFinancialEventID()
 	case apikey.FieldQuota:
 		return m.AddedQuota()
 	case apikey.FieldQuotaUsed:
@@ -1978,6 +2496,20 @@ func (m *APIKeyMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *APIKeyMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case apikey.FieldSecurityLockViolationID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSecurityLockViolationID(v)
+		return nil
+	case apikey.FieldDisabledFinancialEventID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDisabledFinancialEventID(v)
+		return nil
 	case apikey.FieldQuota:
 		v, ok := value.(float64)
 		if !ok {
@@ -2048,6 +2580,27 @@ func (m *APIKeyMutation) ClearedFields() []string {
 	if m.FieldCleared(apikey.FieldGroupID) {
 		fields = append(fields, apikey.FieldGroupID)
 	}
+	if m.FieldCleared(apikey.FieldSecurityLockedAt) {
+		fields = append(fields, apikey.FieldSecurityLockedAt)
+	}
+	if m.FieldCleared(apikey.FieldSecurityLockViolationID) {
+		fields = append(fields, apikey.FieldSecurityLockViolationID)
+	}
+	if m.FieldCleared(apikey.FieldSecurityLockReason) {
+		fields = append(fields, apikey.FieldSecurityLockReason)
+	}
+	if m.FieldCleared(apikey.FieldDisabledReason) {
+		fields = append(fields, apikey.FieldDisabledReason)
+	}
+	if m.FieldCleared(apikey.FieldDisabledFinancialEventType) {
+		fields = append(fields, apikey.FieldDisabledFinancialEventType)
+	}
+	if m.FieldCleared(apikey.FieldDisabledFinancialEventID) {
+		fields = append(fields, apikey.FieldDisabledFinancialEventID)
+	}
+	if m.FieldCleared(apikey.FieldDisabledAt) {
+		fields = append(fields, apikey.FieldDisabledAt)
+	}
 	if m.FieldCleared(apikey.FieldLastUsedAt) {
 		fields = append(fields, apikey.FieldLastUsedAt)
 	}
@@ -2088,6 +2641,27 @@ func (m *APIKeyMutation) ClearField(name string) error {
 		return nil
 	case apikey.FieldGroupID:
 		m.ClearGroupID()
+		return nil
+	case apikey.FieldSecurityLockedAt:
+		m.ClearSecurityLockedAt()
+		return nil
+	case apikey.FieldSecurityLockViolationID:
+		m.ClearSecurityLockViolationID()
+		return nil
+	case apikey.FieldSecurityLockReason:
+		m.ClearSecurityLockReason()
+		return nil
+	case apikey.FieldDisabledReason:
+		m.ClearDisabledReason()
+		return nil
+	case apikey.FieldDisabledFinancialEventType:
+		m.ClearDisabledFinancialEventType()
+		return nil
+	case apikey.FieldDisabledFinancialEventID:
+		m.ClearDisabledFinancialEventID()
+		return nil
+	case apikey.FieldDisabledAt:
+		m.ClearDisabledAt()
 		return nil
 	case apikey.FieldLastUsedAt:
 		m.ClearLastUsedAt()
@@ -2141,6 +2715,27 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case apikey.FieldSecurityLockedAt:
+		m.ResetSecurityLockedAt()
+		return nil
+	case apikey.FieldSecurityLockViolationID:
+		m.ResetSecurityLockViolationID()
+		return nil
+	case apikey.FieldSecurityLockReason:
+		m.ResetSecurityLockReason()
+		return nil
+	case apikey.FieldDisabledReason:
+		m.ResetDisabledReason()
+		return nil
+	case apikey.FieldDisabledFinancialEventType:
+		m.ResetDisabledFinancialEventType()
+		return nil
+	case apikey.FieldDisabledFinancialEventID:
+		m.ResetDisabledFinancialEventID()
+		return nil
+	case apikey.FieldDisabledAt:
+		m.ResetDisabledAt()
 		return nil
 	case apikey.FieldLastUsedAt:
 		m.ResetLastUsedAt()
@@ -23340,6 +23935,9 @@ type GroupMutation struct {
 	addpeak_rate_multiplier                 *float64
 	is_exclusive                            *bool
 	status                                  *string
+	security_deposit_base_required_cents    *int64
+	addsecurity_deposit_base_required_cents *int64
+	security_deposit_policy_version         *string
 	duplicate_operation_id                  *string
 	platform                                *string
 	subscription_type                       *string
@@ -24036,6 +24634,98 @@ func (m *GroupMutation) OldStatus(ctx context.Context) (v string, err error) {
 // ResetStatus resets all changes to the "status" field.
 func (m *GroupMutation) ResetStatus() {
 	m.status = nil
+}
+
+// SetSecurityDepositBaseRequiredCents sets the "security_deposit_base_required_cents" field.
+func (m *GroupMutation) SetSecurityDepositBaseRequiredCents(i int64) {
+	m.security_deposit_base_required_cents = &i
+	m.addsecurity_deposit_base_required_cents = nil
+}
+
+// SecurityDepositBaseRequiredCents returns the value of the "security_deposit_base_required_cents" field in the mutation.
+func (m *GroupMutation) SecurityDepositBaseRequiredCents() (r int64, exists bool) {
+	v := m.security_deposit_base_required_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSecurityDepositBaseRequiredCents returns the old "security_deposit_base_required_cents" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldSecurityDepositBaseRequiredCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSecurityDepositBaseRequiredCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSecurityDepositBaseRequiredCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSecurityDepositBaseRequiredCents: %w", err)
+	}
+	return oldValue.SecurityDepositBaseRequiredCents, nil
+}
+
+// AddSecurityDepositBaseRequiredCents adds i to the "security_deposit_base_required_cents" field.
+func (m *GroupMutation) AddSecurityDepositBaseRequiredCents(i int64) {
+	if m.addsecurity_deposit_base_required_cents != nil {
+		*m.addsecurity_deposit_base_required_cents += i
+	} else {
+		m.addsecurity_deposit_base_required_cents = &i
+	}
+}
+
+// AddedSecurityDepositBaseRequiredCents returns the value that was added to the "security_deposit_base_required_cents" field in this mutation.
+func (m *GroupMutation) AddedSecurityDepositBaseRequiredCents() (r int64, exists bool) {
+	v := m.addsecurity_deposit_base_required_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSecurityDepositBaseRequiredCents resets all changes to the "security_deposit_base_required_cents" field.
+func (m *GroupMutation) ResetSecurityDepositBaseRequiredCents() {
+	m.security_deposit_base_required_cents = nil
+	m.addsecurity_deposit_base_required_cents = nil
+}
+
+// SetSecurityDepositPolicyVersion sets the "security_deposit_policy_version" field.
+func (m *GroupMutation) SetSecurityDepositPolicyVersion(s string) {
+	m.security_deposit_policy_version = &s
+}
+
+// SecurityDepositPolicyVersion returns the value of the "security_deposit_policy_version" field in the mutation.
+func (m *GroupMutation) SecurityDepositPolicyVersion() (r string, exists bool) {
+	v := m.security_deposit_policy_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSecurityDepositPolicyVersion returns the old "security_deposit_policy_version" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldSecurityDepositPolicyVersion(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSecurityDepositPolicyVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSecurityDepositPolicyVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSecurityDepositPolicyVersion: %w", err)
+	}
+	return oldValue.SecurityDepositPolicyVersion, nil
+}
+
+// ResetSecurityDepositPolicyVersion resets all changes to the "security_deposit_policy_version" field.
+func (m *GroupMutation) ResetSecurityDepositPolicyVersion() {
+	m.security_deposit_policy_version = nil
 }
 
 // SetDuplicateOperationID sets the "duplicate_operation_id" field.
@@ -27018,7 +27708,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 62)
+	fields := make([]string, 0, 64)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -27054,6 +27744,12 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, group.FieldStatus)
+	}
+	if m.security_deposit_base_required_cents != nil {
+		fields = append(fields, group.FieldSecurityDepositBaseRequiredCents)
+	}
+	if m.security_deposit_policy_version != nil {
+		fields = append(fields, group.FieldSecurityDepositPolicyVersion)
 	}
 	if m.duplicate_operation_id != nil {
 		fields = append(fields, group.FieldDuplicateOperationID)
@@ -27237,6 +27933,10 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.IsExclusive()
 	case group.FieldStatus:
 		return m.Status()
+	case group.FieldSecurityDepositBaseRequiredCents:
+		return m.SecurityDepositBaseRequiredCents()
+	case group.FieldSecurityDepositPolicyVersion:
+		return m.SecurityDepositPolicyVersion()
 	case group.FieldDuplicateOperationID:
 		return m.DuplicateOperationID()
 	case group.FieldPlatform:
@@ -27370,6 +28070,10 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldIsExclusive(ctx)
 	case group.FieldStatus:
 		return m.OldStatus(ctx)
+	case group.FieldSecurityDepositBaseRequiredCents:
+		return m.OldSecurityDepositBaseRequiredCents(ctx)
+	case group.FieldSecurityDepositPolicyVersion:
+		return m.OldSecurityDepositPolicyVersion(ctx)
 	case group.FieldDuplicateOperationID:
 		return m.OldDuplicateOperationID(ctx)
 	case group.FieldPlatform:
@@ -27562,6 +28266,20 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case group.FieldSecurityDepositBaseRequiredCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSecurityDepositBaseRequiredCents(v)
+		return nil
+	case group.FieldSecurityDepositPolicyVersion:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSecurityDepositPolicyVersion(v)
 		return nil
 	case group.FieldDuplicateOperationID:
 		v, ok := value.(string)
@@ -27927,6 +28645,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addpeak_rate_multiplier != nil {
 		fields = append(fields, group.FieldPeakRateMultiplier)
 	}
+	if m.addsecurity_deposit_base_required_cents != nil {
+		fields = append(fields, group.FieldSecurityDepositBaseRequiredCents)
+	}
 	if m.adddaily_limit_usd != nil {
 		fields = append(fields, group.FieldDailyLimitUsd)
 	}
@@ -28014,6 +28735,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedRateMultiplier()
 	case group.FieldPeakRateMultiplier:
 		return m.AddedPeakRateMultiplier()
+	case group.FieldSecurityDepositBaseRequiredCents:
+		return m.AddedSecurityDepositBaseRequiredCents()
 	case group.FieldDailyLimitUsd:
 		return m.AddedDailyLimitUsd()
 	case group.FieldWeeklyLimitUsd:
@@ -28086,6 +28809,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddPeakRateMultiplier(v)
+		return nil
+	case group.FieldSecurityDepositBaseRequiredCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSecurityDepositBaseRequiredCents(v)
 		return nil
 	case group.FieldDailyLimitUsd:
 		v, ok := value.(float64)
@@ -28459,6 +29189,12 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case group.FieldSecurityDepositBaseRequiredCents:
+		m.ResetSecurityDepositBaseRequiredCents()
+		return nil
+	case group.FieldSecurityDepositPolicyVersion:
+		m.ResetSecurityDepositPolicyVersion()
 		return nil
 	case group.FieldDuplicateOperationID:
 		m.ResetDuplicateOperationID()
@@ -58534,6 +59270,10999 @@ func (m *ResetRebateUserItemMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *ResetRebateUserItemMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown ResetRebateUserItem edge %s", name)
+}
+
+// SecurityDepositAccountMutation represents an operation that mutates the SecurityDepositAccount nodes in the graph.
+type SecurityDepositAccountMutation struct {
+	config
+	op                       Op
+	typ                      string
+	id                       *int64
+	created_at               *time.Time
+	updated_at               *time.Time
+	user_id                  *int64
+	adduser_id               *int64
+	bucket_type              *securitydepositaccount.BucketType
+	currency                 *string
+	balance_cents            *int64
+	addbalance_cents         *int64
+	refund_reserved_cents    *int64
+	addrefund_reserved_cents *int64
+	version                  *int64
+	addversion               *int64
+	clearedFields            map[string]struct{}
+	done                     bool
+	oldValue                 func(context.Context) (*SecurityDepositAccount, error)
+	predicates               []predicate.SecurityDepositAccount
+}
+
+var _ ent.Mutation = (*SecurityDepositAccountMutation)(nil)
+
+// securitydepositaccountOption allows management of the mutation configuration using functional options.
+type securitydepositaccountOption func(*SecurityDepositAccountMutation)
+
+// newSecurityDepositAccountMutation creates new mutation for the SecurityDepositAccount entity.
+func newSecurityDepositAccountMutation(c config, op Op, opts ...securitydepositaccountOption) *SecurityDepositAccountMutation {
+	m := &SecurityDepositAccountMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSecurityDepositAccount,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSecurityDepositAccountID sets the ID field of the mutation.
+func withSecurityDepositAccountID(id int64) securitydepositaccountOption {
+	return func(m *SecurityDepositAccountMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SecurityDepositAccount
+		)
+		m.oldValue = func(ctx context.Context) (*SecurityDepositAccount, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SecurityDepositAccount.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSecurityDepositAccount sets the old SecurityDepositAccount of the mutation.
+func withSecurityDepositAccount(node *SecurityDepositAccount) securitydepositaccountOption {
+	return func(m *SecurityDepositAccountMutation) {
+		m.oldValue = func(context.Context) (*SecurityDepositAccount, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SecurityDepositAccountMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SecurityDepositAccountMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SecurityDepositAccountMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SecurityDepositAccountMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SecurityDepositAccount.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SecurityDepositAccountMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SecurityDepositAccountMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SecurityDepositAccount entity.
+// If the SecurityDepositAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAccountMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SecurityDepositAccountMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *SecurityDepositAccountMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *SecurityDepositAccountMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the SecurityDepositAccount entity.
+// If the SecurityDepositAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAccountMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *SecurityDepositAccountMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *SecurityDepositAccountMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *SecurityDepositAccountMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the SecurityDepositAccount entity.
+// If the SecurityDepositAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAccountMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *SecurityDepositAccountMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *SecurityDepositAccountMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *SecurityDepositAccountMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetBucketType sets the "bucket_type" field.
+func (m *SecurityDepositAccountMutation) SetBucketType(st securitydepositaccount.BucketType) {
+	m.bucket_type = &st
+}
+
+// BucketType returns the value of the "bucket_type" field in the mutation.
+func (m *SecurityDepositAccountMutation) BucketType() (r securitydepositaccount.BucketType, exists bool) {
+	v := m.bucket_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketType returns the old "bucket_type" field's value of the SecurityDepositAccount entity.
+// If the SecurityDepositAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAccountMutation) OldBucketType(ctx context.Context) (v securitydepositaccount.BucketType, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketType: %w", err)
+	}
+	return oldValue.BucketType, nil
+}
+
+// ResetBucketType resets all changes to the "bucket_type" field.
+func (m *SecurityDepositAccountMutation) ResetBucketType() {
+	m.bucket_type = nil
+}
+
+// SetCurrency sets the "currency" field.
+func (m *SecurityDepositAccountMutation) SetCurrency(s string) {
+	m.currency = &s
+}
+
+// Currency returns the value of the "currency" field in the mutation.
+func (m *SecurityDepositAccountMutation) Currency() (r string, exists bool) {
+	v := m.currency
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCurrency returns the old "currency" field's value of the SecurityDepositAccount entity.
+// If the SecurityDepositAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAccountMutation) OldCurrency(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCurrency is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCurrency requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCurrency: %w", err)
+	}
+	return oldValue.Currency, nil
+}
+
+// ResetCurrency resets all changes to the "currency" field.
+func (m *SecurityDepositAccountMutation) ResetCurrency() {
+	m.currency = nil
+}
+
+// SetBalanceCents sets the "balance_cents" field.
+func (m *SecurityDepositAccountMutation) SetBalanceCents(i int64) {
+	m.balance_cents = &i
+	m.addbalance_cents = nil
+}
+
+// BalanceCents returns the value of the "balance_cents" field in the mutation.
+func (m *SecurityDepositAccountMutation) BalanceCents() (r int64, exists bool) {
+	v := m.balance_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBalanceCents returns the old "balance_cents" field's value of the SecurityDepositAccount entity.
+// If the SecurityDepositAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAccountMutation) OldBalanceCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBalanceCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBalanceCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBalanceCents: %w", err)
+	}
+	return oldValue.BalanceCents, nil
+}
+
+// AddBalanceCents adds i to the "balance_cents" field.
+func (m *SecurityDepositAccountMutation) AddBalanceCents(i int64) {
+	if m.addbalance_cents != nil {
+		*m.addbalance_cents += i
+	} else {
+		m.addbalance_cents = &i
+	}
+}
+
+// AddedBalanceCents returns the value that was added to the "balance_cents" field in this mutation.
+func (m *SecurityDepositAccountMutation) AddedBalanceCents() (r int64, exists bool) {
+	v := m.addbalance_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBalanceCents resets all changes to the "balance_cents" field.
+func (m *SecurityDepositAccountMutation) ResetBalanceCents() {
+	m.balance_cents = nil
+	m.addbalance_cents = nil
+}
+
+// SetRefundReservedCents sets the "refund_reserved_cents" field.
+func (m *SecurityDepositAccountMutation) SetRefundReservedCents(i int64) {
+	m.refund_reserved_cents = &i
+	m.addrefund_reserved_cents = nil
+}
+
+// RefundReservedCents returns the value of the "refund_reserved_cents" field in the mutation.
+func (m *SecurityDepositAccountMutation) RefundReservedCents() (r int64, exists bool) {
+	v := m.refund_reserved_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRefundReservedCents returns the old "refund_reserved_cents" field's value of the SecurityDepositAccount entity.
+// If the SecurityDepositAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAccountMutation) OldRefundReservedCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRefundReservedCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRefundReservedCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRefundReservedCents: %w", err)
+	}
+	return oldValue.RefundReservedCents, nil
+}
+
+// AddRefundReservedCents adds i to the "refund_reserved_cents" field.
+func (m *SecurityDepositAccountMutation) AddRefundReservedCents(i int64) {
+	if m.addrefund_reserved_cents != nil {
+		*m.addrefund_reserved_cents += i
+	} else {
+		m.addrefund_reserved_cents = &i
+	}
+}
+
+// AddedRefundReservedCents returns the value that was added to the "refund_reserved_cents" field in this mutation.
+func (m *SecurityDepositAccountMutation) AddedRefundReservedCents() (r int64, exists bool) {
+	v := m.addrefund_reserved_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRefundReservedCents resets all changes to the "refund_reserved_cents" field.
+func (m *SecurityDepositAccountMutation) ResetRefundReservedCents() {
+	m.refund_reserved_cents = nil
+	m.addrefund_reserved_cents = nil
+}
+
+// SetVersion sets the "version" field.
+func (m *SecurityDepositAccountMutation) SetVersion(i int64) {
+	m.version = &i
+	m.addversion = nil
+}
+
+// Version returns the value of the "version" field in the mutation.
+func (m *SecurityDepositAccountMutation) Version() (r int64, exists bool) {
+	v := m.version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVersion returns the old "version" field's value of the SecurityDepositAccount entity.
+// If the SecurityDepositAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAccountMutation) OldVersion(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVersion: %w", err)
+	}
+	return oldValue.Version, nil
+}
+
+// AddVersion adds i to the "version" field.
+func (m *SecurityDepositAccountMutation) AddVersion(i int64) {
+	if m.addversion != nil {
+		*m.addversion += i
+	} else {
+		m.addversion = &i
+	}
+}
+
+// AddedVersion returns the value that was added to the "version" field in this mutation.
+func (m *SecurityDepositAccountMutation) AddedVersion() (r int64, exists bool) {
+	v := m.addversion
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetVersion resets all changes to the "version" field.
+func (m *SecurityDepositAccountMutation) ResetVersion() {
+	m.version = nil
+	m.addversion = nil
+}
+
+// Where appends a list predicates to the SecurityDepositAccountMutation builder.
+func (m *SecurityDepositAccountMutation) Where(ps ...predicate.SecurityDepositAccount) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SecurityDepositAccountMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SecurityDepositAccountMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SecurityDepositAccount, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SecurityDepositAccountMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SecurityDepositAccountMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SecurityDepositAccount).
+func (m *SecurityDepositAccountMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SecurityDepositAccountMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.created_at != nil {
+		fields = append(fields, securitydepositaccount.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, securitydepositaccount.FieldUpdatedAt)
+	}
+	if m.user_id != nil {
+		fields = append(fields, securitydepositaccount.FieldUserID)
+	}
+	if m.bucket_type != nil {
+		fields = append(fields, securitydepositaccount.FieldBucketType)
+	}
+	if m.currency != nil {
+		fields = append(fields, securitydepositaccount.FieldCurrency)
+	}
+	if m.balance_cents != nil {
+		fields = append(fields, securitydepositaccount.FieldBalanceCents)
+	}
+	if m.refund_reserved_cents != nil {
+		fields = append(fields, securitydepositaccount.FieldRefundReservedCents)
+	}
+	if m.version != nil {
+		fields = append(fields, securitydepositaccount.FieldVersion)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SecurityDepositAccountMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositaccount.FieldCreatedAt:
+		return m.CreatedAt()
+	case securitydepositaccount.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case securitydepositaccount.FieldUserID:
+		return m.UserID()
+	case securitydepositaccount.FieldBucketType:
+		return m.BucketType()
+	case securitydepositaccount.FieldCurrency:
+		return m.Currency()
+	case securitydepositaccount.FieldBalanceCents:
+		return m.BalanceCents()
+	case securitydepositaccount.FieldRefundReservedCents:
+		return m.RefundReservedCents()
+	case securitydepositaccount.FieldVersion:
+		return m.Version()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SecurityDepositAccountMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case securitydepositaccount.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case securitydepositaccount.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case securitydepositaccount.FieldUserID:
+		return m.OldUserID(ctx)
+	case securitydepositaccount.FieldBucketType:
+		return m.OldBucketType(ctx)
+	case securitydepositaccount.FieldCurrency:
+		return m.OldCurrency(ctx)
+	case securitydepositaccount.FieldBalanceCents:
+		return m.OldBalanceCents(ctx)
+	case securitydepositaccount.FieldRefundReservedCents:
+		return m.OldRefundReservedCents(ctx)
+	case securitydepositaccount.FieldVersion:
+		return m.OldVersion(ctx)
+	}
+	return nil, fmt.Errorf("unknown SecurityDepositAccount field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositAccountMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositaccount.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case securitydepositaccount.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case securitydepositaccount.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case securitydepositaccount.FieldBucketType:
+		v, ok := value.(securitydepositaccount.BucketType)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketType(v)
+		return nil
+	case securitydepositaccount.FieldCurrency:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCurrency(v)
+		return nil
+	case securitydepositaccount.FieldBalanceCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBalanceCents(v)
+		return nil
+	case securitydepositaccount.FieldRefundReservedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRefundReservedCents(v)
+		return nil
+	case securitydepositaccount.FieldVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVersion(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositAccount field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SecurityDepositAccountMutation) AddedFields() []string {
+	var fields []string
+	if m.adduser_id != nil {
+		fields = append(fields, securitydepositaccount.FieldUserID)
+	}
+	if m.addbalance_cents != nil {
+		fields = append(fields, securitydepositaccount.FieldBalanceCents)
+	}
+	if m.addrefund_reserved_cents != nil {
+		fields = append(fields, securitydepositaccount.FieldRefundReservedCents)
+	}
+	if m.addversion != nil {
+		fields = append(fields, securitydepositaccount.FieldVersion)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SecurityDepositAccountMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositaccount.FieldUserID:
+		return m.AddedUserID()
+	case securitydepositaccount.FieldBalanceCents:
+		return m.AddedBalanceCents()
+	case securitydepositaccount.FieldRefundReservedCents:
+		return m.AddedRefundReservedCents()
+	case securitydepositaccount.FieldVersion:
+		return m.AddedVersion()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositAccountMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositaccount.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case securitydepositaccount.FieldBalanceCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBalanceCents(v)
+		return nil
+	case securitydepositaccount.FieldRefundReservedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRefundReservedCents(v)
+		return nil
+	case securitydepositaccount.FieldVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddVersion(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositAccount numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SecurityDepositAccountMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SecurityDepositAccountMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SecurityDepositAccountMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown SecurityDepositAccount nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SecurityDepositAccountMutation) ResetField(name string) error {
+	switch name {
+	case securitydepositaccount.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case securitydepositaccount.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case securitydepositaccount.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case securitydepositaccount.FieldBucketType:
+		m.ResetBucketType()
+		return nil
+	case securitydepositaccount.FieldCurrency:
+		m.ResetCurrency()
+		return nil
+	case securitydepositaccount.FieldBalanceCents:
+		m.ResetBalanceCents()
+		return nil
+	case securitydepositaccount.FieldRefundReservedCents:
+		m.ResetRefundReservedCents()
+		return nil
+	case securitydepositaccount.FieldVersion:
+		m.ResetVersion()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositAccount field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SecurityDepositAccountMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SecurityDepositAccountMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SecurityDepositAccountMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SecurityDepositAccountMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SecurityDepositAccountMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SecurityDepositAccountMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SecurityDepositAccountMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositAccount unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SecurityDepositAccountMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositAccount edge %s", name)
+}
+
+// SecurityDepositAgreementMutation represents an operation that mutates the SecurityDepositAgreement nodes in the graph.
+type SecurityDepositAgreementMutation struct {
+	config
+	op                              Op
+	typ                             string
+	id                              *int64
+	user_id                         *int64
+	adduser_id                      *int64
+	policy_version                  *string
+	content_hash                    *string
+	group_id                        *int64
+	addgroup_id                     *int64
+	base_required_snapshot_cents    *int64
+	addbase_required_snapshot_cents *int64
+	risk_multiplier_snapshot        *int64
+	addrisk_multiplier_snapshot     *int64
+	required_snapshot_cents         *int64
+	addrequired_snapshot_cents      *int64
+	accepted_at                     *time.Time
+	client_ip                       *string
+	user_agent                      *string
+	clearedFields                   map[string]struct{}
+	done                            bool
+	oldValue                        func(context.Context) (*SecurityDepositAgreement, error)
+	predicates                      []predicate.SecurityDepositAgreement
+}
+
+var _ ent.Mutation = (*SecurityDepositAgreementMutation)(nil)
+
+// securitydepositagreementOption allows management of the mutation configuration using functional options.
+type securitydepositagreementOption func(*SecurityDepositAgreementMutation)
+
+// newSecurityDepositAgreementMutation creates new mutation for the SecurityDepositAgreement entity.
+func newSecurityDepositAgreementMutation(c config, op Op, opts ...securitydepositagreementOption) *SecurityDepositAgreementMutation {
+	m := &SecurityDepositAgreementMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSecurityDepositAgreement,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSecurityDepositAgreementID sets the ID field of the mutation.
+func withSecurityDepositAgreementID(id int64) securitydepositagreementOption {
+	return func(m *SecurityDepositAgreementMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SecurityDepositAgreement
+		)
+		m.oldValue = func(ctx context.Context) (*SecurityDepositAgreement, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SecurityDepositAgreement.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSecurityDepositAgreement sets the old SecurityDepositAgreement of the mutation.
+func withSecurityDepositAgreement(node *SecurityDepositAgreement) securitydepositagreementOption {
+	return func(m *SecurityDepositAgreementMutation) {
+		m.oldValue = func(context.Context) (*SecurityDepositAgreement, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SecurityDepositAgreementMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SecurityDepositAgreementMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SecurityDepositAgreementMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SecurityDepositAgreementMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SecurityDepositAgreement.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUserID sets the "user_id" field.
+func (m *SecurityDepositAgreementMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *SecurityDepositAgreementMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the SecurityDepositAgreement entity.
+// If the SecurityDepositAgreement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAgreementMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *SecurityDepositAgreementMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *SecurityDepositAgreementMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *SecurityDepositAgreementMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetPolicyVersion sets the "policy_version" field.
+func (m *SecurityDepositAgreementMutation) SetPolicyVersion(s string) {
+	m.policy_version = &s
+}
+
+// PolicyVersion returns the value of the "policy_version" field in the mutation.
+func (m *SecurityDepositAgreementMutation) PolicyVersion() (r string, exists bool) {
+	v := m.policy_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPolicyVersion returns the old "policy_version" field's value of the SecurityDepositAgreement entity.
+// If the SecurityDepositAgreement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAgreementMutation) OldPolicyVersion(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPolicyVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPolicyVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPolicyVersion: %w", err)
+	}
+	return oldValue.PolicyVersion, nil
+}
+
+// ResetPolicyVersion resets all changes to the "policy_version" field.
+func (m *SecurityDepositAgreementMutation) ResetPolicyVersion() {
+	m.policy_version = nil
+}
+
+// SetContentHash sets the "content_hash" field.
+func (m *SecurityDepositAgreementMutation) SetContentHash(s string) {
+	m.content_hash = &s
+}
+
+// ContentHash returns the value of the "content_hash" field in the mutation.
+func (m *SecurityDepositAgreementMutation) ContentHash() (r string, exists bool) {
+	v := m.content_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContentHash returns the old "content_hash" field's value of the SecurityDepositAgreement entity.
+// If the SecurityDepositAgreement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAgreementMutation) OldContentHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContentHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContentHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContentHash: %w", err)
+	}
+	return oldValue.ContentHash, nil
+}
+
+// ResetContentHash resets all changes to the "content_hash" field.
+func (m *SecurityDepositAgreementMutation) ResetContentHash() {
+	m.content_hash = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *SecurityDepositAgreementMutation) SetGroupID(i int64) {
+	m.group_id = &i
+	m.addgroup_id = nil
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *SecurityDepositAgreementMutation) GroupID() (r int64, exists bool) {
+	v := m.group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the SecurityDepositAgreement entity.
+// If the SecurityDepositAgreement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAgreementMutation) OldGroupID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// AddGroupID adds i to the "group_id" field.
+func (m *SecurityDepositAgreementMutation) AddGroupID(i int64) {
+	if m.addgroup_id != nil {
+		*m.addgroup_id += i
+	} else {
+		m.addgroup_id = &i
+	}
+}
+
+// AddedGroupID returns the value that was added to the "group_id" field in this mutation.
+func (m *SecurityDepositAgreementMutation) AddedGroupID() (r int64, exists bool) {
+	v := m.addgroup_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *SecurityDepositAgreementMutation) ResetGroupID() {
+	m.group_id = nil
+	m.addgroup_id = nil
+}
+
+// SetBaseRequiredSnapshotCents sets the "base_required_snapshot_cents" field.
+func (m *SecurityDepositAgreementMutation) SetBaseRequiredSnapshotCents(i int64) {
+	m.base_required_snapshot_cents = &i
+	m.addbase_required_snapshot_cents = nil
+}
+
+// BaseRequiredSnapshotCents returns the value of the "base_required_snapshot_cents" field in the mutation.
+func (m *SecurityDepositAgreementMutation) BaseRequiredSnapshotCents() (r int64, exists bool) {
+	v := m.base_required_snapshot_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBaseRequiredSnapshotCents returns the old "base_required_snapshot_cents" field's value of the SecurityDepositAgreement entity.
+// If the SecurityDepositAgreement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAgreementMutation) OldBaseRequiredSnapshotCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBaseRequiredSnapshotCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBaseRequiredSnapshotCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBaseRequiredSnapshotCents: %w", err)
+	}
+	return oldValue.BaseRequiredSnapshotCents, nil
+}
+
+// AddBaseRequiredSnapshotCents adds i to the "base_required_snapshot_cents" field.
+func (m *SecurityDepositAgreementMutation) AddBaseRequiredSnapshotCents(i int64) {
+	if m.addbase_required_snapshot_cents != nil {
+		*m.addbase_required_snapshot_cents += i
+	} else {
+		m.addbase_required_snapshot_cents = &i
+	}
+}
+
+// AddedBaseRequiredSnapshotCents returns the value that was added to the "base_required_snapshot_cents" field in this mutation.
+func (m *SecurityDepositAgreementMutation) AddedBaseRequiredSnapshotCents() (r int64, exists bool) {
+	v := m.addbase_required_snapshot_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBaseRequiredSnapshotCents resets all changes to the "base_required_snapshot_cents" field.
+func (m *SecurityDepositAgreementMutation) ResetBaseRequiredSnapshotCents() {
+	m.base_required_snapshot_cents = nil
+	m.addbase_required_snapshot_cents = nil
+}
+
+// SetRiskMultiplierSnapshot sets the "risk_multiplier_snapshot" field.
+func (m *SecurityDepositAgreementMutation) SetRiskMultiplierSnapshot(i int64) {
+	m.risk_multiplier_snapshot = &i
+	m.addrisk_multiplier_snapshot = nil
+}
+
+// RiskMultiplierSnapshot returns the value of the "risk_multiplier_snapshot" field in the mutation.
+func (m *SecurityDepositAgreementMutation) RiskMultiplierSnapshot() (r int64, exists bool) {
+	v := m.risk_multiplier_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRiskMultiplierSnapshot returns the old "risk_multiplier_snapshot" field's value of the SecurityDepositAgreement entity.
+// If the SecurityDepositAgreement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAgreementMutation) OldRiskMultiplierSnapshot(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRiskMultiplierSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRiskMultiplierSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRiskMultiplierSnapshot: %w", err)
+	}
+	return oldValue.RiskMultiplierSnapshot, nil
+}
+
+// AddRiskMultiplierSnapshot adds i to the "risk_multiplier_snapshot" field.
+func (m *SecurityDepositAgreementMutation) AddRiskMultiplierSnapshot(i int64) {
+	if m.addrisk_multiplier_snapshot != nil {
+		*m.addrisk_multiplier_snapshot += i
+	} else {
+		m.addrisk_multiplier_snapshot = &i
+	}
+}
+
+// AddedRiskMultiplierSnapshot returns the value that was added to the "risk_multiplier_snapshot" field in this mutation.
+func (m *SecurityDepositAgreementMutation) AddedRiskMultiplierSnapshot() (r int64, exists bool) {
+	v := m.addrisk_multiplier_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRiskMultiplierSnapshot resets all changes to the "risk_multiplier_snapshot" field.
+func (m *SecurityDepositAgreementMutation) ResetRiskMultiplierSnapshot() {
+	m.risk_multiplier_snapshot = nil
+	m.addrisk_multiplier_snapshot = nil
+}
+
+// SetRequiredSnapshotCents sets the "required_snapshot_cents" field.
+func (m *SecurityDepositAgreementMutation) SetRequiredSnapshotCents(i int64) {
+	m.required_snapshot_cents = &i
+	m.addrequired_snapshot_cents = nil
+}
+
+// RequiredSnapshotCents returns the value of the "required_snapshot_cents" field in the mutation.
+func (m *SecurityDepositAgreementMutation) RequiredSnapshotCents() (r int64, exists bool) {
+	v := m.required_snapshot_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequiredSnapshotCents returns the old "required_snapshot_cents" field's value of the SecurityDepositAgreement entity.
+// If the SecurityDepositAgreement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAgreementMutation) OldRequiredSnapshotCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequiredSnapshotCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequiredSnapshotCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequiredSnapshotCents: %w", err)
+	}
+	return oldValue.RequiredSnapshotCents, nil
+}
+
+// AddRequiredSnapshotCents adds i to the "required_snapshot_cents" field.
+func (m *SecurityDepositAgreementMutation) AddRequiredSnapshotCents(i int64) {
+	if m.addrequired_snapshot_cents != nil {
+		*m.addrequired_snapshot_cents += i
+	} else {
+		m.addrequired_snapshot_cents = &i
+	}
+}
+
+// AddedRequiredSnapshotCents returns the value that was added to the "required_snapshot_cents" field in this mutation.
+func (m *SecurityDepositAgreementMutation) AddedRequiredSnapshotCents() (r int64, exists bool) {
+	v := m.addrequired_snapshot_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRequiredSnapshotCents resets all changes to the "required_snapshot_cents" field.
+func (m *SecurityDepositAgreementMutation) ResetRequiredSnapshotCents() {
+	m.required_snapshot_cents = nil
+	m.addrequired_snapshot_cents = nil
+}
+
+// SetAcceptedAt sets the "accepted_at" field.
+func (m *SecurityDepositAgreementMutation) SetAcceptedAt(t time.Time) {
+	m.accepted_at = &t
+}
+
+// AcceptedAt returns the value of the "accepted_at" field in the mutation.
+func (m *SecurityDepositAgreementMutation) AcceptedAt() (r time.Time, exists bool) {
+	v := m.accepted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAcceptedAt returns the old "accepted_at" field's value of the SecurityDepositAgreement entity.
+// If the SecurityDepositAgreement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAgreementMutation) OldAcceptedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAcceptedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAcceptedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAcceptedAt: %w", err)
+	}
+	return oldValue.AcceptedAt, nil
+}
+
+// ResetAcceptedAt resets all changes to the "accepted_at" field.
+func (m *SecurityDepositAgreementMutation) ResetAcceptedAt() {
+	m.accepted_at = nil
+}
+
+// SetClientIP sets the "client_ip" field.
+func (m *SecurityDepositAgreementMutation) SetClientIP(s string) {
+	m.client_ip = &s
+}
+
+// ClientIP returns the value of the "client_ip" field in the mutation.
+func (m *SecurityDepositAgreementMutation) ClientIP() (r string, exists bool) {
+	v := m.client_ip
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClientIP returns the old "client_ip" field's value of the SecurityDepositAgreement entity.
+// If the SecurityDepositAgreement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAgreementMutation) OldClientIP(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClientIP is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClientIP requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClientIP: %w", err)
+	}
+	return oldValue.ClientIP, nil
+}
+
+// ResetClientIP resets all changes to the "client_ip" field.
+func (m *SecurityDepositAgreementMutation) ResetClientIP() {
+	m.client_ip = nil
+}
+
+// SetUserAgent sets the "user_agent" field.
+func (m *SecurityDepositAgreementMutation) SetUserAgent(s string) {
+	m.user_agent = &s
+}
+
+// UserAgent returns the value of the "user_agent" field in the mutation.
+func (m *SecurityDepositAgreementMutation) UserAgent() (r string, exists bool) {
+	v := m.user_agent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserAgent returns the old "user_agent" field's value of the SecurityDepositAgreement entity.
+// If the SecurityDepositAgreement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositAgreementMutation) OldUserAgent(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserAgent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserAgent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserAgent: %w", err)
+	}
+	return oldValue.UserAgent, nil
+}
+
+// ResetUserAgent resets all changes to the "user_agent" field.
+func (m *SecurityDepositAgreementMutation) ResetUserAgent() {
+	m.user_agent = nil
+}
+
+// Where appends a list predicates to the SecurityDepositAgreementMutation builder.
+func (m *SecurityDepositAgreementMutation) Where(ps ...predicate.SecurityDepositAgreement) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SecurityDepositAgreementMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SecurityDepositAgreementMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SecurityDepositAgreement, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SecurityDepositAgreementMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SecurityDepositAgreementMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SecurityDepositAgreement).
+func (m *SecurityDepositAgreementMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SecurityDepositAgreementMutation) Fields() []string {
+	fields := make([]string, 0, 10)
+	if m.user_id != nil {
+		fields = append(fields, securitydepositagreement.FieldUserID)
+	}
+	if m.policy_version != nil {
+		fields = append(fields, securitydepositagreement.FieldPolicyVersion)
+	}
+	if m.content_hash != nil {
+		fields = append(fields, securitydepositagreement.FieldContentHash)
+	}
+	if m.group_id != nil {
+		fields = append(fields, securitydepositagreement.FieldGroupID)
+	}
+	if m.base_required_snapshot_cents != nil {
+		fields = append(fields, securitydepositagreement.FieldBaseRequiredSnapshotCents)
+	}
+	if m.risk_multiplier_snapshot != nil {
+		fields = append(fields, securitydepositagreement.FieldRiskMultiplierSnapshot)
+	}
+	if m.required_snapshot_cents != nil {
+		fields = append(fields, securitydepositagreement.FieldRequiredSnapshotCents)
+	}
+	if m.accepted_at != nil {
+		fields = append(fields, securitydepositagreement.FieldAcceptedAt)
+	}
+	if m.client_ip != nil {
+		fields = append(fields, securitydepositagreement.FieldClientIP)
+	}
+	if m.user_agent != nil {
+		fields = append(fields, securitydepositagreement.FieldUserAgent)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SecurityDepositAgreementMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositagreement.FieldUserID:
+		return m.UserID()
+	case securitydepositagreement.FieldPolicyVersion:
+		return m.PolicyVersion()
+	case securitydepositagreement.FieldContentHash:
+		return m.ContentHash()
+	case securitydepositagreement.FieldGroupID:
+		return m.GroupID()
+	case securitydepositagreement.FieldBaseRequiredSnapshotCents:
+		return m.BaseRequiredSnapshotCents()
+	case securitydepositagreement.FieldRiskMultiplierSnapshot:
+		return m.RiskMultiplierSnapshot()
+	case securitydepositagreement.FieldRequiredSnapshotCents:
+		return m.RequiredSnapshotCents()
+	case securitydepositagreement.FieldAcceptedAt:
+		return m.AcceptedAt()
+	case securitydepositagreement.FieldClientIP:
+		return m.ClientIP()
+	case securitydepositagreement.FieldUserAgent:
+		return m.UserAgent()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SecurityDepositAgreementMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case securitydepositagreement.FieldUserID:
+		return m.OldUserID(ctx)
+	case securitydepositagreement.FieldPolicyVersion:
+		return m.OldPolicyVersion(ctx)
+	case securitydepositagreement.FieldContentHash:
+		return m.OldContentHash(ctx)
+	case securitydepositagreement.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case securitydepositagreement.FieldBaseRequiredSnapshotCents:
+		return m.OldBaseRequiredSnapshotCents(ctx)
+	case securitydepositagreement.FieldRiskMultiplierSnapshot:
+		return m.OldRiskMultiplierSnapshot(ctx)
+	case securitydepositagreement.FieldRequiredSnapshotCents:
+		return m.OldRequiredSnapshotCents(ctx)
+	case securitydepositagreement.FieldAcceptedAt:
+		return m.OldAcceptedAt(ctx)
+	case securitydepositagreement.FieldClientIP:
+		return m.OldClientIP(ctx)
+	case securitydepositagreement.FieldUserAgent:
+		return m.OldUserAgent(ctx)
+	}
+	return nil, fmt.Errorf("unknown SecurityDepositAgreement field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositAgreementMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositagreement.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case securitydepositagreement.FieldPolicyVersion:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPolicyVersion(v)
+		return nil
+	case securitydepositagreement.FieldContentHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContentHash(v)
+		return nil
+	case securitydepositagreement.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case securitydepositagreement.FieldBaseRequiredSnapshotCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBaseRequiredSnapshotCents(v)
+		return nil
+	case securitydepositagreement.FieldRiskMultiplierSnapshot:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRiskMultiplierSnapshot(v)
+		return nil
+	case securitydepositagreement.FieldRequiredSnapshotCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequiredSnapshotCents(v)
+		return nil
+	case securitydepositagreement.FieldAcceptedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAcceptedAt(v)
+		return nil
+	case securitydepositagreement.FieldClientIP:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClientIP(v)
+		return nil
+	case securitydepositagreement.FieldUserAgent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserAgent(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositAgreement field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SecurityDepositAgreementMutation) AddedFields() []string {
+	var fields []string
+	if m.adduser_id != nil {
+		fields = append(fields, securitydepositagreement.FieldUserID)
+	}
+	if m.addgroup_id != nil {
+		fields = append(fields, securitydepositagreement.FieldGroupID)
+	}
+	if m.addbase_required_snapshot_cents != nil {
+		fields = append(fields, securitydepositagreement.FieldBaseRequiredSnapshotCents)
+	}
+	if m.addrisk_multiplier_snapshot != nil {
+		fields = append(fields, securitydepositagreement.FieldRiskMultiplierSnapshot)
+	}
+	if m.addrequired_snapshot_cents != nil {
+		fields = append(fields, securitydepositagreement.FieldRequiredSnapshotCents)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SecurityDepositAgreementMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositagreement.FieldUserID:
+		return m.AddedUserID()
+	case securitydepositagreement.FieldGroupID:
+		return m.AddedGroupID()
+	case securitydepositagreement.FieldBaseRequiredSnapshotCents:
+		return m.AddedBaseRequiredSnapshotCents()
+	case securitydepositagreement.FieldRiskMultiplierSnapshot:
+		return m.AddedRiskMultiplierSnapshot()
+	case securitydepositagreement.FieldRequiredSnapshotCents:
+		return m.AddedRequiredSnapshotCents()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositAgreementMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositagreement.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case securitydepositagreement.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupID(v)
+		return nil
+	case securitydepositagreement.FieldBaseRequiredSnapshotCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBaseRequiredSnapshotCents(v)
+		return nil
+	case securitydepositagreement.FieldRiskMultiplierSnapshot:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRiskMultiplierSnapshot(v)
+		return nil
+	case securitydepositagreement.FieldRequiredSnapshotCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRequiredSnapshotCents(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositAgreement numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SecurityDepositAgreementMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SecurityDepositAgreementMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SecurityDepositAgreementMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown SecurityDepositAgreement nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SecurityDepositAgreementMutation) ResetField(name string) error {
+	switch name {
+	case securitydepositagreement.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case securitydepositagreement.FieldPolicyVersion:
+		m.ResetPolicyVersion()
+		return nil
+	case securitydepositagreement.FieldContentHash:
+		m.ResetContentHash()
+		return nil
+	case securitydepositagreement.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case securitydepositagreement.FieldBaseRequiredSnapshotCents:
+		m.ResetBaseRequiredSnapshotCents()
+		return nil
+	case securitydepositagreement.FieldRiskMultiplierSnapshot:
+		m.ResetRiskMultiplierSnapshot()
+		return nil
+	case securitydepositagreement.FieldRequiredSnapshotCents:
+		m.ResetRequiredSnapshotCents()
+		return nil
+	case securitydepositagreement.FieldAcceptedAt:
+		m.ResetAcceptedAt()
+		return nil
+	case securitydepositagreement.FieldClientIP:
+		m.ResetClientIP()
+		return nil
+	case securitydepositagreement.FieldUserAgent:
+		m.ResetUserAgent()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositAgreement field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SecurityDepositAgreementMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SecurityDepositAgreementMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SecurityDepositAgreementMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SecurityDepositAgreementMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SecurityDepositAgreementMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SecurityDepositAgreementMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SecurityDepositAgreementMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositAgreement unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SecurityDepositAgreementMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositAgreement edge %s", name)
+}
+
+// SecurityDepositLedgerMutation represents an operation that mutates the SecurityDepositLedger nodes in the graph.
+type SecurityDepositLedgerMutation struct {
+	config
+	op                             Op
+	typ                            string
+	id                             *int64
+	user_id                        *int64
+	adduser_id                     *int64
+	lot_id                         *int64
+	addlot_id                      *int64
+	bucket_type                    *securitydepositledger.BucketType
+	entry_type                     *securitydepositledger.EntryType
+	delta_cents                    *int64
+	adddelta_cents                 *int64
+	reserved_delta_cents           *int64
+	addreserved_delta_cents        *int64
+	bucket_balance_after_cents     *int64
+	addbucket_balance_after_cents  *int64
+	bucket_reserved_after_cents    *int64
+	addbucket_reserved_after_cents *int64
+	group_id                       *int64
+	addgroup_id                    *int64
+	api_key_id                     *int64
+	addapi_key_id                  *int64
+	violation_id                   *int64
+	addviolation_id                *int64
+	refund_id                      *int64
+	addrefund_id                   *int64
+	payment_order_id               *int64
+	addpayment_order_id            *int64
+	operator_id                    *int64
+	addoperator_id                 *int64
+	reason                         *string
+	idempotency_key                *string
+	created_at                     *time.Time
+	clearedFields                  map[string]struct{}
+	done                           bool
+	oldValue                       func(context.Context) (*SecurityDepositLedger, error)
+	predicates                     []predicate.SecurityDepositLedger
+}
+
+var _ ent.Mutation = (*SecurityDepositLedgerMutation)(nil)
+
+// securitydepositledgerOption allows management of the mutation configuration using functional options.
+type securitydepositledgerOption func(*SecurityDepositLedgerMutation)
+
+// newSecurityDepositLedgerMutation creates new mutation for the SecurityDepositLedger entity.
+func newSecurityDepositLedgerMutation(c config, op Op, opts ...securitydepositledgerOption) *SecurityDepositLedgerMutation {
+	m := &SecurityDepositLedgerMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSecurityDepositLedger,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSecurityDepositLedgerID sets the ID field of the mutation.
+func withSecurityDepositLedgerID(id int64) securitydepositledgerOption {
+	return func(m *SecurityDepositLedgerMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SecurityDepositLedger
+		)
+		m.oldValue = func(ctx context.Context) (*SecurityDepositLedger, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SecurityDepositLedger.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSecurityDepositLedger sets the old SecurityDepositLedger of the mutation.
+func withSecurityDepositLedger(node *SecurityDepositLedger) securitydepositledgerOption {
+	return func(m *SecurityDepositLedgerMutation) {
+		m.oldValue = func(context.Context) (*SecurityDepositLedger, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SecurityDepositLedgerMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SecurityDepositLedgerMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SecurityDepositLedgerMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SecurityDepositLedgerMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SecurityDepositLedger.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUserID sets the "user_id" field.
+func (m *SecurityDepositLedgerMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *SecurityDepositLedgerMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *SecurityDepositLedgerMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *SecurityDepositLedgerMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetLotID sets the "lot_id" field.
+func (m *SecurityDepositLedgerMutation) SetLotID(i int64) {
+	m.lot_id = &i
+	m.addlot_id = nil
+}
+
+// LotID returns the value of the "lot_id" field in the mutation.
+func (m *SecurityDepositLedgerMutation) LotID() (r int64, exists bool) {
+	v := m.lot_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLotID returns the old "lot_id" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldLotID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLotID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLotID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLotID: %w", err)
+	}
+	return oldValue.LotID, nil
+}
+
+// AddLotID adds i to the "lot_id" field.
+func (m *SecurityDepositLedgerMutation) AddLotID(i int64) {
+	if m.addlot_id != nil {
+		*m.addlot_id += i
+	} else {
+		m.addlot_id = &i
+	}
+}
+
+// AddedLotID returns the value that was added to the "lot_id" field in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedLotID() (r int64, exists bool) {
+	v := m.addlot_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetLotID resets all changes to the "lot_id" field.
+func (m *SecurityDepositLedgerMutation) ResetLotID() {
+	m.lot_id = nil
+	m.addlot_id = nil
+}
+
+// SetBucketType sets the "bucket_type" field.
+func (m *SecurityDepositLedgerMutation) SetBucketType(st securitydepositledger.BucketType) {
+	m.bucket_type = &st
+}
+
+// BucketType returns the value of the "bucket_type" field in the mutation.
+func (m *SecurityDepositLedgerMutation) BucketType() (r securitydepositledger.BucketType, exists bool) {
+	v := m.bucket_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketType returns the old "bucket_type" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldBucketType(ctx context.Context) (v securitydepositledger.BucketType, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketType: %w", err)
+	}
+	return oldValue.BucketType, nil
+}
+
+// ResetBucketType resets all changes to the "bucket_type" field.
+func (m *SecurityDepositLedgerMutation) ResetBucketType() {
+	m.bucket_type = nil
+}
+
+// SetEntryType sets the "entry_type" field.
+func (m *SecurityDepositLedgerMutation) SetEntryType(st securitydepositledger.EntryType) {
+	m.entry_type = &st
+}
+
+// EntryType returns the value of the "entry_type" field in the mutation.
+func (m *SecurityDepositLedgerMutation) EntryType() (r securitydepositledger.EntryType, exists bool) {
+	v := m.entry_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEntryType returns the old "entry_type" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldEntryType(ctx context.Context) (v securitydepositledger.EntryType, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEntryType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEntryType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEntryType: %w", err)
+	}
+	return oldValue.EntryType, nil
+}
+
+// ResetEntryType resets all changes to the "entry_type" field.
+func (m *SecurityDepositLedgerMutation) ResetEntryType() {
+	m.entry_type = nil
+}
+
+// SetDeltaCents sets the "delta_cents" field.
+func (m *SecurityDepositLedgerMutation) SetDeltaCents(i int64) {
+	m.delta_cents = &i
+	m.adddelta_cents = nil
+}
+
+// DeltaCents returns the value of the "delta_cents" field in the mutation.
+func (m *SecurityDepositLedgerMutation) DeltaCents() (r int64, exists bool) {
+	v := m.delta_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDeltaCents returns the old "delta_cents" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldDeltaCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDeltaCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDeltaCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDeltaCents: %w", err)
+	}
+	return oldValue.DeltaCents, nil
+}
+
+// AddDeltaCents adds i to the "delta_cents" field.
+func (m *SecurityDepositLedgerMutation) AddDeltaCents(i int64) {
+	if m.adddelta_cents != nil {
+		*m.adddelta_cents += i
+	} else {
+		m.adddelta_cents = &i
+	}
+}
+
+// AddedDeltaCents returns the value that was added to the "delta_cents" field in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedDeltaCents() (r int64, exists bool) {
+	v := m.adddelta_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDeltaCents resets all changes to the "delta_cents" field.
+func (m *SecurityDepositLedgerMutation) ResetDeltaCents() {
+	m.delta_cents = nil
+	m.adddelta_cents = nil
+}
+
+// SetReservedDeltaCents sets the "reserved_delta_cents" field.
+func (m *SecurityDepositLedgerMutation) SetReservedDeltaCents(i int64) {
+	m.reserved_delta_cents = &i
+	m.addreserved_delta_cents = nil
+}
+
+// ReservedDeltaCents returns the value of the "reserved_delta_cents" field in the mutation.
+func (m *SecurityDepositLedgerMutation) ReservedDeltaCents() (r int64, exists bool) {
+	v := m.reserved_delta_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReservedDeltaCents returns the old "reserved_delta_cents" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldReservedDeltaCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReservedDeltaCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReservedDeltaCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReservedDeltaCents: %w", err)
+	}
+	return oldValue.ReservedDeltaCents, nil
+}
+
+// AddReservedDeltaCents adds i to the "reserved_delta_cents" field.
+func (m *SecurityDepositLedgerMutation) AddReservedDeltaCents(i int64) {
+	if m.addreserved_delta_cents != nil {
+		*m.addreserved_delta_cents += i
+	} else {
+		m.addreserved_delta_cents = &i
+	}
+}
+
+// AddedReservedDeltaCents returns the value that was added to the "reserved_delta_cents" field in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedReservedDeltaCents() (r int64, exists bool) {
+	v := m.addreserved_delta_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetReservedDeltaCents resets all changes to the "reserved_delta_cents" field.
+func (m *SecurityDepositLedgerMutation) ResetReservedDeltaCents() {
+	m.reserved_delta_cents = nil
+	m.addreserved_delta_cents = nil
+}
+
+// SetBucketBalanceAfterCents sets the "bucket_balance_after_cents" field.
+func (m *SecurityDepositLedgerMutation) SetBucketBalanceAfterCents(i int64) {
+	m.bucket_balance_after_cents = &i
+	m.addbucket_balance_after_cents = nil
+}
+
+// BucketBalanceAfterCents returns the value of the "bucket_balance_after_cents" field in the mutation.
+func (m *SecurityDepositLedgerMutation) BucketBalanceAfterCents() (r int64, exists bool) {
+	v := m.bucket_balance_after_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketBalanceAfterCents returns the old "bucket_balance_after_cents" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldBucketBalanceAfterCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketBalanceAfterCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketBalanceAfterCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketBalanceAfterCents: %w", err)
+	}
+	return oldValue.BucketBalanceAfterCents, nil
+}
+
+// AddBucketBalanceAfterCents adds i to the "bucket_balance_after_cents" field.
+func (m *SecurityDepositLedgerMutation) AddBucketBalanceAfterCents(i int64) {
+	if m.addbucket_balance_after_cents != nil {
+		*m.addbucket_balance_after_cents += i
+	} else {
+		m.addbucket_balance_after_cents = &i
+	}
+}
+
+// AddedBucketBalanceAfterCents returns the value that was added to the "bucket_balance_after_cents" field in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedBucketBalanceAfterCents() (r int64, exists bool) {
+	v := m.addbucket_balance_after_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBucketBalanceAfterCents resets all changes to the "bucket_balance_after_cents" field.
+func (m *SecurityDepositLedgerMutation) ResetBucketBalanceAfterCents() {
+	m.bucket_balance_after_cents = nil
+	m.addbucket_balance_after_cents = nil
+}
+
+// SetBucketReservedAfterCents sets the "bucket_reserved_after_cents" field.
+func (m *SecurityDepositLedgerMutation) SetBucketReservedAfterCents(i int64) {
+	m.bucket_reserved_after_cents = &i
+	m.addbucket_reserved_after_cents = nil
+}
+
+// BucketReservedAfterCents returns the value of the "bucket_reserved_after_cents" field in the mutation.
+func (m *SecurityDepositLedgerMutation) BucketReservedAfterCents() (r int64, exists bool) {
+	v := m.bucket_reserved_after_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketReservedAfterCents returns the old "bucket_reserved_after_cents" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldBucketReservedAfterCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketReservedAfterCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketReservedAfterCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketReservedAfterCents: %w", err)
+	}
+	return oldValue.BucketReservedAfterCents, nil
+}
+
+// AddBucketReservedAfterCents adds i to the "bucket_reserved_after_cents" field.
+func (m *SecurityDepositLedgerMutation) AddBucketReservedAfterCents(i int64) {
+	if m.addbucket_reserved_after_cents != nil {
+		*m.addbucket_reserved_after_cents += i
+	} else {
+		m.addbucket_reserved_after_cents = &i
+	}
+}
+
+// AddedBucketReservedAfterCents returns the value that was added to the "bucket_reserved_after_cents" field in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedBucketReservedAfterCents() (r int64, exists bool) {
+	v := m.addbucket_reserved_after_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBucketReservedAfterCents resets all changes to the "bucket_reserved_after_cents" field.
+func (m *SecurityDepositLedgerMutation) ResetBucketReservedAfterCents() {
+	m.bucket_reserved_after_cents = nil
+	m.addbucket_reserved_after_cents = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *SecurityDepositLedgerMutation) SetGroupID(i int64) {
+	m.group_id = &i
+	m.addgroup_id = nil
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *SecurityDepositLedgerMutation) GroupID() (r int64, exists bool) {
+	v := m.group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldGroupID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// AddGroupID adds i to the "group_id" field.
+func (m *SecurityDepositLedgerMutation) AddGroupID(i int64) {
+	if m.addgroup_id != nil {
+		*m.addgroup_id += i
+	} else {
+		m.addgroup_id = &i
+	}
+}
+
+// AddedGroupID returns the value that was added to the "group_id" field in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedGroupID() (r int64, exists bool) {
+	v := m.addgroup_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearGroupID clears the value of the "group_id" field.
+func (m *SecurityDepositLedgerMutation) ClearGroupID() {
+	m.group_id = nil
+	m.addgroup_id = nil
+	m.clearedFields[securitydepositledger.FieldGroupID] = struct{}{}
+}
+
+// GroupIDCleared returns if the "group_id" field was cleared in this mutation.
+func (m *SecurityDepositLedgerMutation) GroupIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositledger.FieldGroupID]
+	return ok
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *SecurityDepositLedgerMutation) ResetGroupID() {
+	m.group_id = nil
+	m.addgroup_id = nil
+	delete(m.clearedFields, securitydepositledger.FieldGroupID)
+}
+
+// SetAPIKeyID sets the "api_key_id" field.
+func (m *SecurityDepositLedgerMutation) SetAPIKeyID(i int64) {
+	m.api_key_id = &i
+	m.addapi_key_id = nil
+}
+
+// APIKeyID returns the value of the "api_key_id" field in the mutation.
+func (m *SecurityDepositLedgerMutation) APIKeyID() (r int64, exists bool) {
+	v := m.api_key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyID returns the old "api_key_id" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldAPIKeyID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyID: %w", err)
+	}
+	return oldValue.APIKeyID, nil
+}
+
+// AddAPIKeyID adds i to the "api_key_id" field.
+func (m *SecurityDepositLedgerMutation) AddAPIKeyID(i int64) {
+	if m.addapi_key_id != nil {
+		*m.addapi_key_id += i
+	} else {
+		m.addapi_key_id = &i
+	}
+}
+
+// AddedAPIKeyID returns the value that was added to the "api_key_id" field in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedAPIKeyID() (r int64, exists bool) {
+	v := m.addapi_key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAPIKeyID clears the value of the "api_key_id" field.
+func (m *SecurityDepositLedgerMutation) ClearAPIKeyID() {
+	m.api_key_id = nil
+	m.addapi_key_id = nil
+	m.clearedFields[securitydepositledger.FieldAPIKeyID] = struct{}{}
+}
+
+// APIKeyIDCleared returns if the "api_key_id" field was cleared in this mutation.
+func (m *SecurityDepositLedgerMutation) APIKeyIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositledger.FieldAPIKeyID]
+	return ok
+}
+
+// ResetAPIKeyID resets all changes to the "api_key_id" field.
+func (m *SecurityDepositLedgerMutation) ResetAPIKeyID() {
+	m.api_key_id = nil
+	m.addapi_key_id = nil
+	delete(m.clearedFields, securitydepositledger.FieldAPIKeyID)
+}
+
+// SetViolationID sets the "violation_id" field.
+func (m *SecurityDepositLedgerMutation) SetViolationID(i int64) {
+	m.violation_id = &i
+	m.addviolation_id = nil
+}
+
+// ViolationID returns the value of the "violation_id" field in the mutation.
+func (m *SecurityDepositLedgerMutation) ViolationID() (r int64, exists bool) {
+	v := m.violation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldViolationID returns the old "violation_id" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldViolationID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldViolationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldViolationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldViolationID: %w", err)
+	}
+	return oldValue.ViolationID, nil
+}
+
+// AddViolationID adds i to the "violation_id" field.
+func (m *SecurityDepositLedgerMutation) AddViolationID(i int64) {
+	if m.addviolation_id != nil {
+		*m.addviolation_id += i
+	} else {
+		m.addviolation_id = &i
+	}
+}
+
+// AddedViolationID returns the value that was added to the "violation_id" field in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedViolationID() (r int64, exists bool) {
+	v := m.addviolation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearViolationID clears the value of the "violation_id" field.
+func (m *SecurityDepositLedgerMutation) ClearViolationID() {
+	m.violation_id = nil
+	m.addviolation_id = nil
+	m.clearedFields[securitydepositledger.FieldViolationID] = struct{}{}
+}
+
+// ViolationIDCleared returns if the "violation_id" field was cleared in this mutation.
+func (m *SecurityDepositLedgerMutation) ViolationIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositledger.FieldViolationID]
+	return ok
+}
+
+// ResetViolationID resets all changes to the "violation_id" field.
+func (m *SecurityDepositLedgerMutation) ResetViolationID() {
+	m.violation_id = nil
+	m.addviolation_id = nil
+	delete(m.clearedFields, securitydepositledger.FieldViolationID)
+}
+
+// SetRefundID sets the "refund_id" field.
+func (m *SecurityDepositLedgerMutation) SetRefundID(i int64) {
+	m.refund_id = &i
+	m.addrefund_id = nil
+}
+
+// RefundID returns the value of the "refund_id" field in the mutation.
+func (m *SecurityDepositLedgerMutation) RefundID() (r int64, exists bool) {
+	v := m.refund_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRefundID returns the old "refund_id" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldRefundID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRefundID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRefundID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRefundID: %w", err)
+	}
+	return oldValue.RefundID, nil
+}
+
+// AddRefundID adds i to the "refund_id" field.
+func (m *SecurityDepositLedgerMutation) AddRefundID(i int64) {
+	if m.addrefund_id != nil {
+		*m.addrefund_id += i
+	} else {
+		m.addrefund_id = &i
+	}
+}
+
+// AddedRefundID returns the value that was added to the "refund_id" field in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedRefundID() (r int64, exists bool) {
+	v := m.addrefund_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearRefundID clears the value of the "refund_id" field.
+func (m *SecurityDepositLedgerMutation) ClearRefundID() {
+	m.refund_id = nil
+	m.addrefund_id = nil
+	m.clearedFields[securitydepositledger.FieldRefundID] = struct{}{}
+}
+
+// RefundIDCleared returns if the "refund_id" field was cleared in this mutation.
+func (m *SecurityDepositLedgerMutation) RefundIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositledger.FieldRefundID]
+	return ok
+}
+
+// ResetRefundID resets all changes to the "refund_id" field.
+func (m *SecurityDepositLedgerMutation) ResetRefundID() {
+	m.refund_id = nil
+	m.addrefund_id = nil
+	delete(m.clearedFields, securitydepositledger.FieldRefundID)
+}
+
+// SetPaymentOrderID sets the "payment_order_id" field.
+func (m *SecurityDepositLedgerMutation) SetPaymentOrderID(i int64) {
+	m.payment_order_id = &i
+	m.addpayment_order_id = nil
+}
+
+// PaymentOrderID returns the value of the "payment_order_id" field in the mutation.
+func (m *SecurityDepositLedgerMutation) PaymentOrderID() (r int64, exists bool) {
+	v := m.payment_order_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPaymentOrderID returns the old "payment_order_id" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldPaymentOrderID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPaymentOrderID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPaymentOrderID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPaymentOrderID: %w", err)
+	}
+	return oldValue.PaymentOrderID, nil
+}
+
+// AddPaymentOrderID adds i to the "payment_order_id" field.
+func (m *SecurityDepositLedgerMutation) AddPaymentOrderID(i int64) {
+	if m.addpayment_order_id != nil {
+		*m.addpayment_order_id += i
+	} else {
+		m.addpayment_order_id = &i
+	}
+}
+
+// AddedPaymentOrderID returns the value that was added to the "payment_order_id" field in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedPaymentOrderID() (r int64, exists bool) {
+	v := m.addpayment_order_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearPaymentOrderID clears the value of the "payment_order_id" field.
+func (m *SecurityDepositLedgerMutation) ClearPaymentOrderID() {
+	m.payment_order_id = nil
+	m.addpayment_order_id = nil
+	m.clearedFields[securitydepositledger.FieldPaymentOrderID] = struct{}{}
+}
+
+// PaymentOrderIDCleared returns if the "payment_order_id" field was cleared in this mutation.
+func (m *SecurityDepositLedgerMutation) PaymentOrderIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositledger.FieldPaymentOrderID]
+	return ok
+}
+
+// ResetPaymentOrderID resets all changes to the "payment_order_id" field.
+func (m *SecurityDepositLedgerMutation) ResetPaymentOrderID() {
+	m.payment_order_id = nil
+	m.addpayment_order_id = nil
+	delete(m.clearedFields, securitydepositledger.FieldPaymentOrderID)
+}
+
+// SetOperatorID sets the "operator_id" field.
+func (m *SecurityDepositLedgerMutation) SetOperatorID(i int64) {
+	m.operator_id = &i
+	m.addoperator_id = nil
+}
+
+// OperatorID returns the value of the "operator_id" field in the mutation.
+func (m *SecurityDepositLedgerMutation) OperatorID() (r int64, exists bool) {
+	v := m.operator_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOperatorID returns the old "operator_id" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldOperatorID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOperatorID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOperatorID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOperatorID: %w", err)
+	}
+	return oldValue.OperatorID, nil
+}
+
+// AddOperatorID adds i to the "operator_id" field.
+func (m *SecurityDepositLedgerMutation) AddOperatorID(i int64) {
+	if m.addoperator_id != nil {
+		*m.addoperator_id += i
+	} else {
+		m.addoperator_id = &i
+	}
+}
+
+// AddedOperatorID returns the value that was added to the "operator_id" field in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedOperatorID() (r int64, exists bool) {
+	v := m.addoperator_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearOperatorID clears the value of the "operator_id" field.
+func (m *SecurityDepositLedgerMutation) ClearOperatorID() {
+	m.operator_id = nil
+	m.addoperator_id = nil
+	m.clearedFields[securitydepositledger.FieldOperatorID] = struct{}{}
+}
+
+// OperatorIDCleared returns if the "operator_id" field was cleared in this mutation.
+func (m *SecurityDepositLedgerMutation) OperatorIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositledger.FieldOperatorID]
+	return ok
+}
+
+// ResetOperatorID resets all changes to the "operator_id" field.
+func (m *SecurityDepositLedgerMutation) ResetOperatorID() {
+	m.operator_id = nil
+	m.addoperator_id = nil
+	delete(m.clearedFields, securitydepositledger.FieldOperatorID)
+}
+
+// SetReason sets the "reason" field.
+func (m *SecurityDepositLedgerMutation) SetReason(s string) {
+	m.reason = &s
+}
+
+// Reason returns the value of the "reason" field in the mutation.
+func (m *SecurityDepositLedgerMutation) Reason() (r string, exists bool) {
+	v := m.reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReason returns the old "reason" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldReason(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReason: %w", err)
+	}
+	return oldValue.Reason, nil
+}
+
+// ClearReason clears the value of the "reason" field.
+func (m *SecurityDepositLedgerMutation) ClearReason() {
+	m.reason = nil
+	m.clearedFields[securitydepositledger.FieldReason] = struct{}{}
+}
+
+// ReasonCleared returns if the "reason" field was cleared in this mutation.
+func (m *SecurityDepositLedgerMutation) ReasonCleared() bool {
+	_, ok := m.clearedFields[securitydepositledger.FieldReason]
+	return ok
+}
+
+// ResetReason resets all changes to the "reason" field.
+func (m *SecurityDepositLedgerMutation) ResetReason() {
+	m.reason = nil
+	delete(m.clearedFields, securitydepositledger.FieldReason)
+}
+
+// SetIdempotencyKey sets the "idempotency_key" field.
+func (m *SecurityDepositLedgerMutation) SetIdempotencyKey(s string) {
+	m.idempotency_key = &s
+}
+
+// IdempotencyKey returns the value of the "idempotency_key" field in the mutation.
+func (m *SecurityDepositLedgerMutation) IdempotencyKey() (r string, exists bool) {
+	v := m.idempotency_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIdempotencyKey returns the old "idempotency_key" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldIdempotencyKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIdempotencyKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIdempotencyKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIdempotencyKey: %w", err)
+	}
+	return oldValue.IdempotencyKey, nil
+}
+
+// ResetIdempotencyKey resets all changes to the "idempotency_key" field.
+func (m *SecurityDepositLedgerMutation) ResetIdempotencyKey() {
+	m.idempotency_key = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SecurityDepositLedgerMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SecurityDepositLedgerMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SecurityDepositLedger entity.
+// If the SecurityDepositLedger object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLedgerMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SecurityDepositLedgerMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the SecurityDepositLedgerMutation builder.
+func (m *SecurityDepositLedgerMutation) Where(ps ...predicate.SecurityDepositLedger) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SecurityDepositLedgerMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SecurityDepositLedgerMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SecurityDepositLedger, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SecurityDepositLedgerMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SecurityDepositLedgerMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SecurityDepositLedger).
+func (m *SecurityDepositLedgerMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SecurityDepositLedgerMutation) Fields() []string {
+	fields := make([]string, 0, 17)
+	if m.user_id != nil {
+		fields = append(fields, securitydepositledger.FieldUserID)
+	}
+	if m.lot_id != nil {
+		fields = append(fields, securitydepositledger.FieldLotID)
+	}
+	if m.bucket_type != nil {
+		fields = append(fields, securitydepositledger.FieldBucketType)
+	}
+	if m.entry_type != nil {
+		fields = append(fields, securitydepositledger.FieldEntryType)
+	}
+	if m.delta_cents != nil {
+		fields = append(fields, securitydepositledger.FieldDeltaCents)
+	}
+	if m.reserved_delta_cents != nil {
+		fields = append(fields, securitydepositledger.FieldReservedDeltaCents)
+	}
+	if m.bucket_balance_after_cents != nil {
+		fields = append(fields, securitydepositledger.FieldBucketBalanceAfterCents)
+	}
+	if m.bucket_reserved_after_cents != nil {
+		fields = append(fields, securitydepositledger.FieldBucketReservedAfterCents)
+	}
+	if m.group_id != nil {
+		fields = append(fields, securitydepositledger.FieldGroupID)
+	}
+	if m.api_key_id != nil {
+		fields = append(fields, securitydepositledger.FieldAPIKeyID)
+	}
+	if m.violation_id != nil {
+		fields = append(fields, securitydepositledger.FieldViolationID)
+	}
+	if m.refund_id != nil {
+		fields = append(fields, securitydepositledger.FieldRefundID)
+	}
+	if m.payment_order_id != nil {
+		fields = append(fields, securitydepositledger.FieldPaymentOrderID)
+	}
+	if m.operator_id != nil {
+		fields = append(fields, securitydepositledger.FieldOperatorID)
+	}
+	if m.reason != nil {
+		fields = append(fields, securitydepositledger.FieldReason)
+	}
+	if m.idempotency_key != nil {
+		fields = append(fields, securitydepositledger.FieldIdempotencyKey)
+	}
+	if m.created_at != nil {
+		fields = append(fields, securitydepositledger.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SecurityDepositLedgerMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositledger.FieldUserID:
+		return m.UserID()
+	case securitydepositledger.FieldLotID:
+		return m.LotID()
+	case securitydepositledger.FieldBucketType:
+		return m.BucketType()
+	case securitydepositledger.FieldEntryType:
+		return m.EntryType()
+	case securitydepositledger.FieldDeltaCents:
+		return m.DeltaCents()
+	case securitydepositledger.FieldReservedDeltaCents:
+		return m.ReservedDeltaCents()
+	case securitydepositledger.FieldBucketBalanceAfterCents:
+		return m.BucketBalanceAfterCents()
+	case securitydepositledger.FieldBucketReservedAfterCents:
+		return m.BucketReservedAfterCents()
+	case securitydepositledger.FieldGroupID:
+		return m.GroupID()
+	case securitydepositledger.FieldAPIKeyID:
+		return m.APIKeyID()
+	case securitydepositledger.FieldViolationID:
+		return m.ViolationID()
+	case securitydepositledger.FieldRefundID:
+		return m.RefundID()
+	case securitydepositledger.FieldPaymentOrderID:
+		return m.PaymentOrderID()
+	case securitydepositledger.FieldOperatorID:
+		return m.OperatorID()
+	case securitydepositledger.FieldReason:
+		return m.Reason()
+	case securitydepositledger.FieldIdempotencyKey:
+		return m.IdempotencyKey()
+	case securitydepositledger.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SecurityDepositLedgerMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case securitydepositledger.FieldUserID:
+		return m.OldUserID(ctx)
+	case securitydepositledger.FieldLotID:
+		return m.OldLotID(ctx)
+	case securitydepositledger.FieldBucketType:
+		return m.OldBucketType(ctx)
+	case securitydepositledger.FieldEntryType:
+		return m.OldEntryType(ctx)
+	case securitydepositledger.FieldDeltaCents:
+		return m.OldDeltaCents(ctx)
+	case securitydepositledger.FieldReservedDeltaCents:
+		return m.OldReservedDeltaCents(ctx)
+	case securitydepositledger.FieldBucketBalanceAfterCents:
+		return m.OldBucketBalanceAfterCents(ctx)
+	case securitydepositledger.FieldBucketReservedAfterCents:
+		return m.OldBucketReservedAfterCents(ctx)
+	case securitydepositledger.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case securitydepositledger.FieldAPIKeyID:
+		return m.OldAPIKeyID(ctx)
+	case securitydepositledger.FieldViolationID:
+		return m.OldViolationID(ctx)
+	case securitydepositledger.FieldRefundID:
+		return m.OldRefundID(ctx)
+	case securitydepositledger.FieldPaymentOrderID:
+		return m.OldPaymentOrderID(ctx)
+	case securitydepositledger.FieldOperatorID:
+		return m.OldOperatorID(ctx)
+	case securitydepositledger.FieldReason:
+		return m.OldReason(ctx)
+	case securitydepositledger.FieldIdempotencyKey:
+		return m.OldIdempotencyKey(ctx)
+	case securitydepositledger.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SecurityDepositLedger field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositLedgerMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositledger.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case securitydepositledger.FieldLotID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLotID(v)
+		return nil
+	case securitydepositledger.FieldBucketType:
+		v, ok := value.(securitydepositledger.BucketType)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketType(v)
+		return nil
+	case securitydepositledger.FieldEntryType:
+		v, ok := value.(securitydepositledger.EntryType)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEntryType(v)
+		return nil
+	case securitydepositledger.FieldDeltaCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDeltaCents(v)
+		return nil
+	case securitydepositledger.FieldReservedDeltaCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReservedDeltaCents(v)
+		return nil
+	case securitydepositledger.FieldBucketBalanceAfterCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketBalanceAfterCents(v)
+		return nil
+	case securitydepositledger.FieldBucketReservedAfterCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketReservedAfterCents(v)
+		return nil
+	case securitydepositledger.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case securitydepositledger.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyID(v)
+		return nil
+	case securitydepositledger.FieldViolationID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetViolationID(v)
+		return nil
+	case securitydepositledger.FieldRefundID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRefundID(v)
+		return nil
+	case securitydepositledger.FieldPaymentOrderID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPaymentOrderID(v)
+		return nil
+	case securitydepositledger.FieldOperatorID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOperatorID(v)
+		return nil
+	case securitydepositledger.FieldReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReason(v)
+		return nil
+	case securitydepositledger.FieldIdempotencyKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIdempotencyKey(v)
+		return nil
+	case securitydepositledger.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositLedger field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SecurityDepositLedgerMutation) AddedFields() []string {
+	var fields []string
+	if m.adduser_id != nil {
+		fields = append(fields, securitydepositledger.FieldUserID)
+	}
+	if m.addlot_id != nil {
+		fields = append(fields, securitydepositledger.FieldLotID)
+	}
+	if m.adddelta_cents != nil {
+		fields = append(fields, securitydepositledger.FieldDeltaCents)
+	}
+	if m.addreserved_delta_cents != nil {
+		fields = append(fields, securitydepositledger.FieldReservedDeltaCents)
+	}
+	if m.addbucket_balance_after_cents != nil {
+		fields = append(fields, securitydepositledger.FieldBucketBalanceAfterCents)
+	}
+	if m.addbucket_reserved_after_cents != nil {
+		fields = append(fields, securitydepositledger.FieldBucketReservedAfterCents)
+	}
+	if m.addgroup_id != nil {
+		fields = append(fields, securitydepositledger.FieldGroupID)
+	}
+	if m.addapi_key_id != nil {
+		fields = append(fields, securitydepositledger.FieldAPIKeyID)
+	}
+	if m.addviolation_id != nil {
+		fields = append(fields, securitydepositledger.FieldViolationID)
+	}
+	if m.addrefund_id != nil {
+		fields = append(fields, securitydepositledger.FieldRefundID)
+	}
+	if m.addpayment_order_id != nil {
+		fields = append(fields, securitydepositledger.FieldPaymentOrderID)
+	}
+	if m.addoperator_id != nil {
+		fields = append(fields, securitydepositledger.FieldOperatorID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SecurityDepositLedgerMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositledger.FieldUserID:
+		return m.AddedUserID()
+	case securitydepositledger.FieldLotID:
+		return m.AddedLotID()
+	case securitydepositledger.FieldDeltaCents:
+		return m.AddedDeltaCents()
+	case securitydepositledger.FieldReservedDeltaCents:
+		return m.AddedReservedDeltaCents()
+	case securitydepositledger.FieldBucketBalanceAfterCents:
+		return m.AddedBucketBalanceAfterCents()
+	case securitydepositledger.FieldBucketReservedAfterCents:
+		return m.AddedBucketReservedAfterCents()
+	case securitydepositledger.FieldGroupID:
+		return m.AddedGroupID()
+	case securitydepositledger.FieldAPIKeyID:
+		return m.AddedAPIKeyID()
+	case securitydepositledger.FieldViolationID:
+		return m.AddedViolationID()
+	case securitydepositledger.FieldRefundID:
+		return m.AddedRefundID()
+	case securitydepositledger.FieldPaymentOrderID:
+		return m.AddedPaymentOrderID()
+	case securitydepositledger.FieldOperatorID:
+		return m.AddedOperatorID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositLedgerMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositledger.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case securitydepositledger.FieldLotID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddLotID(v)
+		return nil
+	case securitydepositledger.FieldDeltaCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDeltaCents(v)
+		return nil
+	case securitydepositledger.FieldReservedDeltaCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddReservedDeltaCents(v)
+		return nil
+	case securitydepositledger.FieldBucketBalanceAfterCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBucketBalanceAfterCents(v)
+		return nil
+	case securitydepositledger.FieldBucketReservedAfterCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBucketReservedAfterCents(v)
+		return nil
+	case securitydepositledger.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupID(v)
+		return nil
+	case securitydepositledger.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAPIKeyID(v)
+		return nil
+	case securitydepositledger.FieldViolationID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddViolationID(v)
+		return nil
+	case securitydepositledger.FieldRefundID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRefundID(v)
+		return nil
+	case securitydepositledger.FieldPaymentOrderID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPaymentOrderID(v)
+		return nil
+	case securitydepositledger.FieldOperatorID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOperatorID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositLedger numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SecurityDepositLedgerMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(securitydepositledger.FieldGroupID) {
+		fields = append(fields, securitydepositledger.FieldGroupID)
+	}
+	if m.FieldCleared(securitydepositledger.FieldAPIKeyID) {
+		fields = append(fields, securitydepositledger.FieldAPIKeyID)
+	}
+	if m.FieldCleared(securitydepositledger.FieldViolationID) {
+		fields = append(fields, securitydepositledger.FieldViolationID)
+	}
+	if m.FieldCleared(securitydepositledger.FieldRefundID) {
+		fields = append(fields, securitydepositledger.FieldRefundID)
+	}
+	if m.FieldCleared(securitydepositledger.FieldPaymentOrderID) {
+		fields = append(fields, securitydepositledger.FieldPaymentOrderID)
+	}
+	if m.FieldCleared(securitydepositledger.FieldOperatorID) {
+		fields = append(fields, securitydepositledger.FieldOperatorID)
+	}
+	if m.FieldCleared(securitydepositledger.FieldReason) {
+		fields = append(fields, securitydepositledger.FieldReason)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SecurityDepositLedgerMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SecurityDepositLedgerMutation) ClearField(name string) error {
+	switch name {
+	case securitydepositledger.FieldGroupID:
+		m.ClearGroupID()
+		return nil
+	case securitydepositledger.FieldAPIKeyID:
+		m.ClearAPIKeyID()
+		return nil
+	case securitydepositledger.FieldViolationID:
+		m.ClearViolationID()
+		return nil
+	case securitydepositledger.FieldRefundID:
+		m.ClearRefundID()
+		return nil
+	case securitydepositledger.FieldPaymentOrderID:
+		m.ClearPaymentOrderID()
+		return nil
+	case securitydepositledger.FieldOperatorID:
+		m.ClearOperatorID()
+		return nil
+	case securitydepositledger.FieldReason:
+		m.ClearReason()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositLedger nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SecurityDepositLedgerMutation) ResetField(name string) error {
+	switch name {
+	case securitydepositledger.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case securitydepositledger.FieldLotID:
+		m.ResetLotID()
+		return nil
+	case securitydepositledger.FieldBucketType:
+		m.ResetBucketType()
+		return nil
+	case securitydepositledger.FieldEntryType:
+		m.ResetEntryType()
+		return nil
+	case securitydepositledger.FieldDeltaCents:
+		m.ResetDeltaCents()
+		return nil
+	case securitydepositledger.FieldReservedDeltaCents:
+		m.ResetReservedDeltaCents()
+		return nil
+	case securitydepositledger.FieldBucketBalanceAfterCents:
+		m.ResetBucketBalanceAfterCents()
+		return nil
+	case securitydepositledger.FieldBucketReservedAfterCents:
+		m.ResetBucketReservedAfterCents()
+		return nil
+	case securitydepositledger.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case securitydepositledger.FieldAPIKeyID:
+		m.ResetAPIKeyID()
+		return nil
+	case securitydepositledger.FieldViolationID:
+		m.ResetViolationID()
+		return nil
+	case securitydepositledger.FieldRefundID:
+		m.ResetRefundID()
+		return nil
+	case securitydepositledger.FieldPaymentOrderID:
+		m.ResetPaymentOrderID()
+		return nil
+	case securitydepositledger.FieldOperatorID:
+		m.ResetOperatorID()
+		return nil
+	case securitydepositledger.FieldReason:
+		m.ResetReason()
+		return nil
+	case securitydepositledger.FieldIdempotencyKey:
+		m.ResetIdempotencyKey()
+		return nil
+	case securitydepositledger.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositLedger field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SecurityDepositLedgerMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SecurityDepositLedgerMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SecurityDepositLedgerMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SecurityDepositLedgerMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SecurityDepositLedgerMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SecurityDepositLedgerMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositLedger unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SecurityDepositLedgerMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositLedger edge %s", name)
+}
+
+// SecurityDepositLotMutation represents an operation that mutates the SecurityDepositLot nodes in the graph.
+type SecurityDepositLotMutation struct {
+	config
+	op                       Op
+	typ                      string
+	id                       *int64
+	created_at               *time.Time
+	updated_at               *time.Time
+	user_id                  *int64
+	adduser_id               *int64
+	bucket_type              *securitydepositlot.BucketType
+	source_type              *securitydepositlot.SourceType
+	payment_order_id         *int64
+	addpayment_order_id      *int64
+	original_cents           *int64
+	addoriginal_cents        *int64
+	remaining_cents          *int64
+	addremaining_cents       *int64
+	refund_reserved_cents    *int64
+	addrefund_reserved_cents *int64
+	forfeited_cents          *int64
+	addforfeited_cents       *int64
+	refunded_cents           *int64
+	addrefunded_cents        *int64
+	admin_deducted_cents     *int64
+	addadmin_deducted_cents  *int64
+	revoked_cents            *int64
+	addrevoked_cents         *int64
+	currency                 *string
+	locked_until             *time.Time
+	refund_policy            *securitydepositlot.RefundPolicy
+	status                   *string
+	source_reference         *string
+	notes                    *string
+	created_by               *int64
+	addcreated_by            *int64
+	clearedFields            map[string]struct{}
+	done                     bool
+	oldValue                 func(context.Context) (*SecurityDepositLot, error)
+	predicates               []predicate.SecurityDepositLot
+}
+
+var _ ent.Mutation = (*SecurityDepositLotMutation)(nil)
+
+// securitydepositlotOption allows management of the mutation configuration using functional options.
+type securitydepositlotOption func(*SecurityDepositLotMutation)
+
+// newSecurityDepositLotMutation creates new mutation for the SecurityDepositLot entity.
+func newSecurityDepositLotMutation(c config, op Op, opts ...securitydepositlotOption) *SecurityDepositLotMutation {
+	m := &SecurityDepositLotMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSecurityDepositLot,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSecurityDepositLotID sets the ID field of the mutation.
+func withSecurityDepositLotID(id int64) securitydepositlotOption {
+	return func(m *SecurityDepositLotMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SecurityDepositLot
+		)
+		m.oldValue = func(ctx context.Context) (*SecurityDepositLot, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SecurityDepositLot.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSecurityDepositLot sets the old SecurityDepositLot of the mutation.
+func withSecurityDepositLot(node *SecurityDepositLot) securitydepositlotOption {
+	return func(m *SecurityDepositLotMutation) {
+		m.oldValue = func(context.Context) (*SecurityDepositLot, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SecurityDepositLotMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SecurityDepositLotMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SecurityDepositLotMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SecurityDepositLotMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SecurityDepositLot.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SecurityDepositLotMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SecurityDepositLotMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SecurityDepositLotMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *SecurityDepositLotMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *SecurityDepositLotMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *SecurityDepositLotMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *SecurityDepositLotMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *SecurityDepositLotMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *SecurityDepositLotMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *SecurityDepositLotMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *SecurityDepositLotMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetBucketType sets the "bucket_type" field.
+func (m *SecurityDepositLotMutation) SetBucketType(st securitydepositlot.BucketType) {
+	m.bucket_type = &st
+}
+
+// BucketType returns the value of the "bucket_type" field in the mutation.
+func (m *SecurityDepositLotMutation) BucketType() (r securitydepositlot.BucketType, exists bool) {
+	v := m.bucket_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketType returns the old "bucket_type" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldBucketType(ctx context.Context) (v securitydepositlot.BucketType, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketType: %w", err)
+	}
+	return oldValue.BucketType, nil
+}
+
+// ResetBucketType resets all changes to the "bucket_type" field.
+func (m *SecurityDepositLotMutation) ResetBucketType() {
+	m.bucket_type = nil
+}
+
+// SetSourceType sets the "source_type" field.
+func (m *SecurityDepositLotMutation) SetSourceType(st securitydepositlot.SourceType) {
+	m.source_type = &st
+}
+
+// SourceType returns the value of the "source_type" field in the mutation.
+func (m *SecurityDepositLotMutation) SourceType() (r securitydepositlot.SourceType, exists bool) {
+	v := m.source_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceType returns the old "source_type" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldSourceType(ctx context.Context) (v securitydepositlot.SourceType, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceType: %w", err)
+	}
+	return oldValue.SourceType, nil
+}
+
+// ResetSourceType resets all changes to the "source_type" field.
+func (m *SecurityDepositLotMutation) ResetSourceType() {
+	m.source_type = nil
+}
+
+// SetPaymentOrderID sets the "payment_order_id" field.
+func (m *SecurityDepositLotMutation) SetPaymentOrderID(i int64) {
+	m.payment_order_id = &i
+	m.addpayment_order_id = nil
+}
+
+// PaymentOrderID returns the value of the "payment_order_id" field in the mutation.
+func (m *SecurityDepositLotMutation) PaymentOrderID() (r int64, exists bool) {
+	v := m.payment_order_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPaymentOrderID returns the old "payment_order_id" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldPaymentOrderID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPaymentOrderID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPaymentOrderID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPaymentOrderID: %w", err)
+	}
+	return oldValue.PaymentOrderID, nil
+}
+
+// AddPaymentOrderID adds i to the "payment_order_id" field.
+func (m *SecurityDepositLotMutation) AddPaymentOrderID(i int64) {
+	if m.addpayment_order_id != nil {
+		*m.addpayment_order_id += i
+	} else {
+		m.addpayment_order_id = &i
+	}
+}
+
+// AddedPaymentOrderID returns the value that was added to the "payment_order_id" field in this mutation.
+func (m *SecurityDepositLotMutation) AddedPaymentOrderID() (r int64, exists bool) {
+	v := m.addpayment_order_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearPaymentOrderID clears the value of the "payment_order_id" field.
+func (m *SecurityDepositLotMutation) ClearPaymentOrderID() {
+	m.payment_order_id = nil
+	m.addpayment_order_id = nil
+	m.clearedFields[securitydepositlot.FieldPaymentOrderID] = struct{}{}
+}
+
+// PaymentOrderIDCleared returns if the "payment_order_id" field was cleared in this mutation.
+func (m *SecurityDepositLotMutation) PaymentOrderIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositlot.FieldPaymentOrderID]
+	return ok
+}
+
+// ResetPaymentOrderID resets all changes to the "payment_order_id" field.
+func (m *SecurityDepositLotMutation) ResetPaymentOrderID() {
+	m.payment_order_id = nil
+	m.addpayment_order_id = nil
+	delete(m.clearedFields, securitydepositlot.FieldPaymentOrderID)
+}
+
+// SetOriginalCents sets the "original_cents" field.
+func (m *SecurityDepositLotMutation) SetOriginalCents(i int64) {
+	m.original_cents = &i
+	m.addoriginal_cents = nil
+}
+
+// OriginalCents returns the value of the "original_cents" field in the mutation.
+func (m *SecurityDepositLotMutation) OriginalCents() (r int64, exists bool) {
+	v := m.original_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOriginalCents returns the old "original_cents" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldOriginalCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOriginalCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOriginalCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOriginalCents: %w", err)
+	}
+	return oldValue.OriginalCents, nil
+}
+
+// AddOriginalCents adds i to the "original_cents" field.
+func (m *SecurityDepositLotMutation) AddOriginalCents(i int64) {
+	if m.addoriginal_cents != nil {
+		*m.addoriginal_cents += i
+	} else {
+		m.addoriginal_cents = &i
+	}
+}
+
+// AddedOriginalCents returns the value that was added to the "original_cents" field in this mutation.
+func (m *SecurityDepositLotMutation) AddedOriginalCents() (r int64, exists bool) {
+	v := m.addoriginal_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOriginalCents resets all changes to the "original_cents" field.
+func (m *SecurityDepositLotMutation) ResetOriginalCents() {
+	m.original_cents = nil
+	m.addoriginal_cents = nil
+}
+
+// SetRemainingCents sets the "remaining_cents" field.
+func (m *SecurityDepositLotMutation) SetRemainingCents(i int64) {
+	m.remaining_cents = &i
+	m.addremaining_cents = nil
+}
+
+// RemainingCents returns the value of the "remaining_cents" field in the mutation.
+func (m *SecurityDepositLotMutation) RemainingCents() (r int64, exists bool) {
+	v := m.remaining_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRemainingCents returns the old "remaining_cents" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldRemainingCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRemainingCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRemainingCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRemainingCents: %w", err)
+	}
+	return oldValue.RemainingCents, nil
+}
+
+// AddRemainingCents adds i to the "remaining_cents" field.
+func (m *SecurityDepositLotMutation) AddRemainingCents(i int64) {
+	if m.addremaining_cents != nil {
+		*m.addremaining_cents += i
+	} else {
+		m.addremaining_cents = &i
+	}
+}
+
+// AddedRemainingCents returns the value that was added to the "remaining_cents" field in this mutation.
+func (m *SecurityDepositLotMutation) AddedRemainingCents() (r int64, exists bool) {
+	v := m.addremaining_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRemainingCents resets all changes to the "remaining_cents" field.
+func (m *SecurityDepositLotMutation) ResetRemainingCents() {
+	m.remaining_cents = nil
+	m.addremaining_cents = nil
+}
+
+// SetRefundReservedCents sets the "refund_reserved_cents" field.
+func (m *SecurityDepositLotMutation) SetRefundReservedCents(i int64) {
+	m.refund_reserved_cents = &i
+	m.addrefund_reserved_cents = nil
+}
+
+// RefundReservedCents returns the value of the "refund_reserved_cents" field in the mutation.
+func (m *SecurityDepositLotMutation) RefundReservedCents() (r int64, exists bool) {
+	v := m.refund_reserved_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRefundReservedCents returns the old "refund_reserved_cents" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldRefundReservedCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRefundReservedCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRefundReservedCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRefundReservedCents: %w", err)
+	}
+	return oldValue.RefundReservedCents, nil
+}
+
+// AddRefundReservedCents adds i to the "refund_reserved_cents" field.
+func (m *SecurityDepositLotMutation) AddRefundReservedCents(i int64) {
+	if m.addrefund_reserved_cents != nil {
+		*m.addrefund_reserved_cents += i
+	} else {
+		m.addrefund_reserved_cents = &i
+	}
+}
+
+// AddedRefundReservedCents returns the value that was added to the "refund_reserved_cents" field in this mutation.
+func (m *SecurityDepositLotMutation) AddedRefundReservedCents() (r int64, exists bool) {
+	v := m.addrefund_reserved_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRefundReservedCents resets all changes to the "refund_reserved_cents" field.
+func (m *SecurityDepositLotMutation) ResetRefundReservedCents() {
+	m.refund_reserved_cents = nil
+	m.addrefund_reserved_cents = nil
+}
+
+// SetForfeitedCents sets the "forfeited_cents" field.
+func (m *SecurityDepositLotMutation) SetForfeitedCents(i int64) {
+	m.forfeited_cents = &i
+	m.addforfeited_cents = nil
+}
+
+// ForfeitedCents returns the value of the "forfeited_cents" field in the mutation.
+func (m *SecurityDepositLotMutation) ForfeitedCents() (r int64, exists bool) {
+	v := m.forfeited_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldForfeitedCents returns the old "forfeited_cents" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldForfeitedCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldForfeitedCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldForfeitedCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldForfeitedCents: %w", err)
+	}
+	return oldValue.ForfeitedCents, nil
+}
+
+// AddForfeitedCents adds i to the "forfeited_cents" field.
+func (m *SecurityDepositLotMutation) AddForfeitedCents(i int64) {
+	if m.addforfeited_cents != nil {
+		*m.addforfeited_cents += i
+	} else {
+		m.addforfeited_cents = &i
+	}
+}
+
+// AddedForfeitedCents returns the value that was added to the "forfeited_cents" field in this mutation.
+func (m *SecurityDepositLotMutation) AddedForfeitedCents() (r int64, exists bool) {
+	v := m.addforfeited_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetForfeitedCents resets all changes to the "forfeited_cents" field.
+func (m *SecurityDepositLotMutation) ResetForfeitedCents() {
+	m.forfeited_cents = nil
+	m.addforfeited_cents = nil
+}
+
+// SetRefundedCents sets the "refunded_cents" field.
+func (m *SecurityDepositLotMutation) SetRefundedCents(i int64) {
+	m.refunded_cents = &i
+	m.addrefunded_cents = nil
+}
+
+// RefundedCents returns the value of the "refunded_cents" field in the mutation.
+func (m *SecurityDepositLotMutation) RefundedCents() (r int64, exists bool) {
+	v := m.refunded_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRefundedCents returns the old "refunded_cents" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldRefundedCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRefundedCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRefundedCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRefundedCents: %w", err)
+	}
+	return oldValue.RefundedCents, nil
+}
+
+// AddRefundedCents adds i to the "refunded_cents" field.
+func (m *SecurityDepositLotMutation) AddRefundedCents(i int64) {
+	if m.addrefunded_cents != nil {
+		*m.addrefunded_cents += i
+	} else {
+		m.addrefunded_cents = &i
+	}
+}
+
+// AddedRefundedCents returns the value that was added to the "refunded_cents" field in this mutation.
+func (m *SecurityDepositLotMutation) AddedRefundedCents() (r int64, exists bool) {
+	v := m.addrefunded_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRefundedCents resets all changes to the "refunded_cents" field.
+func (m *SecurityDepositLotMutation) ResetRefundedCents() {
+	m.refunded_cents = nil
+	m.addrefunded_cents = nil
+}
+
+// SetAdminDeductedCents sets the "admin_deducted_cents" field.
+func (m *SecurityDepositLotMutation) SetAdminDeductedCents(i int64) {
+	m.admin_deducted_cents = &i
+	m.addadmin_deducted_cents = nil
+}
+
+// AdminDeductedCents returns the value of the "admin_deducted_cents" field in the mutation.
+func (m *SecurityDepositLotMutation) AdminDeductedCents() (r int64, exists bool) {
+	v := m.admin_deducted_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAdminDeductedCents returns the old "admin_deducted_cents" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldAdminDeductedCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAdminDeductedCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAdminDeductedCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAdminDeductedCents: %w", err)
+	}
+	return oldValue.AdminDeductedCents, nil
+}
+
+// AddAdminDeductedCents adds i to the "admin_deducted_cents" field.
+func (m *SecurityDepositLotMutation) AddAdminDeductedCents(i int64) {
+	if m.addadmin_deducted_cents != nil {
+		*m.addadmin_deducted_cents += i
+	} else {
+		m.addadmin_deducted_cents = &i
+	}
+}
+
+// AddedAdminDeductedCents returns the value that was added to the "admin_deducted_cents" field in this mutation.
+func (m *SecurityDepositLotMutation) AddedAdminDeductedCents() (r int64, exists bool) {
+	v := m.addadmin_deducted_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAdminDeductedCents resets all changes to the "admin_deducted_cents" field.
+func (m *SecurityDepositLotMutation) ResetAdminDeductedCents() {
+	m.admin_deducted_cents = nil
+	m.addadmin_deducted_cents = nil
+}
+
+// SetRevokedCents sets the "revoked_cents" field.
+func (m *SecurityDepositLotMutation) SetRevokedCents(i int64) {
+	m.revoked_cents = &i
+	m.addrevoked_cents = nil
+}
+
+// RevokedCents returns the value of the "revoked_cents" field in the mutation.
+func (m *SecurityDepositLotMutation) RevokedCents() (r int64, exists bool) {
+	v := m.revoked_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRevokedCents returns the old "revoked_cents" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldRevokedCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRevokedCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRevokedCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRevokedCents: %w", err)
+	}
+	return oldValue.RevokedCents, nil
+}
+
+// AddRevokedCents adds i to the "revoked_cents" field.
+func (m *SecurityDepositLotMutation) AddRevokedCents(i int64) {
+	if m.addrevoked_cents != nil {
+		*m.addrevoked_cents += i
+	} else {
+		m.addrevoked_cents = &i
+	}
+}
+
+// AddedRevokedCents returns the value that was added to the "revoked_cents" field in this mutation.
+func (m *SecurityDepositLotMutation) AddedRevokedCents() (r int64, exists bool) {
+	v := m.addrevoked_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRevokedCents resets all changes to the "revoked_cents" field.
+func (m *SecurityDepositLotMutation) ResetRevokedCents() {
+	m.revoked_cents = nil
+	m.addrevoked_cents = nil
+}
+
+// SetCurrency sets the "currency" field.
+func (m *SecurityDepositLotMutation) SetCurrency(s string) {
+	m.currency = &s
+}
+
+// Currency returns the value of the "currency" field in the mutation.
+func (m *SecurityDepositLotMutation) Currency() (r string, exists bool) {
+	v := m.currency
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCurrency returns the old "currency" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldCurrency(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCurrency is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCurrency requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCurrency: %w", err)
+	}
+	return oldValue.Currency, nil
+}
+
+// ResetCurrency resets all changes to the "currency" field.
+func (m *SecurityDepositLotMutation) ResetCurrency() {
+	m.currency = nil
+}
+
+// SetLockedUntil sets the "locked_until" field.
+func (m *SecurityDepositLotMutation) SetLockedUntil(t time.Time) {
+	m.locked_until = &t
+}
+
+// LockedUntil returns the value of the "locked_until" field in the mutation.
+func (m *SecurityDepositLotMutation) LockedUntil() (r time.Time, exists bool) {
+	v := m.locked_until
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLockedUntil returns the old "locked_until" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldLockedUntil(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLockedUntil is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLockedUntil requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLockedUntil: %w", err)
+	}
+	return oldValue.LockedUntil, nil
+}
+
+// ClearLockedUntil clears the value of the "locked_until" field.
+func (m *SecurityDepositLotMutation) ClearLockedUntil() {
+	m.locked_until = nil
+	m.clearedFields[securitydepositlot.FieldLockedUntil] = struct{}{}
+}
+
+// LockedUntilCleared returns if the "locked_until" field was cleared in this mutation.
+func (m *SecurityDepositLotMutation) LockedUntilCleared() bool {
+	_, ok := m.clearedFields[securitydepositlot.FieldLockedUntil]
+	return ok
+}
+
+// ResetLockedUntil resets all changes to the "locked_until" field.
+func (m *SecurityDepositLotMutation) ResetLockedUntil() {
+	m.locked_until = nil
+	delete(m.clearedFields, securitydepositlot.FieldLockedUntil)
+}
+
+// SetRefundPolicy sets the "refund_policy" field.
+func (m *SecurityDepositLotMutation) SetRefundPolicy(sp securitydepositlot.RefundPolicy) {
+	m.refund_policy = &sp
+}
+
+// RefundPolicy returns the value of the "refund_policy" field in the mutation.
+func (m *SecurityDepositLotMutation) RefundPolicy() (r securitydepositlot.RefundPolicy, exists bool) {
+	v := m.refund_policy
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRefundPolicy returns the old "refund_policy" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldRefundPolicy(ctx context.Context) (v securitydepositlot.RefundPolicy, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRefundPolicy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRefundPolicy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRefundPolicy: %w", err)
+	}
+	return oldValue.RefundPolicy, nil
+}
+
+// ResetRefundPolicy resets all changes to the "refund_policy" field.
+func (m *SecurityDepositLotMutation) ResetRefundPolicy() {
+	m.refund_policy = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *SecurityDepositLotMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *SecurityDepositLotMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *SecurityDepositLotMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetSourceReference sets the "source_reference" field.
+func (m *SecurityDepositLotMutation) SetSourceReference(s string) {
+	m.source_reference = &s
+}
+
+// SourceReference returns the value of the "source_reference" field in the mutation.
+func (m *SecurityDepositLotMutation) SourceReference() (r string, exists bool) {
+	v := m.source_reference
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceReference returns the old "source_reference" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldSourceReference(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceReference is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceReference requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceReference: %w", err)
+	}
+	return oldValue.SourceReference, nil
+}
+
+// ClearSourceReference clears the value of the "source_reference" field.
+func (m *SecurityDepositLotMutation) ClearSourceReference() {
+	m.source_reference = nil
+	m.clearedFields[securitydepositlot.FieldSourceReference] = struct{}{}
+}
+
+// SourceReferenceCleared returns if the "source_reference" field was cleared in this mutation.
+func (m *SecurityDepositLotMutation) SourceReferenceCleared() bool {
+	_, ok := m.clearedFields[securitydepositlot.FieldSourceReference]
+	return ok
+}
+
+// ResetSourceReference resets all changes to the "source_reference" field.
+func (m *SecurityDepositLotMutation) ResetSourceReference() {
+	m.source_reference = nil
+	delete(m.clearedFields, securitydepositlot.FieldSourceReference)
+}
+
+// SetNotes sets the "notes" field.
+func (m *SecurityDepositLotMutation) SetNotes(s string) {
+	m.notes = &s
+}
+
+// Notes returns the value of the "notes" field in the mutation.
+func (m *SecurityDepositLotMutation) Notes() (r string, exists bool) {
+	v := m.notes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNotes returns the old "notes" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldNotes(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNotes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNotes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNotes: %w", err)
+	}
+	return oldValue.Notes, nil
+}
+
+// ClearNotes clears the value of the "notes" field.
+func (m *SecurityDepositLotMutation) ClearNotes() {
+	m.notes = nil
+	m.clearedFields[securitydepositlot.FieldNotes] = struct{}{}
+}
+
+// NotesCleared returns if the "notes" field was cleared in this mutation.
+func (m *SecurityDepositLotMutation) NotesCleared() bool {
+	_, ok := m.clearedFields[securitydepositlot.FieldNotes]
+	return ok
+}
+
+// ResetNotes resets all changes to the "notes" field.
+func (m *SecurityDepositLotMutation) ResetNotes() {
+	m.notes = nil
+	delete(m.clearedFields, securitydepositlot.FieldNotes)
+}
+
+// SetCreatedBy sets the "created_by" field.
+func (m *SecurityDepositLotMutation) SetCreatedBy(i int64) {
+	m.created_by = &i
+	m.addcreated_by = nil
+}
+
+// CreatedBy returns the value of the "created_by" field in the mutation.
+func (m *SecurityDepositLotMutation) CreatedBy() (r int64, exists bool) {
+	v := m.created_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedBy returns the old "created_by" field's value of the SecurityDepositLot entity.
+// If the SecurityDepositLot object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositLotMutation) OldCreatedBy(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedBy: %w", err)
+	}
+	return oldValue.CreatedBy, nil
+}
+
+// AddCreatedBy adds i to the "created_by" field.
+func (m *SecurityDepositLotMutation) AddCreatedBy(i int64) {
+	if m.addcreated_by != nil {
+		*m.addcreated_by += i
+	} else {
+		m.addcreated_by = &i
+	}
+}
+
+// AddedCreatedBy returns the value that was added to the "created_by" field in this mutation.
+func (m *SecurityDepositLotMutation) AddedCreatedBy() (r int64, exists bool) {
+	v := m.addcreated_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearCreatedBy clears the value of the "created_by" field.
+func (m *SecurityDepositLotMutation) ClearCreatedBy() {
+	m.created_by = nil
+	m.addcreated_by = nil
+	m.clearedFields[securitydepositlot.FieldCreatedBy] = struct{}{}
+}
+
+// CreatedByCleared returns if the "created_by" field was cleared in this mutation.
+func (m *SecurityDepositLotMutation) CreatedByCleared() bool {
+	_, ok := m.clearedFields[securitydepositlot.FieldCreatedBy]
+	return ok
+}
+
+// ResetCreatedBy resets all changes to the "created_by" field.
+func (m *SecurityDepositLotMutation) ResetCreatedBy() {
+	m.created_by = nil
+	m.addcreated_by = nil
+	delete(m.clearedFields, securitydepositlot.FieldCreatedBy)
+}
+
+// Where appends a list predicates to the SecurityDepositLotMutation builder.
+func (m *SecurityDepositLotMutation) Where(ps ...predicate.SecurityDepositLot) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SecurityDepositLotMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SecurityDepositLotMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SecurityDepositLot, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SecurityDepositLotMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SecurityDepositLotMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SecurityDepositLot).
+func (m *SecurityDepositLotMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SecurityDepositLotMutation) Fields() []string {
+	fields := make([]string, 0, 20)
+	if m.created_at != nil {
+		fields = append(fields, securitydepositlot.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, securitydepositlot.FieldUpdatedAt)
+	}
+	if m.user_id != nil {
+		fields = append(fields, securitydepositlot.FieldUserID)
+	}
+	if m.bucket_type != nil {
+		fields = append(fields, securitydepositlot.FieldBucketType)
+	}
+	if m.source_type != nil {
+		fields = append(fields, securitydepositlot.FieldSourceType)
+	}
+	if m.payment_order_id != nil {
+		fields = append(fields, securitydepositlot.FieldPaymentOrderID)
+	}
+	if m.original_cents != nil {
+		fields = append(fields, securitydepositlot.FieldOriginalCents)
+	}
+	if m.remaining_cents != nil {
+		fields = append(fields, securitydepositlot.FieldRemainingCents)
+	}
+	if m.refund_reserved_cents != nil {
+		fields = append(fields, securitydepositlot.FieldRefundReservedCents)
+	}
+	if m.forfeited_cents != nil {
+		fields = append(fields, securitydepositlot.FieldForfeitedCents)
+	}
+	if m.refunded_cents != nil {
+		fields = append(fields, securitydepositlot.FieldRefundedCents)
+	}
+	if m.admin_deducted_cents != nil {
+		fields = append(fields, securitydepositlot.FieldAdminDeductedCents)
+	}
+	if m.revoked_cents != nil {
+		fields = append(fields, securitydepositlot.FieldRevokedCents)
+	}
+	if m.currency != nil {
+		fields = append(fields, securitydepositlot.FieldCurrency)
+	}
+	if m.locked_until != nil {
+		fields = append(fields, securitydepositlot.FieldLockedUntil)
+	}
+	if m.refund_policy != nil {
+		fields = append(fields, securitydepositlot.FieldRefundPolicy)
+	}
+	if m.status != nil {
+		fields = append(fields, securitydepositlot.FieldStatus)
+	}
+	if m.source_reference != nil {
+		fields = append(fields, securitydepositlot.FieldSourceReference)
+	}
+	if m.notes != nil {
+		fields = append(fields, securitydepositlot.FieldNotes)
+	}
+	if m.created_by != nil {
+		fields = append(fields, securitydepositlot.FieldCreatedBy)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SecurityDepositLotMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositlot.FieldCreatedAt:
+		return m.CreatedAt()
+	case securitydepositlot.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case securitydepositlot.FieldUserID:
+		return m.UserID()
+	case securitydepositlot.FieldBucketType:
+		return m.BucketType()
+	case securitydepositlot.FieldSourceType:
+		return m.SourceType()
+	case securitydepositlot.FieldPaymentOrderID:
+		return m.PaymentOrderID()
+	case securitydepositlot.FieldOriginalCents:
+		return m.OriginalCents()
+	case securitydepositlot.FieldRemainingCents:
+		return m.RemainingCents()
+	case securitydepositlot.FieldRefundReservedCents:
+		return m.RefundReservedCents()
+	case securitydepositlot.FieldForfeitedCents:
+		return m.ForfeitedCents()
+	case securitydepositlot.FieldRefundedCents:
+		return m.RefundedCents()
+	case securitydepositlot.FieldAdminDeductedCents:
+		return m.AdminDeductedCents()
+	case securitydepositlot.FieldRevokedCents:
+		return m.RevokedCents()
+	case securitydepositlot.FieldCurrency:
+		return m.Currency()
+	case securitydepositlot.FieldLockedUntil:
+		return m.LockedUntil()
+	case securitydepositlot.FieldRefundPolicy:
+		return m.RefundPolicy()
+	case securitydepositlot.FieldStatus:
+		return m.Status()
+	case securitydepositlot.FieldSourceReference:
+		return m.SourceReference()
+	case securitydepositlot.FieldNotes:
+		return m.Notes()
+	case securitydepositlot.FieldCreatedBy:
+		return m.CreatedBy()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SecurityDepositLotMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case securitydepositlot.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case securitydepositlot.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case securitydepositlot.FieldUserID:
+		return m.OldUserID(ctx)
+	case securitydepositlot.FieldBucketType:
+		return m.OldBucketType(ctx)
+	case securitydepositlot.FieldSourceType:
+		return m.OldSourceType(ctx)
+	case securitydepositlot.FieldPaymentOrderID:
+		return m.OldPaymentOrderID(ctx)
+	case securitydepositlot.FieldOriginalCents:
+		return m.OldOriginalCents(ctx)
+	case securitydepositlot.FieldRemainingCents:
+		return m.OldRemainingCents(ctx)
+	case securitydepositlot.FieldRefundReservedCents:
+		return m.OldRefundReservedCents(ctx)
+	case securitydepositlot.FieldForfeitedCents:
+		return m.OldForfeitedCents(ctx)
+	case securitydepositlot.FieldRefundedCents:
+		return m.OldRefundedCents(ctx)
+	case securitydepositlot.FieldAdminDeductedCents:
+		return m.OldAdminDeductedCents(ctx)
+	case securitydepositlot.FieldRevokedCents:
+		return m.OldRevokedCents(ctx)
+	case securitydepositlot.FieldCurrency:
+		return m.OldCurrency(ctx)
+	case securitydepositlot.FieldLockedUntil:
+		return m.OldLockedUntil(ctx)
+	case securitydepositlot.FieldRefundPolicy:
+		return m.OldRefundPolicy(ctx)
+	case securitydepositlot.FieldStatus:
+		return m.OldStatus(ctx)
+	case securitydepositlot.FieldSourceReference:
+		return m.OldSourceReference(ctx)
+	case securitydepositlot.FieldNotes:
+		return m.OldNotes(ctx)
+	case securitydepositlot.FieldCreatedBy:
+		return m.OldCreatedBy(ctx)
+	}
+	return nil, fmt.Errorf("unknown SecurityDepositLot field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositLotMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositlot.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case securitydepositlot.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case securitydepositlot.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case securitydepositlot.FieldBucketType:
+		v, ok := value.(securitydepositlot.BucketType)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketType(v)
+		return nil
+	case securitydepositlot.FieldSourceType:
+		v, ok := value.(securitydepositlot.SourceType)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceType(v)
+		return nil
+	case securitydepositlot.FieldPaymentOrderID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPaymentOrderID(v)
+		return nil
+	case securitydepositlot.FieldOriginalCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOriginalCents(v)
+		return nil
+	case securitydepositlot.FieldRemainingCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRemainingCents(v)
+		return nil
+	case securitydepositlot.FieldRefundReservedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRefundReservedCents(v)
+		return nil
+	case securitydepositlot.FieldForfeitedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetForfeitedCents(v)
+		return nil
+	case securitydepositlot.FieldRefundedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRefundedCents(v)
+		return nil
+	case securitydepositlot.FieldAdminDeductedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAdminDeductedCents(v)
+		return nil
+	case securitydepositlot.FieldRevokedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRevokedCents(v)
+		return nil
+	case securitydepositlot.FieldCurrency:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCurrency(v)
+		return nil
+	case securitydepositlot.FieldLockedUntil:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLockedUntil(v)
+		return nil
+	case securitydepositlot.FieldRefundPolicy:
+		v, ok := value.(securitydepositlot.RefundPolicy)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRefundPolicy(v)
+		return nil
+	case securitydepositlot.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case securitydepositlot.FieldSourceReference:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceReference(v)
+		return nil
+	case securitydepositlot.FieldNotes:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNotes(v)
+		return nil
+	case securitydepositlot.FieldCreatedBy:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedBy(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositLot field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SecurityDepositLotMutation) AddedFields() []string {
+	var fields []string
+	if m.adduser_id != nil {
+		fields = append(fields, securitydepositlot.FieldUserID)
+	}
+	if m.addpayment_order_id != nil {
+		fields = append(fields, securitydepositlot.FieldPaymentOrderID)
+	}
+	if m.addoriginal_cents != nil {
+		fields = append(fields, securitydepositlot.FieldOriginalCents)
+	}
+	if m.addremaining_cents != nil {
+		fields = append(fields, securitydepositlot.FieldRemainingCents)
+	}
+	if m.addrefund_reserved_cents != nil {
+		fields = append(fields, securitydepositlot.FieldRefundReservedCents)
+	}
+	if m.addforfeited_cents != nil {
+		fields = append(fields, securitydepositlot.FieldForfeitedCents)
+	}
+	if m.addrefunded_cents != nil {
+		fields = append(fields, securitydepositlot.FieldRefundedCents)
+	}
+	if m.addadmin_deducted_cents != nil {
+		fields = append(fields, securitydepositlot.FieldAdminDeductedCents)
+	}
+	if m.addrevoked_cents != nil {
+		fields = append(fields, securitydepositlot.FieldRevokedCents)
+	}
+	if m.addcreated_by != nil {
+		fields = append(fields, securitydepositlot.FieldCreatedBy)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SecurityDepositLotMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositlot.FieldUserID:
+		return m.AddedUserID()
+	case securitydepositlot.FieldPaymentOrderID:
+		return m.AddedPaymentOrderID()
+	case securitydepositlot.FieldOriginalCents:
+		return m.AddedOriginalCents()
+	case securitydepositlot.FieldRemainingCents:
+		return m.AddedRemainingCents()
+	case securitydepositlot.FieldRefundReservedCents:
+		return m.AddedRefundReservedCents()
+	case securitydepositlot.FieldForfeitedCents:
+		return m.AddedForfeitedCents()
+	case securitydepositlot.FieldRefundedCents:
+		return m.AddedRefundedCents()
+	case securitydepositlot.FieldAdminDeductedCents:
+		return m.AddedAdminDeductedCents()
+	case securitydepositlot.FieldRevokedCents:
+		return m.AddedRevokedCents()
+	case securitydepositlot.FieldCreatedBy:
+		return m.AddedCreatedBy()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositLotMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositlot.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case securitydepositlot.FieldPaymentOrderID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPaymentOrderID(v)
+		return nil
+	case securitydepositlot.FieldOriginalCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOriginalCents(v)
+		return nil
+	case securitydepositlot.FieldRemainingCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRemainingCents(v)
+		return nil
+	case securitydepositlot.FieldRefundReservedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRefundReservedCents(v)
+		return nil
+	case securitydepositlot.FieldForfeitedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddForfeitedCents(v)
+		return nil
+	case securitydepositlot.FieldRefundedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRefundedCents(v)
+		return nil
+	case securitydepositlot.FieldAdminDeductedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAdminDeductedCents(v)
+		return nil
+	case securitydepositlot.FieldRevokedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRevokedCents(v)
+		return nil
+	case securitydepositlot.FieldCreatedBy:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCreatedBy(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositLot numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SecurityDepositLotMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(securitydepositlot.FieldPaymentOrderID) {
+		fields = append(fields, securitydepositlot.FieldPaymentOrderID)
+	}
+	if m.FieldCleared(securitydepositlot.FieldLockedUntil) {
+		fields = append(fields, securitydepositlot.FieldLockedUntil)
+	}
+	if m.FieldCleared(securitydepositlot.FieldSourceReference) {
+		fields = append(fields, securitydepositlot.FieldSourceReference)
+	}
+	if m.FieldCleared(securitydepositlot.FieldNotes) {
+		fields = append(fields, securitydepositlot.FieldNotes)
+	}
+	if m.FieldCleared(securitydepositlot.FieldCreatedBy) {
+		fields = append(fields, securitydepositlot.FieldCreatedBy)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SecurityDepositLotMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SecurityDepositLotMutation) ClearField(name string) error {
+	switch name {
+	case securitydepositlot.FieldPaymentOrderID:
+		m.ClearPaymentOrderID()
+		return nil
+	case securitydepositlot.FieldLockedUntil:
+		m.ClearLockedUntil()
+		return nil
+	case securitydepositlot.FieldSourceReference:
+		m.ClearSourceReference()
+		return nil
+	case securitydepositlot.FieldNotes:
+		m.ClearNotes()
+		return nil
+	case securitydepositlot.FieldCreatedBy:
+		m.ClearCreatedBy()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositLot nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SecurityDepositLotMutation) ResetField(name string) error {
+	switch name {
+	case securitydepositlot.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case securitydepositlot.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case securitydepositlot.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case securitydepositlot.FieldBucketType:
+		m.ResetBucketType()
+		return nil
+	case securitydepositlot.FieldSourceType:
+		m.ResetSourceType()
+		return nil
+	case securitydepositlot.FieldPaymentOrderID:
+		m.ResetPaymentOrderID()
+		return nil
+	case securitydepositlot.FieldOriginalCents:
+		m.ResetOriginalCents()
+		return nil
+	case securitydepositlot.FieldRemainingCents:
+		m.ResetRemainingCents()
+		return nil
+	case securitydepositlot.FieldRefundReservedCents:
+		m.ResetRefundReservedCents()
+		return nil
+	case securitydepositlot.FieldForfeitedCents:
+		m.ResetForfeitedCents()
+		return nil
+	case securitydepositlot.FieldRefundedCents:
+		m.ResetRefundedCents()
+		return nil
+	case securitydepositlot.FieldAdminDeductedCents:
+		m.ResetAdminDeductedCents()
+		return nil
+	case securitydepositlot.FieldRevokedCents:
+		m.ResetRevokedCents()
+		return nil
+	case securitydepositlot.FieldCurrency:
+		m.ResetCurrency()
+		return nil
+	case securitydepositlot.FieldLockedUntil:
+		m.ResetLockedUntil()
+		return nil
+	case securitydepositlot.FieldRefundPolicy:
+		m.ResetRefundPolicy()
+		return nil
+	case securitydepositlot.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case securitydepositlot.FieldSourceReference:
+		m.ResetSourceReference()
+		return nil
+	case securitydepositlot.FieldNotes:
+		m.ResetNotes()
+		return nil
+	case securitydepositlot.FieldCreatedBy:
+		m.ResetCreatedBy()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositLot field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SecurityDepositLotMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SecurityDepositLotMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SecurityDepositLotMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SecurityDepositLotMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SecurityDepositLotMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SecurityDepositLotMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SecurityDepositLotMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositLot unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SecurityDepositLotMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositLot edge %s", name)
+}
+
+// SecurityDepositRefundMutation represents an operation that mutates the SecurityDepositRefund nodes in the graph.
+type SecurityDepositRefundMutation struct {
+	config
+	op                         Op
+	typ                        string
+	id                         *int64
+	refund_id                  *string
+	user_id                    *int64
+	adduser_id                 *int64
+	lot_id                     *int64
+	addlot_id                  *int64
+	payment_order_id           *int64
+	addpayment_order_id        *int64
+	principal_cents            *int64
+	addprincipal_cents         *int64
+	gateway_amount             *string
+	gateway_currency           *string
+	mode                       *securitydepositrefund.Mode
+	state                      *string
+	requested_by               *int64
+	addrequested_by            *int64
+	reason                     *string
+	quote_hash                 *string
+	idempotency_key            *string
+	provider_request_id        *string
+	provider_response_snapshot *map[string]interface{}
+	external_refund_id         *string
+	external_refunded_at       *time.Time
+	external_evidence          *map[string]interface{}
+	created_at                 *time.Time
+	submitted_at               *time.Time
+	completed_at               *time.Time
+	clearedFields              map[string]struct{}
+	done                       bool
+	oldValue                   func(context.Context) (*SecurityDepositRefund, error)
+	predicates                 []predicate.SecurityDepositRefund
+}
+
+var _ ent.Mutation = (*SecurityDepositRefundMutation)(nil)
+
+// securitydepositrefundOption allows management of the mutation configuration using functional options.
+type securitydepositrefundOption func(*SecurityDepositRefundMutation)
+
+// newSecurityDepositRefundMutation creates new mutation for the SecurityDepositRefund entity.
+func newSecurityDepositRefundMutation(c config, op Op, opts ...securitydepositrefundOption) *SecurityDepositRefundMutation {
+	m := &SecurityDepositRefundMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSecurityDepositRefund,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSecurityDepositRefundID sets the ID field of the mutation.
+func withSecurityDepositRefundID(id int64) securitydepositrefundOption {
+	return func(m *SecurityDepositRefundMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SecurityDepositRefund
+		)
+		m.oldValue = func(ctx context.Context) (*SecurityDepositRefund, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SecurityDepositRefund.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSecurityDepositRefund sets the old SecurityDepositRefund of the mutation.
+func withSecurityDepositRefund(node *SecurityDepositRefund) securitydepositrefundOption {
+	return func(m *SecurityDepositRefundMutation) {
+		m.oldValue = func(context.Context) (*SecurityDepositRefund, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SecurityDepositRefundMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SecurityDepositRefundMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SecurityDepositRefundMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SecurityDepositRefundMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SecurityDepositRefund.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetRefundID sets the "refund_id" field.
+func (m *SecurityDepositRefundMutation) SetRefundID(s string) {
+	m.refund_id = &s
+}
+
+// RefundID returns the value of the "refund_id" field in the mutation.
+func (m *SecurityDepositRefundMutation) RefundID() (r string, exists bool) {
+	v := m.refund_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRefundID returns the old "refund_id" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldRefundID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRefundID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRefundID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRefundID: %w", err)
+	}
+	return oldValue.RefundID, nil
+}
+
+// ResetRefundID resets all changes to the "refund_id" field.
+func (m *SecurityDepositRefundMutation) ResetRefundID() {
+	m.refund_id = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *SecurityDepositRefundMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *SecurityDepositRefundMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *SecurityDepositRefundMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *SecurityDepositRefundMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *SecurityDepositRefundMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetLotID sets the "lot_id" field.
+func (m *SecurityDepositRefundMutation) SetLotID(i int64) {
+	m.lot_id = &i
+	m.addlot_id = nil
+}
+
+// LotID returns the value of the "lot_id" field in the mutation.
+func (m *SecurityDepositRefundMutation) LotID() (r int64, exists bool) {
+	v := m.lot_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLotID returns the old "lot_id" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldLotID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLotID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLotID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLotID: %w", err)
+	}
+	return oldValue.LotID, nil
+}
+
+// AddLotID adds i to the "lot_id" field.
+func (m *SecurityDepositRefundMutation) AddLotID(i int64) {
+	if m.addlot_id != nil {
+		*m.addlot_id += i
+	} else {
+		m.addlot_id = &i
+	}
+}
+
+// AddedLotID returns the value that was added to the "lot_id" field in this mutation.
+func (m *SecurityDepositRefundMutation) AddedLotID() (r int64, exists bool) {
+	v := m.addlot_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetLotID resets all changes to the "lot_id" field.
+func (m *SecurityDepositRefundMutation) ResetLotID() {
+	m.lot_id = nil
+	m.addlot_id = nil
+}
+
+// SetPaymentOrderID sets the "payment_order_id" field.
+func (m *SecurityDepositRefundMutation) SetPaymentOrderID(i int64) {
+	m.payment_order_id = &i
+	m.addpayment_order_id = nil
+}
+
+// PaymentOrderID returns the value of the "payment_order_id" field in the mutation.
+func (m *SecurityDepositRefundMutation) PaymentOrderID() (r int64, exists bool) {
+	v := m.payment_order_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPaymentOrderID returns the old "payment_order_id" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldPaymentOrderID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPaymentOrderID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPaymentOrderID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPaymentOrderID: %w", err)
+	}
+	return oldValue.PaymentOrderID, nil
+}
+
+// AddPaymentOrderID adds i to the "payment_order_id" field.
+func (m *SecurityDepositRefundMutation) AddPaymentOrderID(i int64) {
+	if m.addpayment_order_id != nil {
+		*m.addpayment_order_id += i
+	} else {
+		m.addpayment_order_id = &i
+	}
+}
+
+// AddedPaymentOrderID returns the value that was added to the "payment_order_id" field in this mutation.
+func (m *SecurityDepositRefundMutation) AddedPaymentOrderID() (r int64, exists bool) {
+	v := m.addpayment_order_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPaymentOrderID resets all changes to the "payment_order_id" field.
+func (m *SecurityDepositRefundMutation) ResetPaymentOrderID() {
+	m.payment_order_id = nil
+	m.addpayment_order_id = nil
+}
+
+// SetPrincipalCents sets the "principal_cents" field.
+func (m *SecurityDepositRefundMutation) SetPrincipalCents(i int64) {
+	m.principal_cents = &i
+	m.addprincipal_cents = nil
+}
+
+// PrincipalCents returns the value of the "principal_cents" field in the mutation.
+func (m *SecurityDepositRefundMutation) PrincipalCents() (r int64, exists bool) {
+	v := m.principal_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPrincipalCents returns the old "principal_cents" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldPrincipalCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPrincipalCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPrincipalCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPrincipalCents: %w", err)
+	}
+	return oldValue.PrincipalCents, nil
+}
+
+// AddPrincipalCents adds i to the "principal_cents" field.
+func (m *SecurityDepositRefundMutation) AddPrincipalCents(i int64) {
+	if m.addprincipal_cents != nil {
+		*m.addprincipal_cents += i
+	} else {
+		m.addprincipal_cents = &i
+	}
+}
+
+// AddedPrincipalCents returns the value that was added to the "principal_cents" field in this mutation.
+func (m *SecurityDepositRefundMutation) AddedPrincipalCents() (r int64, exists bool) {
+	v := m.addprincipal_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPrincipalCents resets all changes to the "principal_cents" field.
+func (m *SecurityDepositRefundMutation) ResetPrincipalCents() {
+	m.principal_cents = nil
+	m.addprincipal_cents = nil
+}
+
+// SetGatewayAmount sets the "gateway_amount" field.
+func (m *SecurityDepositRefundMutation) SetGatewayAmount(s string) {
+	m.gateway_amount = &s
+}
+
+// GatewayAmount returns the value of the "gateway_amount" field in the mutation.
+func (m *SecurityDepositRefundMutation) GatewayAmount() (r string, exists bool) {
+	v := m.gateway_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGatewayAmount returns the old "gateway_amount" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldGatewayAmount(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGatewayAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGatewayAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGatewayAmount: %w", err)
+	}
+	return oldValue.GatewayAmount, nil
+}
+
+// ResetGatewayAmount resets all changes to the "gateway_amount" field.
+func (m *SecurityDepositRefundMutation) ResetGatewayAmount() {
+	m.gateway_amount = nil
+}
+
+// SetGatewayCurrency sets the "gateway_currency" field.
+func (m *SecurityDepositRefundMutation) SetGatewayCurrency(s string) {
+	m.gateway_currency = &s
+}
+
+// GatewayCurrency returns the value of the "gateway_currency" field in the mutation.
+func (m *SecurityDepositRefundMutation) GatewayCurrency() (r string, exists bool) {
+	v := m.gateway_currency
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGatewayCurrency returns the old "gateway_currency" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldGatewayCurrency(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGatewayCurrency is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGatewayCurrency requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGatewayCurrency: %w", err)
+	}
+	return oldValue.GatewayCurrency, nil
+}
+
+// ResetGatewayCurrency resets all changes to the "gateway_currency" field.
+func (m *SecurityDepositRefundMutation) ResetGatewayCurrency() {
+	m.gateway_currency = nil
+}
+
+// SetMode sets the "mode" field.
+func (m *SecurityDepositRefundMutation) SetMode(s securitydepositrefund.Mode) {
+	m.mode = &s
+}
+
+// Mode returns the value of the "mode" field in the mutation.
+func (m *SecurityDepositRefundMutation) Mode() (r securitydepositrefund.Mode, exists bool) {
+	v := m.mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMode returns the old "mode" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldMode(ctx context.Context) (v securitydepositrefund.Mode, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMode: %w", err)
+	}
+	return oldValue.Mode, nil
+}
+
+// ResetMode resets all changes to the "mode" field.
+func (m *SecurityDepositRefundMutation) ResetMode() {
+	m.mode = nil
+}
+
+// SetState sets the "state" field.
+func (m *SecurityDepositRefundMutation) SetState(s string) {
+	m.state = &s
+}
+
+// State returns the value of the "state" field in the mutation.
+func (m *SecurityDepositRefundMutation) State() (r string, exists bool) {
+	v := m.state
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldState returns the old "state" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldState(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldState is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldState requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldState: %w", err)
+	}
+	return oldValue.State, nil
+}
+
+// ResetState resets all changes to the "state" field.
+func (m *SecurityDepositRefundMutation) ResetState() {
+	m.state = nil
+}
+
+// SetRequestedBy sets the "requested_by" field.
+func (m *SecurityDepositRefundMutation) SetRequestedBy(i int64) {
+	m.requested_by = &i
+	m.addrequested_by = nil
+}
+
+// RequestedBy returns the value of the "requested_by" field in the mutation.
+func (m *SecurityDepositRefundMutation) RequestedBy() (r int64, exists bool) {
+	v := m.requested_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestedBy returns the old "requested_by" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldRequestedBy(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestedBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestedBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestedBy: %w", err)
+	}
+	return oldValue.RequestedBy, nil
+}
+
+// AddRequestedBy adds i to the "requested_by" field.
+func (m *SecurityDepositRefundMutation) AddRequestedBy(i int64) {
+	if m.addrequested_by != nil {
+		*m.addrequested_by += i
+	} else {
+		m.addrequested_by = &i
+	}
+}
+
+// AddedRequestedBy returns the value that was added to the "requested_by" field in this mutation.
+func (m *SecurityDepositRefundMutation) AddedRequestedBy() (r int64, exists bool) {
+	v := m.addrequested_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearRequestedBy clears the value of the "requested_by" field.
+func (m *SecurityDepositRefundMutation) ClearRequestedBy() {
+	m.requested_by = nil
+	m.addrequested_by = nil
+	m.clearedFields[securitydepositrefund.FieldRequestedBy] = struct{}{}
+}
+
+// RequestedByCleared returns if the "requested_by" field was cleared in this mutation.
+func (m *SecurityDepositRefundMutation) RequestedByCleared() bool {
+	_, ok := m.clearedFields[securitydepositrefund.FieldRequestedBy]
+	return ok
+}
+
+// ResetRequestedBy resets all changes to the "requested_by" field.
+func (m *SecurityDepositRefundMutation) ResetRequestedBy() {
+	m.requested_by = nil
+	m.addrequested_by = nil
+	delete(m.clearedFields, securitydepositrefund.FieldRequestedBy)
+}
+
+// SetReason sets the "reason" field.
+func (m *SecurityDepositRefundMutation) SetReason(s string) {
+	m.reason = &s
+}
+
+// Reason returns the value of the "reason" field in the mutation.
+func (m *SecurityDepositRefundMutation) Reason() (r string, exists bool) {
+	v := m.reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReason returns the old "reason" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldReason(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReason: %w", err)
+	}
+	return oldValue.Reason, nil
+}
+
+// ClearReason clears the value of the "reason" field.
+func (m *SecurityDepositRefundMutation) ClearReason() {
+	m.reason = nil
+	m.clearedFields[securitydepositrefund.FieldReason] = struct{}{}
+}
+
+// ReasonCleared returns if the "reason" field was cleared in this mutation.
+func (m *SecurityDepositRefundMutation) ReasonCleared() bool {
+	_, ok := m.clearedFields[securitydepositrefund.FieldReason]
+	return ok
+}
+
+// ResetReason resets all changes to the "reason" field.
+func (m *SecurityDepositRefundMutation) ResetReason() {
+	m.reason = nil
+	delete(m.clearedFields, securitydepositrefund.FieldReason)
+}
+
+// SetQuoteHash sets the "quote_hash" field.
+func (m *SecurityDepositRefundMutation) SetQuoteHash(s string) {
+	m.quote_hash = &s
+}
+
+// QuoteHash returns the value of the "quote_hash" field in the mutation.
+func (m *SecurityDepositRefundMutation) QuoteHash() (r string, exists bool) {
+	v := m.quote_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQuoteHash returns the old "quote_hash" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldQuoteHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQuoteHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQuoteHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQuoteHash: %w", err)
+	}
+	return oldValue.QuoteHash, nil
+}
+
+// ResetQuoteHash resets all changes to the "quote_hash" field.
+func (m *SecurityDepositRefundMutation) ResetQuoteHash() {
+	m.quote_hash = nil
+}
+
+// SetIdempotencyKey sets the "idempotency_key" field.
+func (m *SecurityDepositRefundMutation) SetIdempotencyKey(s string) {
+	m.idempotency_key = &s
+}
+
+// IdempotencyKey returns the value of the "idempotency_key" field in the mutation.
+func (m *SecurityDepositRefundMutation) IdempotencyKey() (r string, exists bool) {
+	v := m.idempotency_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIdempotencyKey returns the old "idempotency_key" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldIdempotencyKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIdempotencyKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIdempotencyKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIdempotencyKey: %w", err)
+	}
+	return oldValue.IdempotencyKey, nil
+}
+
+// ResetIdempotencyKey resets all changes to the "idempotency_key" field.
+func (m *SecurityDepositRefundMutation) ResetIdempotencyKey() {
+	m.idempotency_key = nil
+}
+
+// SetProviderRequestID sets the "provider_request_id" field.
+func (m *SecurityDepositRefundMutation) SetProviderRequestID(s string) {
+	m.provider_request_id = &s
+}
+
+// ProviderRequestID returns the value of the "provider_request_id" field in the mutation.
+func (m *SecurityDepositRefundMutation) ProviderRequestID() (r string, exists bool) {
+	v := m.provider_request_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProviderRequestID returns the old "provider_request_id" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldProviderRequestID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProviderRequestID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProviderRequestID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProviderRequestID: %w", err)
+	}
+	return oldValue.ProviderRequestID, nil
+}
+
+// ClearProviderRequestID clears the value of the "provider_request_id" field.
+func (m *SecurityDepositRefundMutation) ClearProviderRequestID() {
+	m.provider_request_id = nil
+	m.clearedFields[securitydepositrefund.FieldProviderRequestID] = struct{}{}
+}
+
+// ProviderRequestIDCleared returns if the "provider_request_id" field was cleared in this mutation.
+func (m *SecurityDepositRefundMutation) ProviderRequestIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositrefund.FieldProviderRequestID]
+	return ok
+}
+
+// ResetProviderRequestID resets all changes to the "provider_request_id" field.
+func (m *SecurityDepositRefundMutation) ResetProviderRequestID() {
+	m.provider_request_id = nil
+	delete(m.clearedFields, securitydepositrefund.FieldProviderRequestID)
+}
+
+// SetProviderResponseSnapshot sets the "provider_response_snapshot" field.
+func (m *SecurityDepositRefundMutation) SetProviderResponseSnapshot(value map[string]interface{}) {
+	m.provider_response_snapshot = &value
+}
+
+// ProviderResponseSnapshot returns the value of the "provider_response_snapshot" field in the mutation.
+func (m *SecurityDepositRefundMutation) ProviderResponseSnapshot() (r map[string]interface{}, exists bool) {
+	v := m.provider_response_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProviderResponseSnapshot returns the old "provider_response_snapshot" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldProviderResponseSnapshot(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProviderResponseSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProviderResponseSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProviderResponseSnapshot: %w", err)
+	}
+	return oldValue.ProviderResponseSnapshot, nil
+}
+
+// ClearProviderResponseSnapshot clears the value of the "provider_response_snapshot" field.
+func (m *SecurityDepositRefundMutation) ClearProviderResponseSnapshot() {
+	m.provider_response_snapshot = nil
+	m.clearedFields[securitydepositrefund.FieldProviderResponseSnapshot] = struct{}{}
+}
+
+// ProviderResponseSnapshotCleared returns if the "provider_response_snapshot" field was cleared in this mutation.
+func (m *SecurityDepositRefundMutation) ProviderResponseSnapshotCleared() bool {
+	_, ok := m.clearedFields[securitydepositrefund.FieldProviderResponseSnapshot]
+	return ok
+}
+
+// ResetProviderResponseSnapshot resets all changes to the "provider_response_snapshot" field.
+func (m *SecurityDepositRefundMutation) ResetProviderResponseSnapshot() {
+	m.provider_response_snapshot = nil
+	delete(m.clearedFields, securitydepositrefund.FieldProviderResponseSnapshot)
+}
+
+// SetExternalRefundID sets the "external_refund_id" field.
+func (m *SecurityDepositRefundMutation) SetExternalRefundID(s string) {
+	m.external_refund_id = &s
+}
+
+// ExternalRefundID returns the value of the "external_refund_id" field in the mutation.
+func (m *SecurityDepositRefundMutation) ExternalRefundID() (r string, exists bool) {
+	v := m.external_refund_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExternalRefundID returns the old "external_refund_id" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldExternalRefundID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExternalRefundID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExternalRefundID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExternalRefundID: %w", err)
+	}
+	return oldValue.ExternalRefundID, nil
+}
+
+// ClearExternalRefundID clears the value of the "external_refund_id" field.
+func (m *SecurityDepositRefundMutation) ClearExternalRefundID() {
+	m.external_refund_id = nil
+	m.clearedFields[securitydepositrefund.FieldExternalRefundID] = struct{}{}
+}
+
+// ExternalRefundIDCleared returns if the "external_refund_id" field was cleared in this mutation.
+func (m *SecurityDepositRefundMutation) ExternalRefundIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositrefund.FieldExternalRefundID]
+	return ok
+}
+
+// ResetExternalRefundID resets all changes to the "external_refund_id" field.
+func (m *SecurityDepositRefundMutation) ResetExternalRefundID() {
+	m.external_refund_id = nil
+	delete(m.clearedFields, securitydepositrefund.FieldExternalRefundID)
+}
+
+// SetExternalRefundedAt sets the "external_refunded_at" field.
+func (m *SecurityDepositRefundMutation) SetExternalRefundedAt(t time.Time) {
+	m.external_refunded_at = &t
+}
+
+// ExternalRefundedAt returns the value of the "external_refunded_at" field in the mutation.
+func (m *SecurityDepositRefundMutation) ExternalRefundedAt() (r time.Time, exists bool) {
+	v := m.external_refunded_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExternalRefundedAt returns the old "external_refunded_at" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldExternalRefundedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExternalRefundedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExternalRefundedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExternalRefundedAt: %w", err)
+	}
+	return oldValue.ExternalRefundedAt, nil
+}
+
+// ClearExternalRefundedAt clears the value of the "external_refunded_at" field.
+func (m *SecurityDepositRefundMutation) ClearExternalRefundedAt() {
+	m.external_refunded_at = nil
+	m.clearedFields[securitydepositrefund.FieldExternalRefundedAt] = struct{}{}
+}
+
+// ExternalRefundedAtCleared returns if the "external_refunded_at" field was cleared in this mutation.
+func (m *SecurityDepositRefundMutation) ExternalRefundedAtCleared() bool {
+	_, ok := m.clearedFields[securitydepositrefund.FieldExternalRefundedAt]
+	return ok
+}
+
+// ResetExternalRefundedAt resets all changes to the "external_refunded_at" field.
+func (m *SecurityDepositRefundMutation) ResetExternalRefundedAt() {
+	m.external_refunded_at = nil
+	delete(m.clearedFields, securitydepositrefund.FieldExternalRefundedAt)
+}
+
+// SetExternalEvidence sets the "external_evidence" field.
+func (m *SecurityDepositRefundMutation) SetExternalEvidence(value map[string]interface{}) {
+	m.external_evidence = &value
+}
+
+// ExternalEvidence returns the value of the "external_evidence" field in the mutation.
+func (m *SecurityDepositRefundMutation) ExternalEvidence() (r map[string]interface{}, exists bool) {
+	v := m.external_evidence
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExternalEvidence returns the old "external_evidence" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldExternalEvidence(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExternalEvidence is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExternalEvidence requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExternalEvidence: %w", err)
+	}
+	return oldValue.ExternalEvidence, nil
+}
+
+// ClearExternalEvidence clears the value of the "external_evidence" field.
+func (m *SecurityDepositRefundMutation) ClearExternalEvidence() {
+	m.external_evidence = nil
+	m.clearedFields[securitydepositrefund.FieldExternalEvidence] = struct{}{}
+}
+
+// ExternalEvidenceCleared returns if the "external_evidence" field was cleared in this mutation.
+func (m *SecurityDepositRefundMutation) ExternalEvidenceCleared() bool {
+	_, ok := m.clearedFields[securitydepositrefund.FieldExternalEvidence]
+	return ok
+}
+
+// ResetExternalEvidence resets all changes to the "external_evidence" field.
+func (m *SecurityDepositRefundMutation) ResetExternalEvidence() {
+	m.external_evidence = nil
+	delete(m.clearedFields, securitydepositrefund.FieldExternalEvidence)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SecurityDepositRefundMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SecurityDepositRefundMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SecurityDepositRefundMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetSubmittedAt sets the "submitted_at" field.
+func (m *SecurityDepositRefundMutation) SetSubmittedAt(t time.Time) {
+	m.submitted_at = &t
+}
+
+// SubmittedAt returns the value of the "submitted_at" field in the mutation.
+func (m *SecurityDepositRefundMutation) SubmittedAt() (r time.Time, exists bool) {
+	v := m.submitted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSubmittedAt returns the old "submitted_at" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldSubmittedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSubmittedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSubmittedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSubmittedAt: %w", err)
+	}
+	return oldValue.SubmittedAt, nil
+}
+
+// ClearSubmittedAt clears the value of the "submitted_at" field.
+func (m *SecurityDepositRefundMutation) ClearSubmittedAt() {
+	m.submitted_at = nil
+	m.clearedFields[securitydepositrefund.FieldSubmittedAt] = struct{}{}
+}
+
+// SubmittedAtCleared returns if the "submitted_at" field was cleared in this mutation.
+func (m *SecurityDepositRefundMutation) SubmittedAtCleared() bool {
+	_, ok := m.clearedFields[securitydepositrefund.FieldSubmittedAt]
+	return ok
+}
+
+// ResetSubmittedAt resets all changes to the "submitted_at" field.
+func (m *SecurityDepositRefundMutation) ResetSubmittedAt() {
+	m.submitted_at = nil
+	delete(m.clearedFields, securitydepositrefund.FieldSubmittedAt)
+}
+
+// SetCompletedAt sets the "completed_at" field.
+func (m *SecurityDepositRefundMutation) SetCompletedAt(t time.Time) {
+	m.completed_at = &t
+}
+
+// CompletedAt returns the value of the "completed_at" field in the mutation.
+func (m *SecurityDepositRefundMutation) CompletedAt() (r time.Time, exists bool) {
+	v := m.completed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCompletedAt returns the old "completed_at" field's value of the SecurityDepositRefund entity.
+// If the SecurityDepositRefund object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRefundMutation) OldCompletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCompletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCompletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCompletedAt: %w", err)
+	}
+	return oldValue.CompletedAt, nil
+}
+
+// ClearCompletedAt clears the value of the "completed_at" field.
+func (m *SecurityDepositRefundMutation) ClearCompletedAt() {
+	m.completed_at = nil
+	m.clearedFields[securitydepositrefund.FieldCompletedAt] = struct{}{}
+}
+
+// CompletedAtCleared returns if the "completed_at" field was cleared in this mutation.
+func (m *SecurityDepositRefundMutation) CompletedAtCleared() bool {
+	_, ok := m.clearedFields[securitydepositrefund.FieldCompletedAt]
+	return ok
+}
+
+// ResetCompletedAt resets all changes to the "completed_at" field.
+func (m *SecurityDepositRefundMutation) ResetCompletedAt() {
+	m.completed_at = nil
+	delete(m.clearedFields, securitydepositrefund.FieldCompletedAt)
+}
+
+// Where appends a list predicates to the SecurityDepositRefundMutation builder.
+func (m *SecurityDepositRefundMutation) Where(ps ...predicate.SecurityDepositRefund) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SecurityDepositRefundMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SecurityDepositRefundMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SecurityDepositRefund, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SecurityDepositRefundMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SecurityDepositRefundMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SecurityDepositRefund).
+func (m *SecurityDepositRefundMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SecurityDepositRefundMutation) Fields() []string {
+	fields := make([]string, 0, 21)
+	if m.refund_id != nil {
+		fields = append(fields, securitydepositrefund.FieldRefundID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, securitydepositrefund.FieldUserID)
+	}
+	if m.lot_id != nil {
+		fields = append(fields, securitydepositrefund.FieldLotID)
+	}
+	if m.payment_order_id != nil {
+		fields = append(fields, securitydepositrefund.FieldPaymentOrderID)
+	}
+	if m.principal_cents != nil {
+		fields = append(fields, securitydepositrefund.FieldPrincipalCents)
+	}
+	if m.gateway_amount != nil {
+		fields = append(fields, securitydepositrefund.FieldGatewayAmount)
+	}
+	if m.gateway_currency != nil {
+		fields = append(fields, securitydepositrefund.FieldGatewayCurrency)
+	}
+	if m.mode != nil {
+		fields = append(fields, securitydepositrefund.FieldMode)
+	}
+	if m.state != nil {
+		fields = append(fields, securitydepositrefund.FieldState)
+	}
+	if m.requested_by != nil {
+		fields = append(fields, securitydepositrefund.FieldRequestedBy)
+	}
+	if m.reason != nil {
+		fields = append(fields, securitydepositrefund.FieldReason)
+	}
+	if m.quote_hash != nil {
+		fields = append(fields, securitydepositrefund.FieldQuoteHash)
+	}
+	if m.idempotency_key != nil {
+		fields = append(fields, securitydepositrefund.FieldIdempotencyKey)
+	}
+	if m.provider_request_id != nil {
+		fields = append(fields, securitydepositrefund.FieldProviderRequestID)
+	}
+	if m.provider_response_snapshot != nil {
+		fields = append(fields, securitydepositrefund.FieldProviderResponseSnapshot)
+	}
+	if m.external_refund_id != nil {
+		fields = append(fields, securitydepositrefund.FieldExternalRefundID)
+	}
+	if m.external_refunded_at != nil {
+		fields = append(fields, securitydepositrefund.FieldExternalRefundedAt)
+	}
+	if m.external_evidence != nil {
+		fields = append(fields, securitydepositrefund.FieldExternalEvidence)
+	}
+	if m.created_at != nil {
+		fields = append(fields, securitydepositrefund.FieldCreatedAt)
+	}
+	if m.submitted_at != nil {
+		fields = append(fields, securitydepositrefund.FieldSubmittedAt)
+	}
+	if m.completed_at != nil {
+		fields = append(fields, securitydepositrefund.FieldCompletedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SecurityDepositRefundMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositrefund.FieldRefundID:
+		return m.RefundID()
+	case securitydepositrefund.FieldUserID:
+		return m.UserID()
+	case securitydepositrefund.FieldLotID:
+		return m.LotID()
+	case securitydepositrefund.FieldPaymentOrderID:
+		return m.PaymentOrderID()
+	case securitydepositrefund.FieldPrincipalCents:
+		return m.PrincipalCents()
+	case securitydepositrefund.FieldGatewayAmount:
+		return m.GatewayAmount()
+	case securitydepositrefund.FieldGatewayCurrency:
+		return m.GatewayCurrency()
+	case securitydepositrefund.FieldMode:
+		return m.Mode()
+	case securitydepositrefund.FieldState:
+		return m.State()
+	case securitydepositrefund.FieldRequestedBy:
+		return m.RequestedBy()
+	case securitydepositrefund.FieldReason:
+		return m.Reason()
+	case securitydepositrefund.FieldQuoteHash:
+		return m.QuoteHash()
+	case securitydepositrefund.FieldIdempotencyKey:
+		return m.IdempotencyKey()
+	case securitydepositrefund.FieldProviderRequestID:
+		return m.ProviderRequestID()
+	case securitydepositrefund.FieldProviderResponseSnapshot:
+		return m.ProviderResponseSnapshot()
+	case securitydepositrefund.FieldExternalRefundID:
+		return m.ExternalRefundID()
+	case securitydepositrefund.FieldExternalRefundedAt:
+		return m.ExternalRefundedAt()
+	case securitydepositrefund.FieldExternalEvidence:
+		return m.ExternalEvidence()
+	case securitydepositrefund.FieldCreatedAt:
+		return m.CreatedAt()
+	case securitydepositrefund.FieldSubmittedAt:
+		return m.SubmittedAt()
+	case securitydepositrefund.FieldCompletedAt:
+		return m.CompletedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SecurityDepositRefundMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case securitydepositrefund.FieldRefundID:
+		return m.OldRefundID(ctx)
+	case securitydepositrefund.FieldUserID:
+		return m.OldUserID(ctx)
+	case securitydepositrefund.FieldLotID:
+		return m.OldLotID(ctx)
+	case securitydepositrefund.FieldPaymentOrderID:
+		return m.OldPaymentOrderID(ctx)
+	case securitydepositrefund.FieldPrincipalCents:
+		return m.OldPrincipalCents(ctx)
+	case securitydepositrefund.FieldGatewayAmount:
+		return m.OldGatewayAmount(ctx)
+	case securitydepositrefund.FieldGatewayCurrency:
+		return m.OldGatewayCurrency(ctx)
+	case securitydepositrefund.FieldMode:
+		return m.OldMode(ctx)
+	case securitydepositrefund.FieldState:
+		return m.OldState(ctx)
+	case securitydepositrefund.FieldRequestedBy:
+		return m.OldRequestedBy(ctx)
+	case securitydepositrefund.FieldReason:
+		return m.OldReason(ctx)
+	case securitydepositrefund.FieldQuoteHash:
+		return m.OldQuoteHash(ctx)
+	case securitydepositrefund.FieldIdempotencyKey:
+		return m.OldIdempotencyKey(ctx)
+	case securitydepositrefund.FieldProviderRequestID:
+		return m.OldProviderRequestID(ctx)
+	case securitydepositrefund.FieldProviderResponseSnapshot:
+		return m.OldProviderResponseSnapshot(ctx)
+	case securitydepositrefund.FieldExternalRefundID:
+		return m.OldExternalRefundID(ctx)
+	case securitydepositrefund.FieldExternalRefundedAt:
+		return m.OldExternalRefundedAt(ctx)
+	case securitydepositrefund.FieldExternalEvidence:
+		return m.OldExternalEvidence(ctx)
+	case securitydepositrefund.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case securitydepositrefund.FieldSubmittedAt:
+		return m.OldSubmittedAt(ctx)
+	case securitydepositrefund.FieldCompletedAt:
+		return m.OldCompletedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SecurityDepositRefund field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositRefundMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositrefund.FieldRefundID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRefundID(v)
+		return nil
+	case securitydepositrefund.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case securitydepositrefund.FieldLotID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLotID(v)
+		return nil
+	case securitydepositrefund.FieldPaymentOrderID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPaymentOrderID(v)
+		return nil
+	case securitydepositrefund.FieldPrincipalCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPrincipalCents(v)
+		return nil
+	case securitydepositrefund.FieldGatewayAmount:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGatewayAmount(v)
+		return nil
+	case securitydepositrefund.FieldGatewayCurrency:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGatewayCurrency(v)
+		return nil
+	case securitydepositrefund.FieldMode:
+		v, ok := value.(securitydepositrefund.Mode)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMode(v)
+		return nil
+	case securitydepositrefund.FieldState:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetState(v)
+		return nil
+	case securitydepositrefund.FieldRequestedBy:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestedBy(v)
+		return nil
+	case securitydepositrefund.FieldReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReason(v)
+		return nil
+	case securitydepositrefund.FieldQuoteHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQuoteHash(v)
+		return nil
+	case securitydepositrefund.FieldIdempotencyKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIdempotencyKey(v)
+		return nil
+	case securitydepositrefund.FieldProviderRequestID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProviderRequestID(v)
+		return nil
+	case securitydepositrefund.FieldProviderResponseSnapshot:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProviderResponseSnapshot(v)
+		return nil
+	case securitydepositrefund.FieldExternalRefundID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExternalRefundID(v)
+		return nil
+	case securitydepositrefund.FieldExternalRefundedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExternalRefundedAt(v)
+		return nil
+	case securitydepositrefund.FieldExternalEvidence:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExternalEvidence(v)
+		return nil
+	case securitydepositrefund.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case securitydepositrefund.FieldSubmittedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSubmittedAt(v)
+		return nil
+	case securitydepositrefund.FieldCompletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCompletedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositRefund field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SecurityDepositRefundMutation) AddedFields() []string {
+	var fields []string
+	if m.adduser_id != nil {
+		fields = append(fields, securitydepositrefund.FieldUserID)
+	}
+	if m.addlot_id != nil {
+		fields = append(fields, securitydepositrefund.FieldLotID)
+	}
+	if m.addpayment_order_id != nil {
+		fields = append(fields, securitydepositrefund.FieldPaymentOrderID)
+	}
+	if m.addprincipal_cents != nil {
+		fields = append(fields, securitydepositrefund.FieldPrincipalCents)
+	}
+	if m.addrequested_by != nil {
+		fields = append(fields, securitydepositrefund.FieldRequestedBy)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SecurityDepositRefundMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositrefund.FieldUserID:
+		return m.AddedUserID()
+	case securitydepositrefund.FieldLotID:
+		return m.AddedLotID()
+	case securitydepositrefund.FieldPaymentOrderID:
+		return m.AddedPaymentOrderID()
+	case securitydepositrefund.FieldPrincipalCents:
+		return m.AddedPrincipalCents()
+	case securitydepositrefund.FieldRequestedBy:
+		return m.AddedRequestedBy()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositRefundMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositrefund.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case securitydepositrefund.FieldLotID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddLotID(v)
+		return nil
+	case securitydepositrefund.FieldPaymentOrderID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPaymentOrderID(v)
+		return nil
+	case securitydepositrefund.FieldPrincipalCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPrincipalCents(v)
+		return nil
+	case securitydepositrefund.FieldRequestedBy:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRequestedBy(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositRefund numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SecurityDepositRefundMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(securitydepositrefund.FieldRequestedBy) {
+		fields = append(fields, securitydepositrefund.FieldRequestedBy)
+	}
+	if m.FieldCleared(securitydepositrefund.FieldReason) {
+		fields = append(fields, securitydepositrefund.FieldReason)
+	}
+	if m.FieldCleared(securitydepositrefund.FieldProviderRequestID) {
+		fields = append(fields, securitydepositrefund.FieldProviderRequestID)
+	}
+	if m.FieldCleared(securitydepositrefund.FieldProviderResponseSnapshot) {
+		fields = append(fields, securitydepositrefund.FieldProviderResponseSnapshot)
+	}
+	if m.FieldCleared(securitydepositrefund.FieldExternalRefundID) {
+		fields = append(fields, securitydepositrefund.FieldExternalRefundID)
+	}
+	if m.FieldCleared(securitydepositrefund.FieldExternalRefundedAt) {
+		fields = append(fields, securitydepositrefund.FieldExternalRefundedAt)
+	}
+	if m.FieldCleared(securitydepositrefund.FieldExternalEvidence) {
+		fields = append(fields, securitydepositrefund.FieldExternalEvidence)
+	}
+	if m.FieldCleared(securitydepositrefund.FieldSubmittedAt) {
+		fields = append(fields, securitydepositrefund.FieldSubmittedAt)
+	}
+	if m.FieldCleared(securitydepositrefund.FieldCompletedAt) {
+		fields = append(fields, securitydepositrefund.FieldCompletedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SecurityDepositRefundMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SecurityDepositRefundMutation) ClearField(name string) error {
+	switch name {
+	case securitydepositrefund.FieldRequestedBy:
+		m.ClearRequestedBy()
+		return nil
+	case securitydepositrefund.FieldReason:
+		m.ClearReason()
+		return nil
+	case securitydepositrefund.FieldProviderRequestID:
+		m.ClearProviderRequestID()
+		return nil
+	case securitydepositrefund.FieldProviderResponseSnapshot:
+		m.ClearProviderResponseSnapshot()
+		return nil
+	case securitydepositrefund.FieldExternalRefundID:
+		m.ClearExternalRefundID()
+		return nil
+	case securitydepositrefund.FieldExternalRefundedAt:
+		m.ClearExternalRefundedAt()
+		return nil
+	case securitydepositrefund.FieldExternalEvidence:
+		m.ClearExternalEvidence()
+		return nil
+	case securitydepositrefund.FieldSubmittedAt:
+		m.ClearSubmittedAt()
+		return nil
+	case securitydepositrefund.FieldCompletedAt:
+		m.ClearCompletedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositRefund nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SecurityDepositRefundMutation) ResetField(name string) error {
+	switch name {
+	case securitydepositrefund.FieldRefundID:
+		m.ResetRefundID()
+		return nil
+	case securitydepositrefund.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case securitydepositrefund.FieldLotID:
+		m.ResetLotID()
+		return nil
+	case securitydepositrefund.FieldPaymentOrderID:
+		m.ResetPaymentOrderID()
+		return nil
+	case securitydepositrefund.FieldPrincipalCents:
+		m.ResetPrincipalCents()
+		return nil
+	case securitydepositrefund.FieldGatewayAmount:
+		m.ResetGatewayAmount()
+		return nil
+	case securitydepositrefund.FieldGatewayCurrency:
+		m.ResetGatewayCurrency()
+		return nil
+	case securitydepositrefund.FieldMode:
+		m.ResetMode()
+		return nil
+	case securitydepositrefund.FieldState:
+		m.ResetState()
+		return nil
+	case securitydepositrefund.FieldRequestedBy:
+		m.ResetRequestedBy()
+		return nil
+	case securitydepositrefund.FieldReason:
+		m.ResetReason()
+		return nil
+	case securitydepositrefund.FieldQuoteHash:
+		m.ResetQuoteHash()
+		return nil
+	case securitydepositrefund.FieldIdempotencyKey:
+		m.ResetIdempotencyKey()
+		return nil
+	case securitydepositrefund.FieldProviderRequestID:
+		m.ResetProviderRequestID()
+		return nil
+	case securitydepositrefund.FieldProviderResponseSnapshot:
+		m.ResetProviderResponseSnapshot()
+		return nil
+	case securitydepositrefund.FieldExternalRefundID:
+		m.ResetExternalRefundID()
+		return nil
+	case securitydepositrefund.FieldExternalRefundedAt:
+		m.ResetExternalRefundedAt()
+		return nil
+	case securitydepositrefund.FieldExternalEvidence:
+		m.ResetExternalEvidence()
+		return nil
+	case securitydepositrefund.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case securitydepositrefund.FieldSubmittedAt:
+		m.ResetSubmittedAt()
+		return nil
+	case securitydepositrefund.FieldCompletedAt:
+		m.ResetCompletedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositRefund field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SecurityDepositRefundMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SecurityDepositRefundMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SecurityDepositRefundMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SecurityDepositRefundMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SecurityDepositRefundMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SecurityDepositRefundMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SecurityDepositRefundMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositRefund unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SecurityDepositRefundMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositRefund edge %s", name)
+}
+
+// SecurityDepositRiskEventMutation represents an operation that mutates the SecurityDepositRiskEvent nodes in the graph.
+type SecurityDepositRiskEventMutation struct {
+	config
+	op                     Op
+	typ                    string
+	id                     *int64
+	user_id                *int64
+	adduser_id             *int64
+	event_type             *securitydepositriskevent.EventType
+	violation_id           *int64
+	addviolation_id        *int64
+	strike_count_before    *int64
+	addstrike_count_before *int64
+	strike_count_after     *int64
+	addstrike_count_after  *int64
+	multiplier_before      *int64
+	addmultiplier_before   *int64
+	multiplier_after       *int64
+	addmultiplier_after    *int64
+	operator_id            *int64
+	addoperator_id         *int64
+	reason                 *string
+	idempotency_key        *string
+	created_at             *time.Time
+	clearedFields          map[string]struct{}
+	done                   bool
+	oldValue               func(context.Context) (*SecurityDepositRiskEvent, error)
+	predicates             []predicate.SecurityDepositRiskEvent
+}
+
+var _ ent.Mutation = (*SecurityDepositRiskEventMutation)(nil)
+
+// securitydepositriskeventOption allows management of the mutation configuration using functional options.
+type securitydepositriskeventOption func(*SecurityDepositRiskEventMutation)
+
+// newSecurityDepositRiskEventMutation creates new mutation for the SecurityDepositRiskEvent entity.
+func newSecurityDepositRiskEventMutation(c config, op Op, opts ...securitydepositriskeventOption) *SecurityDepositRiskEventMutation {
+	m := &SecurityDepositRiskEventMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSecurityDepositRiskEvent,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSecurityDepositRiskEventID sets the ID field of the mutation.
+func withSecurityDepositRiskEventID(id int64) securitydepositriskeventOption {
+	return func(m *SecurityDepositRiskEventMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SecurityDepositRiskEvent
+		)
+		m.oldValue = func(ctx context.Context) (*SecurityDepositRiskEvent, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SecurityDepositRiskEvent.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSecurityDepositRiskEvent sets the old SecurityDepositRiskEvent of the mutation.
+func withSecurityDepositRiskEvent(node *SecurityDepositRiskEvent) securitydepositriskeventOption {
+	return func(m *SecurityDepositRiskEventMutation) {
+		m.oldValue = func(context.Context) (*SecurityDepositRiskEvent, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SecurityDepositRiskEventMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SecurityDepositRiskEventMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SecurityDepositRiskEventMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SecurityDepositRiskEventMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SecurityDepositRiskEvent.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUserID sets the "user_id" field.
+func (m *SecurityDepositRiskEventMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *SecurityDepositRiskEventMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the SecurityDepositRiskEvent entity.
+// If the SecurityDepositRiskEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskEventMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *SecurityDepositRiskEventMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *SecurityDepositRiskEventMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *SecurityDepositRiskEventMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetEventType sets the "event_type" field.
+func (m *SecurityDepositRiskEventMutation) SetEventType(st securitydepositriskevent.EventType) {
+	m.event_type = &st
+}
+
+// EventType returns the value of the "event_type" field in the mutation.
+func (m *SecurityDepositRiskEventMutation) EventType() (r securitydepositriskevent.EventType, exists bool) {
+	v := m.event_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEventType returns the old "event_type" field's value of the SecurityDepositRiskEvent entity.
+// If the SecurityDepositRiskEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskEventMutation) OldEventType(ctx context.Context) (v securitydepositriskevent.EventType, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEventType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEventType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEventType: %w", err)
+	}
+	return oldValue.EventType, nil
+}
+
+// ResetEventType resets all changes to the "event_type" field.
+func (m *SecurityDepositRiskEventMutation) ResetEventType() {
+	m.event_type = nil
+}
+
+// SetViolationID sets the "violation_id" field.
+func (m *SecurityDepositRiskEventMutation) SetViolationID(i int64) {
+	m.violation_id = &i
+	m.addviolation_id = nil
+}
+
+// ViolationID returns the value of the "violation_id" field in the mutation.
+func (m *SecurityDepositRiskEventMutation) ViolationID() (r int64, exists bool) {
+	v := m.violation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldViolationID returns the old "violation_id" field's value of the SecurityDepositRiskEvent entity.
+// If the SecurityDepositRiskEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskEventMutation) OldViolationID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldViolationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldViolationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldViolationID: %w", err)
+	}
+	return oldValue.ViolationID, nil
+}
+
+// AddViolationID adds i to the "violation_id" field.
+func (m *SecurityDepositRiskEventMutation) AddViolationID(i int64) {
+	if m.addviolation_id != nil {
+		*m.addviolation_id += i
+	} else {
+		m.addviolation_id = &i
+	}
+}
+
+// AddedViolationID returns the value that was added to the "violation_id" field in this mutation.
+func (m *SecurityDepositRiskEventMutation) AddedViolationID() (r int64, exists bool) {
+	v := m.addviolation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearViolationID clears the value of the "violation_id" field.
+func (m *SecurityDepositRiskEventMutation) ClearViolationID() {
+	m.violation_id = nil
+	m.addviolation_id = nil
+	m.clearedFields[securitydepositriskevent.FieldViolationID] = struct{}{}
+}
+
+// ViolationIDCleared returns if the "violation_id" field was cleared in this mutation.
+func (m *SecurityDepositRiskEventMutation) ViolationIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositriskevent.FieldViolationID]
+	return ok
+}
+
+// ResetViolationID resets all changes to the "violation_id" field.
+func (m *SecurityDepositRiskEventMutation) ResetViolationID() {
+	m.violation_id = nil
+	m.addviolation_id = nil
+	delete(m.clearedFields, securitydepositriskevent.FieldViolationID)
+}
+
+// SetStrikeCountBefore sets the "strike_count_before" field.
+func (m *SecurityDepositRiskEventMutation) SetStrikeCountBefore(i int64) {
+	m.strike_count_before = &i
+	m.addstrike_count_before = nil
+}
+
+// StrikeCountBefore returns the value of the "strike_count_before" field in the mutation.
+func (m *SecurityDepositRiskEventMutation) StrikeCountBefore() (r int64, exists bool) {
+	v := m.strike_count_before
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStrikeCountBefore returns the old "strike_count_before" field's value of the SecurityDepositRiskEvent entity.
+// If the SecurityDepositRiskEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskEventMutation) OldStrikeCountBefore(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStrikeCountBefore is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStrikeCountBefore requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStrikeCountBefore: %w", err)
+	}
+	return oldValue.StrikeCountBefore, nil
+}
+
+// AddStrikeCountBefore adds i to the "strike_count_before" field.
+func (m *SecurityDepositRiskEventMutation) AddStrikeCountBefore(i int64) {
+	if m.addstrike_count_before != nil {
+		*m.addstrike_count_before += i
+	} else {
+		m.addstrike_count_before = &i
+	}
+}
+
+// AddedStrikeCountBefore returns the value that was added to the "strike_count_before" field in this mutation.
+func (m *SecurityDepositRiskEventMutation) AddedStrikeCountBefore() (r int64, exists bool) {
+	v := m.addstrike_count_before
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetStrikeCountBefore resets all changes to the "strike_count_before" field.
+func (m *SecurityDepositRiskEventMutation) ResetStrikeCountBefore() {
+	m.strike_count_before = nil
+	m.addstrike_count_before = nil
+}
+
+// SetStrikeCountAfter sets the "strike_count_after" field.
+func (m *SecurityDepositRiskEventMutation) SetStrikeCountAfter(i int64) {
+	m.strike_count_after = &i
+	m.addstrike_count_after = nil
+}
+
+// StrikeCountAfter returns the value of the "strike_count_after" field in the mutation.
+func (m *SecurityDepositRiskEventMutation) StrikeCountAfter() (r int64, exists bool) {
+	v := m.strike_count_after
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStrikeCountAfter returns the old "strike_count_after" field's value of the SecurityDepositRiskEvent entity.
+// If the SecurityDepositRiskEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskEventMutation) OldStrikeCountAfter(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStrikeCountAfter is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStrikeCountAfter requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStrikeCountAfter: %w", err)
+	}
+	return oldValue.StrikeCountAfter, nil
+}
+
+// AddStrikeCountAfter adds i to the "strike_count_after" field.
+func (m *SecurityDepositRiskEventMutation) AddStrikeCountAfter(i int64) {
+	if m.addstrike_count_after != nil {
+		*m.addstrike_count_after += i
+	} else {
+		m.addstrike_count_after = &i
+	}
+}
+
+// AddedStrikeCountAfter returns the value that was added to the "strike_count_after" field in this mutation.
+func (m *SecurityDepositRiskEventMutation) AddedStrikeCountAfter() (r int64, exists bool) {
+	v := m.addstrike_count_after
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetStrikeCountAfter resets all changes to the "strike_count_after" field.
+func (m *SecurityDepositRiskEventMutation) ResetStrikeCountAfter() {
+	m.strike_count_after = nil
+	m.addstrike_count_after = nil
+}
+
+// SetMultiplierBefore sets the "multiplier_before" field.
+func (m *SecurityDepositRiskEventMutation) SetMultiplierBefore(i int64) {
+	m.multiplier_before = &i
+	m.addmultiplier_before = nil
+}
+
+// MultiplierBefore returns the value of the "multiplier_before" field in the mutation.
+func (m *SecurityDepositRiskEventMutation) MultiplierBefore() (r int64, exists bool) {
+	v := m.multiplier_before
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMultiplierBefore returns the old "multiplier_before" field's value of the SecurityDepositRiskEvent entity.
+// If the SecurityDepositRiskEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskEventMutation) OldMultiplierBefore(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMultiplierBefore is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMultiplierBefore requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMultiplierBefore: %w", err)
+	}
+	return oldValue.MultiplierBefore, nil
+}
+
+// AddMultiplierBefore adds i to the "multiplier_before" field.
+func (m *SecurityDepositRiskEventMutation) AddMultiplierBefore(i int64) {
+	if m.addmultiplier_before != nil {
+		*m.addmultiplier_before += i
+	} else {
+		m.addmultiplier_before = &i
+	}
+}
+
+// AddedMultiplierBefore returns the value that was added to the "multiplier_before" field in this mutation.
+func (m *SecurityDepositRiskEventMutation) AddedMultiplierBefore() (r int64, exists bool) {
+	v := m.addmultiplier_before
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetMultiplierBefore resets all changes to the "multiplier_before" field.
+func (m *SecurityDepositRiskEventMutation) ResetMultiplierBefore() {
+	m.multiplier_before = nil
+	m.addmultiplier_before = nil
+}
+
+// SetMultiplierAfter sets the "multiplier_after" field.
+func (m *SecurityDepositRiskEventMutation) SetMultiplierAfter(i int64) {
+	m.multiplier_after = &i
+	m.addmultiplier_after = nil
+}
+
+// MultiplierAfter returns the value of the "multiplier_after" field in the mutation.
+func (m *SecurityDepositRiskEventMutation) MultiplierAfter() (r int64, exists bool) {
+	v := m.multiplier_after
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMultiplierAfter returns the old "multiplier_after" field's value of the SecurityDepositRiskEvent entity.
+// If the SecurityDepositRiskEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskEventMutation) OldMultiplierAfter(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMultiplierAfter is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMultiplierAfter requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMultiplierAfter: %w", err)
+	}
+	return oldValue.MultiplierAfter, nil
+}
+
+// AddMultiplierAfter adds i to the "multiplier_after" field.
+func (m *SecurityDepositRiskEventMutation) AddMultiplierAfter(i int64) {
+	if m.addmultiplier_after != nil {
+		*m.addmultiplier_after += i
+	} else {
+		m.addmultiplier_after = &i
+	}
+}
+
+// AddedMultiplierAfter returns the value that was added to the "multiplier_after" field in this mutation.
+func (m *SecurityDepositRiskEventMutation) AddedMultiplierAfter() (r int64, exists bool) {
+	v := m.addmultiplier_after
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetMultiplierAfter resets all changes to the "multiplier_after" field.
+func (m *SecurityDepositRiskEventMutation) ResetMultiplierAfter() {
+	m.multiplier_after = nil
+	m.addmultiplier_after = nil
+}
+
+// SetOperatorID sets the "operator_id" field.
+func (m *SecurityDepositRiskEventMutation) SetOperatorID(i int64) {
+	m.operator_id = &i
+	m.addoperator_id = nil
+}
+
+// OperatorID returns the value of the "operator_id" field in the mutation.
+func (m *SecurityDepositRiskEventMutation) OperatorID() (r int64, exists bool) {
+	v := m.operator_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOperatorID returns the old "operator_id" field's value of the SecurityDepositRiskEvent entity.
+// If the SecurityDepositRiskEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskEventMutation) OldOperatorID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOperatorID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOperatorID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOperatorID: %w", err)
+	}
+	return oldValue.OperatorID, nil
+}
+
+// AddOperatorID adds i to the "operator_id" field.
+func (m *SecurityDepositRiskEventMutation) AddOperatorID(i int64) {
+	if m.addoperator_id != nil {
+		*m.addoperator_id += i
+	} else {
+		m.addoperator_id = &i
+	}
+}
+
+// AddedOperatorID returns the value that was added to the "operator_id" field in this mutation.
+func (m *SecurityDepositRiskEventMutation) AddedOperatorID() (r int64, exists bool) {
+	v := m.addoperator_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearOperatorID clears the value of the "operator_id" field.
+func (m *SecurityDepositRiskEventMutation) ClearOperatorID() {
+	m.operator_id = nil
+	m.addoperator_id = nil
+	m.clearedFields[securitydepositriskevent.FieldOperatorID] = struct{}{}
+}
+
+// OperatorIDCleared returns if the "operator_id" field was cleared in this mutation.
+func (m *SecurityDepositRiskEventMutation) OperatorIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositriskevent.FieldOperatorID]
+	return ok
+}
+
+// ResetOperatorID resets all changes to the "operator_id" field.
+func (m *SecurityDepositRiskEventMutation) ResetOperatorID() {
+	m.operator_id = nil
+	m.addoperator_id = nil
+	delete(m.clearedFields, securitydepositriskevent.FieldOperatorID)
+}
+
+// SetReason sets the "reason" field.
+func (m *SecurityDepositRiskEventMutation) SetReason(s string) {
+	m.reason = &s
+}
+
+// Reason returns the value of the "reason" field in the mutation.
+func (m *SecurityDepositRiskEventMutation) Reason() (r string, exists bool) {
+	v := m.reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReason returns the old "reason" field's value of the SecurityDepositRiskEvent entity.
+// If the SecurityDepositRiskEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskEventMutation) OldReason(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReason: %w", err)
+	}
+	return oldValue.Reason, nil
+}
+
+// ClearReason clears the value of the "reason" field.
+func (m *SecurityDepositRiskEventMutation) ClearReason() {
+	m.reason = nil
+	m.clearedFields[securitydepositriskevent.FieldReason] = struct{}{}
+}
+
+// ReasonCleared returns if the "reason" field was cleared in this mutation.
+func (m *SecurityDepositRiskEventMutation) ReasonCleared() bool {
+	_, ok := m.clearedFields[securitydepositriskevent.FieldReason]
+	return ok
+}
+
+// ResetReason resets all changes to the "reason" field.
+func (m *SecurityDepositRiskEventMutation) ResetReason() {
+	m.reason = nil
+	delete(m.clearedFields, securitydepositriskevent.FieldReason)
+}
+
+// SetIdempotencyKey sets the "idempotency_key" field.
+func (m *SecurityDepositRiskEventMutation) SetIdempotencyKey(s string) {
+	m.idempotency_key = &s
+}
+
+// IdempotencyKey returns the value of the "idempotency_key" field in the mutation.
+func (m *SecurityDepositRiskEventMutation) IdempotencyKey() (r string, exists bool) {
+	v := m.idempotency_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIdempotencyKey returns the old "idempotency_key" field's value of the SecurityDepositRiskEvent entity.
+// If the SecurityDepositRiskEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskEventMutation) OldIdempotencyKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIdempotencyKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIdempotencyKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIdempotencyKey: %w", err)
+	}
+	return oldValue.IdempotencyKey, nil
+}
+
+// ResetIdempotencyKey resets all changes to the "idempotency_key" field.
+func (m *SecurityDepositRiskEventMutation) ResetIdempotencyKey() {
+	m.idempotency_key = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SecurityDepositRiskEventMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SecurityDepositRiskEventMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SecurityDepositRiskEvent entity.
+// If the SecurityDepositRiskEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskEventMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SecurityDepositRiskEventMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the SecurityDepositRiskEventMutation builder.
+func (m *SecurityDepositRiskEventMutation) Where(ps ...predicate.SecurityDepositRiskEvent) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SecurityDepositRiskEventMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SecurityDepositRiskEventMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SecurityDepositRiskEvent, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SecurityDepositRiskEventMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SecurityDepositRiskEventMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SecurityDepositRiskEvent).
+func (m *SecurityDepositRiskEventMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SecurityDepositRiskEventMutation) Fields() []string {
+	fields := make([]string, 0, 11)
+	if m.user_id != nil {
+		fields = append(fields, securitydepositriskevent.FieldUserID)
+	}
+	if m.event_type != nil {
+		fields = append(fields, securitydepositriskevent.FieldEventType)
+	}
+	if m.violation_id != nil {
+		fields = append(fields, securitydepositriskevent.FieldViolationID)
+	}
+	if m.strike_count_before != nil {
+		fields = append(fields, securitydepositriskevent.FieldStrikeCountBefore)
+	}
+	if m.strike_count_after != nil {
+		fields = append(fields, securitydepositriskevent.FieldStrikeCountAfter)
+	}
+	if m.multiplier_before != nil {
+		fields = append(fields, securitydepositriskevent.FieldMultiplierBefore)
+	}
+	if m.multiplier_after != nil {
+		fields = append(fields, securitydepositriskevent.FieldMultiplierAfter)
+	}
+	if m.operator_id != nil {
+		fields = append(fields, securitydepositriskevent.FieldOperatorID)
+	}
+	if m.reason != nil {
+		fields = append(fields, securitydepositriskevent.FieldReason)
+	}
+	if m.idempotency_key != nil {
+		fields = append(fields, securitydepositriskevent.FieldIdempotencyKey)
+	}
+	if m.created_at != nil {
+		fields = append(fields, securitydepositriskevent.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SecurityDepositRiskEventMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositriskevent.FieldUserID:
+		return m.UserID()
+	case securitydepositriskevent.FieldEventType:
+		return m.EventType()
+	case securitydepositriskevent.FieldViolationID:
+		return m.ViolationID()
+	case securitydepositriskevent.FieldStrikeCountBefore:
+		return m.StrikeCountBefore()
+	case securitydepositriskevent.FieldStrikeCountAfter:
+		return m.StrikeCountAfter()
+	case securitydepositriskevent.FieldMultiplierBefore:
+		return m.MultiplierBefore()
+	case securitydepositriskevent.FieldMultiplierAfter:
+		return m.MultiplierAfter()
+	case securitydepositriskevent.FieldOperatorID:
+		return m.OperatorID()
+	case securitydepositriskevent.FieldReason:
+		return m.Reason()
+	case securitydepositriskevent.FieldIdempotencyKey:
+		return m.IdempotencyKey()
+	case securitydepositriskevent.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SecurityDepositRiskEventMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case securitydepositriskevent.FieldUserID:
+		return m.OldUserID(ctx)
+	case securitydepositriskevent.FieldEventType:
+		return m.OldEventType(ctx)
+	case securitydepositriskevent.FieldViolationID:
+		return m.OldViolationID(ctx)
+	case securitydepositriskevent.FieldStrikeCountBefore:
+		return m.OldStrikeCountBefore(ctx)
+	case securitydepositriskevent.FieldStrikeCountAfter:
+		return m.OldStrikeCountAfter(ctx)
+	case securitydepositriskevent.FieldMultiplierBefore:
+		return m.OldMultiplierBefore(ctx)
+	case securitydepositriskevent.FieldMultiplierAfter:
+		return m.OldMultiplierAfter(ctx)
+	case securitydepositriskevent.FieldOperatorID:
+		return m.OldOperatorID(ctx)
+	case securitydepositriskevent.FieldReason:
+		return m.OldReason(ctx)
+	case securitydepositriskevent.FieldIdempotencyKey:
+		return m.OldIdempotencyKey(ctx)
+	case securitydepositriskevent.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SecurityDepositRiskEvent field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositRiskEventMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositriskevent.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case securitydepositriskevent.FieldEventType:
+		v, ok := value.(securitydepositriskevent.EventType)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEventType(v)
+		return nil
+	case securitydepositriskevent.FieldViolationID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetViolationID(v)
+		return nil
+	case securitydepositriskevent.FieldStrikeCountBefore:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStrikeCountBefore(v)
+		return nil
+	case securitydepositriskevent.FieldStrikeCountAfter:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStrikeCountAfter(v)
+		return nil
+	case securitydepositriskevent.FieldMultiplierBefore:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMultiplierBefore(v)
+		return nil
+	case securitydepositriskevent.FieldMultiplierAfter:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMultiplierAfter(v)
+		return nil
+	case securitydepositriskevent.FieldOperatorID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOperatorID(v)
+		return nil
+	case securitydepositriskevent.FieldReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReason(v)
+		return nil
+	case securitydepositriskevent.FieldIdempotencyKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIdempotencyKey(v)
+		return nil
+	case securitydepositriskevent.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositRiskEvent field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SecurityDepositRiskEventMutation) AddedFields() []string {
+	var fields []string
+	if m.adduser_id != nil {
+		fields = append(fields, securitydepositriskevent.FieldUserID)
+	}
+	if m.addviolation_id != nil {
+		fields = append(fields, securitydepositriskevent.FieldViolationID)
+	}
+	if m.addstrike_count_before != nil {
+		fields = append(fields, securitydepositriskevent.FieldStrikeCountBefore)
+	}
+	if m.addstrike_count_after != nil {
+		fields = append(fields, securitydepositriskevent.FieldStrikeCountAfter)
+	}
+	if m.addmultiplier_before != nil {
+		fields = append(fields, securitydepositriskevent.FieldMultiplierBefore)
+	}
+	if m.addmultiplier_after != nil {
+		fields = append(fields, securitydepositriskevent.FieldMultiplierAfter)
+	}
+	if m.addoperator_id != nil {
+		fields = append(fields, securitydepositriskevent.FieldOperatorID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SecurityDepositRiskEventMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositriskevent.FieldUserID:
+		return m.AddedUserID()
+	case securitydepositriskevent.FieldViolationID:
+		return m.AddedViolationID()
+	case securitydepositriskevent.FieldStrikeCountBefore:
+		return m.AddedStrikeCountBefore()
+	case securitydepositriskevent.FieldStrikeCountAfter:
+		return m.AddedStrikeCountAfter()
+	case securitydepositriskevent.FieldMultiplierBefore:
+		return m.AddedMultiplierBefore()
+	case securitydepositriskevent.FieldMultiplierAfter:
+		return m.AddedMultiplierAfter()
+	case securitydepositriskevent.FieldOperatorID:
+		return m.AddedOperatorID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositRiskEventMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositriskevent.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case securitydepositriskevent.FieldViolationID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddViolationID(v)
+		return nil
+	case securitydepositriskevent.FieldStrikeCountBefore:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddStrikeCountBefore(v)
+		return nil
+	case securitydepositriskevent.FieldStrikeCountAfter:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddStrikeCountAfter(v)
+		return nil
+	case securitydepositriskevent.FieldMultiplierBefore:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMultiplierBefore(v)
+		return nil
+	case securitydepositriskevent.FieldMultiplierAfter:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMultiplierAfter(v)
+		return nil
+	case securitydepositriskevent.FieldOperatorID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOperatorID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositRiskEvent numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SecurityDepositRiskEventMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(securitydepositriskevent.FieldViolationID) {
+		fields = append(fields, securitydepositriskevent.FieldViolationID)
+	}
+	if m.FieldCleared(securitydepositriskevent.FieldOperatorID) {
+		fields = append(fields, securitydepositriskevent.FieldOperatorID)
+	}
+	if m.FieldCleared(securitydepositriskevent.FieldReason) {
+		fields = append(fields, securitydepositriskevent.FieldReason)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SecurityDepositRiskEventMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SecurityDepositRiskEventMutation) ClearField(name string) error {
+	switch name {
+	case securitydepositriskevent.FieldViolationID:
+		m.ClearViolationID()
+		return nil
+	case securitydepositriskevent.FieldOperatorID:
+		m.ClearOperatorID()
+		return nil
+	case securitydepositriskevent.FieldReason:
+		m.ClearReason()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositRiskEvent nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SecurityDepositRiskEventMutation) ResetField(name string) error {
+	switch name {
+	case securitydepositriskevent.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case securitydepositriskevent.FieldEventType:
+		m.ResetEventType()
+		return nil
+	case securitydepositriskevent.FieldViolationID:
+		m.ResetViolationID()
+		return nil
+	case securitydepositriskevent.FieldStrikeCountBefore:
+		m.ResetStrikeCountBefore()
+		return nil
+	case securitydepositriskevent.FieldStrikeCountAfter:
+		m.ResetStrikeCountAfter()
+		return nil
+	case securitydepositriskevent.FieldMultiplierBefore:
+		m.ResetMultiplierBefore()
+		return nil
+	case securitydepositriskevent.FieldMultiplierAfter:
+		m.ResetMultiplierAfter()
+		return nil
+	case securitydepositriskevent.FieldOperatorID:
+		m.ResetOperatorID()
+		return nil
+	case securitydepositriskevent.FieldReason:
+		m.ResetReason()
+		return nil
+	case securitydepositriskevent.FieldIdempotencyKey:
+		m.ResetIdempotencyKey()
+		return nil
+	case securitydepositriskevent.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositRiskEvent field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SecurityDepositRiskEventMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SecurityDepositRiskEventMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SecurityDepositRiskEventMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SecurityDepositRiskEventMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SecurityDepositRiskEventMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SecurityDepositRiskEventMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SecurityDepositRiskEventMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositRiskEvent unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SecurityDepositRiskEventMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositRiskEvent edge %s", name)
+}
+
+// SecurityDepositRiskProfileMutation represents an operation that mutates the SecurityDepositRiskProfile nodes in the graph.
+type SecurityDepositRiskProfileMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *int64
+	created_at            *time.Time
+	updated_at            *time.Time
+	user_id               *int64
+	adduser_id            *int64
+	cyber_strike_count    *int64
+	addcyber_strike_count *int64
+	risk_multiplier       *int64
+	addrisk_multiplier    *int64
+	last_violation_id     *int64
+	addlast_violation_id  *int64
+	version               *int64
+	addversion            *int64
+	clearedFields         map[string]struct{}
+	done                  bool
+	oldValue              func(context.Context) (*SecurityDepositRiskProfile, error)
+	predicates            []predicate.SecurityDepositRiskProfile
+}
+
+var _ ent.Mutation = (*SecurityDepositRiskProfileMutation)(nil)
+
+// securitydepositriskprofileOption allows management of the mutation configuration using functional options.
+type securitydepositriskprofileOption func(*SecurityDepositRiskProfileMutation)
+
+// newSecurityDepositRiskProfileMutation creates new mutation for the SecurityDepositRiskProfile entity.
+func newSecurityDepositRiskProfileMutation(c config, op Op, opts ...securitydepositriskprofileOption) *SecurityDepositRiskProfileMutation {
+	m := &SecurityDepositRiskProfileMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSecurityDepositRiskProfile,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSecurityDepositRiskProfileID sets the ID field of the mutation.
+func withSecurityDepositRiskProfileID(id int64) securitydepositriskprofileOption {
+	return func(m *SecurityDepositRiskProfileMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SecurityDepositRiskProfile
+		)
+		m.oldValue = func(ctx context.Context) (*SecurityDepositRiskProfile, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SecurityDepositRiskProfile.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSecurityDepositRiskProfile sets the old SecurityDepositRiskProfile of the mutation.
+func withSecurityDepositRiskProfile(node *SecurityDepositRiskProfile) securitydepositriskprofileOption {
+	return func(m *SecurityDepositRiskProfileMutation) {
+		m.oldValue = func(context.Context) (*SecurityDepositRiskProfile, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SecurityDepositRiskProfileMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SecurityDepositRiskProfileMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SecurityDepositRiskProfileMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SecurityDepositRiskProfileMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SecurityDepositRiskProfile.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SecurityDepositRiskProfileMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SecurityDepositRiskProfileMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SecurityDepositRiskProfile entity.
+// If the SecurityDepositRiskProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskProfileMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SecurityDepositRiskProfileMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *SecurityDepositRiskProfileMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *SecurityDepositRiskProfileMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the SecurityDepositRiskProfile entity.
+// If the SecurityDepositRiskProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskProfileMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *SecurityDepositRiskProfileMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *SecurityDepositRiskProfileMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *SecurityDepositRiskProfileMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the SecurityDepositRiskProfile entity.
+// If the SecurityDepositRiskProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskProfileMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *SecurityDepositRiskProfileMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *SecurityDepositRiskProfileMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *SecurityDepositRiskProfileMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetCyberStrikeCount sets the "cyber_strike_count" field.
+func (m *SecurityDepositRiskProfileMutation) SetCyberStrikeCount(i int64) {
+	m.cyber_strike_count = &i
+	m.addcyber_strike_count = nil
+}
+
+// CyberStrikeCount returns the value of the "cyber_strike_count" field in the mutation.
+func (m *SecurityDepositRiskProfileMutation) CyberStrikeCount() (r int64, exists bool) {
+	v := m.cyber_strike_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCyberStrikeCount returns the old "cyber_strike_count" field's value of the SecurityDepositRiskProfile entity.
+// If the SecurityDepositRiskProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskProfileMutation) OldCyberStrikeCount(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCyberStrikeCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCyberStrikeCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCyberStrikeCount: %w", err)
+	}
+	return oldValue.CyberStrikeCount, nil
+}
+
+// AddCyberStrikeCount adds i to the "cyber_strike_count" field.
+func (m *SecurityDepositRiskProfileMutation) AddCyberStrikeCount(i int64) {
+	if m.addcyber_strike_count != nil {
+		*m.addcyber_strike_count += i
+	} else {
+		m.addcyber_strike_count = &i
+	}
+}
+
+// AddedCyberStrikeCount returns the value that was added to the "cyber_strike_count" field in this mutation.
+func (m *SecurityDepositRiskProfileMutation) AddedCyberStrikeCount() (r int64, exists bool) {
+	v := m.addcyber_strike_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCyberStrikeCount resets all changes to the "cyber_strike_count" field.
+func (m *SecurityDepositRiskProfileMutation) ResetCyberStrikeCount() {
+	m.cyber_strike_count = nil
+	m.addcyber_strike_count = nil
+}
+
+// SetRiskMultiplier sets the "risk_multiplier" field.
+func (m *SecurityDepositRiskProfileMutation) SetRiskMultiplier(i int64) {
+	m.risk_multiplier = &i
+	m.addrisk_multiplier = nil
+}
+
+// RiskMultiplier returns the value of the "risk_multiplier" field in the mutation.
+func (m *SecurityDepositRiskProfileMutation) RiskMultiplier() (r int64, exists bool) {
+	v := m.risk_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRiskMultiplier returns the old "risk_multiplier" field's value of the SecurityDepositRiskProfile entity.
+// If the SecurityDepositRiskProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskProfileMutation) OldRiskMultiplier(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRiskMultiplier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRiskMultiplier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRiskMultiplier: %w", err)
+	}
+	return oldValue.RiskMultiplier, nil
+}
+
+// AddRiskMultiplier adds i to the "risk_multiplier" field.
+func (m *SecurityDepositRiskProfileMutation) AddRiskMultiplier(i int64) {
+	if m.addrisk_multiplier != nil {
+		*m.addrisk_multiplier += i
+	} else {
+		m.addrisk_multiplier = &i
+	}
+}
+
+// AddedRiskMultiplier returns the value that was added to the "risk_multiplier" field in this mutation.
+func (m *SecurityDepositRiskProfileMutation) AddedRiskMultiplier() (r int64, exists bool) {
+	v := m.addrisk_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRiskMultiplier resets all changes to the "risk_multiplier" field.
+func (m *SecurityDepositRiskProfileMutation) ResetRiskMultiplier() {
+	m.risk_multiplier = nil
+	m.addrisk_multiplier = nil
+}
+
+// SetLastViolationID sets the "last_violation_id" field.
+func (m *SecurityDepositRiskProfileMutation) SetLastViolationID(i int64) {
+	m.last_violation_id = &i
+	m.addlast_violation_id = nil
+}
+
+// LastViolationID returns the value of the "last_violation_id" field in the mutation.
+func (m *SecurityDepositRiskProfileMutation) LastViolationID() (r int64, exists bool) {
+	v := m.last_violation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastViolationID returns the old "last_violation_id" field's value of the SecurityDepositRiskProfile entity.
+// If the SecurityDepositRiskProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskProfileMutation) OldLastViolationID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastViolationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastViolationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastViolationID: %w", err)
+	}
+	return oldValue.LastViolationID, nil
+}
+
+// AddLastViolationID adds i to the "last_violation_id" field.
+func (m *SecurityDepositRiskProfileMutation) AddLastViolationID(i int64) {
+	if m.addlast_violation_id != nil {
+		*m.addlast_violation_id += i
+	} else {
+		m.addlast_violation_id = &i
+	}
+}
+
+// AddedLastViolationID returns the value that was added to the "last_violation_id" field in this mutation.
+func (m *SecurityDepositRiskProfileMutation) AddedLastViolationID() (r int64, exists bool) {
+	v := m.addlast_violation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearLastViolationID clears the value of the "last_violation_id" field.
+func (m *SecurityDepositRiskProfileMutation) ClearLastViolationID() {
+	m.last_violation_id = nil
+	m.addlast_violation_id = nil
+	m.clearedFields[securitydepositriskprofile.FieldLastViolationID] = struct{}{}
+}
+
+// LastViolationIDCleared returns if the "last_violation_id" field was cleared in this mutation.
+func (m *SecurityDepositRiskProfileMutation) LastViolationIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositriskprofile.FieldLastViolationID]
+	return ok
+}
+
+// ResetLastViolationID resets all changes to the "last_violation_id" field.
+func (m *SecurityDepositRiskProfileMutation) ResetLastViolationID() {
+	m.last_violation_id = nil
+	m.addlast_violation_id = nil
+	delete(m.clearedFields, securitydepositriskprofile.FieldLastViolationID)
+}
+
+// SetVersion sets the "version" field.
+func (m *SecurityDepositRiskProfileMutation) SetVersion(i int64) {
+	m.version = &i
+	m.addversion = nil
+}
+
+// Version returns the value of the "version" field in the mutation.
+func (m *SecurityDepositRiskProfileMutation) Version() (r int64, exists bool) {
+	v := m.version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVersion returns the old "version" field's value of the SecurityDepositRiskProfile entity.
+// If the SecurityDepositRiskProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositRiskProfileMutation) OldVersion(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVersion: %w", err)
+	}
+	return oldValue.Version, nil
+}
+
+// AddVersion adds i to the "version" field.
+func (m *SecurityDepositRiskProfileMutation) AddVersion(i int64) {
+	if m.addversion != nil {
+		*m.addversion += i
+	} else {
+		m.addversion = &i
+	}
+}
+
+// AddedVersion returns the value that was added to the "version" field in this mutation.
+func (m *SecurityDepositRiskProfileMutation) AddedVersion() (r int64, exists bool) {
+	v := m.addversion
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetVersion resets all changes to the "version" field.
+func (m *SecurityDepositRiskProfileMutation) ResetVersion() {
+	m.version = nil
+	m.addversion = nil
+}
+
+// Where appends a list predicates to the SecurityDepositRiskProfileMutation builder.
+func (m *SecurityDepositRiskProfileMutation) Where(ps ...predicate.SecurityDepositRiskProfile) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SecurityDepositRiskProfileMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SecurityDepositRiskProfileMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SecurityDepositRiskProfile, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SecurityDepositRiskProfileMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SecurityDepositRiskProfileMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SecurityDepositRiskProfile).
+func (m *SecurityDepositRiskProfileMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SecurityDepositRiskProfileMutation) Fields() []string {
+	fields := make([]string, 0, 7)
+	if m.created_at != nil {
+		fields = append(fields, securitydepositriskprofile.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, securitydepositriskprofile.FieldUpdatedAt)
+	}
+	if m.user_id != nil {
+		fields = append(fields, securitydepositriskprofile.FieldUserID)
+	}
+	if m.cyber_strike_count != nil {
+		fields = append(fields, securitydepositriskprofile.FieldCyberStrikeCount)
+	}
+	if m.risk_multiplier != nil {
+		fields = append(fields, securitydepositriskprofile.FieldRiskMultiplier)
+	}
+	if m.last_violation_id != nil {
+		fields = append(fields, securitydepositriskprofile.FieldLastViolationID)
+	}
+	if m.version != nil {
+		fields = append(fields, securitydepositriskprofile.FieldVersion)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SecurityDepositRiskProfileMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositriskprofile.FieldCreatedAt:
+		return m.CreatedAt()
+	case securitydepositriskprofile.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case securitydepositriskprofile.FieldUserID:
+		return m.UserID()
+	case securitydepositriskprofile.FieldCyberStrikeCount:
+		return m.CyberStrikeCount()
+	case securitydepositriskprofile.FieldRiskMultiplier:
+		return m.RiskMultiplier()
+	case securitydepositriskprofile.FieldLastViolationID:
+		return m.LastViolationID()
+	case securitydepositriskprofile.FieldVersion:
+		return m.Version()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SecurityDepositRiskProfileMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case securitydepositriskprofile.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case securitydepositriskprofile.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case securitydepositriskprofile.FieldUserID:
+		return m.OldUserID(ctx)
+	case securitydepositriskprofile.FieldCyberStrikeCount:
+		return m.OldCyberStrikeCount(ctx)
+	case securitydepositriskprofile.FieldRiskMultiplier:
+		return m.OldRiskMultiplier(ctx)
+	case securitydepositriskprofile.FieldLastViolationID:
+		return m.OldLastViolationID(ctx)
+	case securitydepositriskprofile.FieldVersion:
+		return m.OldVersion(ctx)
+	}
+	return nil, fmt.Errorf("unknown SecurityDepositRiskProfile field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositRiskProfileMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositriskprofile.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case securitydepositriskprofile.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case securitydepositriskprofile.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case securitydepositriskprofile.FieldCyberStrikeCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCyberStrikeCount(v)
+		return nil
+	case securitydepositriskprofile.FieldRiskMultiplier:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRiskMultiplier(v)
+		return nil
+	case securitydepositriskprofile.FieldLastViolationID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastViolationID(v)
+		return nil
+	case securitydepositriskprofile.FieldVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVersion(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositRiskProfile field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SecurityDepositRiskProfileMutation) AddedFields() []string {
+	var fields []string
+	if m.adduser_id != nil {
+		fields = append(fields, securitydepositriskprofile.FieldUserID)
+	}
+	if m.addcyber_strike_count != nil {
+		fields = append(fields, securitydepositriskprofile.FieldCyberStrikeCount)
+	}
+	if m.addrisk_multiplier != nil {
+		fields = append(fields, securitydepositriskprofile.FieldRiskMultiplier)
+	}
+	if m.addlast_violation_id != nil {
+		fields = append(fields, securitydepositriskprofile.FieldLastViolationID)
+	}
+	if m.addversion != nil {
+		fields = append(fields, securitydepositriskprofile.FieldVersion)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SecurityDepositRiskProfileMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositriskprofile.FieldUserID:
+		return m.AddedUserID()
+	case securitydepositriskprofile.FieldCyberStrikeCount:
+		return m.AddedCyberStrikeCount()
+	case securitydepositriskprofile.FieldRiskMultiplier:
+		return m.AddedRiskMultiplier()
+	case securitydepositriskprofile.FieldLastViolationID:
+		return m.AddedLastViolationID()
+	case securitydepositriskprofile.FieldVersion:
+		return m.AddedVersion()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositRiskProfileMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositriskprofile.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case securitydepositriskprofile.FieldCyberStrikeCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCyberStrikeCount(v)
+		return nil
+	case securitydepositriskprofile.FieldRiskMultiplier:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRiskMultiplier(v)
+		return nil
+	case securitydepositriskprofile.FieldLastViolationID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddLastViolationID(v)
+		return nil
+	case securitydepositriskprofile.FieldVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddVersion(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositRiskProfile numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SecurityDepositRiskProfileMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(securitydepositriskprofile.FieldLastViolationID) {
+		fields = append(fields, securitydepositriskprofile.FieldLastViolationID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SecurityDepositRiskProfileMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SecurityDepositRiskProfileMutation) ClearField(name string) error {
+	switch name {
+	case securitydepositriskprofile.FieldLastViolationID:
+		m.ClearLastViolationID()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositRiskProfile nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SecurityDepositRiskProfileMutation) ResetField(name string) error {
+	switch name {
+	case securitydepositriskprofile.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case securitydepositriskprofile.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case securitydepositriskprofile.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case securitydepositriskprofile.FieldCyberStrikeCount:
+		m.ResetCyberStrikeCount()
+		return nil
+	case securitydepositriskprofile.FieldRiskMultiplier:
+		m.ResetRiskMultiplier()
+		return nil
+	case securitydepositriskprofile.FieldLastViolationID:
+		m.ResetLastViolationID()
+		return nil
+	case securitydepositriskprofile.FieldVersion:
+		m.ResetVersion()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositRiskProfile field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SecurityDepositRiskProfileMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SecurityDepositRiskProfileMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SecurityDepositRiskProfileMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SecurityDepositRiskProfileMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SecurityDepositRiskProfileMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SecurityDepositRiskProfileMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SecurityDepositRiskProfileMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositRiskProfile unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SecurityDepositRiskProfileMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositRiskProfile edge %s", name)
+}
+
+// SecurityDepositViolationMutation represents an operation that mutates the SecurityDepositViolation nodes in the graph.
+type SecurityDepositViolationMutation struct {
+	config
+	op                              Op
+	typ                             string
+	id                              *int64
+	event_key                       *string
+	request_id                      *string
+	upstream_response_id            *string
+	turn_index                      *int64
+	addturn_index                   *int64
+	user_id                         *int64
+	adduser_id                      *int64
+	api_key_id                      *int64
+	addapi_key_id                   *int64
+	group_id                        *int64
+	addgroup_id                     *int64
+	policy_code                     *string
+	detector_version                *string
+	base_required_snapshot_cents    *int64
+	addbase_required_snapshot_cents *int64
+	risk_multiplier_before          *int64
+	addrisk_multiplier_before       *int64
+	required_snapshot_cents         *int64
+	addrequired_snapshot_cents      *int64
+	risk_multiplier_after           *int64
+	addrisk_multiplier_after        *int64
+	forfeited_cents                 *int64
+	addforfeited_cents              *int64
+	shortfall_cents                 *int64
+	addshortfall_cents              *int64
+	state                           *string
+	error_code                      *string
+	retry_count                     *int
+	addretry_count                  *int
+	api_key_name_snapshot           *string
+	group_name_snapshot             *string
+	created_at                      *time.Time
+	processed_at                    *time.Time
+	clearedFields                   map[string]struct{}
+	done                            bool
+	oldValue                        func(context.Context) (*SecurityDepositViolation, error)
+	predicates                      []predicate.SecurityDepositViolation
+}
+
+var _ ent.Mutation = (*SecurityDepositViolationMutation)(nil)
+
+// securitydepositviolationOption allows management of the mutation configuration using functional options.
+type securitydepositviolationOption func(*SecurityDepositViolationMutation)
+
+// newSecurityDepositViolationMutation creates new mutation for the SecurityDepositViolation entity.
+func newSecurityDepositViolationMutation(c config, op Op, opts ...securitydepositviolationOption) *SecurityDepositViolationMutation {
+	m := &SecurityDepositViolationMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSecurityDepositViolation,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSecurityDepositViolationID sets the ID field of the mutation.
+func withSecurityDepositViolationID(id int64) securitydepositviolationOption {
+	return func(m *SecurityDepositViolationMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SecurityDepositViolation
+		)
+		m.oldValue = func(ctx context.Context) (*SecurityDepositViolation, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SecurityDepositViolation.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSecurityDepositViolation sets the old SecurityDepositViolation of the mutation.
+func withSecurityDepositViolation(node *SecurityDepositViolation) securitydepositviolationOption {
+	return func(m *SecurityDepositViolationMutation) {
+		m.oldValue = func(context.Context) (*SecurityDepositViolation, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SecurityDepositViolationMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SecurityDepositViolationMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SecurityDepositViolationMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SecurityDepositViolationMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SecurityDepositViolation.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetEventKey sets the "event_key" field.
+func (m *SecurityDepositViolationMutation) SetEventKey(s string) {
+	m.event_key = &s
+}
+
+// EventKey returns the value of the "event_key" field in the mutation.
+func (m *SecurityDepositViolationMutation) EventKey() (r string, exists bool) {
+	v := m.event_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEventKey returns the old "event_key" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldEventKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEventKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEventKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEventKey: %w", err)
+	}
+	return oldValue.EventKey, nil
+}
+
+// ResetEventKey resets all changes to the "event_key" field.
+func (m *SecurityDepositViolationMutation) ResetEventKey() {
+	m.event_key = nil
+}
+
+// SetRequestID sets the "request_id" field.
+func (m *SecurityDepositViolationMutation) SetRequestID(s string) {
+	m.request_id = &s
+}
+
+// RequestID returns the value of the "request_id" field in the mutation.
+func (m *SecurityDepositViolationMutation) RequestID() (r string, exists bool) {
+	v := m.request_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestID returns the old "request_id" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldRequestID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestID: %w", err)
+	}
+	return oldValue.RequestID, nil
+}
+
+// ResetRequestID resets all changes to the "request_id" field.
+func (m *SecurityDepositViolationMutation) ResetRequestID() {
+	m.request_id = nil
+}
+
+// SetUpstreamResponseID sets the "upstream_response_id" field.
+func (m *SecurityDepositViolationMutation) SetUpstreamResponseID(s string) {
+	m.upstream_response_id = &s
+}
+
+// UpstreamResponseID returns the value of the "upstream_response_id" field in the mutation.
+func (m *SecurityDepositViolationMutation) UpstreamResponseID() (r string, exists bool) {
+	v := m.upstream_response_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpstreamResponseID returns the old "upstream_response_id" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldUpstreamResponseID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpstreamResponseID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpstreamResponseID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpstreamResponseID: %w", err)
+	}
+	return oldValue.UpstreamResponseID, nil
+}
+
+// ClearUpstreamResponseID clears the value of the "upstream_response_id" field.
+func (m *SecurityDepositViolationMutation) ClearUpstreamResponseID() {
+	m.upstream_response_id = nil
+	m.clearedFields[securitydepositviolation.FieldUpstreamResponseID] = struct{}{}
+}
+
+// UpstreamResponseIDCleared returns if the "upstream_response_id" field was cleared in this mutation.
+func (m *SecurityDepositViolationMutation) UpstreamResponseIDCleared() bool {
+	_, ok := m.clearedFields[securitydepositviolation.FieldUpstreamResponseID]
+	return ok
+}
+
+// ResetUpstreamResponseID resets all changes to the "upstream_response_id" field.
+func (m *SecurityDepositViolationMutation) ResetUpstreamResponseID() {
+	m.upstream_response_id = nil
+	delete(m.clearedFields, securitydepositviolation.FieldUpstreamResponseID)
+}
+
+// SetTurnIndex sets the "turn_index" field.
+func (m *SecurityDepositViolationMutation) SetTurnIndex(i int64) {
+	m.turn_index = &i
+	m.addturn_index = nil
+}
+
+// TurnIndex returns the value of the "turn_index" field in the mutation.
+func (m *SecurityDepositViolationMutation) TurnIndex() (r int64, exists bool) {
+	v := m.turn_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTurnIndex returns the old "turn_index" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldTurnIndex(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTurnIndex is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTurnIndex requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTurnIndex: %w", err)
+	}
+	return oldValue.TurnIndex, nil
+}
+
+// AddTurnIndex adds i to the "turn_index" field.
+func (m *SecurityDepositViolationMutation) AddTurnIndex(i int64) {
+	if m.addturn_index != nil {
+		*m.addturn_index += i
+	} else {
+		m.addturn_index = &i
+	}
+}
+
+// AddedTurnIndex returns the value that was added to the "turn_index" field in this mutation.
+func (m *SecurityDepositViolationMutation) AddedTurnIndex() (r int64, exists bool) {
+	v := m.addturn_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearTurnIndex clears the value of the "turn_index" field.
+func (m *SecurityDepositViolationMutation) ClearTurnIndex() {
+	m.turn_index = nil
+	m.addturn_index = nil
+	m.clearedFields[securitydepositviolation.FieldTurnIndex] = struct{}{}
+}
+
+// TurnIndexCleared returns if the "turn_index" field was cleared in this mutation.
+func (m *SecurityDepositViolationMutation) TurnIndexCleared() bool {
+	_, ok := m.clearedFields[securitydepositviolation.FieldTurnIndex]
+	return ok
+}
+
+// ResetTurnIndex resets all changes to the "turn_index" field.
+func (m *SecurityDepositViolationMutation) ResetTurnIndex() {
+	m.turn_index = nil
+	m.addturn_index = nil
+	delete(m.clearedFields, securitydepositviolation.FieldTurnIndex)
+}
+
+// SetUserID sets the "user_id" field.
+func (m *SecurityDepositViolationMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *SecurityDepositViolationMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *SecurityDepositViolationMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *SecurityDepositViolationMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *SecurityDepositViolationMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetAPIKeyID sets the "api_key_id" field.
+func (m *SecurityDepositViolationMutation) SetAPIKeyID(i int64) {
+	m.api_key_id = &i
+	m.addapi_key_id = nil
+}
+
+// APIKeyID returns the value of the "api_key_id" field in the mutation.
+func (m *SecurityDepositViolationMutation) APIKeyID() (r int64, exists bool) {
+	v := m.api_key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyID returns the old "api_key_id" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldAPIKeyID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyID: %w", err)
+	}
+	return oldValue.APIKeyID, nil
+}
+
+// AddAPIKeyID adds i to the "api_key_id" field.
+func (m *SecurityDepositViolationMutation) AddAPIKeyID(i int64) {
+	if m.addapi_key_id != nil {
+		*m.addapi_key_id += i
+	} else {
+		m.addapi_key_id = &i
+	}
+}
+
+// AddedAPIKeyID returns the value that was added to the "api_key_id" field in this mutation.
+func (m *SecurityDepositViolationMutation) AddedAPIKeyID() (r int64, exists bool) {
+	v := m.addapi_key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAPIKeyID resets all changes to the "api_key_id" field.
+func (m *SecurityDepositViolationMutation) ResetAPIKeyID() {
+	m.api_key_id = nil
+	m.addapi_key_id = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *SecurityDepositViolationMutation) SetGroupID(i int64) {
+	m.group_id = &i
+	m.addgroup_id = nil
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *SecurityDepositViolationMutation) GroupID() (r int64, exists bool) {
+	v := m.group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldGroupID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// AddGroupID adds i to the "group_id" field.
+func (m *SecurityDepositViolationMutation) AddGroupID(i int64) {
+	if m.addgroup_id != nil {
+		*m.addgroup_id += i
+	} else {
+		m.addgroup_id = &i
+	}
+}
+
+// AddedGroupID returns the value that was added to the "group_id" field in this mutation.
+func (m *SecurityDepositViolationMutation) AddedGroupID() (r int64, exists bool) {
+	v := m.addgroup_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *SecurityDepositViolationMutation) ResetGroupID() {
+	m.group_id = nil
+	m.addgroup_id = nil
+}
+
+// SetPolicyCode sets the "policy_code" field.
+func (m *SecurityDepositViolationMutation) SetPolicyCode(s string) {
+	m.policy_code = &s
+}
+
+// PolicyCode returns the value of the "policy_code" field in the mutation.
+func (m *SecurityDepositViolationMutation) PolicyCode() (r string, exists bool) {
+	v := m.policy_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPolicyCode returns the old "policy_code" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldPolicyCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPolicyCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPolicyCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPolicyCode: %w", err)
+	}
+	return oldValue.PolicyCode, nil
+}
+
+// ResetPolicyCode resets all changes to the "policy_code" field.
+func (m *SecurityDepositViolationMutation) ResetPolicyCode() {
+	m.policy_code = nil
+}
+
+// SetDetectorVersion sets the "detector_version" field.
+func (m *SecurityDepositViolationMutation) SetDetectorVersion(s string) {
+	m.detector_version = &s
+}
+
+// DetectorVersion returns the value of the "detector_version" field in the mutation.
+func (m *SecurityDepositViolationMutation) DetectorVersion() (r string, exists bool) {
+	v := m.detector_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDetectorVersion returns the old "detector_version" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldDetectorVersion(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDetectorVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDetectorVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDetectorVersion: %w", err)
+	}
+	return oldValue.DetectorVersion, nil
+}
+
+// ResetDetectorVersion resets all changes to the "detector_version" field.
+func (m *SecurityDepositViolationMutation) ResetDetectorVersion() {
+	m.detector_version = nil
+}
+
+// SetBaseRequiredSnapshotCents sets the "base_required_snapshot_cents" field.
+func (m *SecurityDepositViolationMutation) SetBaseRequiredSnapshotCents(i int64) {
+	m.base_required_snapshot_cents = &i
+	m.addbase_required_snapshot_cents = nil
+}
+
+// BaseRequiredSnapshotCents returns the value of the "base_required_snapshot_cents" field in the mutation.
+func (m *SecurityDepositViolationMutation) BaseRequiredSnapshotCents() (r int64, exists bool) {
+	v := m.base_required_snapshot_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBaseRequiredSnapshotCents returns the old "base_required_snapshot_cents" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldBaseRequiredSnapshotCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBaseRequiredSnapshotCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBaseRequiredSnapshotCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBaseRequiredSnapshotCents: %w", err)
+	}
+	return oldValue.BaseRequiredSnapshotCents, nil
+}
+
+// AddBaseRequiredSnapshotCents adds i to the "base_required_snapshot_cents" field.
+func (m *SecurityDepositViolationMutation) AddBaseRequiredSnapshotCents(i int64) {
+	if m.addbase_required_snapshot_cents != nil {
+		*m.addbase_required_snapshot_cents += i
+	} else {
+		m.addbase_required_snapshot_cents = &i
+	}
+}
+
+// AddedBaseRequiredSnapshotCents returns the value that was added to the "base_required_snapshot_cents" field in this mutation.
+func (m *SecurityDepositViolationMutation) AddedBaseRequiredSnapshotCents() (r int64, exists bool) {
+	v := m.addbase_required_snapshot_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBaseRequiredSnapshotCents resets all changes to the "base_required_snapshot_cents" field.
+func (m *SecurityDepositViolationMutation) ResetBaseRequiredSnapshotCents() {
+	m.base_required_snapshot_cents = nil
+	m.addbase_required_snapshot_cents = nil
+}
+
+// SetRiskMultiplierBefore sets the "risk_multiplier_before" field.
+func (m *SecurityDepositViolationMutation) SetRiskMultiplierBefore(i int64) {
+	m.risk_multiplier_before = &i
+	m.addrisk_multiplier_before = nil
+}
+
+// RiskMultiplierBefore returns the value of the "risk_multiplier_before" field in the mutation.
+func (m *SecurityDepositViolationMutation) RiskMultiplierBefore() (r int64, exists bool) {
+	v := m.risk_multiplier_before
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRiskMultiplierBefore returns the old "risk_multiplier_before" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldRiskMultiplierBefore(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRiskMultiplierBefore is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRiskMultiplierBefore requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRiskMultiplierBefore: %w", err)
+	}
+	return oldValue.RiskMultiplierBefore, nil
+}
+
+// AddRiskMultiplierBefore adds i to the "risk_multiplier_before" field.
+func (m *SecurityDepositViolationMutation) AddRiskMultiplierBefore(i int64) {
+	if m.addrisk_multiplier_before != nil {
+		*m.addrisk_multiplier_before += i
+	} else {
+		m.addrisk_multiplier_before = &i
+	}
+}
+
+// AddedRiskMultiplierBefore returns the value that was added to the "risk_multiplier_before" field in this mutation.
+func (m *SecurityDepositViolationMutation) AddedRiskMultiplierBefore() (r int64, exists bool) {
+	v := m.addrisk_multiplier_before
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRiskMultiplierBefore resets all changes to the "risk_multiplier_before" field.
+func (m *SecurityDepositViolationMutation) ResetRiskMultiplierBefore() {
+	m.risk_multiplier_before = nil
+	m.addrisk_multiplier_before = nil
+}
+
+// SetRequiredSnapshotCents sets the "required_snapshot_cents" field.
+func (m *SecurityDepositViolationMutation) SetRequiredSnapshotCents(i int64) {
+	m.required_snapshot_cents = &i
+	m.addrequired_snapshot_cents = nil
+}
+
+// RequiredSnapshotCents returns the value of the "required_snapshot_cents" field in the mutation.
+func (m *SecurityDepositViolationMutation) RequiredSnapshotCents() (r int64, exists bool) {
+	v := m.required_snapshot_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequiredSnapshotCents returns the old "required_snapshot_cents" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldRequiredSnapshotCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequiredSnapshotCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequiredSnapshotCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequiredSnapshotCents: %w", err)
+	}
+	return oldValue.RequiredSnapshotCents, nil
+}
+
+// AddRequiredSnapshotCents adds i to the "required_snapshot_cents" field.
+func (m *SecurityDepositViolationMutation) AddRequiredSnapshotCents(i int64) {
+	if m.addrequired_snapshot_cents != nil {
+		*m.addrequired_snapshot_cents += i
+	} else {
+		m.addrequired_snapshot_cents = &i
+	}
+}
+
+// AddedRequiredSnapshotCents returns the value that was added to the "required_snapshot_cents" field in this mutation.
+func (m *SecurityDepositViolationMutation) AddedRequiredSnapshotCents() (r int64, exists bool) {
+	v := m.addrequired_snapshot_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRequiredSnapshotCents resets all changes to the "required_snapshot_cents" field.
+func (m *SecurityDepositViolationMutation) ResetRequiredSnapshotCents() {
+	m.required_snapshot_cents = nil
+	m.addrequired_snapshot_cents = nil
+}
+
+// SetRiskMultiplierAfter sets the "risk_multiplier_after" field.
+func (m *SecurityDepositViolationMutation) SetRiskMultiplierAfter(i int64) {
+	m.risk_multiplier_after = &i
+	m.addrisk_multiplier_after = nil
+}
+
+// RiskMultiplierAfter returns the value of the "risk_multiplier_after" field in the mutation.
+func (m *SecurityDepositViolationMutation) RiskMultiplierAfter() (r int64, exists bool) {
+	v := m.risk_multiplier_after
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRiskMultiplierAfter returns the old "risk_multiplier_after" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldRiskMultiplierAfter(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRiskMultiplierAfter is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRiskMultiplierAfter requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRiskMultiplierAfter: %w", err)
+	}
+	return oldValue.RiskMultiplierAfter, nil
+}
+
+// AddRiskMultiplierAfter adds i to the "risk_multiplier_after" field.
+func (m *SecurityDepositViolationMutation) AddRiskMultiplierAfter(i int64) {
+	if m.addrisk_multiplier_after != nil {
+		*m.addrisk_multiplier_after += i
+	} else {
+		m.addrisk_multiplier_after = &i
+	}
+}
+
+// AddedRiskMultiplierAfter returns the value that was added to the "risk_multiplier_after" field in this mutation.
+func (m *SecurityDepositViolationMutation) AddedRiskMultiplierAfter() (r int64, exists bool) {
+	v := m.addrisk_multiplier_after
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRiskMultiplierAfter resets all changes to the "risk_multiplier_after" field.
+func (m *SecurityDepositViolationMutation) ResetRiskMultiplierAfter() {
+	m.risk_multiplier_after = nil
+	m.addrisk_multiplier_after = nil
+}
+
+// SetForfeitedCents sets the "forfeited_cents" field.
+func (m *SecurityDepositViolationMutation) SetForfeitedCents(i int64) {
+	m.forfeited_cents = &i
+	m.addforfeited_cents = nil
+}
+
+// ForfeitedCents returns the value of the "forfeited_cents" field in the mutation.
+func (m *SecurityDepositViolationMutation) ForfeitedCents() (r int64, exists bool) {
+	v := m.forfeited_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldForfeitedCents returns the old "forfeited_cents" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldForfeitedCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldForfeitedCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldForfeitedCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldForfeitedCents: %w", err)
+	}
+	return oldValue.ForfeitedCents, nil
+}
+
+// AddForfeitedCents adds i to the "forfeited_cents" field.
+func (m *SecurityDepositViolationMutation) AddForfeitedCents(i int64) {
+	if m.addforfeited_cents != nil {
+		*m.addforfeited_cents += i
+	} else {
+		m.addforfeited_cents = &i
+	}
+}
+
+// AddedForfeitedCents returns the value that was added to the "forfeited_cents" field in this mutation.
+func (m *SecurityDepositViolationMutation) AddedForfeitedCents() (r int64, exists bool) {
+	v := m.addforfeited_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetForfeitedCents resets all changes to the "forfeited_cents" field.
+func (m *SecurityDepositViolationMutation) ResetForfeitedCents() {
+	m.forfeited_cents = nil
+	m.addforfeited_cents = nil
+}
+
+// SetShortfallCents sets the "shortfall_cents" field.
+func (m *SecurityDepositViolationMutation) SetShortfallCents(i int64) {
+	m.shortfall_cents = &i
+	m.addshortfall_cents = nil
+}
+
+// ShortfallCents returns the value of the "shortfall_cents" field in the mutation.
+func (m *SecurityDepositViolationMutation) ShortfallCents() (r int64, exists bool) {
+	v := m.shortfall_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldShortfallCents returns the old "shortfall_cents" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldShortfallCents(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldShortfallCents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldShortfallCents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldShortfallCents: %w", err)
+	}
+	return oldValue.ShortfallCents, nil
+}
+
+// AddShortfallCents adds i to the "shortfall_cents" field.
+func (m *SecurityDepositViolationMutation) AddShortfallCents(i int64) {
+	if m.addshortfall_cents != nil {
+		*m.addshortfall_cents += i
+	} else {
+		m.addshortfall_cents = &i
+	}
+}
+
+// AddedShortfallCents returns the value that was added to the "shortfall_cents" field in this mutation.
+func (m *SecurityDepositViolationMutation) AddedShortfallCents() (r int64, exists bool) {
+	v := m.addshortfall_cents
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetShortfallCents resets all changes to the "shortfall_cents" field.
+func (m *SecurityDepositViolationMutation) ResetShortfallCents() {
+	m.shortfall_cents = nil
+	m.addshortfall_cents = nil
+}
+
+// SetState sets the "state" field.
+func (m *SecurityDepositViolationMutation) SetState(s string) {
+	m.state = &s
+}
+
+// State returns the value of the "state" field in the mutation.
+func (m *SecurityDepositViolationMutation) State() (r string, exists bool) {
+	v := m.state
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldState returns the old "state" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldState(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldState is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldState requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldState: %w", err)
+	}
+	return oldValue.State, nil
+}
+
+// ResetState resets all changes to the "state" field.
+func (m *SecurityDepositViolationMutation) ResetState() {
+	m.state = nil
+}
+
+// SetErrorCode sets the "error_code" field.
+func (m *SecurityDepositViolationMutation) SetErrorCode(s string) {
+	m.error_code = &s
+}
+
+// ErrorCode returns the value of the "error_code" field in the mutation.
+func (m *SecurityDepositViolationMutation) ErrorCode() (r string, exists bool) {
+	v := m.error_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorCode returns the old "error_code" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldErrorCode(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorCode: %w", err)
+	}
+	return oldValue.ErrorCode, nil
+}
+
+// ClearErrorCode clears the value of the "error_code" field.
+func (m *SecurityDepositViolationMutation) ClearErrorCode() {
+	m.error_code = nil
+	m.clearedFields[securitydepositviolation.FieldErrorCode] = struct{}{}
+}
+
+// ErrorCodeCleared returns if the "error_code" field was cleared in this mutation.
+func (m *SecurityDepositViolationMutation) ErrorCodeCleared() bool {
+	_, ok := m.clearedFields[securitydepositviolation.FieldErrorCode]
+	return ok
+}
+
+// ResetErrorCode resets all changes to the "error_code" field.
+func (m *SecurityDepositViolationMutation) ResetErrorCode() {
+	m.error_code = nil
+	delete(m.clearedFields, securitydepositviolation.FieldErrorCode)
+}
+
+// SetRetryCount sets the "retry_count" field.
+func (m *SecurityDepositViolationMutation) SetRetryCount(i int) {
+	m.retry_count = &i
+	m.addretry_count = nil
+}
+
+// RetryCount returns the value of the "retry_count" field in the mutation.
+func (m *SecurityDepositViolationMutation) RetryCount() (r int, exists bool) {
+	v := m.retry_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRetryCount returns the old "retry_count" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldRetryCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRetryCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRetryCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRetryCount: %w", err)
+	}
+	return oldValue.RetryCount, nil
+}
+
+// AddRetryCount adds i to the "retry_count" field.
+func (m *SecurityDepositViolationMutation) AddRetryCount(i int) {
+	if m.addretry_count != nil {
+		*m.addretry_count += i
+	} else {
+		m.addretry_count = &i
+	}
+}
+
+// AddedRetryCount returns the value that was added to the "retry_count" field in this mutation.
+func (m *SecurityDepositViolationMutation) AddedRetryCount() (r int, exists bool) {
+	v := m.addretry_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRetryCount resets all changes to the "retry_count" field.
+func (m *SecurityDepositViolationMutation) ResetRetryCount() {
+	m.retry_count = nil
+	m.addretry_count = nil
+}
+
+// SetAPIKeyNameSnapshot sets the "api_key_name_snapshot" field.
+func (m *SecurityDepositViolationMutation) SetAPIKeyNameSnapshot(s string) {
+	m.api_key_name_snapshot = &s
+}
+
+// APIKeyNameSnapshot returns the value of the "api_key_name_snapshot" field in the mutation.
+func (m *SecurityDepositViolationMutation) APIKeyNameSnapshot() (r string, exists bool) {
+	v := m.api_key_name_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyNameSnapshot returns the old "api_key_name_snapshot" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldAPIKeyNameSnapshot(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyNameSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyNameSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyNameSnapshot: %w", err)
+	}
+	return oldValue.APIKeyNameSnapshot, nil
+}
+
+// ResetAPIKeyNameSnapshot resets all changes to the "api_key_name_snapshot" field.
+func (m *SecurityDepositViolationMutation) ResetAPIKeyNameSnapshot() {
+	m.api_key_name_snapshot = nil
+}
+
+// SetGroupNameSnapshot sets the "group_name_snapshot" field.
+func (m *SecurityDepositViolationMutation) SetGroupNameSnapshot(s string) {
+	m.group_name_snapshot = &s
+}
+
+// GroupNameSnapshot returns the value of the "group_name_snapshot" field in the mutation.
+func (m *SecurityDepositViolationMutation) GroupNameSnapshot() (r string, exists bool) {
+	v := m.group_name_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupNameSnapshot returns the old "group_name_snapshot" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldGroupNameSnapshot(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupNameSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupNameSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupNameSnapshot: %w", err)
+	}
+	return oldValue.GroupNameSnapshot, nil
+}
+
+// ResetGroupNameSnapshot resets all changes to the "group_name_snapshot" field.
+func (m *SecurityDepositViolationMutation) ResetGroupNameSnapshot() {
+	m.group_name_snapshot = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SecurityDepositViolationMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SecurityDepositViolationMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SecurityDepositViolationMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetProcessedAt sets the "processed_at" field.
+func (m *SecurityDepositViolationMutation) SetProcessedAt(t time.Time) {
+	m.processed_at = &t
+}
+
+// ProcessedAt returns the value of the "processed_at" field in the mutation.
+func (m *SecurityDepositViolationMutation) ProcessedAt() (r time.Time, exists bool) {
+	v := m.processed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProcessedAt returns the old "processed_at" field's value of the SecurityDepositViolation entity.
+// If the SecurityDepositViolation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecurityDepositViolationMutation) OldProcessedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProcessedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProcessedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProcessedAt: %w", err)
+	}
+	return oldValue.ProcessedAt, nil
+}
+
+// ClearProcessedAt clears the value of the "processed_at" field.
+func (m *SecurityDepositViolationMutation) ClearProcessedAt() {
+	m.processed_at = nil
+	m.clearedFields[securitydepositviolation.FieldProcessedAt] = struct{}{}
+}
+
+// ProcessedAtCleared returns if the "processed_at" field was cleared in this mutation.
+func (m *SecurityDepositViolationMutation) ProcessedAtCleared() bool {
+	_, ok := m.clearedFields[securitydepositviolation.FieldProcessedAt]
+	return ok
+}
+
+// ResetProcessedAt resets all changes to the "processed_at" field.
+func (m *SecurityDepositViolationMutation) ResetProcessedAt() {
+	m.processed_at = nil
+	delete(m.clearedFields, securitydepositviolation.FieldProcessedAt)
+}
+
+// Where appends a list predicates to the SecurityDepositViolationMutation builder.
+func (m *SecurityDepositViolationMutation) Where(ps ...predicate.SecurityDepositViolation) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SecurityDepositViolationMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SecurityDepositViolationMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SecurityDepositViolation, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SecurityDepositViolationMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SecurityDepositViolationMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SecurityDepositViolation).
+func (m *SecurityDepositViolationMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SecurityDepositViolationMutation) Fields() []string {
+	fields := make([]string, 0, 22)
+	if m.event_key != nil {
+		fields = append(fields, securitydepositviolation.FieldEventKey)
+	}
+	if m.request_id != nil {
+		fields = append(fields, securitydepositviolation.FieldRequestID)
+	}
+	if m.upstream_response_id != nil {
+		fields = append(fields, securitydepositviolation.FieldUpstreamResponseID)
+	}
+	if m.turn_index != nil {
+		fields = append(fields, securitydepositviolation.FieldTurnIndex)
+	}
+	if m.user_id != nil {
+		fields = append(fields, securitydepositviolation.FieldUserID)
+	}
+	if m.api_key_id != nil {
+		fields = append(fields, securitydepositviolation.FieldAPIKeyID)
+	}
+	if m.group_id != nil {
+		fields = append(fields, securitydepositviolation.FieldGroupID)
+	}
+	if m.policy_code != nil {
+		fields = append(fields, securitydepositviolation.FieldPolicyCode)
+	}
+	if m.detector_version != nil {
+		fields = append(fields, securitydepositviolation.FieldDetectorVersion)
+	}
+	if m.base_required_snapshot_cents != nil {
+		fields = append(fields, securitydepositviolation.FieldBaseRequiredSnapshotCents)
+	}
+	if m.risk_multiplier_before != nil {
+		fields = append(fields, securitydepositviolation.FieldRiskMultiplierBefore)
+	}
+	if m.required_snapshot_cents != nil {
+		fields = append(fields, securitydepositviolation.FieldRequiredSnapshotCents)
+	}
+	if m.risk_multiplier_after != nil {
+		fields = append(fields, securitydepositviolation.FieldRiskMultiplierAfter)
+	}
+	if m.forfeited_cents != nil {
+		fields = append(fields, securitydepositviolation.FieldForfeitedCents)
+	}
+	if m.shortfall_cents != nil {
+		fields = append(fields, securitydepositviolation.FieldShortfallCents)
+	}
+	if m.state != nil {
+		fields = append(fields, securitydepositviolation.FieldState)
+	}
+	if m.error_code != nil {
+		fields = append(fields, securitydepositviolation.FieldErrorCode)
+	}
+	if m.retry_count != nil {
+		fields = append(fields, securitydepositviolation.FieldRetryCount)
+	}
+	if m.api_key_name_snapshot != nil {
+		fields = append(fields, securitydepositviolation.FieldAPIKeyNameSnapshot)
+	}
+	if m.group_name_snapshot != nil {
+		fields = append(fields, securitydepositviolation.FieldGroupNameSnapshot)
+	}
+	if m.created_at != nil {
+		fields = append(fields, securitydepositviolation.FieldCreatedAt)
+	}
+	if m.processed_at != nil {
+		fields = append(fields, securitydepositviolation.FieldProcessedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SecurityDepositViolationMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositviolation.FieldEventKey:
+		return m.EventKey()
+	case securitydepositviolation.FieldRequestID:
+		return m.RequestID()
+	case securitydepositviolation.FieldUpstreamResponseID:
+		return m.UpstreamResponseID()
+	case securitydepositviolation.FieldTurnIndex:
+		return m.TurnIndex()
+	case securitydepositviolation.FieldUserID:
+		return m.UserID()
+	case securitydepositviolation.FieldAPIKeyID:
+		return m.APIKeyID()
+	case securitydepositviolation.FieldGroupID:
+		return m.GroupID()
+	case securitydepositviolation.FieldPolicyCode:
+		return m.PolicyCode()
+	case securitydepositviolation.FieldDetectorVersion:
+		return m.DetectorVersion()
+	case securitydepositviolation.FieldBaseRequiredSnapshotCents:
+		return m.BaseRequiredSnapshotCents()
+	case securitydepositviolation.FieldRiskMultiplierBefore:
+		return m.RiskMultiplierBefore()
+	case securitydepositviolation.FieldRequiredSnapshotCents:
+		return m.RequiredSnapshotCents()
+	case securitydepositviolation.FieldRiskMultiplierAfter:
+		return m.RiskMultiplierAfter()
+	case securitydepositviolation.FieldForfeitedCents:
+		return m.ForfeitedCents()
+	case securitydepositviolation.FieldShortfallCents:
+		return m.ShortfallCents()
+	case securitydepositviolation.FieldState:
+		return m.State()
+	case securitydepositviolation.FieldErrorCode:
+		return m.ErrorCode()
+	case securitydepositviolation.FieldRetryCount:
+		return m.RetryCount()
+	case securitydepositviolation.FieldAPIKeyNameSnapshot:
+		return m.APIKeyNameSnapshot()
+	case securitydepositviolation.FieldGroupNameSnapshot:
+		return m.GroupNameSnapshot()
+	case securitydepositviolation.FieldCreatedAt:
+		return m.CreatedAt()
+	case securitydepositviolation.FieldProcessedAt:
+		return m.ProcessedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SecurityDepositViolationMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case securitydepositviolation.FieldEventKey:
+		return m.OldEventKey(ctx)
+	case securitydepositviolation.FieldRequestID:
+		return m.OldRequestID(ctx)
+	case securitydepositviolation.FieldUpstreamResponseID:
+		return m.OldUpstreamResponseID(ctx)
+	case securitydepositviolation.FieldTurnIndex:
+		return m.OldTurnIndex(ctx)
+	case securitydepositviolation.FieldUserID:
+		return m.OldUserID(ctx)
+	case securitydepositviolation.FieldAPIKeyID:
+		return m.OldAPIKeyID(ctx)
+	case securitydepositviolation.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case securitydepositviolation.FieldPolicyCode:
+		return m.OldPolicyCode(ctx)
+	case securitydepositviolation.FieldDetectorVersion:
+		return m.OldDetectorVersion(ctx)
+	case securitydepositviolation.FieldBaseRequiredSnapshotCents:
+		return m.OldBaseRequiredSnapshotCents(ctx)
+	case securitydepositviolation.FieldRiskMultiplierBefore:
+		return m.OldRiskMultiplierBefore(ctx)
+	case securitydepositviolation.FieldRequiredSnapshotCents:
+		return m.OldRequiredSnapshotCents(ctx)
+	case securitydepositviolation.FieldRiskMultiplierAfter:
+		return m.OldRiskMultiplierAfter(ctx)
+	case securitydepositviolation.FieldForfeitedCents:
+		return m.OldForfeitedCents(ctx)
+	case securitydepositviolation.FieldShortfallCents:
+		return m.OldShortfallCents(ctx)
+	case securitydepositviolation.FieldState:
+		return m.OldState(ctx)
+	case securitydepositviolation.FieldErrorCode:
+		return m.OldErrorCode(ctx)
+	case securitydepositviolation.FieldRetryCount:
+		return m.OldRetryCount(ctx)
+	case securitydepositviolation.FieldAPIKeyNameSnapshot:
+		return m.OldAPIKeyNameSnapshot(ctx)
+	case securitydepositviolation.FieldGroupNameSnapshot:
+		return m.OldGroupNameSnapshot(ctx)
+	case securitydepositviolation.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case securitydepositviolation.FieldProcessedAt:
+		return m.OldProcessedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SecurityDepositViolation field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositViolationMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositviolation.FieldEventKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEventKey(v)
+		return nil
+	case securitydepositviolation.FieldRequestID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestID(v)
+		return nil
+	case securitydepositviolation.FieldUpstreamResponseID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpstreamResponseID(v)
+		return nil
+	case securitydepositviolation.FieldTurnIndex:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTurnIndex(v)
+		return nil
+	case securitydepositviolation.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case securitydepositviolation.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyID(v)
+		return nil
+	case securitydepositviolation.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case securitydepositviolation.FieldPolicyCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPolicyCode(v)
+		return nil
+	case securitydepositviolation.FieldDetectorVersion:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDetectorVersion(v)
+		return nil
+	case securitydepositviolation.FieldBaseRequiredSnapshotCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBaseRequiredSnapshotCents(v)
+		return nil
+	case securitydepositviolation.FieldRiskMultiplierBefore:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRiskMultiplierBefore(v)
+		return nil
+	case securitydepositviolation.FieldRequiredSnapshotCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequiredSnapshotCents(v)
+		return nil
+	case securitydepositviolation.FieldRiskMultiplierAfter:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRiskMultiplierAfter(v)
+		return nil
+	case securitydepositviolation.FieldForfeitedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetForfeitedCents(v)
+		return nil
+	case securitydepositviolation.FieldShortfallCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetShortfallCents(v)
+		return nil
+	case securitydepositviolation.FieldState:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetState(v)
+		return nil
+	case securitydepositviolation.FieldErrorCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorCode(v)
+		return nil
+	case securitydepositviolation.FieldRetryCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRetryCount(v)
+		return nil
+	case securitydepositviolation.FieldAPIKeyNameSnapshot:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyNameSnapshot(v)
+		return nil
+	case securitydepositviolation.FieldGroupNameSnapshot:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupNameSnapshot(v)
+		return nil
+	case securitydepositviolation.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case securitydepositviolation.FieldProcessedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProcessedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositViolation field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SecurityDepositViolationMutation) AddedFields() []string {
+	var fields []string
+	if m.addturn_index != nil {
+		fields = append(fields, securitydepositviolation.FieldTurnIndex)
+	}
+	if m.adduser_id != nil {
+		fields = append(fields, securitydepositviolation.FieldUserID)
+	}
+	if m.addapi_key_id != nil {
+		fields = append(fields, securitydepositviolation.FieldAPIKeyID)
+	}
+	if m.addgroup_id != nil {
+		fields = append(fields, securitydepositviolation.FieldGroupID)
+	}
+	if m.addbase_required_snapshot_cents != nil {
+		fields = append(fields, securitydepositviolation.FieldBaseRequiredSnapshotCents)
+	}
+	if m.addrisk_multiplier_before != nil {
+		fields = append(fields, securitydepositviolation.FieldRiskMultiplierBefore)
+	}
+	if m.addrequired_snapshot_cents != nil {
+		fields = append(fields, securitydepositviolation.FieldRequiredSnapshotCents)
+	}
+	if m.addrisk_multiplier_after != nil {
+		fields = append(fields, securitydepositviolation.FieldRiskMultiplierAfter)
+	}
+	if m.addforfeited_cents != nil {
+		fields = append(fields, securitydepositviolation.FieldForfeitedCents)
+	}
+	if m.addshortfall_cents != nil {
+		fields = append(fields, securitydepositviolation.FieldShortfallCents)
+	}
+	if m.addretry_count != nil {
+		fields = append(fields, securitydepositviolation.FieldRetryCount)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SecurityDepositViolationMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case securitydepositviolation.FieldTurnIndex:
+		return m.AddedTurnIndex()
+	case securitydepositviolation.FieldUserID:
+		return m.AddedUserID()
+	case securitydepositviolation.FieldAPIKeyID:
+		return m.AddedAPIKeyID()
+	case securitydepositviolation.FieldGroupID:
+		return m.AddedGroupID()
+	case securitydepositviolation.FieldBaseRequiredSnapshotCents:
+		return m.AddedBaseRequiredSnapshotCents()
+	case securitydepositviolation.FieldRiskMultiplierBefore:
+		return m.AddedRiskMultiplierBefore()
+	case securitydepositviolation.FieldRequiredSnapshotCents:
+		return m.AddedRequiredSnapshotCents()
+	case securitydepositviolation.FieldRiskMultiplierAfter:
+		return m.AddedRiskMultiplierAfter()
+	case securitydepositviolation.FieldForfeitedCents:
+		return m.AddedForfeitedCents()
+	case securitydepositviolation.FieldShortfallCents:
+		return m.AddedShortfallCents()
+	case securitydepositviolation.FieldRetryCount:
+		return m.AddedRetryCount()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SecurityDepositViolationMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case securitydepositviolation.FieldTurnIndex:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTurnIndex(v)
+		return nil
+	case securitydepositviolation.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case securitydepositviolation.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAPIKeyID(v)
+		return nil
+	case securitydepositviolation.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupID(v)
+		return nil
+	case securitydepositviolation.FieldBaseRequiredSnapshotCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBaseRequiredSnapshotCents(v)
+		return nil
+	case securitydepositviolation.FieldRiskMultiplierBefore:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRiskMultiplierBefore(v)
+		return nil
+	case securitydepositviolation.FieldRequiredSnapshotCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRequiredSnapshotCents(v)
+		return nil
+	case securitydepositviolation.FieldRiskMultiplierAfter:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRiskMultiplierAfter(v)
+		return nil
+	case securitydepositviolation.FieldForfeitedCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddForfeitedCents(v)
+		return nil
+	case securitydepositviolation.FieldShortfallCents:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddShortfallCents(v)
+		return nil
+	case securitydepositviolation.FieldRetryCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRetryCount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositViolation numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SecurityDepositViolationMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(securitydepositviolation.FieldUpstreamResponseID) {
+		fields = append(fields, securitydepositviolation.FieldUpstreamResponseID)
+	}
+	if m.FieldCleared(securitydepositviolation.FieldTurnIndex) {
+		fields = append(fields, securitydepositviolation.FieldTurnIndex)
+	}
+	if m.FieldCleared(securitydepositviolation.FieldErrorCode) {
+		fields = append(fields, securitydepositviolation.FieldErrorCode)
+	}
+	if m.FieldCleared(securitydepositviolation.FieldProcessedAt) {
+		fields = append(fields, securitydepositviolation.FieldProcessedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SecurityDepositViolationMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SecurityDepositViolationMutation) ClearField(name string) error {
+	switch name {
+	case securitydepositviolation.FieldUpstreamResponseID:
+		m.ClearUpstreamResponseID()
+		return nil
+	case securitydepositviolation.FieldTurnIndex:
+		m.ClearTurnIndex()
+		return nil
+	case securitydepositviolation.FieldErrorCode:
+		m.ClearErrorCode()
+		return nil
+	case securitydepositviolation.FieldProcessedAt:
+		m.ClearProcessedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositViolation nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SecurityDepositViolationMutation) ResetField(name string) error {
+	switch name {
+	case securitydepositviolation.FieldEventKey:
+		m.ResetEventKey()
+		return nil
+	case securitydepositviolation.FieldRequestID:
+		m.ResetRequestID()
+		return nil
+	case securitydepositviolation.FieldUpstreamResponseID:
+		m.ResetUpstreamResponseID()
+		return nil
+	case securitydepositviolation.FieldTurnIndex:
+		m.ResetTurnIndex()
+		return nil
+	case securitydepositviolation.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case securitydepositviolation.FieldAPIKeyID:
+		m.ResetAPIKeyID()
+		return nil
+	case securitydepositviolation.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case securitydepositviolation.FieldPolicyCode:
+		m.ResetPolicyCode()
+		return nil
+	case securitydepositviolation.FieldDetectorVersion:
+		m.ResetDetectorVersion()
+		return nil
+	case securitydepositviolation.FieldBaseRequiredSnapshotCents:
+		m.ResetBaseRequiredSnapshotCents()
+		return nil
+	case securitydepositviolation.FieldRiskMultiplierBefore:
+		m.ResetRiskMultiplierBefore()
+		return nil
+	case securitydepositviolation.FieldRequiredSnapshotCents:
+		m.ResetRequiredSnapshotCents()
+		return nil
+	case securitydepositviolation.FieldRiskMultiplierAfter:
+		m.ResetRiskMultiplierAfter()
+		return nil
+	case securitydepositviolation.FieldForfeitedCents:
+		m.ResetForfeitedCents()
+		return nil
+	case securitydepositviolation.FieldShortfallCents:
+		m.ResetShortfallCents()
+		return nil
+	case securitydepositviolation.FieldState:
+		m.ResetState()
+		return nil
+	case securitydepositviolation.FieldErrorCode:
+		m.ResetErrorCode()
+		return nil
+	case securitydepositviolation.FieldRetryCount:
+		m.ResetRetryCount()
+		return nil
+	case securitydepositviolation.FieldAPIKeyNameSnapshot:
+		m.ResetAPIKeyNameSnapshot()
+		return nil
+	case securitydepositviolation.FieldGroupNameSnapshot:
+		m.ResetGroupNameSnapshot()
+		return nil
+	case securitydepositviolation.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case securitydepositviolation.FieldProcessedAt:
+		m.ResetProcessedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SecurityDepositViolation field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SecurityDepositViolationMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SecurityDepositViolationMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SecurityDepositViolationMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SecurityDepositViolationMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SecurityDepositViolationMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SecurityDepositViolationMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SecurityDepositViolationMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositViolation unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SecurityDepositViolationMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SecurityDepositViolation edge %s", name)
 }
 
 // SecuritySecretMutation represents an operation that mutates the SecuritySecret nodes in the graph.

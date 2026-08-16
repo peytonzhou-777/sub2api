@@ -42,6 +42,34 @@
         >
           {{ peakRateText }}
         </span>
+        <div
+          v-if="securityDepositBaseRequiredCents > 0"
+          data-test="group-security-deposit-status"
+          class="max-w-52 text-right text-[11px] leading-4"
+        >
+          <span v-if="securityDepositLoading" class="text-gray-400 dark:text-gray-500">
+            {{ t('keys.securityDeposit.loading') }}
+          </span>
+          <template v-else-if="securityDepositEligibility">
+            <p class="font-medium" :class="securityDepositEligibility.eligible ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'">
+              {{ securityDepositEligibility.eligible
+                ? t('keys.securityDeposit.available')
+                : t('keys.securityDeposit.shortfall', { amount: formatCents(securityDepositEligibility.shortfall_cents) }) }}
+            </p>
+            <p class="text-gray-500 dark:text-gray-400">
+              {{ securityDepositEligibility.risk_multiplier > 1
+                ? t('keys.securityDeposit.personalRequired', {
+                    amount: formatCents(securityDepositEligibility.required_cents),
+                    multiplier: securityDepositEligibility.risk_multiplier
+                  })
+                : t('keys.securityDeposit.required', { amount: formatCents(securityDepositEligibility.required_cents) }) }}
+              · {{ t('keys.securityDeposit.current', { amount: formatCents(securityDepositEligibility.effective_balance_cents) }) }}
+            </p>
+          </template>
+          <span v-else class="text-gray-500 dark:text-gray-400">
+            {{ t('keys.securityDeposit.required', { amount: formatCents(securityDepositBaseRequiredCents) }) }}
+          </span>
+        </div>
       </div>
       <!-- Checkmark -->
       <svg
@@ -65,6 +93,7 @@ import GroupBadge from './GroupBadge.vue'
 import type { SubscriptionType, GroupPlatform } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
+import type { SecurityDepositEligibility } from '@/types/securityDeposit'
 
 const { t } = useI18n()
 
@@ -81,6 +110,9 @@ interface Props {
   description?: string | null
   selected?: boolean
   showCheckmark?: boolean
+  securityDepositBaseRequiredCents?: number
+  securityDepositEligibility?: SecurityDepositEligibility | null
+  securityDepositLoading?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -88,8 +120,15 @@ const props = withDefaults(defineProps<Props>(), {
   selected: false,
   showCheckmark: true,
   userRateMultiplier: null,
-  peakRateEnabled: false
+  peakRateEnabled: false,
+  securityDepositBaseRequiredCents: 0,
+  securityDepositEligibility: null,
+  securityDepositLoading: false,
 })
+
+function formatCents(cents: number): string {
+  return `¥${(Number(cents || 0) / 100).toFixed(2)}`
+}
 
 // Whether user has a custom rate different from default
 const hasCustomRate = computed(() => {

@@ -499,4 +499,25 @@ describe('PaymentResultView', () => {
     expect(wrapper.text()).toContain('payment.methods.alipay')
     expect(wrapper.text()).not.toContain('payment.methods.alipay_direct')
   })
+
+  it('保证金支付成功后返回密钥页并使用独立结果文案', async () => {
+    routeState.query = { resume_token: 'deposit-resume' }
+    resolveOrderPublicByResumeToken.mockResolvedValue({
+      data: {
+        ...orderFactory('PAID'),
+        order_type: 'security_deposit',
+        currency: 'CNY',
+      },
+    })
+
+    const wrapper = mount(PaymentResultView, {
+      global: { stubs: { OrderStatusBadge: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('payment.result.securityDepositSuccess')
+    expect(wrapper.text()).toContain('payment.result.backToKeys')
+    await wrapper.findAll('button')[0].trigger('click')
+    expect(routerPush).toHaveBeenCalledWith('/keys')
+  })
 })

@@ -225,6 +225,8 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				group.FieldProfitControlEnabled,
 				group.FieldProfitMinMargin,
 				group.FieldProfitSafetyBuffer,
+				group.FieldSecurityDepositBaseRequiredCents,
+				group.FieldSecurityDepositPolicyVersion,
 			)
 		}).
 		Only(ctx)
@@ -258,6 +260,12 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fiel
 	}
 	if fields.Status {
 		builder.SetStatus(key.Status)
+		if key.Status == service.StatusAPIKeyActive {
+			builder.ClearDisabledReason().
+				ClearDisabledFinancialEventType().
+				ClearDisabledFinancialEventID().
+				ClearDisabledAt()
+		}
 	}
 	if fields.Quota {
 		builder.SetQuota(key.Quota)
@@ -499,6 +507,72 @@ func (r *apiKeyRepository) ListAllByUserID(ctx context.Context, userID int64, fi
 		return nil, err
 	}
 	return outKeys, nil
+}
+
+// ListActiveSecurityDepositKeys 返回参与保证金资格重算的 active 且已绑定分组密钥。
+func (r *apiKeyRepository) ListActiveSecurityDepositKeys(ctx context.Context, userID int64) ([]service.SecurityDepositKeyReference, error) {
+	rows, err := clientFromContext(ctx, r.client).APIKey.Query().
+		Where(
+			apikey.UserIDEQ(userID),
+			apikey.StatusEQ(service.StatusAPIKeyActive),
+			apikey.GroupIDNotNil(),
+			apikey.DeletedAtIsNil(),
+		).
+		Order(dbent.Asc(apikey.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]service.SecurityDepositKeyReference, 0, len(rows))
+	for _, row := range rows {
+		if row.GroupID == nil {
+			continue
+		}
+		result = append(result, service.SecurityDepositKeyReference{ID: row.ID, UserID: row.UserID, Key: row.Key, GroupID: *row.GroupID})
+	}
+	return result, nil
+}
+
+// DisableActiveSecurityDepositKeys 用条件更新避免覆盖并发产生的其他密钥状态。
+func (r *apiKeyRepository) DisableActiveSecurityDepositKeys(ctx context.Context, keyIDs []int64, eventType string, eventID int64, disabledAt time.Time) ([]service.SecurityDepositKeyReference, error) {
+	if len(keyIDs) == 0 {
+		return []service.SecurityDepositKeyReference{}, nil
+	}
+	client := clientFromContext(ctx, r.client)
+	_, err := client.APIKey.Update().
+		Where(
+			apikey.IDIn(keyIDs...),
+			apikey.StatusEQ(service.StatusAPIKeyActive),
+			apikey.DeletedAtIsNil(),
+		).
+		SetStatus(service.StatusAPIKeyDisabled).
+		SetDisabledReason(service.DisabledReasonSecurityDepositInsufficient).
+		SetDisabledFinancialEventType(eventType).
+		SetDisabledFinancialEventID(eventID).
+		SetDisabledAt(disabledAt).
+		SetUpdatedAt(disabledAt).
+		Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := client.APIKey.Query().Where(
+		apikey.IDIn(keyIDs...),
+		apikey.StatusEQ(service.StatusAPIKeyDisabled),
+		apikey.DisabledReasonEQ(service.DisabledReasonSecurityDepositInsufficient),
+		apikey.DisabledFinancialEventTypeEQ(eventType),
+		apikey.DisabledFinancialEventIDEQ(eventID),
+		apikey.DeletedAtIsNil(),
+	).Order(dbent.Asc(apikey.FieldID)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]service.SecurityDepositKeyReference, 0, len(rows))
+	for _, row := range rows {
+		if row.GroupID != nil {
+			result = append(result, service.SecurityDepositKeyReference{ID: row.ID, UserID: row.UserID, Key: row.Key, GroupID: *row.GroupID})
+		}
+	}
+	return result, nil
 }
 
 func (r *apiKeyRepository) attachLastUsedIPs(ctx context.Context, keys []service.APIKey) error {
@@ -868,29 +942,36 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		return nil
 	}
 	out := &service.APIKey{
-		ID:            m.ID,
-		UserID:        m.UserID,
-		Key:           m.Key,
-		Name:          m.Name,
-		Status:        m.Status,
-		IPWhitelist:   m.IPWhitelist,
-		IPBlacklist:   m.IPBlacklist,
-		LastUsedAt:    m.LastUsedAt,
-		CreatedAt:     m.CreatedAt,
-		UpdatedAt:     m.UpdatedAt,
-		GroupID:       m.GroupID,
-		Quota:         m.Quota,
-		QuotaUsed:     m.QuotaUsed,
-		ExpiresAt:     m.ExpiresAt,
-		RateLimit5h:   m.RateLimit5h,
-		RateLimit1d:   m.RateLimit1d,
-		RateLimit7d:   m.RateLimit7d,
-		Usage5h:       m.Usage5h,
-		Usage1d:       m.Usage1d,
-		Usage7d:       m.Usage7d,
-		Window5hStart: m.Window5hStart,
-		Window1dStart: m.Window1dStart,
-		Window7dStart: m.Window7dStart,
+		ID:                         m.ID,
+		UserID:                     m.UserID,
+		Key:                        m.Key,
+		Name:                       m.Name,
+		Status:                     m.Status,
+		SecurityLockedAt:           m.SecurityLockedAt,
+		SecurityLockViolationID:    m.SecurityLockViolationID,
+		SecurityLockReason:         m.SecurityLockReason,
+		DisabledReason:             m.DisabledReason,
+		DisabledFinancialEventType: m.DisabledFinancialEventType,
+		DisabledFinancialEventID:   m.DisabledFinancialEventID,
+		DisabledAt:                 m.DisabledAt,
+		IPWhitelist:                m.IPWhitelist,
+		IPBlacklist:                m.IPBlacklist,
+		LastUsedAt:                 m.LastUsedAt,
+		CreatedAt:                  m.CreatedAt,
+		UpdatedAt:                  m.UpdatedAt,
+		GroupID:                    m.GroupID,
+		Quota:                      m.Quota,
+		QuotaUsed:                  m.QuotaUsed,
+		ExpiresAt:                  m.ExpiresAt,
+		RateLimit5h:                m.RateLimit5h,
+		RateLimit1d:                m.RateLimit1d,
+		RateLimit7d:                m.RateLimit7d,
+		Usage5h:                    m.Usage5h,
+		Usage1d:                    m.Usage1d,
+		Usage7d:                    m.Usage7d,
+		Window5hStart:              m.Window5hStart,
+		Window1dStart:              m.Window1dStart,
+		Window7dStart:              m.Window7dStart,
 	}
 	if m.Edges.User != nil {
 		out.User = userEntityToService(m.Edges.User)
@@ -959,69 +1040,71 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		}
 	}
 	return &service.Group{
-		ID:                              g.ID,
-		Name:                            g.Name,
-		Description:                     derefString(g.Description),
-		Platform:                        g.Platform,
-		RateMultiplier:                  g.RateMultiplier,
-		IsExclusive:                     g.IsExclusive,
-		Status:                          g.Status,
-		Hydrated:                        true,
-		DuplicateOperationID:            derefString(g.DuplicateOperationID),
-		SubscriptionType:                g.SubscriptionType,
-		DailyLimitUSD:                   g.DailyLimitUsd,
-		WeeklyLimitUSD:                  g.WeeklyLimitUsd,
-		MonthlyLimitUSD:                 g.MonthlyLimitUsd,
-		AllowImageGeneration:            g.AllowImageGeneration,
-		AllowBatchImageGeneration:       g.AllowBatchImageGeneration,
-		ImageRateIndependent:            g.ImageRateIndependent,
-		ImageRateMultiplier:             g.ImageRateMultiplier,
-		ImagePrice1K:                    g.ImagePrice1k,
-		ImagePrice2K:                    g.ImagePrice2k,
-		ImagePrice4K:                    g.ImagePrice4k,
-		BatchImageDiscountMultiplier:    g.BatchImageDiscountMultiplier,
-		BatchImageHoldMultiplier:        g.BatchImageHoldMultiplier,
-		VideoRateIndependent:            g.VideoRateIndependent,
-		VideoRateMultiplier:             g.VideoRateMultiplier,
-		VideoPrice480P:                  g.VideoPrice480p,
-		VideoPrice720P:                  g.VideoPrice720p,
-		VideoPrice1080P:                 g.VideoPrice1080p,
-		VideoModelPrices:                service.NormalizeVideoModelPrices(g.VideoModelPrices),
-		WebSearchPricePerCall:           g.WebSearchPricePerCall,
-		SearchPricePer1k:                g.SearchPricePer1k,
-		AudioRealtimePricePerMin:        g.AudioRealtimePricePerMin,
-		AudioTTSPricePerMillionChars:    g.AudioTtsPricePerMillionChars,
-		AudioSTTPricePerHour:            g.AudioSttPricePerHour,
-		LongContextPricingEnabled:       g.LongContextPricingEnabled,
-		ModelPricing:                    modelPricing,
-		DefaultValidityDays:             g.DefaultValidityDays,
-		ClaudeCodeOnly:                  g.ClaudeCodeOnly,
-		FallbackGroupID:                 g.FallbackGroupID,
-		FallbackGroupIDOnInvalidRequest: g.FallbackGroupIDOnInvalidRequest,
-		ModelRouting:                    g.ModelRouting,
-		ModelRoutingEnabled:             g.ModelRoutingEnabled,
-		MCPXMLInject:                    g.McpXMLInject,
-		SupportedModelScopes:            g.SupportedModelScopes,
-		SortOrder:                       g.SortOrder,
-		AllowMessagesDispatch:           g.AllowMessagesDispatch,
-		AllowLive:                       g.AllowLive,
-		RequireOAuthOnly:                g.RequireOauthOnly,
-		RequirePrivacySet:               g.RequirePrivacySet,
-		DefaultMappedModel:              g.DefaultMappedModel,
-		MessagesDispatchModelConfig:     g.MessagesDispatchModelConfig,
-		ModelsListConfig:                g.ModelsListConfig,
-		RPMLimit:                        g.RpmLimit,
-		MaxReasoningEffort:              g.MaxReasoningEffort,
-		ReasoningEffortMappings:         g.ReasoningEffortMappings,
-		PeakRateEnabled:                 g.PeakRateEnabled,
-		PeakStart:                       g.PeakStart,
-		PeakEnd:                         g.PeakEnd,
-		PeakRateMultiplier:              g.PeakRateMultiplier,
-		ProfitControlEnabled:            g.ProfitControlEnabled,
-		ProfitMinMargin:                 g.ProfitMinMargin,
-		ProfitSafetyBuffer:              g.ProfitSafetyBuffer,
-		CreatedAt:                       g.CreatedAt,
-		UpdatedAt:                       g.UpdatedAt,
+		ID:                               g.ID,
+		Name:                             g.Name,
+		Description:                      derefString(g.Description),
+		Platform:                         g.Platform,
+		RateMultiplier:                   g.RateMultiplier,
+		IsExclusive:                      g.IsExclusive,
+		Status:                           g.Status,
+		Hydrated:                         true,
+		DuplicateOperationID:             derefString(g.DuplicateOperationID),
+		SubscriptionType:                 g.SubscriptionType,
+		DailyLimitUSD:                    g.DailyLimitUsd,
+		WeeklyLimitUSD:                   g.WeeklyLimitUsd,
+		MonthlyLimitUSD:                  g.MonthlyLimitUsd,
+		AllowImageGeneration:             g.AllowImageGeneration,
+		AllowBatchImageGeneration:        g.AllowBatchImageGeneration,
+		ImageRateIndependent:             g.ImageRateIndependent,
+		ImageRateMultiplier:              g.ImageRateMultiplier,
+		ImagePrice1K:                     g.ImagePrice1k,
+		ImagePrice2K:                     g.ImagePrice2k,
+		ImagePrice4K:                     g.ImagePrice4k,
+		BatchImageDiscountMultiplier:     g.BatchImageDiscountMultiplier,
+		BatchImageHoldMultiplier:         g.BatchImageHoldMultiplier,
+		VideoRateIndependent:             g.VideoRateIndependent,
+		VideoRateMultiplier:              g.VideoRateMultiplier,
+		VideoPrice480P:                   g.VideoPrice480p,
+		VideoPrice720P:                   g.VideoPrice720p,
+		VideoPrice1080P:                  g.VideoPrice1080p,
+		VideoModelPrices:                 service.NormalizeVideoModelPrices(g.VideoModelPrices),
+		WebSearchPricePerCall:            g.WebSearchPricePerCall,
+		SearchPricePer1k:                 g.SearchPricePer1k,
+		AudioRealtimePricePerMin:         g.AudioRealtimePricePerMin,
+		AudioTTSPricePerMillionChars:     g.AudioTtsPricePerMillionChars,
+		AudioSTTPricePerHour:             g.AudioSttPricePerHour,
+		LongContextPricingEnabled:        g.LongContextPricingEnabled,
+		ModelPricing:                     modelPricing,
+		DefaultValidityDays:              g.DefaultValidityDays,
+		ClaudeCodeOnly:                   g.ClaudeCodeOnly,
+		FallbackGroupID:                  g.FallbackGroupID,
+		FallbackGroupIDOnInvalidRequest:  g.FallbackGroupIDOnInvalidRequest,
+		ModelRouting:                     g.ModelRouting,
+		ModelRoutingEnabled:              g.ModelRoutingEnabled,
+		MCPXMLInject:                     g.McpXMLInject,
+		SupportedModelScopes:             g.SupportedModelScopes,
+		SortOrder:                        g.SortOrder,
+		AllowMessagesDispatch:            g.AllowMessagesDispatch,
+		AllowLive:                        g.AllowLive,
+		RequireOAuthOnly:                 g.RequireOauthOnly,
+		RequirePrivacySet:                g.RequirePrivacySet,
+		DefaultMappedModel:               g.DefaultMappedModel,
+		MessagesDispatchModelConfig:      g.MessagesDispatchModelConfig,
+		ModelsListConfig:                 g.ModelsListConfig,
+		RPMLimit:                         g.RpmLimit,
+		SecurityDepositBaseRequiredCents: g.SecurityDepositBaseRequiredCents,
+		SecurityDepositPolicyVersion:     g.SecurityDepositPolicyVersion,
+		MaxReasoningEffort:               g.MaxReasoningEffort,
+		ReasoningEffortMappings:          g.ReasoningEffortMappings,
+		PeakRateEnabled:                  g.PeakRateEnabled,
+		PeakStart:                        g.PeakStart,
+		PeakEnd:                          g.PeakEnd,
+		PeakRateMultiplier:               g.PeakRateMultiplier,
+		ProfitControlEnabled:             g.ProfitControlEnabled,
+		ProfitMinMargin:                  g.ProfitMinMargin,
+		ProfitSafetyBuffer:               g.ProfitSafetyBuffer,
+		CreatedAt:                        g.CreatedAt,
+		UpdatedAt:                        g.UpdatedAt,
 	}
 }
 

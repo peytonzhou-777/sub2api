@@ -14,6 +14,7 @@ func RegisterUserRoutes(
 	h *handler.Handlers,
 	jwtAuth middleware.JWTAuthMiddleware,
 	auditLog middleware.AuditLogMiddleware,
+	stepUpAuth middleware.StepUpAuthMiddleware,
 	settingService *service.SettingService,
 	panelRateLimiter *middleware.PanelRateLimiter,
 ) {
@@ -144,6 +145,18 @@ func RegisterUserRoutes(
 		{
 			limitedCredits.GET("/active", h.LimitedCredit.GetActive)
 			limitedCredits.GET("/summary", h.LimitedCredit.GetSummary)
+		}
+
+		// 网络安全保证金与调用余额完全独立。
+		securityDeposits := authenticated.Group("/security-deposits")
+		{
+			securityDeposits.GET("/account", h.SecurityDeposit.GetAccount)
+			securityDeposits.GET("/eligibility", h.SecurityDeposit.GetEligibility)
+			securityDeposits.GET("/agreement", h.SecurityDeposit.GetAgreement)
+			securityDeposits.POST("/orders", h.SecurityDeposit.CreateOrder)
+			securityDeposits.POST("/refunds/preview", h.SecurityDeposit.PreviewRefund)
+			securityDeposits.POST("/refunds", gin.HandlerFunc(stepUpAuth), h.SecurityDeposit.CreateRefund)
+			securityDeposits.GET("/refunds/:id", h.SecurityDeposit.GetRefund)
 		}
 
 		// 渠道监控（用户只读）

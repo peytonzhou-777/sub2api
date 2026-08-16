@@ -301,6 +301,13 @@
               </div>
             </section>
 
+            <SecurityDepositAccountPanel
+              :account="securityDepositAccount"
+              :loading="securityDepositLoading"
+              :error="securityDepositError"
+              @refresh="loadSecurityDepositAccount"
+            />
+
             <section data-test="limited-credit-details">
               <h2 class="mb-3 text-base font-semibold text-gray-900 dark:text-white">
                 {{ t('payment.account.limitedCreditDetails') }}
@@ -410,6 +417,7 @@ import { useSubscriptionStore } from '@/stores/subscriptions'
 import { useAppStore } from '@/stores'
 import { useLimitedCreditStore } from '@/stores/limitedCredits'
 import { paymentAPI } from '@/api/payment'
+import { securityDepositsAPI } from '@/api/securityDeposits'
 import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiError'
 import { isMobileDevice } from '@/utils/device'
 import { calculateCreditedBalancePreview, calculateRechargeBonusPreview } from '@/utils/rechargeBonus'
@@ -417,6 +425,7 @@ import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel, type PeakRateFi
 import { getLimitedCreditAggregateSignalLevel } from '@/utils/limitedCreditStatus'
 import type { SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType } from '@/types/payment'
 import type { LimitedCreditGrant } from '@/types'
+import type { SecurityDepositAccount } from '@/types/securityDeposit'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeaderTabs from '@/components/layout/PageHeaderTabs.vue'
 import AmountInput from '@/components/payment/AmountInput.vue'
@@ -440,6 +449,7 @@ import { planValiditySuffix as validitySuffixOf } from '@/components/payment/val
 import { formatDateTime } from '@/utils/format'
 import { platformAccentBarClass, platformBadgeLightClass, platformBadgeClass, platformTextClass, platformLabel } from '@/utils/platformColors'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
+import SecurityDepositAccountPanel from '@/components/securityDeposit/SecurityDepositAccountPanel.vue'
 import type { PaymentMethodOption } from '@/components/payment/PaymentMethodSelector.vue'
 import { buildPaymentErrorToastMessage, describePaymentScenarioError } from './paymentUx'
 import { hasWechatResumeQuery, parseWechatResumeRoute, stripWechatResumeQuery } from './paymentWechatResume'
@@ -544,6 +554,9 @@ function limitedCreditExpiryClass(expiresAt: string): string {
 const loading = ref(true)
 const submitting = ref(false)
 const accountRefundEnabled = ref(false)
+const securityDepositAccount = ref<SecurityDepositAccount | null>(null)
+const securityDepositLoading = ref(true)
+const securityDepositError = ref(false)
 const errorMessage = ref('')
 const errorHintMessage = ref('')
 const activeTab = ref<'recharge' | 'subscription' | 'account'>(route.query.tab === 'account' ? 'account' : route.query.tab === 'subscription' ? 'subscription' : 'recharge')
@@ -553,6 +566,20 @@ const selectedPlan = ref<SubscriptionPlan | null>(null)
 const previewImage = ref('')
 
 const paymentPhase = ref<'select' | 'paying'>('select')
+
+// 保证金查询失败不阻断钱包的充值、订阅与额度展示。
+async function loadSecurityDepositAccount() {
+  securityDepositLoading.value = true
+  securityDepositError.value = false
+  try {
+    const response = await securityDepositsAPI.getAccount()
+    securityDepositAccount.value = response.data
+  } catch {
+    securityDepositError.value = true
+  } finally {
+    securityDepositLoading.value = false
+  }
+}
 
 interface CreateOrderOptions {
   openid?: string
@@ -1462,6 +1489,7 @@ onMounted(async () => {
   // 确保账户页使用当前有效限时额度。
   limitedCreditStore.fetchActiveLimitedCredits().catch(() => {})
   subscriptionStore.fetchActiveSubscriptions().catch(() => {})
+  void loadSecurityDepositAccount()
 })
 
 onBeforeUnmount(() => {

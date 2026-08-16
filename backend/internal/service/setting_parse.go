@@ -64,6 +64,14 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyLoginAgreementMode:                        defaultLoginAgreementMode,
 		SettingKeyLoginAgreementUpdatedAt:                   defaultLoginAgreementDate,
 		SettingKeyLoginAgreementDocuments:                   loginAgreementDocumentsJSON,
+		SettingKeySecurityDepositPolicyVersion:              defaultSecurityDepositPolicyVersion,
+		SettingKeySecurityDepositAgreementContentZH:         defaultSecurityDepositAgreementContentZH,
+		SettingKeySecurityDepositAgreementContentEN:         defaultSecurityDepositAgreementContentEN,
+		SettingKeySecurityDepositFreezeHours:                strconv.Itoa(defaultSecurityDepositFreezeHours),
+		SettingKeySecurityDepositMaxRiskMultiplier:          strconv.FormatInt(defaultSecurityDepositMaxRiskMultiplier, 10),
+		SettingKeySecurityDepositEnforcementEnabled:         "false",
+		SettingKeySecurityDepositSelfRefundEnabled:          "false",
+		SettingKeySecurityDepositPenaltyMode:                SecurityDepositPenaltyModeOff,
 		SettingKeyAPIKeyACLTrustForwardedIP:                 "true",
 		SettingKeyForwardedClientIPHeaders:                  string(forwardedClientIPHeadersJSON),
 		settingKeyForwardedClientIPModeV2:                   "true",
@@ -843,6 +851,15 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// 风控中心功能（默认关闭，严格 true 才启用）
 	result.RiskControlEnabled = settings[SettingKeyRiskControlEnabled] == "true"
+	depositPolicy := buildSecurityDepositPolicyConfig(settings)
+	result.SecurityDepositEnforcementEnabled = depositPolicy.EnforcementEnabled
+	result.SecurityDepositSelfRefundEnabled = depositPolicy.SelfRefundEnabled
+	result.SecurityDepositPenaltyMode = depositPolicy.PenaltyMode
+	result.SecurityDepositFreezeHours = depositPolicy.FreezeHours
+	result.SecurityDepositMaxRiskMultiplier = depositPolicy.MaxRiskMultiplier
+	result.SecurityDepositPolicyVersion = depositPolicy.Version
+	result.SecurityDepositAgreementContentZH = depositPolicy.ContentZH
+	result.SecurityDepositAgreementContentEN = depositPolicy.ContentEN
 
 	// cyber 会话屏蔽（默认关闭，TTL 默认 3600s）
 	result.CyberSessionBlockEnabled = settings[SettingKeyCyberSessionBlockEnabled] == "true"

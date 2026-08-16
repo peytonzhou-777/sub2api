@@ -134,6 +134,160 @@ func (_u *APIKeyUpdate) SetNillableStatus(v *string) *APIKeyUpdate {
 	return _u
 }
 
+// SetSecurityLockedAt sets the "security_locked_at" field.
+func (_u *APIKeyUpdate) SetSecurityLockedAt(v time.Time) *APIKeyUpdate {
+	_u.mutation.SetSecurityLockedAt(v)
+	return _u
+}
+
+// SetNillableSecurityLockedAt sets the "security_locked_at" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableSecurityLockedAt(v *time.Time) *APIKeyUpdate {
+	if v != nil {
+		_u.SetSecurityLockedAt(*v)
+	}
+	return _u
+}
+
+// ClearSecurityLockedAt clears the value of the "security_locked_at" field.
+func (_u *APIKeyUpdate) ClearSecurityLockedAt() *APIKeyUpdate {
+	_u.mutation.ClearSecurityLockedAt()
+	return _u
+}
+
+// SetSecurityLockViolationID sets the "security_lock_violation_id" field.
+func (_u *APIKeyUpdate) SetSecurityLockViolationID(v int64) *APIKeyUpdate {
+	_u.mutation.ResetSecurityLockViolationID()
+	_u.mutation.SetSecurityLockViolationID(v)
+	return _u
+}
+
+// SetNillableSecurityLockViolationID sets the "security_lock_violation_id" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableSecurityLockViolationID(v *int64) *APIKeyUpdate {
+	if v != nil {
+		_u.SetSecurityLockViolationID(*v)
+	}
+	return _u
+}
+
+// AddSecurityLockViolationID adds value to the "security_lock_violation_id" field.
+func (_u *APIKeyUpdate) AddSecurityLockViolationID(v int64) *APIKeyUpdate {
+	_u.mutation.AddSecurityLockViolationID(v)
+	return _u
+}
+
+// ClearSecurityLockViolationID clears the value of the "security_lock_violation_id" field.
+func (_u *APIKeyUpdate) ClearSecurityLockViolationID() *APIKeyUpdate {
+	_u.mutation.ClearSecurityLockViolationID()
+	return _u
+}
+
+// SetSecurityLockReason sets the "security_lock_reason" field.
+func (_u *APIKeyUpdate) SetSecurityLockReason(v string) *APIKeyUpdate {
+	_u.mutation.SetSecurityLockReason(v)
+	return _u
+}
+
+// SetNillableSecurityLockReason sets the "security_lock_reason" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableSecurityLockReason(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetSecurityLockReason(*v)
+	}
+	return _u
+}
+
+// ClearSecurityLockReason clears the value of the "security_lock_reason" field.
+func (_u *APIKeyUpdate) ClearSecurityLockReason() *APIKeyUpdate {
+	_u.mutation.ClearSecurityLockReason()
+	return _u
+}
+
+// SetDisabledReason sets the "disabled_reason" field.
+func (_u *APIKeyUpdate) SetDisabledReason(v string) *APIKeyUpdate {
+	_u.mutation.SetDisabledReason(v)
+	return _u
+}
+
+// SetNillableDisabledReason sets the "disabled_reason" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableDisabledReason(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetDisabledReason(*v)
+	}
+	return _u
+}
+
+// ClearDisabledReason clears the value of the "disabled_reason" field.
+func (_u *APIKeyUpdate) ClearDisabledReason() *APIKeyUpdate {
+	_u.mutation.ClearDisabledReason()
+	return _u
+}
+
+// SetDisabledFinancialEventType sets the "disabled_financial_event_type" field.
+func (_u *APIKeyUpdate) SetDisabledFinancialEventType(v string) *APIKeyUpdate {
+	_u.mutation.SetDisabledFinancialEventType(v)
+	return _u
+}
+
+// SetNillableDisabledFinancialEventType sets the "disabled_financial_event_type" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableDisabledFinancialEventType(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetDisabledFinancialEventType(*v)
+	}
+	return _u
+}
+
+// ClearDisabledFinancialEventType clears the value of the "disabled_financial_event_type" field.
+func (_u *APIKeyUpdate) ClearDisabledFinancialEventType() *APIKeyUpdate {
+	_u.mutation.ClearDisabledFinancialEventType()
+	return _u
+}
+
+// SetDisabledFinancialEventID sets the "disabled_financial_event_id" field.
+func (_u *APIKeyUpdate) SetDisabledFinancialEventID(v int64) *APIKeyUpdate {
+	_u.mutation.ResetDisabledFinancialEventID()
+	_u.mutation.SetDisabledFinancialEventID(v)
+	return _u
+}
+
+// SetNillableDisabledFinancialEventID sets the "disabled_financial_event_id" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableDisabledFinancialEventID(v *int64) *APIKeyUpdate {
+	if v != nil {
+		_u.SetDisabledFinancialEventID(*v)
+	}
+	return _u
+}
+
+// AddDisabledFinancialEventID adds value to the "disabled_financial_event_id" field.
+func (_u *APIKeyUpdate) AddDisabledFinancialEventID(v int64) *APIKeyUpdate {
+	_u.mutation.AddDisabledFinancialEventID(v)
+	return _u
+}
+
+// ClearDisabledFinancialEventID clears the value of the "disabled_financial_event_id" field.
+func (_u *APIKeyUpdate) ClearDisabledFinancialEventID() *APIKeyUpdate {
+	_u.mutation.ClearDisabledFinancialEventID()
+	return _u
+}
+
+// SetDisabledAt sets the "disabled_at" field.
+func (_u *APIKeyUpdate) SetDisabledAt(v time.Time) *APIKeyUpdate {
+	_u.mutation.SetDisabledAt(v)
+	return _u
+}
+
+// SetNillableDisabledAt sets the "disabled_at" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableDisabledAt(v *time.Time) *APIKeyUpdate {
+	if v != nil {
+		_u.SetDisabledAt(*v)
+	}
+	return _u
+}
+
+// ClearDisabledAt clears the value of the "disabled_at" field.
+func (_u *APIKeyUpdate) ClearDisabledAt() *APIKeyUpdate {
+	_u.mutation.ClearDisabledAt()
+	return _u
+}
+
 // SetLastUsedAt sets the "last_used_at" field.
 func (_u *APIKeyUpdate) SetLastUsedAt(v time.Time) *APIKeyUpdate {
 	_u.mutation.SetLastUsedAt(v)
@@ -560,6 +714,21 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SecurityLockReason(); ok {
+		if err := apikey.SecurityLockReasonValidator(v); err != nil {
+			return &ValidationError{Name: "security_lock_reason", err: fmt.Errorf(`ent: validator failed for field "APIKey.security_lock_reason": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DisabledReason(); ok {
+		if err := apikey.DisabledReasonValidator(v); err != nil {
+			return &ValidationError{Name: "disabled_reason", err: fmt.Errorf(`ent: validator failed for field "APIKey.disabled_reason": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DisabledFinancialEventType(); ok {
+		if err := apikey.DisabledFinancialEventTypeValidator(v); err != nil {
+			return &ValidationError{Name: "disabled_financial_event_type", err: fmt.Errorf(`ent: validator failed for field "APIKey.disabled_financial_event_type": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
@@ -595,6 +764,54 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SecurityLockedAt(); ok {
+		_spec.SetField(apikey.FieldSecurityLockedAt, field.TypeTime, value)
+	}
+	if _u.mutation.SecurityLockedAtCleared() {
+		_spec.ClearField(apikey.FieldSecurityLockedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.SecurityLockViolationID(); ok {
+		_spec.SetField(apikey.FieldSecurityLockViolationID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSecurityLockViolationID(); ok {
+		_spec.AddField(apikey.FieldSecurityLockViolationID, field.TypeInt64, value)
+	}
+	if _u.mutation.SecurityLockViolationIDCleared() {
+		_spec.ClearField(apikey.FieldSecurityLockViolationID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.SecurityLockReason(); ok {
+		_spec.SetField(apikey.FieldSecurityLockReason, field.TypeString, value)
+	}
+	if _u.mutation.SecurityLockReasonCleared() {
+		_spec.ClearField(apikey.FieldSecurityLockReason, field.TypeString)
+	}
+	if value, ok := _u.mutation.DisabledReason(); ok {
+		_spec.SetField(apikey.FieldDisabledReason, field.TypeString, value)
+	}
+	if _u.mutation.DisabledReasonCleared() {
+		_spec.ClearField(apikey.FieldDisabledReason, field.TypeString)
+	}
+	if value, ok := _u.mutation.DisabledFinancialEventType(); ok {
+		_spec.SetField(apikey.FieldDisabledFinancialEventType, field.TypeString, value)
+	}
+	if _u.mutation.DisabledFinancialEventTypeCleared() {
+		_spec.ClearField(apikey.FieldDisabledFinancialEventType, field.TypeString)
+	}
+	if value, ok := _u.mutation.DisabledFinancialEventID(); ok {
+		_spec.SetField(apikey.FieldDisabledFinancialEventID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDisabledFinancialEventID(); ok {
+		_spec.AddField(apikey.FieldDisabledFinancialEventID, field.TypeInt64, value)
+	}
+	if _u.mutation.DisabledFinancialEventIDCleared() {
+		_spec.ClearField(apikey.FieldDisabledFinancialEventID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.DisabledAt(); ok {
+		_spec.SetField(apikey.FieldDisabledAt, field.TypeTime, value)
+	}
+	if _u.mutation.DisabledAtCleared() {
+		_spec.ClearField(apikey.FieldDisabledAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.LastUsedAt(); ok {
 		_spec.SetField(apikey.FieldLastUsedAt, field.TypeTime, value)
@@ -918,6 +1135,160 @@ func (_u *APIKeyUpdateOne) SetNillableStatus(v *string) *APIKeyUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
 	}
+	return _u
+}
+
+// SetSecurityLockedAt sets the "security_locked_at" field.
+func (_u *APIKeyUpdateOne) SetSecurityLockedAt(v time.Time) *APIKeyUpdateOne {
+	_u.mutation.SetSecurityLockedAt(v)
+	return _u
+}
+
+// SetNillableSecurityLockedAt sets the "security_locked_at" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableSecurityLockedAt(v *time.Time) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetSecurityLockedAt(*v)
+	}
+	return _u
+}
+
+// ClearSecurityLockedAt clears the value of the "security_locked_at" field.
+func (_u *APIKeyUpdateOne) ClearSecurityLockedAt() *APIKeyUpdateOne {
+	_u.mutation.ClearSecurityLockedAt()
+	return _u
+}
+
+// SetSecurityLockViolationID sets the "security_lock_violation_id" field.
+func (_u *APIKeyUpdateOne) SetSecurityLockViolationID(v int64) *APIKeyUpdateOne {
+	_u.mutation.ResetSecurityLockViolationID()
+	_u.mutation.SetSecurityLockViolationID(v)
+	return _u
+}
+
+// SetNillableSecurityLockViolationID sets the "security_lock_violation_id" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableSecurityLockViolationID(v *int64) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetSecurityLockViolationID(*v)
+	}
+	return _u
+}
+
+// AddSecurityLockViolationID adds value to the "security_lock_violation_id" field.
+func (_u *APIKeyUpdateOne) AddSecurityLockViolationID(v int64) *APIKeyUpdateOne {
+	_u.mutation.AddSecurityLockViolationID(v)
+	return _u
+}
+
+// ClearSecurityLockViolationID clears the value of the "security_lock_violation_id" field.
+func (_u *APIKeyUpdateOne) ClearSecurityLockViolationID() *APIKeyUpdateOne {
+	_u.mutation.ClearSecurityLockViolationID()
+	return _u
+}
+
+// SetSecurityLockReason sets the "security_lock_reason" field.
+func (_u *APIKeyUpdateOne) SetSecurityLockReason(v string) *APIKeyUpdateOne {
+	_u.mutation.SetSecurityLockReason(v)
+	return _u
+}
+
+// SetNillableSecurityLockReason sets the "security_lock_reason" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableSecurityLockReason(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetSecurityLockReason(*v)
+	}
+	return _u
+}
+
+// ClearSecurityLockReason clears the value of the "security_lock_reason" field.
+func (_u *APIKeyUpdateOne) ClearSecurityLockReason() *APIKeyUpdateOne {
+	_u.mutation.ClearSecurityLockReason()
+	return _u
+}
+
+// SetDisabledReason sets the "disabled_reason" field.
+func (_u *APIKeyUpdateOne) SetDisabledReason(v string) *APIKeyUpdateOne {
+	_u.mutation.SetDisabledReason(v)
+	return _u
+}
+
+// SetNillableDisabledReason sets the "disabled_reason" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableDisabledReason(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetDisabledReason(*v)
+	}
+	return _u
+}
+
+// ClearDisabledReason clears the value of the "disabled_reason" field.
+func (_u *APIKeyUpdateOne) ClearDisabledReason() *APIKeyUpdateOne {
+	_u.mutation.ClearDisabledReason()
+	return _u
+}
+
+// SetDisabledFinancialEventType sets the "disabled_financial_event_type" field.
+func (_u *APIKeyUpdateOne) SetDisabledFinancialEventType(v string) *APIKeyUpdateOne {
+	_u.mutation.SetDisabledFinancialEventType(v)
+	return _u
+}
+
+// SetNillableDisabledFinancialEventType sets the "disabled_financial_event_type" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableDisabledFinancialEventType(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetDisabledFinancialEventType(*v)
+	}
+	return _u
+}
+
+// ClearDisabledFinancialEventType clears the value of the "disabled_financial_event_type" field.
+func (_u *APIKeyUpdateOne) ClearDisabledFinancialEventType() *APIKeyUpdateOne {
+	_u.mutation.ClearDisabledFinancialEventType()
+	return _u
+}
+
+// SetDisabledFinancialEventID sets the "disabled_financial_event_id" field.
+func (_u *APIKeyUpdateOne) SetDisabledFinancialEventID(v int64) *APIKeyUpdateOne {
+	_u.mutation.ResetDisabledFinancialEventID()
+	_u.mutation.SetDisabledFinancialEventID(v)
+	return _u
+}
+
+// SetNillableDisabledFinancialEventID sets the "disabled_financial_event_id" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableDisabledFinancialEventID(v *int64) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetDisabledFinancialEventID(*v)
+	}
+	return _u
+}
+
+// AddDisabledFinancialEventID adds value to the "disabled_financial_event_id" field.
+func (_u *APIKeyUpdateOne) AddDisabledFinancialEventID(v int64) *APIKeyUpdateOne {
+	_u.mutation.AddDisabledFinancialEventID(v)
+	return _u
+}
+
+// ClearDisabledFinancialEventID clears the value of the "disabled_financial_event_id" field.
+func (_u *APIKeyUpdateOne) ClearDisabledFinancialEventID() *APIKeyUpdateOne {
+	_u.mutation.ClearDisabledFinancialEventID()
+	return _u
+}
+
+// SetDisabledAt sets the "disabled_at" field.
+func (_u *APIKeyUpdateOne) SetDisabledAt(v time.Time) *APIKeyUpdateOne {
+	_u.mutation.SetDisabledAt(v)
+	return _u
+}
+
+// SetNillableDisabledAt sets the "disabled_at" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableDisabledAt(v *time.Time) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetDisabledAt(*v)
+	}
+	return _u
+}
+
+// ClearDisabledAt clears the value of the "disabled_at" field.
+func (_u *APIKeyUpdateOne) ClearDisabledAt() *APIKeyUpdateOne {
+	_u.mutation.ClearDisabledAt()
 	return _u
 }
 
@@ -1360,6 +1731,21 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SecurityLockReason(); ok {
+		if err := apikey.SecurityLockReasonValidator(v); err != nil {
+			return &ValidationError{Name: "security_lock_reason", err: fmt.Errorf(`ent: validator failed for field "APIKey.security_lock_reason": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DisabledReason(); ok {
+		if err := apikey.DisabledReasonValidator(v); err != nil {
+			return &ValidationError{Name: "disabled_reason", err: fmt.Errorf(`ent: validator failed for field "APIKey.disabled_reason": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DisabledFinancialEventType(); ok {
+		if err := apikey.DisabledFinancialEventTypeValidator(v); err != nil {
+			return &ValidationError{Name: "disabled_financial_event_type", err: fmt.Errorf(`ent: validator failed for field "APIKey.disabled_financial_event_type": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
@@ -1412,6 +1798,54 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SecurityLockedAt(); ok {
+		_spec.SetField(apikey.FieldSecurityLockedAt, field.TypeTime, value)
+	}
+	if _u.mutation.SecurityLockedAtCleared() {
+		_spec.ClearField(apikey.FieldSecurityLockedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.SecurityLockViolationID(); ok {
+		_spec.SetField(apikey.FieldSecurityLockViolationID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSecurityLockViolationID(); ok {
+		_spec.AddField(apikey.FieldSecurityLockViolationID, field.TypeInt64, value)
+	}
+	if _u.mutation.SecurityLockViolationIDCleared() {
+		_spec.ClearField(apikey.FieldSecurityLockViolationID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.SecurityLockReason(); ok {
+		_spec.SetField(apikey.FieldSecurityLockReason, field.TypeString, value)
+	}
+	if _u.mutation.SecurityLockReasonCleared() {
+		_spec.ClearField(apikey.FieldSecurityLockReason, field.TypeString)
+	}
+	if value, ok := _u.mutation.DisabledReason(); ok {
+		_spec.SetField(apikey.FieldDisabledReason, field.TypeString, value)
+	}
+	if _u.mutation.DisabledReasonCleared() {
+		_spec.ClearField(apikey.FieldDisabledReason, field.TypeString)
+	}
+	if value, ok := _u.mutation.DisabledFinancialEventType(); ok {
+		_spec.SetField(apikey.FieldDisabledFinancialEventType, field.TypeString, value)
+	}
+	if _u.mutation.DisabledFinancialEventTypeCleared() {
+		_spec.ClearField(apikey.FieldDisabledFinancialEventType, field.TypeString)
+	}
+	if value, ok := _u.mutation.DisabledFinancialEventID(); ok {
+		_spec.SetField(apikey.FieldDisabledFinancialEventID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDisabledFinancialEventID(); ok {
+		_spec.AddField(apikey.FieldDisabledFinancialEventID, field.TypeInt64, value)
+	}
+	if _u.mutation.DisabledFinancialEventIDCleared() {
+		_spec.ClearField(apikey.FieldDisabledFinancialEventID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.DisabledAt(); ok {
+		_spec.SetField(apikey.FieldDisabledAt, field.TypeTime, value)
+	}
+	if _u.mutation.DisabledAtCleared() {
+		_spec.ClearField(apikey.FieldDisabledAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.LastUsedAt(); ok {
 		_spec.SetField(apikey.FieldLastUsedAt, field.TypeTime, value)

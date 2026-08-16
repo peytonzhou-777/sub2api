@@ -344,6 +344,7 @@
               'badge',
               value === 'active' ? 'badge-success' :
               value === 'quota_exhausted' ? 'badge-warning' :
+              value === 'security_locked' ? 'badge-danger' :
               value === 'expired' ? 'badge-danger' :
               'badge-gray'
             ]">
@@ -501,6 +502,9 @@
                 :peak-end="(option as unknown as GroupOption).peakEnd"
                 :peak-rate-multiplier="(option as unknown as GroupOption).peakRateMultiplier"
                 :description="(option as unknown as GroupOption).description"
+                :security-deposit-base-required-cents="(option as unknown as GroupOption).securityDepositBaseRequiredCents"
+                :security-deposit-eligibility="securityDepositEligibilities[(option as unknown as GroupOption).value] || null"
+                :security-deposit-loading="securityDepositEligibilityLoading[(option as unknown as GroupOption).value] === true"
                 :selected="selected"
               />
             </template>
@@ -513,6 +517,7 @@
             v-model="formData.status"
             :options="statusOptions"
             :placeholder="t('keys.selectStatus')"
+            :disabled="selectedKey?.status === 'security_locked'"
           />
         </div>
 
@@ -1005,6 +1010,9 @@
               :peak-end="option.peakEnd"
               :peak-rate-multiplier="option.peakRateMultiplier"
               :description="option.description"
+              :security-deposit-base-required-cents="option.securityDepositBaseRequiredCents"
+              :security-deposit-eligibility="securityDepositEligibilities[option.value] || null"
+              :security-deposit-loading="securityDepositEligibilityLoading[option.value] === true"
               :selected="
                 selectedKeyForGroup?.group_id === option.value ||
                 (!selectedKeyForGroup?.group_id && option.value === null)
@@ -1018,6 +1026,16 @@
         </div>
       </div>
     </Teleport>
+
+    <SecurityDepositDialog
+      v-if="securityDepositDialog.show"
+      :show="securityDepositDialog.show"
+      :group-id="securityDepositDialog.groupId"
+      :resume-token="securityDepositDialog.resumeToken"
+      :resume-payment-type="securityDepositDialog.paymentType"
+      @close="closeSecurityDepositDialog"
+      @success="handleSecurityDepositSuccess"
+    />
   </AppLayout>
 </template>
 
@@ -1030,7 +1048,7 @@
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 const { t } = useI18n()
-import { keysAPI, authAPI, usageAPI, userGroupsAPI } from '@/api'
+import { keysAPI, authAPI, usageAPI, userGroupsAPI, securityDepositsAPI } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import DataTable from '@/components/common/DataTable.vue'
@@ -1046,7 +1064,9 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 	import GroupBadge from '@/components/common/GroupBadge.vue'
 	import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
+	import SecurityDepositDialog from '@/components/securityDeposit/SecurityDepositDialog.vue'
 	import type { ApiKey, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
+import type { SecurityDepositEligibility } from '@/types/securityDeposit'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
@@ -1075,6 +1095,7 @@ interface GroupOption {
   peakRateMultiplier: number
   subscriptionType: SubscriptionType
   platform: GroupPlatform
+  securityDepositBaseRequiredCents: number
 }
 
 const appStore = useAppStore()
@@ -1183,6 +1204,21 @@ const now = ref(new Date())
 let resetTimer: ReturnType<typeof setInterval> | null = null
 const usageStats = ref<Record<string, BatchApiKeyUsageStats>>({})
 const userGroupRates = ref<Record<number, number>>({})
+const securityDepositEligibilities = ref<Record<number, SecurityDepositEligibility>>({})
+const securityDepositEligibilityLoading = ref<Record<number, boolean>>({})
+
+type PendingSecurityDepositAction =
+  | { type: 'submit' }
+  | { type: 'toggle'; key: ApiKey }
+  | { type: 'change_group'; key: ApiKey; groupId: number }
+
+const securityDepositDialog = reactive({
+  show: false,
+  groupId: null as number | null,
+  resumeToken: '',
+  paymentType: '',
+})
+let pendingSecurityDepositAction: PendingSecurityDepositAction | null = null
 
 const pagination = ref({
   page: 1,
@@ -1259,6 +1295,9 @@ const statusOptions = computed(() => [
 ])
 
 const shouldSubmitEditStatus = (key: ApiKey, status: 'active' | 'inactive') => {
+  if (key.status === 'security_locked') {
+    return false
+  }
   if (key.status === 'quota_exhausted' || key.status === 'expired') {
     return status === 'active'
   }
@@ -1277,7 +1316,8 @@ const statusFilterOptions = computed(() => [
   { value: 'active', label: t('keys.status.active') },
   { value: 'inactive', label: t('keys.status.inactive') },
   { value: 'quota_exhausted', label: t('keys.status.quota_exhausted') },
-  { value: 'expired', label: t('keys.status.expired') }
+  { value: 'expired', label: t('keys.status.expired') },
+  { value: 'security_locked', label: t('keys.status.security_locked') }
 ])
 
 const onFilterChange = () => {
@@ -1309,7 +1349,8 @@ const groupOptions = computed(() =>
       peakEnd: group.peak_end,
       peakRateMultiplier: group.peak_rate_multiplier,
       subscriptionType: group.subscription_type,
-      platform: group.platform
+      platform: group.platform,
+      securityDepositBaseRequiredCents: group.security_deposit_base_required_cents || 0,
     }))
     .sort((a, b) => a.rate - b.rate)
 )
@@ -1398,9 +1439,64 @@ const loadApiKeys = async () => {
 const loadGroups = async () => {
   try {
     groups.value = await userGroupsAPI.getAvailable()
+    await loadSecurityDepositEligibilities()
   } catch (error) {
     console.error('Failed to load groups:', error)
   }
+}
+
+// 仅对配置了门槛的分组请求个人资格，门槛为 0 的分组保持原有列表表现。
+const loadSecurityDepositEligibilities = async () => {
+  const requiredGroups = groups.value.filter(group => group.security_deposit_base_required_cents > 0)
+  await Promise.all(requiredGroups.map(async (group) => {
+    securityDepositEligibilityLoading.value[group.id] = true
+    try {
+      const response = await securityDepositsAPI.getEligibility(group.id)
+      securityDepositEligibilities.value[group.id] = response.data
+    } catch (error) {
+      console.error('Failed to load security deposit eligibility:', error)
+    } finally {
+      securityDepositEligibilityLoading.value[group.id] = false
+    }
+  }))
+}
+
+function requiresSecurityDeposit(groupId: number | null | undefined): boolean {
+  if (!groupId) return false
+  const eligibility = securityDepositEligibilities.value[groupId]
+  return Boolean(eligibility && eligibility.base_required_cents > 0 && !eligibility.eligible)
+}
+
+function openSecurityDepositDialog(groupId: number, action: PendingSecurityDepositAction | null = null) {
+  pendingSecurityDepositAction = action
+  securityDepositDialog.groupId = groupId
+  securityDepositDialog.resumeToken = ''
+  securityDepositDialog.paymentType = ''
+  securityDepositDialog.show = true
+}
+
+function closeSecurityDepositDialog() {
+  securityDepositDialog.show = false
+  securityDepositDialog.resumeToken = ''
+  securityDepositDialog.paymentType = ''
+  pendingSecurityDepositAction = null
+}
+
+async function handleSecurityDepositSuccess(updated: SecurityDepositEligibility) {
+  securityDepositEligibilities.value[updated.group_id] = updated
+  const action = pendingSecurityDepositAction
+  securityDepositDialog.show = false
+  pendingSecurityDepositAction = null
+  if (!action) return
+  if (action.type === 'submit') await handleSubmit()
+  else if (action.type === 'toggle') await toggleKeyStatus(action.key)
+  else await changeGroup(action.key, action.groupId)
+}
+
+function isSecurityDepositRequiredError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as Record<string, unknown>
+  return candidate.code === 'SECURITY_DEPOSIT_REQUIRED' || candidate.reason === 'SECURITY_DEPOSIT_REQUIRED'
 }
 
 const loadUserGroupRates = async () => {
@@ -1454,7 +1550,7 @@ const editKey = (key: ApiKey) => {
   formData.value = {
     name: key.name,
     group_id: key.group_id,
-    status: key.status === 'quota_exhausted' || key.status === 'expired' ? 'inactive' : key.status,
+    status: key.status === 'active' ? 'active' : 'inactive',
     enable_ip_restriction: hasIPRestriction,
     ip_whitelist: (key.ip_whitelist || []).join('\n'),
     ip_blacklist: (key.ip_blacklist || []).join('\n'),
@@ -1473,6 +1569,10 @@ const editKey = (key: ApiKey) => {
 
 const toggleKeyStatus = async (key: ApiKey) => {
   const newStatus = key.status === 'active' ? 'inactive' : 'active'
+  if (newStatus === 'active' && requiresSecurityDeposit(key.group_id)) {
+    openSecurityDepositDialog(key.group_id!, { type: 'toggle', key })
+    return
+  }
   try {
     await keysAPI.toggleStatus(key.id, newStatus)
     appStore.showSuccess(
@@ -1480,7 +1580,11 @@ const toggleKeyStatus = async (key: ApiKey) => {
     )
     loadApiKeys()
   } catch (error) {
-    appStore.showError(t('keys.failedToUpdateStatus'))
+    if (newStatus === 'active' && key.group_id && isSecurityDepositRequiredError(error)) {
+      openSecurityDepositDialog(key.group_id, { type: 'toggle', key })
+    } else {
+      appStore.showError(t('keys.failedToUpdateStatus'))
+    }
   }
 }
 
@@ -1523,12 +1627,21 @@ const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
   dropdownPosition.value = null
   if (key.group_id === newGroupId) return
 
+  if (newGroupId && requiresSecurityDeposit(newGroupId)) {
+    openSecurityDepositDialog(newGroupId, { type: 'change_group', key, groupId: newGroupId })
+    return
+  }
+
   try {
     await keysAPI.update(key.id, { group_id: newGroupId })
     appStore.showSuccess(t('keys.groupChangedSuccess'))
     loadApiKeys()
   } catch (error) {
-    appStore.showError(t('keys.failedToChangeGroup'))
+    if (newGroupId && isSecurityDepositRequiredError(error)) {
+      openSecurityDepositDialog(newGroupId, { type: 'change_group', key, groupId: newGroupId })
+    } else {
+      appStore.showError(t('keys.failedToChangeGroup'))
+    }
   }
 }
 
@@ -1553,6 +1666,11 @@ const handleSubmit = async () => {
   // Validate group_id is required
   if (formData.value.group_id === null) {
     appStore.showError(t('keys.groupRequired'))
+    return
+  }
+
+  if (requiresSecurityDeposit(formData.value.group_id)) {
+    openSecurityDepositDialog(formData.value.group_id, { type: 'submit' })
     return
   }
 
@@ -1630,8 +1748,12 @@ const handleSubmit = async () => {
     closeModals()
     loadApiKeys()
   } catch (error: any) {
-    const errorMsg = error.response?.data?.detail || t('keys.failedToSave')
-    appStore.showError(errorMsg)
+    if (formData.value.group_id && isSecurityDepositRequiredError(error)) {
+      openSecurityDepositDialog(formData.value.group_id, { type: 'submit' })
+    } else {
+      const errorMsg = error.response?.data?.detail || error.message || t('keys.failedToSave')
+      appStore.showError(errorMsg)
+    }
     // Don't advance tour on error
   } finally {
     submitting.value = false
@@ -1832,6 +1954,19 @@ onMounted(() => {
   loadGroups()
   loadUserGroupRates()
   loadPublicSettings()
+  const resumeURL = new URL(window.location.href)
+  const resumeGroupId = Number(resumeURL.searchParams.get('security_deposit_group_id'))
+  const resumeToken = resumeURL.searchParams.get('wechat_resume_token') || ''
+  if (resumeGroupId > 0 && resumeToken) {
+    securityDepositDialog.groupId = resumeGroupId
+    securityDepositDialog.resumeToken = resumeToken
+    securityDepositDialog.paymentType = resumeURL.searchParams.get('payment_type') || 'wxpay'
+    securityDepositDialog.show = true
+    for (const key of ['security_deposit_group_id', 'wechat_resume', 'wechat_resume_token', 'payment_type', 'order_type', 'state', 'scope']) {
+      resumeURL.searchParams.delete(key)
+    }
+    window.history.replaceState(window.history.state, '', `${resumeURL.pathname}${resumeURL.search}${resumeURL.hash}`)
+  }
   document.addEventListener('click', closeGroupSelector)
   resetTimer = setInterval(() => { now.value = new Date() }, 60000)
 })

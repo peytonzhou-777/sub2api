@@ -46,6 +46,14 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuserattempt"
 	"github.com/Wei-Shaw/sub2api/ent/resetrebateuseritem"
 	"github.com/Wei-Shaw/sub2api/ent/schema"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositaccount"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositagreement"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositledger"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositlot"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositrefund"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositriskevent"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositriskprofile"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositviolation"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
@@ -129,36 +137,48 @@ func init() {
 	apikey.DefaultStatus = apikeyDescStatus.Default.(string)
 	// apikey.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	apikey.StatusValidator = apikeyDescStatus.Validators[0].(func(string) error)
+	// apikeyDescSecurityLockReason is the schema descriptor for security_lock_reason field.
+	apikeyDescSecurityLockReason := apikeyFields[7].Descriptor()
+	// apikey.SecurityLockReasonValidator is a validator for the "security_lock_reason" field. It is called by the builders before save.
+	apikey.SecurityLockReasonValidator = apikeyDescSecurityLockReason.Validators[0].(func(string) error)
+	// apikeyDescDisabledReason is the schema descriptor for disabled_reason field.
+	apikeyDescDisabledReason := apikeyFields[8].Descriptor()
+	// apikey.DisabledReasonValidator is a validator for the "disabled_reason" field. It is called by the builders before save.
+	apikey.DisabledReasonValidator = apikeyDescDisabledReason.Validators[0].(func(string) error)
+	// apikeyDescDisabledFinancialEventType is the schema descriptor for disabled_financial_event_type field.
+	apikeyDescDisabledFinancialEventType := apikeyFields[9].Descriptor()
+	// apikey.DisabledFinancialEventTypeValidator is a validator for the "disabled_financial_event_type" field. It is called by the builders before save.
+	apikey.DisabledFinancialEventTypeValidator = apikeyDescDisabledFinancialEventType.Validators[0].(func(string) error)
 	// apikeyDescQuota is the schema descriptor for quota field.
-	apikeyDescQuota := apikeyFields[8].Descriptor()
+	apikeyDescQuota := apikeyFields[15].Descriptor()
 	// apikey.DefaultQuota holds the default value on creation for the quota field.
 	apikey.DefaultQuota = apikeyDescQuota.Default.(float64)
 	// apikeyDescQuotaUsed is the schema descriptor for quota_used field.
-	apikeyDescQuotaUsed := apikeyFields[9].Descriptor()
+	apikeyDescQuotaUsed := apikeyFields[16].Descriptor()
 	// apikey.DefaultQuotaUsed holds the default value on creation for the quota_used field.
 	apikey.DefaultQuotaUsed = apikeyDescQuotaUsed.Default.(float64)
 	// apikeyDescRateLimit5h is the schema descriptor for rate_limit_5h field.
-	apikeyDescRateLimit5h := apikeyFields[11].Descriptor()
+	apikeyDescRateLimit5h := apikeyFields[18].Descriptor()
 	// apikey.DefaultRateLimit5h holds the default value on creation for the rate_limit_5h field.
 	apikey.DefaultRateLimit5h = apikeyDescRateLimit5h.Default.(float64)
 	// apikeyDescRateLimit1d is the schema descriptor for rate_limit_1d field.
-	apikeyDescRateLimit1d := apikeyFields[12].Descriptor()
+	apikeyDescRateLimit1d := apikeyFields[19].Descriptor()
 	// apikey.DefaultRateLimit1d holds the default value on creation for the rate_limit_1d field.
 	apikey.DefaultRateLimit1d = apikeyDescRateLimit1d.Default.(float64)
 	// apikeyDescRateLimit7d is the schema descriptor for rate_limit_7d field.
-	apikeyDescRateLimit7d := apikeyFields[13].Descriptor()
+	apikeyDescRateLimit7d := apikeyFields[20].Descriptor()
 	// apikey.DefaultRateLimit7d holds the default value on creation for the rate_limit_7d field.
 	apikey.DefaultRateLimit7d = apikeyDescRateLimit7d.Default.(float64)
 	// apikeyDescUsage5h is the schema descriptor for usage_5h field.
-	apikeyDescUsage5h := apikeyFields[14].Descriptor()
+	apikeyDescUsage5h := apikeyFields[21].Descriptor()
 	// apikey.DefaultUsage5h holds the default value on creation for the usage_5h field.
 	apikey.DefaultUsage5h = apikeyDescUsage5h.Default.(float64)
 	// apikeyDescUsage1d is the schema descriptor for usage_1d field.
-	apikeyDescUsage1d := apikeyFields[15].Descriptor()
+	apikeyDescUsage1d := apikeyFields[22].Descriptor()
 	// apikey.DefaultUsage1d holds the default value on creation for the usage_1d field.
 	apikey.DefaultUsage1d = apikeyDescUsage1d.Default.(float64)
 	// apikeyDescUsage7d is the schema descriptor for usage_7d field.
-	apikeyDescUsage7d := apikeyFields[16].Descriptor()
+	apikeyDescUsage7d := apikeyFields[23].Descriptor()
 	// apikey.DefaultUsage7d holds the default value on creation for the usage_7d field.
 	apikey.DefaultUsage7d = apikeyDescUsage7d.Default.(float64)
 	accountMixin := schema.Account{}.Mixin()
@@ -1140,152 +1160,164 @@ func init() {
 	group.DefaultStatus = groupDescStatus.Default.(string)
 	// group.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	group.StatusValidator = groupDescStatus.Validators[0].(func(string) error)
+	// groupDescSecurityDepositBaseRequiredCents is the schema descriptor for security_deposit_base_required_cents field.
+	groupDescSecurityDepositBaseRequiredCents := groupFields[9].Descriptor()
+	// group.DefaultSecurityDepositBaseRequiredCents holds the default value on creation for the security_deposit_base_required_cents field.
+	group.DefaultSecurityDepositBaseRequiredCents = groupDescSecurityDepositBaseRequiredCents.Default.(int64)
+	// group.SecurityDepositBaseRequiredCentsValidator is a validator for the "security_deposit_base_required_cents" field. It is called by the builders before save.
+	group.SecurityDepositBaseRequiredCentsValidator = groupDescSecurityDepositBaseRequiredCents.Validators[0].(func(int64) error)
+	// groupDescSecurityDepositPolicyVersion is the schema descriptor for security_deposit_policy_version field.
+	groupDescSecurityDepositPolicyVersion := groupFields[10].Descriptor()
+	// group.DefaultSecurityDepositPolicyVersion holds the default value on creation for the security_deposit_policy_version field.
+	group.DefaultSecurityDepositPolicyVersion = groupDescSecurityDepositPolicyVersion.Default.(string)
+	// group.SecurityDepositPolicyVersionValidator is a validator for the "security_deposit_policy_version" field. It is called by the builders before save.
+	group.SecurityDepositPolicyVersionValidator = groupDescSecurityDepositPolicyVersion.Validators[0].(func(string) error)
 	// groupDescDuplicateOperationID is the schema descriptor for duplicate_operation_id field.
-	groupDescDuplicateOperationID := groupFields[9].Descriptor()
+	groupDescDuplicateOperationID := groupFields[11].Descriptor()
 	// group.DuplicateOperationIDValidator is a validator for the "duplicate_operation_id" field. It is called by the builders before save.
 	group.DuplicateOperationIDValidator = groupDescDuplicateOperationID.Validators[0].(func(string) error)
 	// groupDescPlatform is the schema descriptor for platform field.
-	groupDescPlatform := groupFields[10].Descriptor()
+	groupDescPlatform := groupFields[12].Descriptor()
 	// group.DefaultPlatform holds the default value on creation for the platform field.
 	group.DefaultPlatform = groupDescPlatform.Default.(string)
 	// group.PlatformValidator is a validator for the "platform" field. It is called by the builders before save.
 	group.PlatformValidator = groupDescPlatform.Validators[0].(func(string) error)
 	// groupDescSubscriptionType is the schema descriptor for subscription_type field.
-	groupDescSubscriptionType := groupFields[11].Descriptor()
+	groupDescSubscriptionType := groupFields[13].Descriptor()
 	// group.DefaultSubscriptionType holds the default value on creation for the subscription_type field.
 	group.DefaultSubscriptionType = groupDescSubscriptionType.Default.(string)
 	// group.SubscriptionTypeValidator is a validator for the "subscription_type" field. It is called by the builders before save.
 	group.SubscriptionTypeValidator = groupDescSubscriptionType.Validators[0].(func(string) error)
 	// groupDescDefaultValidityDays is the schema descriptor for default_validity_days field.
-	groupDescDefaultValidityDays := groupFields[15].Descriptor()
+	groupDescDefaultValidityDays := groupFields[17].Descriptor()
 	// group.DefaultDefaultValidityDays holds the default value on creation for the default_validity_days field.
 	group.DefaultDefaultValidityDays = groupDescDefaultValidityDays.Default.(int)
 	// groupDescAllowImageGeneration is the schema descriptor for allow_image_generation field.
-	groupDescAllowImageGeneration := groupFields[16].Descriptor()
+	groupDescAllowImageGeneration := groupFields[18].Descriptor()
 	// group.DefaultAllowImageGeneration holds the default value on creation for the allow_image_generation field.
 	group.DefaultAllowImageGeneration = groupDescAllowImageGeneration.Default.(bool)
 	// groupDescAllowBatchImageGeneration is the schema descriptor for allow_batch_image_generation field.
-	groupDescAllowBatchImageGeneration := groupFields[17].Descriptor()
+	groupDescAllowBatchImageGeneration := groupFields[19].Descriptor()
 	// group.DefaultAllowBatchImageGeneration holds the default value on creation for the allow_batch_image_generation field.
 	group.DefaultAllowBatchImageGeneration = groupDescAllowBatchImageGeneration.Default.(bool)
 	// groupDescImageRateIndependent is the schema descriptor for image_rate_independent field.
-	groupDescImageRateIndependent := groupFields[18].Descriptor()
+	groupDescImageRateIndependent := groupFields[20].Descriptor()
 	// group.DefaultImageRateIndependent holds the default value on creation for the image_rate_independent field.
 	group.DefaultImageRateIndependent = groupDescImageRateIndependent.Default.(bool)
 	// groupDescImageRateMultiplier is the schema descriptor for image_rate_multiplier field.
-	groupDescImageRateMultiplier := groupFields[19].Descriptor()
+	groupDescImageRateMultiplier := groupFields[21].Descriptor()
 	// group.DefaultImageRateMultiplier holds the default value on creation for the image_rate_multiplier field.
 	group.DefaultImageRateMultiplier = groupDescImageRateMultiplier.Default.(float64)
 	// groupDescBatchImageDiscountMultiplier is the schema descriptor for batch_image_discount_multiplier field.
-	groupDescBatchImageDiscountMultiplier := groupFields[23].Descriptor()
+	groupDescBatchImageDiscountMultiplier := groupFields[25].Descriptor()
 	// group.DefaultBatchImageDiscountMultiplier holds the default value on creation for the batch_image_discount_multiplier field.
 	group.DefaultBatchImageDiscountMultiplier = groupDescBatchImageDiscountMultiplier.Default.(float64)
 	// groupDescBatchImageHoldMultiplier is the schema descriptor for batch_image_hold_multiplier field.
-	groupDescBatchImageHoldMultiplier := groupFields[24].Descriptor()
+	groupDescBatchImageHoldMultiplier := groupFields[26].Descriptor()
 	// group.DefaultBatchImageHoldMultiplier holds the default value on creation for the batch_image_hold_multiplier field.
 	group.DefaultBatchImageHoldMultiplier = groupDescBatchImageHoldMultiplier.Default.(float64)
 	// groupDescVideoRateIndependent is the schema descriptor for video_rate_independent field.
-	groupDescVideoRateIndependent := groupFields[25].Descriptor()
+	groupDescVideoRateIndependent := groupFields[27].Descriptor()
 	// group.DefaultVideoRateIndependent holds the default value on creation for the video_rate_independent field.
 	group.DefaultVideoRateIndependent = groupDescVideoRateIndependent.Default.(bool)
 	// groupDescVideoRateMultiplier is the schema descriptor for video_rate_multiplier field.
-	groupDescVideoRateMultiplier := groupFields[26].Descriptor()
+	groupDescVideoRateMultiplier := groupFields[28].Descriptor()
 	// group.DefaultVideoRateMultiplier holds the default value on creation for the video_rate_multiplier field.
 	group.DefaultVideoRateMultiplier = groupDescVideoRateMultiplier.Default.(float64)
 	// groupDescSearchPricePer1k is the schema descriptor for search_price_per_1k field.
-	groupDescSearchPricePer1k := groupFields[32].Descriptor()
+	groupDescSearchPricePer1k := groupFields[34].Descriptor()
 	// group.SearchPricePer1kValidator is a validator for the "search_price_per_1k" field. It is called by the builders before save.
 	group.SearchPricePer1kValidator = groupDescSearchPricePer1k.Validators[0].(func(float64) error)
 	// groupDescAudioRealtimePricePerMin is the schema descriptor for audio_realtime_price_per_min field.
-	groupDescAudioRealtimePricePerMin := groupFields[33].Descriptor()
+	groupDescAudioRealtimePricePerMin := groupFields[35].Descriptor()
 	// group.AudioRealtimePricePerMinValidator is a validator for the "audio_realtime_price_per_min" field. It is called by the builders before save.
 	group.AudioRealtimePricePerMinValidator = groupDescAudioRealtimePricePerMin.Validators[0].(func(float64) error)
 	// groupDescAudioTtsPricePerMillionChars is the schema descriptor for audio_tts_price_per_million_chars field.
-	groupDescAudioTtsPricePerMillionChars := groupFields[34].Descriptor()
+	groupDescAudioTtsPricePerMillionChars := groupFields[36].Descriptor()
 	// group.AudioTtsPricePerMillionCharsValidator is a validator for the "audio_tts_price_per_million_chars" field. It is called by the builders before save.
 	group.AudioTtsPricePerMillionCharsValidator = groupDescAudioTtsPricePerMillionChars.Validators[0].(func(float64) error)
 	// groupDescAudioSttPricePerHour is the schema descriptor for audio_stt_price_per_hour field.
-	groupDescAudioSttPricePerHour := groupFields[35].Descriptor()
+	groupDescAudioSttPricePerHour := groupFields[37].Descriptor()
 	// group.AudioSttPricePerHourValidator is a validator for the "audio_stt_price_per_hour" field. It is called by the builders before save.
 	group.AudioSttPricePerHourValidator = groupDescAudioSttPricePerHour.Validators[0].(func(float64) error)
 	// groupDescLongContextPricingEnabled is the schema descriptor for long_context_pricing_enabled field.
-	groupDescLongContextPricingEnabled := groupFields[36].Descriptor()
+	groupDescLongContextPricingEnabled := groupFields[38].Descriptor()
 	// group.DefaultLongContextPricingEnabled holds the default value on creation for the long_context_pricing_enabled field.
 	group.DefaultLongContextPricingEnabled = groupDescLongContextPricingEnabled.Default.(bool)
 	// groupDescClaudeCodeOnly is the schema descriptor for claude_code_only field.
-	groupDescClaudeCodeOnly := groupFields[38].Descriptor()
+	groupDescClaudeCodeOnly := groupFields[40].Descriptor()
 	// group.DefaultClaudeCodeOnly holds the default value on creation for the claude_code_only field.
 	group.DefaultClaudeCodeOnly = groupDescClaudeCodeOnly.Default.(bool)
 	// groupDescModelRoutingEnabled is the schema descriptor for model_routing_enabled field.
-	groupDescModelRoutingEnabled := groupFields[42].Descriptor()
+	groupDescModelRoutingEnabled := groupFields[44].Descriptor()
 	// group.DefaultModelRoutingEnabled holds the default value on creation for the model_routing_enabled field.
 	group.DefaultModelRoutingEnabled = groupDescModelRoutingEnabled.Default.(bool)
 	// groupDescMcpXMLInject is the schema descriptor for mcp_xml_inject field.
-	groupDescMcpXMLInject := groupFields[43].Descriptor()
+	groupDescMcpXMLInject := groupFields[45].Descriptor()
 	// group.DefaultMcpXMLInject holds the default value on creation for the mcp_xml_inject field.
 	group.DefaultMcpXMLInject = groupDescMcpXMLInject.Default.(bool)
 	// groupDescSupportedModelScopes is the schema descriptor for supported_model_scopes field.
-	groupDescSupportedModelScopes := groupFields[44].Descriptor()
+	groupDescSupportedModelScopes := groupFields[46].Descriptor()
 	// group.DefaultSupportedModelScopes holds the default value on creation for the supported_model_scopes field.
 	group.DefaultSupportedModelScopes = groupDescSupportedModelScopes.Default.([]string)
 	// groupDescSortOrder is the schema descriptor for sort_order field.
-	groupDescSortOrder := groupFields[45].Descriptor()
+	groupDescSortOrder := groupFields[47].Descriptor()
 	// group.DefaultSortOrder holds the default value on creation for the sort_order field.
 	group.DefaultSortOrder = groupDescSortOrder.Default.(int)
 	// groupDescAllowMessagesDispatch is the schema descriptor for allow_messages_dispatch field.
-	groupDescAllowMessagesDispatch := groupFields[46].Descriptor()
+	groupDescAllowMessagesDispatch := groupFields[48].Descriptor()
 	// group.DefaultAllowMessagesDispatch holds the default value on creation for the allow_messages_dispatch field.
 	group.DefaultAllowMessagesDispatch = groupDescAllowMessagesDispatch.Default.(bool)
 	// groupDescAllowLive is the schema descriptor for allow_live field.
-	groupDescAllowLive := groupFields[47].Descriptor()
+	groupDescAllowLive := groupFields[49].Descriptor()
 	// group.DefaultAllowLive holds the default value on creation for the allow_live field.
 	group.DefaultAllowLive = groupDescAllowLive.Default.(bool)
 	// groupDescRequireOauthOnly is the schema descriptor for require_oauth_only field.
-	groupDescRequireOauthOnly := groupFields[48].Descriptor()
+	groupDescRequireOauthOnly := groupFields[50].Descriptor()
 	// group.DefaultRequireOauthOnly holds the default value on creation for the require_oauth_only field.
 	group.DefaultRequireOauthOnly = groupDescRequireOauthOnly.Default.(bool)
 	// groupDescRequirePrivacySet is the schema descriptor for require_privacy_set field.
-	groupDescRequirePrivacySet := groupFields[49].Descriptor()
+	groupDescRequirePrivacySet := groupFields[51].Descriptor()
 	// group.DefaultRequirePrivacySet holds the default value on creation for the require_privacy_set field.
 	group.DefaultRequirePrivacySet = groupDescRequirePrivacySet.Default.(bool)
 	// groupDescDefaultMappedModel is the schema descriptor for default_mapped_model field.
-	groupDescDefaultMappedModel := groupFields[50].Descriptor()
+	groupDescDefaultMappedModel := groupFields[52].Descriptor()
 	// group.DefaultDefaultMappedModel holds the default value on creation for the default_mapped_model field.
 	group.DefaultDefaultMappedModel = groupDescDefaultMappedModel.Default.(string)
 	// group.DefaultMappedModelValidator is a validator for the "default_mapped_model" field. It is called by the builders before save.
 	group.DefaultMappedModelValidator = groupDescDefaultMappedModel.Validators[0].(func(string) error)
 	// groupDescMessagesDispatchModelConfig is the schema descriptor for messages_dispatch_model_config field.
-	groupDescMessagesDispatchModelConfig := groupFields[51].Descriptor()
+	groupDescMessagesDispatchModelConfig := groupFields[53].Descriptor()
 	// group.DefaultMessagesDispatchModelConfig holds the default value on creation for the messages_dispatch_model_config field.
 	group.DefaultMessagesDispatchModelConfig = groupDescMessagesDispatchModelConfig.Default.(domain.OpenAIMessagesDispatchModelConfig)
 	// groupDescModelsListConfig is the schema descriptor for models_list_config field.
-	groupDescModelsListConfig := groupFields[52].Descriptor()
+	groupDescModelsListConfig := groupFields[54].Descriptor()
 	// group.DefaultModelsListConfig holds the default value on creation for the models_list_config field.
 	group.DefaultModelsListConfig = groupDescModelsListConfig.Default.(domain.GroupModelsListConfig)
 	// groupDescRpmLimit is the schema descriptor for rpm_limit field.
-	groupDescRpmLimit := groupFields[53].Descriptor()
+	groupDescRpmLimit := groupFields[55].Descriptor()
 	// group.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
 	group.DefaultRpmLimit = groupDescRpmLimit.Default.(int)
 	// groupDescMaxReasoningEffort is the schema descriptor for max_reasoning_effort field.
-	groupDescMaxReasoningEffort := groupFields[54].Descriptor()
+	groupDescMaxReasoningEffort := groupFields[56].Descriptor()
 	// group.DefaultMaxReasoningEffort holds the default value on creation for the max_reasoning_effort field.
 	group.DefaultMaxReasoningEffort = groupDescMaxReasoningEffort.Default.(string)
 	// group.MaxReasoningEffortValidator is a validator for the "max_reasoning_effort" field. It is called by the builders before save.
 	group.MaxReasoningEffortValidator = groupDescMaxReasoningEffort.Validators[0].(func(string) error)
 	// groupDescReasoningEffortMappings is the schema descriptor for reasoning_effort_mappings field.
-	groupDescReasoningEffortMappings := groupFields[55].Descriptor()
+	groupDescReasoningEffortMappings := groupFields[57].Descriptor()
 	// group.DefaultReasoningEffortMappings holds the default value on creation for the reasoning_effort_mappings field.
 	group.DefaultReasoningEffortMappings = groupDescReasoningEffortMappings.Default.([]domain.ReasoningEffortMapping)
 	// groupDescProfitControlEnabled is the schema descriptor for profit_control_enabled field.
-	groupDescProfitControlEnabled := groupFields[56].Descriptor()
+	groupDescProfitControlEnabled := groupFields[58].Descriptor()
 	// group.DefaultProfitControlEnabled holds the default value on creation for the profit_control_enabled field.
 	group.DefaultProfitControlEnabled = groupDescProfitControlEnabled.Default.(bool)
 	// groupDescProfitMinMargin is the schema descriptor for profit_min_margin field.
-	groupDescProfitMinMargin := groupFields[57].Descriptor()
+	groupDescProfitMinMargin := groupFields[59].Descriptor()
 	// group.DefaultProfitMinMargin holds the default value on creation for the profit_min_margin field.
 	group.DefaultProfitMinMargin = groupDescProfitMinMargin.Default.(float64)
 	// groupDescProfitSafetyBuffer is the schema descriptor for profit_safety_buffer field.
-	groupDescProfitSafetyBuffer := groupFields[58].Descriptor()
+	groupDescProfitSafetyBuffer := groupFields[60].Descriptor()
 	// group.DefaultProfitSafetyBuffer holds the default value on creation for the profit_safety_buffer field.
 	group.DefaultProfitSafetyBuffer = groupDescProfitSafetyBuffer.Default.(float64)
 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()
@@ -2496,6 +2528,353 @@ func init() {
 	resetrebateuseritem.DefaultUpdatedAt = resetrebateuseritemDescUpdatedAt.Default.(func() time.Time)
 	// resetrebateuseritem.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	resetrebateuseritem.UpdateDefaultUpdatedAt = resetrebateuseritemDescUpdatedAt.UpdateDefault.(func() time.Time)
+	securitydepositaccountMixin := schema.SecurityDepositAccount{}.Mixin()
+	securitydepositaccountMixinFields0 := securitydepositaccountMixin[0].Fields()
+	_ = securitydepositaccountMixinFields0
+	securitydepositaccountFields := schema.SecurityDepositAccount{}.Fields()
+	_ = securitydepositaccountFields
+	// securitydepositaccountDescCreatedAt is the schema descriptor for created_at field.
+	securitydepositaccountDescCreatedAt := securitydepositaccountMixinFields0[0].Descriptor()
+	// securitydepositaccount.DefaultCreatedAt holds the default value on creation for the created_at field.
+	securitydepositaccount.DefaultCreatedAt = securitydepositaccountDescCreatedAt.Default.(func() time.Time)
+	// securitydepositaccountDescUpdatedAt is the schema descriptor for updated_at field.
+	securitydepositaccountDescUpdatedAt := securitydepositaccountMixinFields0[1].Descriptor()
+	// securitydepositaccount.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	securitydepositaccount.DefaultUpdatedAt = securitydepositaccountDescUpdatedAt.Default.(func() time.Time)
+	// securitydepositaccount.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	securitydepositaccount.UpdateDefaultUpdatedAt = securitydepositaccountDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// securitydepositaccountDescCurrency is the schema descriptor for currency field.
+	securitydepositaccountDescCurrency := securitydepositaccountFields[2].Descriptor()
+	// securitydepositaccount.DefaultCurrency holds the default value on creation for the currency field.
+	securitydepositaccount.DefaultCurrency = securitydepositaccountDescCurrency.Default.(string)
+	// securitydepositaccount.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	securitydepositaccount.CurrencyValidator = securitydepositaccountDescCurrency.Validators[0].(func(string) error)
+	// securitydepositaccountDescBalanceCents is the schema descriptor for balance_cents field.
+	securitydepositaccountDescBalanceCents := securitydepositaccountFields[3].Descriptor()
+	// securitydepositaccount.DefaultBalanceCents holds the default value on creation for the balance_cents field.
+	securitydepositaccount.DefaultBalanceCents = securitydepositaccountDescBalanceCents.Default.(int64)
+	// securitydepositaccount.BalanceCentsValidator is a validator for the "balance_cents" field. It is called by the builders before save.
+	securitydepositaccount.BalanceCentsValidator = securitydepositaccountDescBalanceCents.Validators[0].(func(int64) error)
+	// securitydepositaccountDescRefundReservedCents is the schema descriptor for refund_reserved_cents field.
+	securitydepositaccountDescRefundReservedCents := securitydepositaccountFields[4].Descriptor()
+	// securitydepositaccount.DefaultRefundReservedCents holds the default value on creation for the refund_reserved_cents field.
+	securitydepositaccount.DefaultRefundReservedCents = securitydepositaccountDescRefundReservedCents.Default.(int64)
+	// securitydepositaccount.RefundReservedCentsValidator is a validator for the "refund_reserved_cents" field. It is called by the builders before save.
+	securitydepositaccount.RefundReservedCentsValidator = securitydepositaccountDescRefundReservedCents.Validators[0].(func(int64) error)
+	// securitydepositaccountDescVersion is the schema descriptor for version field.
+	securitydepositaccountDescVersion := securitydepositaccountFields[5].Descriptor()
+	// securitydepositaccount.DefaultVersion holds the default value on creation for the version field.
+	securitydepositaccount.DefaultVersion = securitydepositaccountDescVersion.Default.(int64)
+	// securitydepositaccount.VersionValidator is a validator for the "version" field. It is called by the builders before save.
+	securitydepositaccount.VersionValidator = securitydepositaccountDescVersion.Validators[0].(func(int64) error)
+	securitydepositagreementFields := schema.SecurityDepositAgreement{}.Fields()
+	_ = securitydepositagreementFields
+	// securitydepositagreementDescPolicyVersion is the schema descriptor for policy_version field.
+	securitydepositagreementDescPolicyVersion := securitydepositagreementFields[1].Descriptor()
+	// securitydepositagreement.PolicyVersionValidator is a validator for the "policy_version" field. It is called by the builders before save.
+	securitydepositagreement.PolicyVersionValidator = securitydepositagreementDescPolicyVersion.Validators[0].(func(string) error)
+	// securitydepositagreementDescContentHash is the schema descriptor for content_hash field.
+	securitydepositagreementDescContentHash := securitydepositagreementFields[2].Descriptor()
+	// securitydepositagreement.ContentHashValidator is a validator for the "content_hash" field. It is called by the builders before save.
+	securitydepositagreement.ContentHashValidator = securitydepositagreementDescContentHash.Validators[0].(func(string) error)
+	// securitydepositagreementDescBaseRequiredSnapshotCents is the schema descriptor for base_required_snapshot_cents field.
+	securitydepositagreementDescBaseRequiredSnapshotCents := securitydepositagreementFields[4].Descriptor()
+	// securitydepositagreement.BaseRequiredSnapshotCentsValidator is a validator for the "base_required_snapshot_cents" field. It is called by the builders before save.
+	securitydepositagreement.BaseRequiredSnapshotCentsValidator = securitydepositagreementDescBaseRequiredSnapshotCents.Validators[0].(func(int64) error)
+	// securitydepositagreementDescRiskMultiplierSnapshot is the schema descriptor for risk_multiplier_snapshot field.
+	securitydepositagreementDescRiskMultiplierSnapshot := securitydepositagreementFields[5].Descriptor()
+	// securitydepositagreement.RiskMultiplierSnapshotValidator is a validator for the "risk_multiplier_snapshot" field. It is called by the builders before save.
+	securitydepositagreement.RiskMultiplierSnapshotValidator = securitydepositagreementDescRiskMultiplierSnapshot.Validators[0].(func(int64) error)
+	// securitydepositagreementDescRequiredSnapshotCents is the schema descriptor for required_snapshot_cents field.
+	securitydepositagreementDescRequiredSnapshotCents := securitydepositagreementFields[6].Descriptor()
+	// securitydepositagreement.RequiredSnapshotCentsValidator is a validator for the "required_snapshot_cents" field. It is called by the builders before save.
+	securitydepositagreement.RequiredSnapshotCentsValidator = securitydepositagreementDescRequiredSnapshotCents.Validators[0].(func(int64) error)
+	// securitydepositagreementDescAcceptedAt is the schema descriptor for accepted_at field.
+	securitydepositagreementDescAcceptedAt := securitydepositagreementFields[7].Descriptor()
+	// securitydepositagreement.DefaultAcceptedAt holds the default value on creation for the accepted_at field.
+	securitydepositagreement.DefaultAcceptedAt = securitydepositagreementDescAcceptedAt.Default.(func() time.Time)
+	// securitydepositagreementDescClientIP is the schema descriptor for client_ip field.
+	securitydepositagreementDescClientIP := securitydepositagreementFields[8].Descriptor()
+	// securitydepositagreement.ClientIPValidator is a validator for the "client_ip" field. It is called by the builders before save.
+	securitydepositagreement.ClientIPValidator = securitydepositagreementDescClientIP.Validators[0].(func(string) error)
+	securitydepositledgerFields := schema.SecurityDepositLedger{}.Fields()
+	_ = securitydepositledgerFields
+	// securitydepositledgerDescDeltaCents is the schema descriptor for delta_cents field.
+	securitydepositledgerDescDeltaCents := securitydepositledgerFields[4].Descriptor()
+	// securitydepositledger.DefaultDeltaCents holds the default value on creation for the delta_cents field.
+	securitydepositledger.DefaultDeltaCents = securitydepositledgerDescDeltaCents.Default.(int64)
+	// securitydepositledgerDescReservedDeltaCents is the schema descriptor for reserved_delta_cents field.
+	securitydepositledgerDescReservedDeltaCents := securitydepositledgerFields[5].Descriptor()
+	// securitydepositledger.DefaultReservedDeltaCents holds the default value on creation for the reserved_delta_cents field.
+	securitydepositledger.DefaultReservedDeltaCents = securitydepositledgerDescReservedDeltaCents.Default.(int64)
+	// securitydepositledgerDescBucketBalanceAfterCents is the schema descriptor for bucket_balance_after_cents field.
+	securitydepositledgerDescBucketBalanceAfterCents := securitydepositledgerFields[6].Descriptor()
+	// securitydepositledger.BucketBalanceAfterCentsValidator is a validator for the "bucket_balance_after_cents" field. It is called by the builders before save.
+	securitydepositledger.BucketBalanceAfterCentsValidator = securitydepositledgerDescBucketBalanceAfterCents.Validators[0].(func(int64) error)
+	// securitydepositledgerDescBucketReservedAfterCents is the schema descriptor for bucket_reserved_after_cents field.
+	securitydepositledgerDescBucketReservedAfterCents := securitydepositledgerFields[7].Descriptor()
+	// securitydepositledger.BucketReservedAfterCentsValidator is a validator for the "bucket_reserved_after_cents" field. It is called by the builders before save.
+	securitydepositledger.BucketReservedAfterCentsValidator = securitydepositledgerDescBucketReservedAfterCents.Validators[0].(func(int64) error)
+	// securitydepositledgerDescIdempotencyKey is the schema descriptor for idempotency_key field.
+	securitydepositledgerDescIdempotencyKey := securitydepositledgerFields[15].Descriptor()
+	// securitydepositledger.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
+	securitydepositledger.IdempotencyKeyValidator = securitydepositledgerDescIdempotencyKey.Validators[0].(func(string) error)
+	// securitydepositledgerDescCreatedAt is the schema descriptor for created_at field.
+	securitydepositledgerDescCreatedAt := securitydepositledgerFields[16].Descriptor()
+	// securitydepositledger.DefaultCreatedAt holds the default value on creation for the created_at field.
+	securitydepositledger.DefaultCreatedAt = securitydepositledgerDescCreatedAt.Default.(func() time.Time)
+	securitydepositlotMixin := schema.SecurityDepositLot{}.Mixin()
+	securitydepositlotMixinFields0 := securitydepositlotMixin[0].Fields()
+	_ = securitydepositlotMixinFields0
+	securitydepositlotFields := schema.SecurityDepositLot{}.Fields()
+	_ = securitydepositlotFields
+	// securitydepositlotDescCreatedAt is the schema descriptor for created_at field.
+	securitydepositlotDescCreatedAt := securitydepositlotMixinFields0[0].Descriptor()
+	// securitydepositlot.DefaultCreatedAt holds the default value on creation for the created_at field.
+	securitydepositlot.DefaultCreatedAt = securitydepositlotDescCreatedAt.Default.(func() time.Time)
+	// securitydepositlotDescUpdatedAt is the schema descriptor for updated_at field.
+	securitydepositlotDescUpdatedAt := securitydepositlotMixinFields0[1].Descriptor()
+	// securitydepositlot.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	securitydepositlot.DefaultUpdatedAt = securitydepositlotDescUpdatedAt.Default.(func() time.Time)
+	// securitydepositlot.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	securitydepositlot.UpdateDefaultUpdatedAt = securitydepositlotDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// securitydepositlotDescOriginalCents is the schema descriptor for original_cents field.
+	securitydepositlotDescOriginalCents := securitydepositlotFields[4].Descriptor()
+	// securitydepositlot.OriginalCentsValidator is a validator for the "original_cents" field. It is called by the builders before save.
+	securitydepositlot.OriginalCentsValidator = securitydepositlotDescOriginalCents.Validators[0].(func(int64) error)
+	// securitydepositlotDescRemainingCents is the schema descriptor for remaining_cents field.
+	securitydepositlotDescRemainingCents := securitydepositlotFields[5].Descriptor()
+	// securitydepositlot.RemainingCentsValidator is a validator for the "remaining_cents" field. It is called by the builders before save.
+	securitydepositlot.RemainingCentsValidator = securitydepositlotDescRemainingCents.Validators[0].(func(int64) error)
+	// securitydepositlotDescRefundReservedCents is the schema descriptor for refund_reserved_cents field.
+	securitydepositlotDescRefundReservedCents := securitydepositlotFields[6].Descriptor()
+	// securitydepositlot.DefaultRefundReservedCents holds the default value on creation for the refund_reserved_cents field.
+	securitydepositlot.DefaultRefundReservedCents = securitydepositlotDescRefundReservedCents.Default.(int64)
+	// securitydepositlot.RefundReservedCentsValidator is a validator for the "refund_reserved_cents" field. It is called by the builders before save.
+	securitydepositlot.RefundReservedCentsValidator = securitydepositlotDescRefundReservedCents.Validators[0].(func(int64) error)
+	// securitydepositlotDescForfeitedCents is the schema descriptor for forfeited_cents field.
+	securitydepositlotDescForfeitedCents := securitydepositlotFields[7].Descriptor()
+	// securitydepositlot.DefaultForfeitedCents holds the default value on creation for the forfeited_cents field.
+	securitydepositlot.DefaultForfeitedCents = securitydepositlotDescForfeitedCents.Default.(int64)
+	// securitydepositlot.ForfeitedCentsValidator is a validator for the "forfeited_cents" field. It is called by the builders before save.
+	securitydepositlot.ForfeitedCentsValidator = securitydepositlotDescForfeitedCents.Validators[0].(func(int64) error)
+	// securitydepositlotDescRefundedCents is the schema descriptor for refunded_cents field.
+	securitydepositlotDescRefundedCents := securitydepositlotFields[8].Descriptor()
+	// securitydepositlot.DefaultRefundedCents holds the default value on creation for the refunded_cents field.
+	securitydepositlot.DefaultRefundedCents = securitydepositlotDescRefundedCents.Default.(int64)
+	// securitydepositlot.RefundedCentsValidator is a validator for the "refunded_cents" field. It is called by the builders before save.
+	securitydepositlot.RefundedCentsValidator = securitydepositlotDescRefundedCents.Validators[0].(func(int64) error)
+	// securitydepositlotDescAdminDeductedCents is the schema descriptor for admin_deducted_cents field.
+	securitydepositlotDescAdminDeductedCents := securitydepositlotFields[9].Descriptor()
+	// securitydepositlot.DefaultAdminDeductedCents holds the default value on creation for the admin_deducted_cents field.
+	securitydepositlot.DefaultAdminDeductedCents = securitydepositlotDescAdminDeductedCents.Default.(int64)
+	// securitydepositlot.AdminDeductedCentsValidator is a validator for the "admin_deducted_cents" field. It is called by the builders before save.
+	securitydepositlot.AdminDeductedCentsValidator = securitydepositlotDescAdminDeductedCents.Validators[0].(func(int64) error)
+	// securitydepositlotDescRevokedCents is the schema descriptor for revoked_cents field.
+	securitydepositlotDescRevokedCents := securitydepositlotFields[10].Descriptor()
+	// securitydepositlot.DefaultRevokedCents holds the default value on creation for the revoked_cents field.
+	securitydepositlot.DefaultRevokedCents = securitydepositlotDescRevokedCents.Default.(int64)
+	// securitydepositlot.RevokedCentsValidator is a validator for the "revoked_cents" field. It is called by the builders before save.
+	securitydepositlot.RevokedCentsValidator = securitydepositlotDescRevokedCents.Validators[0].(func(int64) error)
+	// securitydepositlotDescCurrency is the schema descriptor for currency field.
+	securitydepositlotDescCurrency := securitydepositlotFields[11].Descriptor()
+	// securitydepositlot.DefaultCurrency holds the default value on creation for the currency field.
+	securitydepositlot.DefaultCurrency = securitydepositlotDescCurrency.Default.(string)
+	// securitydepositlot.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	securitydepositlot.CurrencyValidator = securitydepositlotDescCurrency.Validators[0].(func(string) error)
+	// securitydepositlotDescStatus is the schema descriptor for status field.
+	securitydepositlotDescStatus := securitydepositlotFields[14].Descriptor()
+	// securitydepositlot.DefaultStatus holds the default value on creation for the status field.
+	securitydepositlot.DefaultStatus = securitydepositlotDescStatus.Default.(string)
+	// securitydepositlot.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	securitydepositlot.StatusValidator = securitydepositlotDescStatus.Validators[0].(func(string) error)
+	// securitydepositlotDescSourceReference is the schema descriptor for source_reference field.
+	securitydepositlotDescSourceReference := securitydepositlotFields[15].Descriptor()
+	// securitydepositlot.SourceReferenceValidator is a validator for the "source_reference" field. It is called by the builders before save.
+	securitydepositlot.SourceReferenceValidator = securitydepositlotDescSourceReference.Validators[0].(func(string) error)
+	securitydepositrefundFields := schema.SecurityDepositRefund{}.Fields()
+	_ = securitydepositrefundFields
+	// securitydepositrefundDescRefundID is the schema descriptor for refund_id field.
+	securitydepositrefundDescRefundID := securitydepositrefundFields[0].Descriptor()
+	// securitydepositrefund.RefundIDValidator is a validator for the "refund_id" field. It is called by the builders before save.
+	securitydepositrefund.RefundIDValidator = securitydepositrefundDescRefundID.Validators[0].(func(string) error)
+	// securitydepositrefundDescPrincipalCents is the schema descriptor for principal_cents field.
+	securitydepositrefundDescPrincipalCents := securitydepositrefundFields[4].Descriptor()
+	// securitydepositrefund.PrincipalCentsValidator is a validator for the "principal_cents" field. It is called by the builders before save.
+	securitydepositrefund.PrincipalCentsValidator = securitydepositrefundDescPrincipalCents.Validators[0].(func(int64) error)
+	// securitydepositrefundDescGatewayAmount is the schema descriptor for gateway_amount field.
+	securitydepositrefundDescGatewayAmount := securitydepositrefundFields[5].Descriptor()
+	// securitydepositrefund.GatewayAmountValidator is a validator for the "gateway_amount" field. It is called by the builders before save.
+	securitydepositrefund.GatewayAmountValidator = securitydepositrefundDescGatewayAmount.Validators[0].(func(string) error)
+	// securitydepositrefundDescGatewayCurrency is the schema descriptor for gateway_currency field.
+	securitydepositrefundDescGatewayCurrency := securitydepositrefundFields[6].Descriptor()
+	// securitydepositrefund.DefaultGatewayCurrency holds the default value on creation for the gateway_currency field.
+	securitydepositrefund.DefaultGatewayCurrency = securitydepositrefundDescGatewayCurrency.Default.(string)
+	// securitydepositrefund.GatewayCurrencyValidator is a validator for the "gateway_currency" field. It is called by the builders before save.
+	securitydepositrefund.GatewayCurrencyValidator = securitydepositrefundDescGatewayCurrency.Validators[0].(func(string) error)
+	// securitydepositrefundDescState is the schema descriptor for state field.
+	securitydepositrefundDescState := securitydepositrefundFields[8].Descriptor()
+	// securitydepositrefund.StateValidator is a validator for the "state" field. It is called by the builders before save.
+	securitydepositrefund.StateValidator = securitydepositrefundDescState.Validators[0].(func(string) error)
+	// securitydepositrefundDescQuoteHash is the schema descriptor for quote_hash field.
+	securitydepositrefundDescQuoteHash := securitydepositrefundFields[11].Descriptor()
+	// securitydepositrefund.QuoteHashValidator is a validator for the "quote_hash" field. It is called by the builders before save.
+	securitydepositrefund.QuoteHashValidator = securitydepositrefundDescQuoteHash.Validators[0].(func(string) error)
+	// securitydepositrefundDescIdempotencyKey is the schema descriptor for idempotency_key field.
+	securitydepositrefundDescIdempotencyKey := securitydepositrefundFields[12].Descriptor()
+	// securitydepositrefund.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
+	securitydepositrefund.IdempotencyKeyValidator = securitydepositrefundDescIdempotencyKey.Validators[0].(func(string) error)
+	// securitydepositrefundDescProviderRequestID is the schema descriptor for provider_request_id field.
+	securitydepositrefundDescProviderRequestID := securitydepositrefundFields[13].Descriptor()
+	// securitydepositrefund.ProviderRequestIDValidator is a validator for the "provider_request_id" field. It is called by the builders before save.
+	securitydepositrefund.ProviderRequestIDValidator = securitydepositrefundDescProviderRequestID.Validators[0].(func(string) error)
+	// securitydepositrefundDescExternalRefundID is the schema descriptor for external_refund_id field.
+	securitydepositrefundDescExternalRefundID := securitydepositrefundFields[15].Descriptor()
+	// securitydepositrefund.ExternalRefundIDValidator is a validator for the "external_refund_id" field. It is called by the builders before save.
+	securitydepositrefund.ExternalRefundIDValidator = securitydepositrefundDescExternalRefundID.Validators[0].(func(string) error)
+	// securitydepositrefundDescCreatedAt is the schema descriptor for created_at field.
+	securitydepositrefundDescCreatedAt := securitydepositrefundFields[18].Descriptor()
+	// securitydepositrefund.DefaultCreatedAt holds the default value on creation for the created_at field.
+	securitydepositrefund.DefaultCreatedAt = securitydepositrefundDescCreatedAt.Default.(func() time.Time)
+	securitydepositriskeventFields := schema.SecurityDepositRiskEvent{}.Fields()
+	_ = securitydepositriskeventFields
+	// securitydepositriskeventDescStrikeCountBefore is the schema descriptor for strike_count_before field.
+	securitydepositriskeventDescStrikeCountBefore := securitydepositriskeventFields[3].Descriptor()
+	// securitydepositriskevent.StrikeCountBeforeValidator is a validator for the "strike_count_before" field. It is called by the builders before save.
+	securitydepositriskevent.StrikeCountBeforeValidator = securitydepositriskeventDescStrikeCountBefore.Validators[0].(func(int64) error)
+	// securitydepositriskeventDescStrikeCountAfter is the schema descriptor for strike_count_after field.
+	securitydepositriskeventDescStrikeCountAfter := securitydepositriskeventFields[4].Descriptor()
+	// securitydepositriskevent.StrikeCountAfterValidator is a validator for the "strike_count_after" field. It is called by the builders before save.
+	securitydepositriskevent.StrikeCountAfterValidator = securitydepositriskeventDescStrikeCountAfter.Validators[0].(func(int64) error)
+	// securitydepositriskeventDescMultiplierBefore is the schema descriptor for multiplier_before field.
+	securitydepositriskeventDescMultiplierBefore := securitydepositriskeventFields[5].Descriptor()
+	// securitydepositriskevent.MultiplierBeforeValidator is a validator for the "multiplier_before" field. It is called by the builders before save.
+	securitydepositriskevent.MultiplierBeforeValidator = securitydepositriskeventDescMultiplierBefore.Validators[0].(func(int64) error)
+	// securitydepositriskeventDescMultiplierAfter is the schema descriptor for multiplier_after field.
+	securitydepositriskeventDescMultiplierAfter := securitydepositriskeventFields[6].Descriptor()
+	// securitydepositriskevent.MultiplierAfterValidator is a validator for the "multiplier_after" field. It is called by the builders before save.
+	securitydepositriskevent.MultiplierAfterValidator = securitydepositriskeventDescMultiplierAfter.Validators[0].(func(int64) error)
+	// securitydepositriskeventDescIdempotencyKey is the schema descriptor for idempotency_key field.
+	securitydepositriskeventDescIdempotencyKey := securitydepositriskeventFields[9].Descriptor()
+	// securitydepositriskevent.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
+	securitydepositriskevent.IdempotencyKeyValidator = securitydepositriskeventDescIdempotencyKey.Validators[0].(func(string) error)
+	// securitydepositriskeventDescCreatedAt is the schema descriptor for created_at field.
+	securitydepositriskeventDescCreatedAt := securitydepositriskeventFields[10].Descriptor()
+	// securitydepositriskevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	securitydepositriskevent.DefaultCreatedAt = securitydepositriskeventDescCreatedAt.Default.(func() time.Time)
+	securitydepositriskprofileMixin := schema.SecurityDepositRiskProfile{}.Mixin()
+	securitydepositriskprofileMixinFields0 := securitydepositriskprofileMixin[0].Fields()
+	_ = securitydepositriskprofileMixinFields0
+	securitydepositriskprofileFields := schema.SecurityDepositRiskProfile{}.Fields()
+	_ = securitydepositriskprofileFields
+	// securitydepositriskprofileDescCreatedAt is the schema descriptor for created_at field.
+	securitydepositriskprofileDescCreatedAt := securitydepositriskprofileMixinFields0[0].Descriptor()
+	// securitydepositriskprofile.DefaultCreatedAt holds the default value on creation for the created_at field.
+	securitydepositriskprofile.DefaultCreatedAt = securitydepositriskprofileDescCreatedAt.Default.(func() time.Time)
+	// securitydepositriskprofileDescUpdatedAt is the schema descriptor for updated_at field.
+	securitydepositriskprofileDescUpdatedAt := securitydepositriskprofileMixinFields0[1].Descriptor()
+	// securitydepositriskprofile.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	securitydepositriskprofile.DefaultUpdatedAt = securitydepositriskprofileDescUpdatedAt.Default.(func() time.Time)
+	// securitydepositriskprofile.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	securitydepositriskprofile.UpdateDefaultUpdatedAt = securitydepositriskprofileDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// securitydepositriskprofileDescCyberStrikeCount is the schema descriptor for cyber_strike_count field.
+	securitydepositriskprofileDescCyberStrikeCount := securitydepositriskprofileFields[1].Descriptor()
+	// securitydepositriskprofile.DefaultCyberStrikeCount holds the default value on creation for the cyber_strike_count field.
+	securitydepositriskprofile.DefaultCyberStrikeCount = securitydepositriskprofileDescCyberStrikeCount.Default.(int64)
+	// securitydepositriskprofile.CyberStrikeCountValidator is a validator for the "cyber_strike_count" field. It is called by the builders before save.
+	securitydepositriskprofile.CyberStrikeCountValidator = securitydepositriskprofileDescCyberStrikeCount.Validators[0].(func(int64) error)
+	// securitydepositriskprofileDescRiskMultiplier is the schema descriptor for risk_multiplier field.
+	securitydepositriskprofileDescRiskMultiplier := securitydepositriskprofileFields[2].Descriptor()
+	// securitydepositriskprofile.DefaultRiskMultiplier holds the default value on creation for the risk_multiplier field.
+	securitydepositriskprofile.DefaultRiskMultiplier = securitydepositriskprofileDescRiskMultiplier.Default.(int64)
+	// securitydepositriskprofile.RiskMultiplierValidator is a validator for the "risk_multiplier" field. It is called by the builders before save.
+	securitydepositriskprofile.RiskMultiplierValidator = securitydepositriskprofileDescRiskMultiplier.Validators[0].(func(int64) error)
+	// securitydepositriskprofileDescVersion is the schema descriptor for version field.
+	securitydepositriskprofileDescVersion := securitydepositriskprofileFields[4].Descriptor()
+	// securitydepositriskprofile.DefaultVersion holds the default value on creation for the version field.
+	securitydepositriskprofile.DefaultVersion = securitydepositriskprofileDescVersion.Default.(int64)
+	// securitydepositriskprofile.VersionValidator is a validator for the "version" field. It is called by the builders before save.
+	securitydepositriskprofile.VersionValidator = securitydepositriskprofileDescVersion.Validators[0].(func(int64) error)
+	securitydepositviolationFields := schema.SecurityDepositViolation{}.Fields()
+	_ = securitydepositviolationFields
+	// securitydepositviolationDescEventKey is the schema descriptor for event_key field.
+	securitydepositviolationDescEventKey := securitydepositviolationFields[0].Descriptor()
+	// securitydepositviolation.EventKeyValidator is a validator for the "event_key" field. It is called by the builders before save.
+	securitydepositviolation.EventKeyValidator = securitydepositviolationDescEventKey.Validators[0].(func(string) error)
+	// securitydepositviolationDescRequestID is the schema descriptor for request_id field.
+	securitydepositviolationDescRequestID := securitydepositviolationFields[1].Descriptor()
+	// securitydepositviolation.RequestIDValidator is a validator for the "request_id" field. It is called by the builders before save.
+	securitydepositviolation.RequestIDValidator = securitydepositviolationDescRequestID.Validators[0].(func(string) error)
+	// securitydepositviolationDescUpstreamResponseID is the schema descriptor for upstream_response_id field.
+	securitydepositviolationDescUpstreamResponseID := securitydepositviolationFields[2].Descriptor()
+	// securitydepositviolation.UpstreamResponseIDValidator is a validator for the "upstream_response_id" field. It is called by the builders before save.
+	securitydepositviolation.UpstreamResponseIDValidator = securitydepositviolationDescUpstreamResponseID.Validators[0].(func(string) error)
+	// securitydepositviolationDescTurnIndex is the schema descriptor for turn_index field.
+	securitydepositviolationDescTurnIndex := securitydepositviolationFields[3].Descriptor()
+	// securitydepositviolation.TurnIndexValidator is a validator for the "turn_index" field. It is called by the builders before save.
+	securitydepositviolation.TurnIndexValidator = securitydepositviolationDescTurnIndex.Validators[0].(func(int64) error)
+	// securitydepositviolationDescPolicyCode is the schema descriptor for policy_code field.
+	securitydepositviolationDescPolicyCode := securitydepositviolationFields[7].Descriptor()
+	// securitydepositviolation.PolicyCodeValidator is a validator for the "policy_code" field. It is called by the builders before save.
+	securitydepositviolation.PolicyCodeValidator = securitydepositviolationDescPolicyCode.Validators[0].(func(string) error)
+	// securitydepositviolationDescDetectorVersion is the schema descriptor for detector_version field.
+	securitydepositviolationDescDetectorVersion := securitydepositviolationFields[8].Descriptor()
+	// securitydepositviolation.DetectorVersionValidator is a validator for the "detector_version" field. It is called by the builders before save.
+	securitydepositviolation.DetectorVersionValidator = securitydepositviolationDescDetectorVersion.Validators[0].(func(string) error)
+	// securitydepositviolationDescBaseRequiredSnapshotCents is the schema descriptor for base_required_snapshot_cents field.
+	securitydepositviolationDescBaseRequiredSnapshotCents := securitydepositviolationFields[9].Descriptor()
+	// securitydepositviolation.BaseRequiredSnapshotCentsValidator is a validator for the "base_required_snapshot_cents" field. It is called by the builders before save.
+	securitydepositviolation.BaseRequiredSnapshotCentsValidator = securitydepositviolationDescBaseRequiredSnapshotCents.Validators[0].(func(int64) error)
+	// securitydepositviolationDescRiskMultiplierBefore is the schema descriptor for risk_multiplier_before field.
+	securitydepositviolationDescRiskMultiplierBefore := securitydepositviolationFields[10].Descriptor()
+	// securitydepositviolation.RiskMultiplierBeforeValidator is a validator for the "risk_multiplier_before" field. It is called by the builders before save.
+	securitydepositviolation.RiskMultiplierBeforeValidator = securitydepositviolationDescRiskMultiplierBefore.Validators[0].(func(int64) error)
+	// securitydepositviolationDescRequiredSnapshotCents is the schema descriptor for required_snapshot_cents field.
+	securitydepositviolationDescRequiredSnapshotCents := securitydepositviolationFields[11].Descriptor()
+	// securitydepositviolation.RequiredSnapshotCentsValidator is a validator for the "required_snapshot_cents" field. It is called by the builders before save.
+	securitydepositviolation.RequiredSnapshotCentsValidator = securitydepositviolationDescRequiredSnapshotCents.Validators[0].(func(int64) error)
+	// securitydepositviolationDescRiskMultiplierAfter is the schema descriptor for risk_multiplier_after field.
+	securitydepositviolationDescRiskMultiplierAfter := securitydepositviolationFields[12].Descriptor()
+	// securitydepositviolation.RiskMultiplierAfterValidator is a validator for the "risk_multiplier_after" field. It is called by the builders before save.
+	securitydepositviolation.RiskMultiplierAfterValidator = securitydepositviolationDescRiskMultiplierAfter.Validators[0].(func(int64) error)
+	// securitydepositviolationDescForfeitedCents is the schema descriptor for forfeited_cents field.
+	securitydepositviolationDescForfeitedCents := securitydepositviolationFields[13].Descriptor()
+	// securitydepositviolation.DefaultForfeitedCents holds the default value on creation for the forfeited_cents field.
+	securitydepositviolation.DefaultForfeitedCents = securitydepositviolationDescForfeitedCents.Default.(int64)
+	// securitydepositviolation.ForfeitedCentsValidator is a validator for the "forfeited_cents" field. It is called by the builders before save.
+	securitydepositviolation.ForfeitedCentsValidator = securitydepositviolationDescForfeitedCents.Validators[0].(func(int64) error)
+	// securitydepositviolationDescShortfallCents is the schema descriptor for shortfall_cents field.
+	securitydepositviolationDescShortfallCents := securitydepositviolationFields[14].Descriptor()
+	// securitydepositviolation.DefaultShortfallCents holds the default value on creation for the shortfall_cents field.
+	securitydepositviolation.DefaultShortfallCents = securitydepositviolationDescShortfallCents.Default.(int64)
+	// securitydepositviolation.ShortfallCentsValidator is a validator for the "shortfall_cents" field. It is called by the builders before save.
+	securitydepositviolation.ShortfallCentsValidator = securitydepositviolationDescShortfallCents.Validators[0].(func(int64) error)
+	// securitydepositviolationDescState is the schema descriptor for state field.
+	securitydepositviolationDescState := securitydepositviolationFields[15].Descriptor()
+	// securitydepositviolation.StateValidator is a validator for the "state" field. It is called by the builders before save.
+	securitydepositviolation.StateValidator = securitydepositviolationDescState.Validators[0].(func(string) error)
+	// securitydepositviolationDescErrorCode is the schema descriptor for error_code field.
+	securitydepositviolationDescErrorCode := securitydepositviolationFields[16].Descriptor()
+	// securitydepositviolation.ErrorCodeValidator is a validator for the "error_code" field. It is called by the builders before save.
+	securitydepositviolation.ErrorCodeValidator = securitydepositviolationDescErrorCode.Validators[0].(func(string) error)
+	// securitydepositviolationDescRetryCount is the schema descriptor for retry_count field.
+	securitydepositviolationDescRetryCount := securitydepositviolationFields[17].Descriptor()
+	// securitydepositviolation.DefaultRetryCount holds the default value on creation for the retry_count field.
+	securitydepositviolation.DefaultRetryCount = securitydepositviolationDescRetryCount.Default.(int)
+	// securitydepositviolation.RetryCountValidator is a validator for the "retry_count" field. It is called by the builders before save.
+	securitydepositviolation.RetryCountValidator = securitydepositviolationDescRetryCount.Validators[0].(func(int) error)
+	// securitydepositviolationDescAPIKeyNameSnapshot is the schema descriptor for api_key_name_snapshot field.
+	securitydepositviolationDescAPIKeyNameSnapshot := securitydepositviolationFields[18].Descriptor()
+	// securitydepositviolation.APIKeyNameSnapshotValidator is a validator for the "api_key_name_snapshot" field. It is called by the builders before save.
+	securitydepositviolation.APIKeyNameSnapshotValidator = securitydepositviolationDescAPIKeyNameSnapshot.Validators[0].(func(string) error)
+	// securitydepositviolationDescGroupNameSnapshot is the schema descriptor for group_name_snapshot field.
+	securitydepositviolationDescGroupNameSnapshot := securitydepositviolationFields[19].Descriptor()
+	// securitydepositviolation.GroupNameSnapshotValidator is a validator for the "group_name_snapshot" field. It is called by the builders before save.
+	securitydepositviolation.GroupNameSnapshotValidator = securitydepositviolationDescGroupNameSnapshot.Validators[0].(func(string) error)
+	// securitydepositviolationDescCreatedAt is the schema descriptor for created_at field.
+	securitydepositviolationDescCreatedAt := securitydepositviolationFields[20].Descriptor()
+	// securitydepositviolation.DefaultCreatedAt holds the default value on creation for the created_at field.
+	securitydepositviolation.DefaultCreatedAt = securitydepositviolationDescCreatedAt.Default.(func() time.Time)
 	securitysecretMixin := schema.SecuritySecret{}.Mixin()
 	securitysecretMixinFields0 := securitysecretMixin[0].Fields()
 	_ = securitysecretMixinFields0

@@ -173,6 +173,14 @@ type SystemSettings struct {
 	RiskControlEnabled                bool
 	CyberSessionBlockEnabled          bool
 	CyberSessionBlockTTLSeconds       int
+	SecurityDepositEnforcementEnabled bool
+	SecurityDepositSelfRefundEnabled  bool
+	SecurityDepositPenaltyMode        string
+	SecurityDepositFreezeHours        int
+	SecurityDepositMaxRiskMultiplier  int64
+	SecurityDepositPolicyVersion      string
+	SecurityDepositAgreementContentZH string
+	SecurityDepositAgreementContentEN string
 	AffiliateEnabled                  bool
 	AffiliateRebateRate               float64
 	AffiliateRebateFreezeHours        int

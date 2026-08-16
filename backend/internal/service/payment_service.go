@@ -85,6 +85,27 @@ type CreateOrderRequest struct {
 	OrderType       string
 	PlanID          int64
 	Locale          string
+	// SecurityDeposit 仅允许保证金领域服务在服务端报价后设置。
+	SecurityDeposit *SecurityDepositOrderSnapshot
+}
+
+// SecurityDepositOrderSnapshot 是保证金支付订单的权威下单快照。
+type SecurityDepositOrderSnapshot struct {
+	SchemaVersion               int    `json:"schema_version"`
+	GroupID                     int64  `json:"group_id"`
+	GroupName                   string `json:"group_name"`
+	AgreementID                 int64  `json:"agreement_id"`
+	PolicyVersion               string `json:"policy_version"`
+	ContentHash                 string `json:"content_hash"`
+	BaseRequiredCents           int64  `json:"base_required_cents"`
+	RiskMultiplier              int64  `json:"risk_multiplier"`
+	RequiredCents               int64  `json:"required_cents"`
+	EffectiveBalanceBeforeCents int64  `json:"effective_balance_before_cents"`
+	PrincipalCents              int64  `json:"principal_cents"`
+	FreezeHours                 int    `json:"freeze_hours"`
+	Currency                    string `json:"currency"`
+	ProviderRefundEnabled       bool   `json:"provider_refund_enabled"`
+	ProviderAllowUserRefund     bool   `json:"provider_allow_user_refund"`
 }
 
 type CreateOrderResponse struct {

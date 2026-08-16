@@ -267,6 +267,10 @@ func (h *PaymentHandler) CreateOrder(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if req.OrderType == payment.OrderTypeSecurityDeposit {
+		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_ORDER_TYPE", "security deposit orders must use the dedicated endpoint"))
+		return
+	}
 	if strings.TrimSpace(req.WechatResumeToken) != "" {
 		claims, err := h.paymentService.ParseWeChatPaymentResumeToken(req.WechatResumeToken)
 		if err != nil {

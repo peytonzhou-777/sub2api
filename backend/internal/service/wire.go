@@ -798,6 +798,7 @@ var ProviderSet = wire.NewSet(
 	NewProxyService,
 	ProvideRedeemService,
 	NewLimitedCreditService,
+	ProvideSecurityDepositService,
 	NewResetRebateService,
 	NewRecurringCreditService,
 	NewRechargeBonusService,
@@ -964,6 +965,18 @@ func ProvidePaymentService(entClient *dbent.Client, registry *payment.Registry, 
 	svc.SetNotificationEmailService(notificationEmailService)
 	svc.SetRechargeBonusService(rechargeBonusService)
 	svc.SetAccountRefundDependencies(authCacheInvalidator, concurrencyCache, totpService)
+	return svc
+}
+
+// ProvideSecurityDepositService 接入现有分组授权、支付和配置能力。
+func ProvideSecurityDepositService(repo SecurityDepositRepository, apiKeyService *APIKeyService, paymentService *PaymentService, settingService *SettingService) *SecurityDepositService {
+	svc := NewSecurityDepositService(repo)
+	svc.SetOrderDependencies(apiKeyService, paymentService, settingService)
+	svc.SetPenaltyDependencies(apiKeyService)
+	apiKeyService.SetSecurityDepositGate(svc)
+	if eligibilityRepo, ok := apiKeyService.apiKeyRepo.(SecurityDepositKeyEligibilityRepository); ok {
+		svc.SetKeyEligibilityReconciler(NewKeyEligibilityReconciler(svc, eligibilityRepo, apiKeyService))
+	}
 	return svc
 }
 
