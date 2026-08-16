@@ -51,6 +51,11 @@ type Account struct {
 
 	Schedulable bool
 
+	// SchedulerPrivacyStatus 是调度缓存解析出的隐私四态，不写入账号业务 JSON。
+	SchedulerPrivacyStatus SchedulerPrivacyStatus `json:"-"`
+	// SchedulerSnapshotNeedsRefresh 表示缓存投影缺少当前 schema 的决策字段。
+	SchedulerSnapshotNeedsRefresh bool `json:"-"`
+
 	RateLimitedAt    *time.Time
 	RateLimitResetAt *time.Time
 	OverloadUntil    *time.Time

@@ -1425,12 +1425,13 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 			filterStats.exclude("runtime_blocked")
 			continue
 		}
-		// require_privacy_set: 跳过 privacy 未设置的账号并标记异常
-		if schedGroup != nil && schedGroup.RequirePrivacySet && !account.IsPrivacySet() {
-			s.service.BlockAccountScheduling(account, time.Time{}, "privacy_not_set")
-			_ = s.service.accountRepo.SetError(ctx, account.ID,
-				fmt.Sprintf("Privacy not set, required by group [%s]", schedGroup.Name))
-			filterStats.exclude("privacy_not_set")
+		// 隐私筛选是纯决策逻辑；unknown 由快照层回源，不能持久化为账号错误。
+		if schedGroup != nil && !SchedulerPrivacyAllowsSelection(*account, schedGroup.RequirePrivacySet) {
+			if account.SchedulerPrivacyStatus == SchedulerPrivacyNoncompliant {
+				filterStats.exclude("privacy_noncompliant")
+			} else {
+				filterStats.exclude("privacy_unknown")
+			}
 			continue
 		}
 		if compatible, reason := s.isAccountRequestCompatibleReason(ctx, account, req); !compatible {

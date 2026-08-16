@@ -225,7 +225,14 @@ func (s *SchedulerSnapshotService) ListSchedulableAccounts(ctx context.Context, 
 		if err != nil {
 			logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] cache read failed: bucket=%s err=%v", bucket.String(), err)
 		} else if hit {
-			return derefAccounts(cached), useMixed, nil
+			cachedAccounts := derefAccounts(cached)
+			if !schedulerAccountsNeedRefresh(cachedAccounts) {
+				return cachedAccounts, useMixed, nil
+			}
+			slog.Warn("scheduler cache snapshot requires database refresh",
+				"bucket", bucket.String(),
+				"reason", "missing_scheduler_decision_field",
+			)
 		}
 		token, err := s.cache.CaptureBucketWriteToken(ctx, bucket)
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -1484,16 +1491,19 @@ func (s *SchedulerSnapshotService) loadAccountsFromDB(ctx context.Context, bucke
 			}
 			filtered = append(filtered, acc)
 		}
-		return filtered, nil
+		return annotateSchedulerAccounts(filtered), nil
 	}
 
 	if groupID > 0 {
-		return s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, groupID, bucket.Platform)
+		accounts, err := s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, groupID, bucket.Platform)
+		return annotateSchedulerAccounts(accounts), err
 	}
 	if s.isRunModeSimple() {
-		return s.accountRepo.ListSchedulableByPlatform(ctx, bucket.Platform)
+		accounts, err := s.accountRepo.ListSchedulableByPlatform(ctx, bucket.Platform)
+		return annotateSchedulerAccounts(accounts), err
 	}
-	return s.accountRepo.ListSchedulableUngroupedByPlatform(ctx, bucket.Platform)
+	accounts, err := s.accountRepo.ListSchedulableUngroupedByPlatform(ctx, bucket.Platform)
+	return annotateSchedulerAccounts(accounts), err
 }
 
 func (s *SchedulerSnapshotService) loadAccountsForRebuild(

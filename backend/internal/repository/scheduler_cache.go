@@ -15,18 +15,19 @@ import (
 )
 
 const (
-	schedulerBucketSetKey          = "sched:buckets"
-	schedulerOutboxWatermarkKey    = "sched:outbox:watermark"
-	schedulerAccountPrefix         = "sched:acc:"
-	schedulerAccountMetaPrefix     = "sched:meta:"
-	schedulerAccountLastUsedPrefix = "sched:acc:last_used:"
-	schedulerActivePrefix          = "sched:active:"
-	schedulerReadyPrefix           = "sched:ready:"
-	schedulerVersionPrefix         = "sched:ver:"
-	schedulerEpochPrefix           = "sched:epoch:"
-	schedulerRetiredPrefix         = "sched:retired:"
-	schedulerSnapshotPrefix        = "sched:"
-	schedulerLockPrefix            = "sched:lock:"
+	schedulerCacheNamespace        = "v2"
+	schedulerBucketSetKey          = "sched:" + schedulerCacheNamespace + ":buckets"
+	schedulerOutboxWatermarkKey    = "sched:" + schedulerCacheNamespace + ":outbox:watermark"
+	schedulerAccountPrefix         = "sched:" + schedulerCacheNamespace + ":acc:"
+	schedulerAccountMetaPrefix     = "sched:" + schedulerCacheNamespace + ":meta:"
+	schedulerAccountLastUsedPrefix = "sched:" + schedulerCacheNamespace + ":acc:last_used:"
+	schedulerActivePrefix          = "sched:" + schedulerCacheNamespace + ":active:"
+	schedulerReadyPrefix           = "sched:" + schedulerCacheNamespace + ":ready:"
+	schedulerVersionPrefix         = "sched:" + schedulerCacheNamespace + ":ver:"
+	schedulerEpochPrefix           = "sched:" + schedulerCacheNamespace + ":epoch:"
+	schedulerRetiredPrefix         = "sched:" + schedulerCacheNamespace + ":retired:"
+	schedulerSnapshotPrefix        = "sched:" + schedulerCacheNamespace + ":"
+	schedulerLockPrefix            = "sched:" + schedulerCacheNamespace + ":lock:"
 
 	defaultSchedulerSnapshotMGetChunkSize  = 128
 	defaultSchedulerSnapshotWriteChunkSize = 256
@@ -38,7 +39,7 @@ const (
 )
 
 const (
-	schedulerGroupLifecycleLockPrefix      = "sched:group:lifecycle-lock:"
+	schedulerGroupLifecycleLockPrefix      = "sched:" + schedulerCacheNamespace + ":group:lifecycle-lock:"
 	schedulerGroupLifecycleOwnerTokenBytes = 16
 )
 
@@ -296,14 +297,15 @@ func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket service.Schedul
 		if val == nil {
 			return nil, false, nil
 		}
-		account, err := decodeCachedAccount(val)
+		snapshot, err := decodeCachedSchedulerAccountSnapshot(val)
 		if err != nil {
 			return nil, false, err
 		}
-		if err := applySchedulerLastUsed(account, lastUsedValues[i]); err != nil {
+		account := snapshot.ToAccount()
+		if err := applySchedulerLastUsed(&account, lastUsedValues[i]); err != nil {
 			return nil, false, err
 		}
-		accounts = append(accounts, account)
+		accounts = append(accounts, &account)
 	}
 
 	return accounts, true, nil
@@ -773,7 +775,38 @@ func decodeCachedAccount(val any) (*service.Account, error) {
 	if err := json.Unmarshal(payload, &account); err != nil {
 		return nil, err
 	}
+	account.SchedulerPrivacyStatus = service.ResolveSchedulerPrivacyStatus(account)
 	return &account, nil
+}
+
+func decodeCachedSchedulerAccountSnapshot(val any) (*service.SchedulerAccountSnapshot, error) {
+	var payload []byte
+	switch raw := val.(type) {
+	case string:
+		payload = []byte(raw)
+	case []byte:
+		payload = raw
+	default:
+		return nil, fmt.Errorf("unexpected scheduler snapshot cache type: %T", val)
+	}
+	var snapshot service.SchedulerAccountSnapshot
+	if err := json.Unmarshal(payload, &snapshot); err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return nil, err
+	}
+	if snapshot.ID <= 0 {
+		return nil, fmt.Errorf("invalid scheduler account snapshot")
+	}
+	_, hasPrivacyStatus := fields["privacy_status"]
+	if snapshot.SchemaVersion != service.SchedulerAccountSnapshotSchemaVersion || !hasPrivacyStatus {
+		// 当前命名空间内的残缺字段按 unknown 处理，并让上层回源原子重建。
+		snapshot.PrivacyStatus = service.SchedulerPrivacyUnknown
+		snapshot.NeedsRefresh = true
+	}
+	return &snapshot, nil
 }
 
 func (c *schedulerCache) writeAccountIDs(ctx context.Context, accounts []service.Account) ([]int64, error) {
@@ -831,11 +864,17 @@ func marshalSchedulerCacheAccount(account service.Account) ([]byte, []byte, erro
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal account: %w", err)
 	}
-	metaPayload, err := json.Marshal(buildSchedulerMetadataAccount(account))
+	metaPayload, err := json.Marshal(buildSchedulerAccountSnapshot(account))
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal account metadata: %w", err)
 	}
 	return fullPayload, metaPayload, nil
+}
+
+func buildSchedulerAccountSnapshot(account service.Account) service.SchedulerAccountSnapshot {
+	snapshot := service.NewSchedulerAccountSnapshot(buildSchedulerMetadataAccount(account))
+	snapshot.PrivacyStatus = service.ResolveSchedulerPrivacyStatus(account)
+	return snapshot
 }
 
 func (c *schedulerCache) mgetChunked(ctx context.Context, keys []string) ([]any, error) {
@@ -1015,6 +1054,7 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
 		service.UpstreamBillingProbeExtraKey,
 		service.GrokMediaEligibleExtraKey,
 		"grok_billing_snapshot",
+		"privacy_mode",
 	}
 	filtered := make(map[string]any)
 	for _, key := range keys {
