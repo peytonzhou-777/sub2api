@@ -111,9 +111,36 @@ func TestResolveCodexFingerprintContextScopesThreadsAndDerivesRequestID(t *testi
 
 	first := resolve(101)
 	second := resolve(202)
+	require.Equal(t, first.SessionID(), second.SessionID(), "相同客户端类型的不同 API Key 应共用 Session")
 	require.NotEqual(t, first.ThreadID(), second.ThreadID(), "不同 API Key 的同名客户端 Session 必须隔离")
 	require.NotEmpty(t, first.RequestID())
 	require.NotEqual(t, first.ThreadID(), first.RequestID(), "请求 ID 不得回退为固定 Thread ID")
+}
+
+func TestResolveCodexFingerprintClientScopeSeparatesClientsButNotTransports(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	resolve := func(path, userAgent, originator string) string {
+		c, _ := gin.CreateTestContext(nil)
+		c.Request, _ = http.NewRequest(http.MethodPost, path, nil)
+		c.Request.Header.Set("User-Agent", userAgent)
+		c.Request.Header.Set("originator", originator)
+		c.Set("api_key", &APIKey{ID: 101})
+		return resolveCodexFingerprintClientScope(c, c.Request.Header)
+	}
+
+	codexResponses := resolve("/v1/responses", "codex_cli_rs/0.101.0", "codex_cli_rs")
+	codexChat := resolve("/v1/chat/completions", "codex_cli_rs/0.102.0", "codex_cli_rs")
+	openClawChat := resolve("/v1/chat/completions", "OpenClaw/2026.8.1", "openclaw")
+	openClawResponses := resolve("/v1/responses", "OpenClaw/2026.9.0", "openclaw")
+
+	require.Equal(t, codexResponses, codexChat, "Codex 的版本或传输入口变化不得切换客户端槽位")
+	require.Equal(t, openClawChat, openClawResponses, "OpenClaw 的版本或传输入口变化不得切换客户端槽位")
+	require.NotEqual(t, codexResponses, openClawChat, "Codex 与 OpenClaw 必须使用不同客户端槽位")
+	require.NotEqual(t,
+		resolve("/v1/chat/completions", "", ""),
+		resolve("/v1/responses", "", ""),
+		"缺少客户端身份时才按协议族兜底隔离",
+	)
 }
 
 func TestCodexFingerprintV2RewritesRequestAndPromptCacheIDs(t *testing.T) {
@@ -144,17 +171,24 @@ func TestCodexFingerprintV2RewritesRequestAndPromptCacheIDs(t *testing.T) {
 func TestCodexFingerprintV2FullModeUsesOneAccountThread(t *testing.T) {
 	first, err := newCodexFingerprintContextV2(
 		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 5,
-		codexFingerprintFull, "", codexFingerprintOriginalIDs{clientSessionID: "client-a", turnID: "turn-a"},
+		codexFingerprintFull, "", codexFingerprintOriginalIDs{clientScope: "client:codex", threadScope: "api-key:101:client:codex", clientSessionID: "client-a", turnID: "turn-a"},
 	)
 	require.NoError(t, err)
 	second, err := newCodexFingerprintContextV2(
 		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 5,
-		codexFingerprintFull, "", codexFingerprintOriginalIDs{clientSessionID: "client-b", turnID: "turn-b"},
+		codexFingerprintFull, "", codexFingerprintOriginalIDs{clientScope: "client:codex", threadScope: "api-key:101:client:codex", clientSessionID: "client-b", turnID: "turn-b"},
+	)
+	require.NoError(t, err)
+	otherClient, err := newCodexFingerprintContextV2(
+		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 5,
+		codexFingerprintFull, "", codexFingerprintOriginalIDs{clientScope: "client:openclaw", threadScope: "api-key:101:client:openclaw", clientSessionID: "client-a", turnID: "turn-a"},
 	)
 	require.NoError(t, err)
 
 	assert.Equal(t, first.ThreadID(), second.ThreadID())
 	assert.NotEqual(t, first.TurnID(), second.TurnID())
+	assert.NotEqual(t, first.SessionID(), otherClient.SessionID())
+	assert.NotEqual(t, first.ThreadID(), otherClient.ThreadID())
 }
 
 func TestCodexFingerprintSessionRotationRequiresAgeAndIdle(t *testing.T) {
@@ -198,7 +232,7 @@ func testCodexFingerprintV2Seed() string {
 }
 
 func TestCodexFingerprintV2ContextKeepsOneSessionWithMultipleThreads(t *testing.T) {
-	base := codexFingerprintOriginalIDs{clientSessionID: "client-session-a", turnID: "turn-a"}
+	base := codexFingerprintOriginalIDs{clientScope: "client:codex", threadScope: "api-key:101:client:codex", clientSessionID: "client-session-a", turnID: "turn-a"}
 	first, err := newCodexFingerprintContextV2(
 		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
 		codexFingerprintSession, "", base,
@@ -218,6 +252,79 @@ func TestCodexFingerprintV2ContextKeepsOneSessionWithMultipleThreads(t *testing.
 	assert.NotEqual(t, first.ThreadID(), second.ThreadID())
 	assert.Equal(t, int64(7), first.SessionEpoch())
 	assert.Equal(t, codexFingerprintAlgorithmV2, first.AlgorithmVersion())
+}
+
+func TestCodexFingerprintV2ContextSeparatesClientScopes(t *testing.T) {
+	codexInput := codexFingerprintOriginalIDs{
+		clientScope:     "client:codex",
+		threadScope:     "api-key:101:client:codex",
+		clientSessionID: "shared-client-session",
+		turnID:          "shared-turn",
+		windowID:        "shared-window",
+		promptCacheKey:  "shared-cache",
+		requestID:       "shared-request",
+	}
+	openClawInput := codexInput
+	openClawInput.clientScope = "client:openclaw"
+	openClawInput.threadScope = "api-key:101:client:openclaw"
+	codex, err := newCodexFingerprintContextV2(
+		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+		codexFingerprintSession, "", codexInput,
+	)
+	require.NoError(t, err)
+	openClaw, err := newCodexFingerprintContextV2(
+		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+		codexFingerprintSession, "", openClawInput,
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, codex.InstallationID(), openClaw.InstallationID(), "同一账号仍模拟同一设备")
+	for _, pair := range [][2]string{
+		{codex.SessionID(), openClaw.SessionID()},
+		{codex.ThreadID(), openClaw.ThreadID()},
+		{codex.TurnID(), openClaw.TurnID()},
+		{codex.WindowID(), openClaw.WindowID()},
+		{codex.PromptCacheKey(), openClaw.PromptCacheKey()},
+		{codex.RequestID(), openClaw.RequestID()},
+	} {
+		require.NotEqual(t, pair[0], pair[1])
+	}
+}
+
+func TestCodexFingerprintV2ContextSharesClientSessionButSeparatesAPIKeyThreads(t *testing.T) {
+	firstInput := codexFingerprintOriginalIDs{
+		clientScope:     "client:codex",
+		threadScope:     "api-key:101:client:codex",
+		clientSessionID: "shared-client-session",
+		turnID:          "shared-turn",
+		windowID:        "shared-window",
+		promptCacheKey:  "shared-cache",
+		requestID:       "shared-request",
+	}
+	secondInput := firstInput
+	secondInput.threadScope = "api-key:202:client:codex"
+	first, err := newCodexFingerprintContextV2(
+		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+		codexFingerprintSession, "", firstInput,
+	)
+	require.NoError(t, err)
+	second, err := newCodexFingerprintContextV2(
+		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+		codexFingerprintSession, "", secondInput,
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, first.InstallationID(), second.InstallationID())
+	require.Equal(t, first.SessionID(), second.SessionID())
+	for _, pair := range [][2]string{
+		{first.ThreadID(), second.ThreadID()},
+		{first.TurnID(), second.TurnID()},
+		{first.WindowID(), second.WindowID()},
+		{first.PromptCacheKey(), second.PromptCacheKey()},
+		{first.RequestID(), second.RequestID()},
+	} {
+		require.NotEqual(t, pair[0], pair[1])
+	}
 }
 
 func TestCodexFingerprintV2ContextSeparatesAccountsClustersEpochsAndKinds(t *testing.T) {

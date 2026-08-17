@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	openaiidentity "github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -87,6 +88,8 @@ type CodexFingerprintSessionRepository interface {
 // codexFingerprintOriginalIDs 保存本次逻辑请求的客户端原始标识。
 // 构造完成后只读取，重试必须复用同一份输入，避免同一逻辑 turn 漂移。
 type codexFingerprintOriginalIDs struct {
+	clientScope     string
+	threadScope     string
 	clientSessionID string
 	threadID        string
 	turnID          string
@@ -150,7 +153,8 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 	if original.threadID == "" {
 		original.threadID = "logical-turn:" + original.turnID
 	}
-	original.threadID = codexFingerprintScopedThreadSource(c, original.threadID)
+	original.clientScope = resolveCodexFingerprintClientScope(c, headers)
+	original.threadScope = resolveCodexFingerprintThreadScope(c, original.clientScope)
 	if mode != codexFingerprintDevice && original.threadID == "" {
 		return nil, errCodexFingerprintThreadMissing
 	}
@@ -194,7 +198,10 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 		if !ok {
 			return nil, errors.New("codex fingerprint session repository unavailable")
 		}
-		threadSourceHash := codexFingerprintThreadSourceHash([]byte(secret), original.threadID)
+		threadSourceHash := codexFingerprintThreadSourceHash(
+			[]byte(secret),
+			codexFingerprintScopedDerivationSource(original.threadScope, original.threadID),
+		)
 		resolved, err := sessionRepo.ResolveCodexFingerprintSessionState(
 			ctx,
 			account.ID,
@@ -227,14 +234,62 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 	)
 }
 
-// codexFingerprintScopedThreadSource 防止不同下游 API Key 的相同客户端标识
-// 在同一个上游账号内收敛为同一 Thread；不改变调度 SessionHash 的业务含义。
-func codexFingerprintScopedThreadSource(c *gin.Context, source string) string {
-	source = strings.TrimSpace(source)
-	if source == "" {
-		return ""
+// resolveCodexFingerprintClientScope 将稳定客户端族映射成账号内共享的会话槽位。
+// HTTP/WS 传输方式不参与；只有缺失客户端身份时才按 chat/responses 协议族兜底。
+func resolveCodexFingerprintClientScope(c *gin.Context, headers http.Header) string {
+	if headers == nil && c != nil && c.Request != nil {
+		headers = c.Request.Header
 	}
-	return fmt.Sprintf("api-key:%d:%s", getAPIKeyIDFromContext(c), source)
+	userAgent := ""
+	originator := ""
+	if headers != nil {
+		userAgent = strings.TrimSpace(headers.Get("User-Agent"))
+		originator = strings.TrimSpace(headers.Get("originator"))
+	}
+	family := resolveCodexFingerprintClientFamily(c, userAgent, originator)
+	return "client:" + family
+}
+
+// resolveCodexFingerprintThreadScope 在客户端会话槽位内继续按下游 API Key 隔离 Thread。
+func resolveCodexFingerprintThreadScope(c *gin.Context, clientScope string) string {
+	return fmt.Sprintf("api-key:%d:%s", getAPIKeyIDFromContext(c), strings.TrimSpace(clientScope))
+}
+
+func resolveCodexFingerprintClientFamily(c *gin.Context, userAgent, originator string) string {
+	identity := strings.ToLower(strings.TrimSpace(userAgent + "\n" + originator))
+	switch {
+	case strings.Contains(identity, "openclaw"):
+		return "openclaw"
+	case openaiidentity.IsCodexOfficialClientRequestStrict(userAgent) ||
+		openaiidentity.IsCodexOfficialClientOriginator(originator):
+		return "codex"
+	}
+	if value := NormalizeSessionUserAgent(originator); value != "" {
+		return "originator:" + value
+	}
+	if value := NormalizeSessionUserAgent(userAgent); value != "" {
+		return "ua:" + value
+	}
+	if c != nil && c.Request != nil && c.Request.URL != nil {
+		path := strings.ToLower(strings.TrimSpace(c.Request.URL.Path))
+		switch {
+		case strings.Contains(path, "/chat/completions"):
+			return "unknown-chat"
+		case strings.Contains(path, "/responses"):
+			return "unknown-responses"
+		}
+	}
+	return "unknown"
+}
+
+// codexFingerprintScopedDerivationSource 使用带长度边界的客户端槽位前缀，
+// 避免不同客户端族的相同原始标识映射到同一会话子标识。
+func codexFingerprintScopedDerivationSource(clientScope, value string) string {
+	clientScope = strings.TrimSpace(clientScope)
+	if clientScope == "" {
+		return value
+	}
+	return fmt.Sprintf("%d:%s:%s", len(clientScope), clientScope, value)
 }
 
 func codexFingerprintThreadSourceHash(clusterSecret []byte, source string) string {
@@ -463,7 +518,7 @@ func (c *CodexFingerprintContext) InstallationID() string {
 	return c.installationID
 }
 
-// SessionID 返回账号当前 epoch 的 Session 标识。
+// SessionID 返回账号当前 epoch 下、按客户端槽位隔离的 Session 标识。
 func (c *CodexFingerprintContext) SessionID() string {
 	if c == nil {
 		return ""
@@ -511,7 +566,7 @@ func (c *CodexFingerprintContext) RequestID() string {
 	return c.requestID
 }
 
-// newCodexFingerprintContextV2 按账号 seed、epoch 和原始标识构造 v2 身份。
+// newCodexFingerprintContextV2 按账号 seed、epoch、客户端槽位和原始标识构造 v2 身份。
 // installation 固定使用 epoch 0；Session 与子标识使用 Thread 创建时绑定的 epoch。
 func newCodexFingerprintContextV2(
 	clusterSecret []byte,
@@ -548,11 +603,21 @@ func newCodexFingerprintContextV2(
 		return ctx, nil
 	}
 
-	ctx.sessionID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindSession, "account-session")
+	ctx.sessionID = deriveCodexFingerprintUUIDV2(
+		clusterSecret, seed, epoch, codexFingerprintKindSession,
+		codexFingerprintScopedDerivationSource(original.clientScope, "account-session"),
+	)
+	threadScope := strings.TrimSpace(original.threadScope)
+	if threadScope == "" {
+		threadScope = original.clientScope
+	}
 	if mode == codexFingerprintFull {
-		ctx.threadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread, "account-thread")
-		ctx.turnID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindTurn, original.turnID)
-		ctx.windowID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindWindow, "account-window")
+		ctx.threadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread,
+			codexFingerprintScopedDerivationSource(threadScope, "account-thread"))
+		ctx.turnID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindTurn,
+			codexFingerprintScopedDerivationSource(threadScope, original.turnID))
+		ctx.windowID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindWindow,
+			codexFingerprintScopedDerivationSource(threadScope, "account-window"))
 		return ctx, nil
 	}
 	threadSource := strings.TrimSpace(original.threadID)
@@ -562,21 +627,26 @@ func newCodexFingerprintContextV2(
 	if threadSource == "" {
 		return nil, errCodexFingerprintThreadMissing
 	}
-	ctx.threadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread, threadSource)
+	ctx.threadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread,
+		codexFingerprintScopedDerivationSource(threadScope, threadSource))
 
 	if value := strings.TrimSpace(original.turnID); value != "" {
-		ctx.turnID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindTurn, value)
+		ctx.turnID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindTurn,
+			codexFingerprintScopedDerivationSource(threadScope, value))
 	}
 	windowSource := strings.TrimSpace(original.windowID)
 	if windowSource == "" {
 		windowSource = threadSource + ":0"
 	}
-	ctx.windowID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindWindow, windowSource)
+	ctx.windowID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindWindow,
+		codexFingerprintScopedDerivationSource(threadScope, windowSource))
 	if value := strings.TrimSpace(original.promptCacheKey); value != "" {
-		ctx.promptCacheKey = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindPromptCache, value)
+		ctx.promptCacheKey = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindPromptCache,
+			codexFingerprintScopedDerivationSource(threadScope, value))
 	}
 	if value := strings.TrimSpace(original.requestID); value != "" {
-		ctx.requestID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindRequest, value)
+		ctx.requestID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindRequest,
+			codexFingerprintScopedDerivationSource(threadScope, value))
 	}
 	return ctx, nil
 }

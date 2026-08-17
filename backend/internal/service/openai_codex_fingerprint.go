@@ -49,7 +49,7 @@ func applyStagedCodexFingerprintHeaders(c *gin.Context, account *Account, h http
 // codexFingerprintMode 控制 OAuth 账号出站请求的设备指纹收敛强度。
 // 多人共享同一 OAuth 账号时，每个用户的 Codex 客户端会携带各自不同的
 // installation_id / session_id / thread_id，上游据此判定设备数和会话数。
-// 收敛模式将这些标识改写为账号级恒定值，减少上游可见的设备/会话指纹。
+// 收敛模式将这些标识改写为账号级设备和有限客户端槽位，减少上游可见的设备/会话指纹。
 type codexFingerprintMode string
 
 const (
@@ -60,11 +60,12 @@ const (
 	// 上游看到 1 台设备 + 多会话（每用户各自的 session）。
 	codexFingerprintDevice codexFingerprintMode = "device"
 	// codexFingerprintSession 收敛 installation_id + session_id，
-	// thread_id 按客户端原始 session-id 确定性派生（每个真实 Codex 会话一个独立线程）。
-	// 上游看到 1 台设备 + 1 会话 + N 线程，最接近正常用户 spawn 子代理的模式。
+	// v2 的 session_id 按稳定客户端槽位隔离，thread_id 再按客户端原始
+	// session-id 确定性派生（每个真实客户端会话一个独立线程）。
+	// 上游看到 1 台设备 + 少量客户端会话 + N 线程。
 	codexFingerprintSession codexFingerprintMode = "session"
 	// codexFingerprintFull 收敛所有标识：installation_id + session_id + thread_id。
-	// 上游看到 1 台设备 + 1 会话 + 1 线程，最激进。
+	// v2 的 Session 仍按稳定客户端槽位共享，Thread 则继续按下游 API Key 隔离。
 	codexFingerprintFull codexFingerprintMode = "full"
 )
 
