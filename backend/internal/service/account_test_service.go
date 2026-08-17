@@ -2073,7 +2073,14 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 		// 指纹收敛：探测与真实转发走同一个 /responses 端点，身份也必须同构，
 		// 否则探测流量会以「缺 x-codex-installation-id + 非收敛 session」的
 		// 形态暴露在上游眼里。账号关闭收敛（off）时返回 nil，探测保持原样。
-		if fpIDs := resolveCodexFingerprintIDsFromRequest(account, req.Header); fpIDs != nil {
+		fingerprintService := &OpenAIGatewayService{accountRepo: s.accountRepo, cfg: s.cfg}
+		fingerprintContext, _ := gin.CreateTestContext(nil)
+		fingerprintContext.Request = req
+		fpIDs, fpErr := fingerprintService.prepareCodexFingerprintForAttempt(ctx, fingerprintContext, account, payloadBytes, true)
+		if fpErr != nil {
+			return s.sendErrorAndEnd(c, "Failed to prepare Codex fingerprint: "+fpErr.Error())
+		}
+		if fpIDs != nil {
 			applyCodexFingerprintHeaders(req.Header, fpIDs)
 		}
 	}

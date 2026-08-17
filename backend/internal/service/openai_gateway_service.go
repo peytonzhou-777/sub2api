@@ -453,6 +453,7 @@ type OpenAIGatewayService struct {
 	openaiCodexTurnStateOrigins sync.Map
 	openaiCodexTurnStateWrites  atomic.Uint64
 	codexFingerprintStates      sync.Map // key: accountID, value: codexFingerprintStateCacheEntry
+	codexFingerprintSecretIDs   sync.Map // key: secret SHA-256, value: struct{}
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService

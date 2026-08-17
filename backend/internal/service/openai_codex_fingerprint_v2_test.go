@@ -14,25 +14,41 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 type codexFingerprintSessionRepoStub struct {
 	AccountRepository
-	state CodexFingerprintState
+	state          CodexFingerprintState
+	lastRequest    CodexFingerprintSessionRequest
+	matchedHash    string
+	boundScopeHash string
+}
+
+func (r *codexFingerprintSessionRepoStub) ValidateCodexFingerprintSecret(_ context.Context, _ string, _ time.Time) error {
+	return nil
 }
 
 func (r *codexFingerprintSessionRepoStub) ResolveCodexFingerprintSessionState(
-	context.Context,
-	int64,
-	string,
-	time.Time,
-	bool,
-	time.Time,
-	time.Time,
-	time.Time,
+	_ context.Context,
+	request CodexFingerprintSessionRequest,
 ) (*CodexFingerprintSessionResolution, error) {
+	r.lastRequest = request
 	state := r.state
-	return &CodexFingerprintSessionResolution{State: state, BoundEpoch: state.Epoch}, nil
+	matchedHash := r.matchedHash
+	if matchedHash == "" {
+		matchedHash = request.ThreadSourceHashes[0]
+	}
+	boundScopeHash := r.boundScopeHash
+	if boundScopeHash == "" {
+		boundScopeHash = request.SessionScopeHash
+	}
+	return &CodexFingerprintSessionResolution{
+		State:                   state,
+		BoundEpoch:              state.Epoch,
+		MatchedThreadSourceHash: matchedHash,
+		BoundSessionScopeHash:   boundScopeHash,
+	}, nil
 }
 
 func TestResolveCodexFingerprintContextForAttemptUsesStableFallbacks(t *testing.T) {
@@ -117,30 +133,48 @@ func TestResolveCodexFingerprintContextScopesThreadsAndDerivesRequestID(t *testi
 	require.NotEqual(t, first.ThreadID(), first.RequestID(), "请求 ID 不得回退为固定 Thread ID")
 }
 
-func TestResolveCodexFingerprintClientScopeSeparatesClientsButNotTransports(t *testing.T) {
+func TestResolveCodexFingerprintSessionScopeUsesUpstreamVisibility(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	resolve := func(path, userAgent, originator string) string {
+	resolve := func(path, userAgent, originator string, identityEnforced bool) string {
 		c, _ := gin.CreateTestContext(nil)
 		c.Request, _ = http.NewRequest(http.MethodPost, path, nil)
 		c.Request.Header.Set("User-Agent", userAgent)
 		c.Request.Header.Set("originator", originator)
 		c.Set("api_key", &APIKey{ID: 101})
-		return resolveCodexFingerprintClientScope(c, c.Request.Header)
+		return resolveCodexFingerprintSessionScope(c, c.Request.Header, identityEnforced)
 	}
 
-	codexResponses := resolve("/v1/responses", "codex_cli_rs/0.101.0", "codex_cli_rs")
-	codexChat := resolve("/v1/chat/completions", "codex_cli_rs/0.102.0", "codex_cli_rs")
-	openClawChat := resolve("/v1/chat/completions", "OpenClaw/2026.8.1", "openclaw")
-	openClawResponses := resolve("/v1/responses", "OpenClaw/2026.9.0", "openclaw")
+	codexResponses := resolve("/v1/responses", "codex_cli_rs/0.101.0", "codex_cli_rs", true)
+	openClawResponses := resolve("/v1/responses", "OpenClaw/2026.9.0", "openclaw", true)
+	codexChat := resolve("/v1/chat/completions", "codex_cli_rs/0.102.0", "codex_cli_rs", true)
+	require.Equal(t, codexResponses, openClawResponses, "身份被统一后同协议必须共用 Session")
+	require.NotEqual(t, codexResponses, codexChat, "身份不可见时按语义协议隔离")
 
-	require.Equal(t, codexResponses, codexChat, "Codex 的版本或传输入口变化不得切换客户端槽位")
-	require.Equal(t, openClawChat, openClawResponses, "OpenClaw 的版本或传输入口变化不得切换客户端槽位")
-	require.NotEqual(t, codexResponses, openClawChat, "Codex 与 OpenClaw 必须使用不同客户端槽位")
+	codexVisible := resolve("/v1/responses", "codex_cli_rs/0.101.0", "codex_cli_rs", false)
+	vscodeVisible := resolve("/v1/responses", "codex_vscode/0.101.0", "codex_vscode", false)
+	openClawFallback := resolve("/v1/responses", "OpenClaw/2026.9.0", "openclaw", false)
+	codexVisibleChat := resolve("/v1/chat/completions", "codex_cli_rs/0.102.0", "codex_cli_rs", false)
+	require.NotEqual(t, codexVisible, vscodeVisible, "可配对且真实出站的不同官方客户端必须分槽")
+	require.Equal(t, codexVisible, codexVisibleChat, "同一可见客户端不因协议或版本变化切换 Session")
+	require.Equal(t, openClawFallback, codexResponses, "无法真实出站的 OpenClaw 身份必须按协议收敛")
 	require.NotEqual(t,
-		resolve("/v1/chat/completions", "", ""),
-		resolve("/v1/responses", "", ""),
-		"缺少客户端身份时才按协议族兜底隔离",
+		resolve("/v1/chat/completions", "", "", false),
+		resolve("/v1/responses", "", "", false),
+		"身份缺失时必须按协议族兜底隔离",
 	)
+}
+
+func TestResolveCodexFingerprintLegacyClientScopePreservesCompactFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	resolve := func(path string) string {
+		c, _ := gin.CreateTestContext(nil)
+		c.Request, _ = http.NewRequest(http.MethodPost, path, nil)
+		return resolveCodexFingerprintLegacyClientScope(c, c.Request.Header)
+	}
+
+	require.Equal(t, "client:unknown-responses", resolve("/v1/responses/compact"))
+	require.Equal(t, "client:unknown-chat", resolve("/v1/chat/completions"))
+	require.Equal(t, "client:unknown", resolve("/v1/messages"))
 }
 
 func TestCodexFingerprintV2RewritesRequestAndPromptCacheIDs(t *testing.T) {
@@ -191,24 +225,18 @@ func TestCodexFingerprintV2FullModeUsesOneAccountThread(t *testing.T) {
 	assert.NotEqual(t, first.ThreadID(), otherClient.ThreadID())
 }
 
-func TestCodexFingerprintSessionRotationRequiresAgeAndIdle(t *testing.T) {
+func TestCodexFingerprintSessionRotationThresholdsUseScopeAge(t *testing.T) {
 	now := time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC)
-	startedAt := now.Add(-15 * 24 * time.Hour)
-	lastUsedAt := now.Add(-3 * time.Hour)
 	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{
-		CodexFingerprintMinSessionAgeHours: 14 * 24,
-		CodexFingerprintIdleGateMinutes:    120,
+		CodexFingerprintMinSessionAgeHours:  72,
+		CodexFingerprintMaxSessionAgeHours:  168,
+		CodexFingerprintRotationJitterHours: 0,
+		CodexFingerprintIdleGateMinutes:     120,
 	}}}
-	account := &Account{ID: 27, LastUsedAt: &lastUsedAt}
-	state := CodexFingerprintState{Epoch: 3, EpochStartedAt: startedAt}
-
-	require.True(t, svc.shouldRotateCodexFingerprintSession(account, state, now))
-	recent := now.Add(-time.Hour)
-	account.LastUsedAt = &recent
-	require.False(t, svc.shouldRotateCodexFingerprintSession(account, state, now))
-	account.LastUsedAt = &lastUsedAt
-	state.EpochStartedAt = now.Add(-7 * 24 * time.Hour)
-	require.False(t, svc.shouldRotateCodexFingerprintSession(account, state, now))
+	thresholds := svc.codexFingerprintRotationThresholds(27, strings.Repeat("cd", 32), now)
+	require.Equal(t, now.Add(-72*time.Hour), thresholds.MinAgeBefore)
+	require.Equal(t, now.Add(-168*time.Hour), thresholds.MaxAgeBefore)
+	require.Equal(t, now.Add(-2*time.Hour), thresholds.IdleBefore)
 }
 
 func TestCodexFingerprintThreadSourceHashDoesNotExposeSource(t *testing.T) {
@@ -422,6 +450,84 @@ func TestCodexFingerprintV2ContextRejectsUnsafeState(t *testing.T) {
 			assert.True(t, errors.Is(err, tt.want), "got %v, want %v", err, tt.want)
 		})
 	}
+}
+
+func TestResolveCodexFingerprintContextRequiresConfiguredSecret(t *testing.T) {
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	account := &Account{
+		ID:                             27,
+		Platform:                       PlatformOpenAI,
+		Type:                           AccountTypeOAuth,
+		Extra:                          map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
+		CodexFingerprintSeed:           testCodexFingerprintV2Seed(),
+		CodexFingerprintVersion:        codexFingerprintAlgorithmV2,
+		CodexFingerprintEpoch:          1,
+		CodexFingerprintEpochStartedAt: &startedAt,
+	}
+	c, _ := gin.CreateTestContext(nil)
+	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	_, err := (&OpenAIGatewayService{cfg: &config.Config{}}).resolveCodexFingerprintContextForAttempt(
+		context.Background(), c, account, c.Request.Header, []byte(`{"input":"hello"}`),
+	)
+	require.ErrorIs(t, err, errCodexFingerprintSecretInvalid)
+}
+
+func TestApplyCodexFingerprintForAttemptSharesChatSessionAcrossAPIKeys(t *testing.T) {
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	state := CodexFingerprintState{Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2, Epoch: 3, EpochStartedAt: startedAt}
+	account := &Account{
+		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra:                map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
+		CodexFingerprintSeed: state.Seed, CodexFingerprintVersion: state.Version,
+		CodexFingerprintEpoch: state.Epoch, CodexFingerprintEpochStartedAt: &startedAt,
+	}
+	svc := &OpenAIGatewayService{
+		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV2Secret())}},
+		accountRepo: &codexFingerprintSessionRepoStub{state: state},
+	}
+	apply := func(path string, apiKeyID int64) (string, string) {
+		c, _ := gin.CreateTestContext(nil)
+		c.Request, _ = http.NewRequest(http.MethodPost, path, nil)
+		c.Request.Header.Set("session-id", "same-client-session")
+		c.Set("api_key", &APIKey{ID: apiKeyID})
+		body, err := svc.applyCodexFingerprintForAttempt(context.Background(), c, account, []byte(`{"input":"hello"}`), false, true)
+		require.NoError(t, err)
+		return gjson.GetBytes(body, "client_metadata.session_id").String(), gjson.GetBytes(body, "client_metadata.thread_id").String()
+	}
+
+	chatSession, chatThread := apply("/v1/chat/completions", 101)
+	messagesSession, messagesThread := apply("/v1/messages", 202)
+	require.NotEmpty(t, chatSession)
+	require.Equal(t, chatSession, messagesSession)
+	require.NotEqual(t, chatThread, messagesThread)
+}
+
+func TestApplyCodexFingerprintForAttemptCompactOnlyStagesHeaders(t *testing.T) {
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	state := CodexFingerprintState{Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2, Epoch: 3, EpochStartedAt: startedAt}
+	account := &Account{
+		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra:                map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
+		CodexFingerprintSeed: state.Seed, CodexFingerprintVersion: state.Version,
+		CodexFingerprintEpoch: state.Epoch, CodexFingerprintEpochStartedAt: &startedAt,
+	}
+	svc := &OpenAIGatewayService{
+		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV2Secret())}},
+		accountRepo: &codexFingerprintSessionRepoStub{state: state},
+	}
+	c, _ := gin.CreateTestContext(nil)
+	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses/compact", nil)
+	c.Request.Header.Set("session-id", "compact-session")
+	body := []byte(`{"model":"gpt-5.6-sol","input":"hello"}`)
+
+	updated, err := svc.applyCodexFingerprintForAttempt(context.Background(), c, account, body, false, false)
+	require.NoError(t, err)
+	require.Equal(t, body, updated)
+	headers := make(http.Header)
+	applyStagedCodexFingerprintHeaders(c, account, headers)
+	require.NotEmpty(t, headers.Get("session_id"))
+	require.NotEmpty(t, headers.Get("x-codex-installation-id"))
 }
 
 func TestAccountCodexFingerprintStateIsExcludedFromJSON(t *testing.T) {

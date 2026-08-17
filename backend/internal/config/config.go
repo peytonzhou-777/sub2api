@@ -937,6 +937,10 @@ type GatewayConfig struct {
 	CodexFingerprintSecret string `mapstructure:"codex_fingerprint_secret"`
 	// CodexFingerprintMinSessionAgeHours: Session 最短寿命，达到后才允许在空闲门上轮换。
 	CodexFingerprintMinSessionAgeHours int `mapstructure:"codex_fingerprint_min_session_age_hours"`
+	// CodexFingerprintMaxSessionAgeHours: Session 最长目标寿命，到期后新 Thread 可跳过空闲门轮换。
+	CodexFingerprintMaxSessionAgeHours int `mapstructure:"codex_fingerprint_max_session_age_hours"`
+	// CodexFingerprintRotationJitterHours: 按账号与作用域确定性增加的最大轮换抖动。
+	CodexFingerprintRotationJitterHours int `mapstructure:"codex_fingerprint_rotation_jitter_hours"`
 	// CodexFingerprintIdleGateMinutes: 账号上游活动连续空闲门槛。
 	CodexFingerprintIdleGateMinutes int `mapstructure:"codex_fingerprint_idle_gate_minutes"`
 	// CodexFingerprintOldEpochGraceHours: 旧 Thread epoch 绑定保留宽限期。
@@ -1847,6 +1851,15 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		cfg.Gateway.OpenAIWS.StickyResponseIDTTLSeconds = cfg.Gateway.OpenAIWS.StickyPreviousResponseTTLSeconds
 	}
 
+	// 兼容只配置旧版最短 Session 周期的部署：新增长周期未显式配置时，
+	// 自动抬升到最短周期，避免存量配置在升级后因默认值较小而无法启动。
+	if !hasExplicitConfigOrEnv(
+		"gateway.codex_fingerprint_max_session_age_hours",
+		"GATEWAY_CODEX_FINGERPRINT_MAX_SESSION_AGE_HOURS",
+	) && cfg.Gateway.CodexFingerprintMaxSessionAgeHours < cfg.Gateway.CodexFingerprintMinSessionAgeHours {
+		cfg.Gateway.CodexFingerprintMaxSessionAgeHours = cfg.Gateway.CodexFingerprintMinSessionAgeHours
+	}
+
 	// Normalize UMQ mode: 白名单校验，非法值在加载时一次性 warn 并清空
 	if m := cfg.Gateway.UserMessageQueue.Mode; m != "" && m != UMQModeSerialize && m != UMQModeThrottle {
 		slog.Warn("invalid user_message_queue mode, disabling",
@@ -2301,7 +2314,9 @@ func setDefaults() {
 	viper.SetDefault("gateway.disable_codex_originator_normalization", false)
 	viper.SetDefault("gateway.codex_image_generation_bridge_enabled", false)
 	viper.SetDefault("gateway.codex_fingerprint_secret", "")
-	viper.SetDefault("gateway.codex_fingerprint_min_session_age_hours", 14*24)
+	viper.SetDefault("gateway.codex_fingerprint_min_session_age_hours", 72)
+	viper.SetDefault("gateway.codex_fingerprint_max_session_age_hours", 7*24)
+	viper.SetDefault("gateway.codex_fingerprint_rotation_jitter_hours", 24)
 	viper.SetDefault("gateway.codex_fingerprint_idle_gate_minutes", 120)
 	viper.SetDefault("gateway.codex_fingerprint_old_epoch_grace_hours", 48)
 	viper.SetDefault("gateway.openai_passthrough_allow_timeout_headers", false)
@@ -3288,6 +3303,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.CodexFingerprintMinSessionAgeHours <= 0 {
 		return fmt.Errorf("gateway.codex_fingerprint_min_session_age_hours must be positive")
+	}
+	if c.Gateway.CodexFingerprintMaxSessionAgeHours < c.Gateway.CodexFingerprintMinSessionAgeHours {
+		return fmt.Errorf("gateway.codex_fingerprint_max_session_age_hours must be greater than or equal to min session age")
+	}
+	if c.Gateway.CodexFingerprintRotationJitterHours < 0 {
+		return fmt.Errorf("gateway.codex_fingerprint_rotation_jitter_hours must be non-negative")
 	}
 	if c.Gateway.CodexFingerprintIdleGateMinutes <= 0 {
 		return fmt.Errorf("gateway.codex_fingerprint_idle_gate_minutes must be positive")

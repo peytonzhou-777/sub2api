@@ -72,6 +72,30 @@ func TestLoadServerTimingConfig(t *testing.T) {
 	})
 }
 
+func TestLoadCodexFingerprintSessionAgeCompatibility(t *testing.T) {
+	t.Run("未显式配置最长周期时兼容旧最短周期", func(t *testing.T) {
+		resetViperWithJWTSecret(t)
+		configFile := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(configFile, []byte("gateway:\n  codex_fingerprint_min_session_age_hours: 336\n"), 0o600))
+		t.Setenv("CONFIG_FILE", configFile)
+
+		cfg, err := Load()
+		require.NoError(t, err)
+		require.Equal(t, 336, cfg.Gateway.CodexFingerprintMinSessionAgeHours)
+		require.Equal(t, 336, cfg.Gateway.CodexFingerprintMaxSessionAgeHours)
+	})
+
+	t.Run("显式冲突仍拒绝启动", func(t *testing.T) {
+		resetViperWithJWTSecret(t)
+		configFile := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(configFile, []byte("gateway:\n  codex_fingerprint_min_session_age_hours: 336\n  codex_fingerprint_max_session_age_hours: 168\n"), 0o600))
+		t.Setenv("CONFIG_FILE", configFile)
+
+		_, err := Load()
+		require.ErrorContains(t, err, "codex_fingerprint_max_session_age_hours")
+	})
+}
+
 func TestLoadRedisUsernameFromEnvironment(t *testing.T) {
 	resetViperWithJWTSecret(t)
 	t.Setenv("REDIS_USERNAME", "app-user")

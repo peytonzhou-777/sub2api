@@ -39,6 +39,46 @@ func TestGetOrInitializeCodexFingerprintStateAtomically(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestValidateCodexFingerprintSecretRejectsClusterMismatch(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	now := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
+	secretHash := strings.Repeat("ab", 32)
+	mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO codex_fingerprint_cluster_secrets")).
+		WithArgs(secretHash, now).
+		WillReturnRows(sqlmock.NewRows([]string{"secret_hash"}).AddRow(secretHash))
+	mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO codex_fingerprint_cluster_secrets")).
+		WithArgs(secretHash, now).
+		WillReturnRows(sqlmock.NewRows([]string{"secret_hash"}))
+
+	repo := newAccountRepositoryWithSQL(nil, db, nil)
+	require.NoError(t, repo.ValidateCodexFingerprintSecret(context.Background(), secretHash, now))
+	require.ErrorContains(t, repo.ValidateCodexFingerprintSecret(context.Background(), secretHash, now), "does not match")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRotateCodexFingerprintSessionsOnlyUpdatesFingerprintState(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	now := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta("UPDATE accounts")).
+		WithArgs(int64(27), now).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(27)))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE codex_fingerprint_session_scopes")).
+		WithArgs(int64(27), now).
+		WillReturnResult(sqlmock.NewResult(0, 2))
+	mock.ExpectCommit()
+
+	repo := newAccountRepositoryWithSQL(nil, db, nil)
+	require.NoError(t, repo.RotateCodexFingerprintSessions(context.Background(), 27, now))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestGetOrInitializeCodexFingerprintStateRejectsIneligibleOrPartialState(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -74,6 +114,7 @@ func TestResolveCodexFingerprintSessionStateReturnsBoundEpoch(t *testing.T) {
 	idleBefore := now.Add(-2 * time.Hour)
 	seed := strings.Repeat("ab", 32)
 	threadHash := strings.Repeat("cd", 32)
+	scopeHash := strings.Repeat("ef", 32)
 	mock.ExpectQuery(`(?s)SELECT a.codex_fingerprint_seed.*FROM codex_fingerprint_thread_epochs t`).
 		WithArgs(int64(27), threadHash).
 		WillReturnRows(sqlmock.NewRows([]string{
@@ -83,39 +124,65 @@ func TestResolveCodexFingerprintSessionStateReturnsBoundEpoch(t *testing.T) {
 			"codex_fingerprint_epoch_started_at",
 			"session_epoch",
 			"last_seen_at",
+			"session_scope_hash",
 		}))
 	mock.ExpectBegin()
-	mock.ExpectQuery(`(?s)SELECT codex_fingerprint_seed.*FROM accounts.*FOR UPDATE`).
+	mock.ExpectQuery(`(?s)SELECT a.codex_fingerprint_seed.*FROM codex_fingerprint_thread_epochs t`).
+		WithArgs(int64(27), threadHash).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"codex_fingerprint_seed",
+			"codex_fingerprint_version",
+			"codex_fingerprint_epoch",
+			"codex_fingerprint_epoch_started_at",
+			"session_epoch",
+			"last_seen_at",
+			"session_scope_hash",
+		}))
+	mock.ExpectQuery(`(?s)SELECT codex_fingerprint_seed.*FROM accounts`).
 		WithArgs(int64(27)).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"codex_fingerprint_seed",
 			"codex_fingerprint_version",
 			"codex_fingerprint_epoch",
 			"codex_fingerprint_epoch_started_at",
-			"last_used_at",
-		}).AddRow(seed, "v2", int64(3), startedAt, lastUsedAt))
-	mock.ExpectQuery(`(?s)SELECT session_epoch.*codex_fingerprint_thread_epochs`).
-		WithArgs(int64(27), threadHash).
-		WillReturnRows(sqlmock.NewRows([]string{"session_epoch"}))
-	mock.ExpectQuery(`(?s)UPDATE accounts.*codex_fingerprint_epoch = codex_fingerprint_epoch \+ 1`).
-		WithArgs(int64(27), now).
-		WillReturnRows(sqlmock.NewRows([]string{"codex_fingerprint_epoch", "codex_fingerprint_epoch_started_at"}).AddRow(int64(4), now))
+		}).AddRow(seed, "v2", int64(3), startedAt))
+	mock.ExpectExec(`(?s)INSERT INTO codex_fingerprint_session_scopes`).
+		WithArgs(int64(27), scopeHash, int64(3), now).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(`(?s)SELECT session_epoch, epoch_started_at, last_active_at.*FOR UPDATE`).
+		WithArgs(int64(27), scopeHash).
+		WillReturnRows(sqlmock.NewRows([]string{"session_epoch", "epoch_started_at", "last_active_at"}).AddRow(int64(3), startedAt, lastUsedAt))
+	mock.ExpectQuery(`(?s)UPDATE codex_fingerprint_session_scopes.*session_epoch = session_epoch \+ 1`).
+		WithArgs(int64(27), scopeHash, now).
+		WillReturnRows(sqlmock.NewRows([]string{"session_epoch", "epoch_started_at"}).AddRow(int64(4), now))
 	mock.ExpectQuery(`(?s)INSERT INTO codex_fingerprint_thread_epochs`).
-		WithArgs(int64(27), threadHash, int64(4), now).
+		WithArgs(int64(27), threadHash, int64(4), now, scopeHash).
 		WillReturnRows(sqlmock.NewRows([]string{"session_epoch"}).AddRow(int64(4)))
+	mock.ExpectExec(`(?s)UPDATE codex_fingerprint_session_scopes.*last_active_at`).
+		WithArgs(int64(27), scopeHash, now).
+		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`(?s)DELETE FROM codex_fingerprint_thread_epochs`).
-		WithArgs(int64(27), int64(4), cutoff).
+		WithArgs(int64(27), scopeHash, int64(4), cutoff).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`(?s)DELETE FROM codex_fingerprint_thread_epochs`).
+		WithArgs(int64(27), cutoff).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	repo := newAccountRepositoryWithSQL(nil, db, nil)
 	state, err := repo.ResolveCodexFingerprintSessionState(
-		context.Background(), 27, threadHash, now, true, startedAt, idleBefore, cutoff,
+		context.Background(), service.CodexFingerprintSessionRequest{
+			AccountID: 27, SessionScopeHash: scopeHash, ThreadSourceHashes: []string{threadHash},
+			Now: now, RotationAllowed: true, MinAgeBefore: now.Add(-72 * time.Hour),
+			IdleBefore: idleBefore, MaxAgeBefore: now.Add(-7 * 24 * time.Hour), OldEpochCutoff: cutoff,
+		},
 	)
 
 	require.NoError(t, err)
 	require.Equal(t, int64(4), state.State.Epoch)
 	require.Equal(t, int64(4), state.BoundEpoch)
+	require.Equal(t, scopeHash, state.BoundSessionScopeHash)
+	require.Equal(t, threadHash, state.MatchedThreadSourceHash)
 	require.True(t, state.Rotated)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -130,6 +197,7 @@ func TestResolveCodexFingerprintSessionStateUsesBoundThreadFastPath(t *testing.T
 	lastSeenAt := now.Add(-time.Minute)
 	seed := strings.Repeat("ab", 32)
 	threadHash := strings.Repeat("cd", 32)
+	scopeHash := strings.Repeat("ef", 32)
 	mock.ExpectQuery(`(?s)SELECT a.codex_fingerprint_seed.*FROM codex_fingerprint_thread_epochs t`).
 		WithArgs(int64(27), threadHash).
 		WillReturnRows(sqlmock.NewRows([]string{
@@ -139,16 +207,54 @@ func TestResolveCodexFingerprintSessionStateUsesBoundThreadFastPath(t *testing.T
 			"codex_fingerprint_epoch_started_at",
 			"session_epoch",
 			"last_seen_at",
-		}).AddRow(seed, "v2", int64(5), startedAt, int64(3), lastSeenAt))
+			"session_scope_hash",
+		}).AddRow(seed, "v2", int64(5), startedAt, int64(3), lastSeenAt, scopeHash))
 
 	repo := newAccountRepositoryWithSQL(nil, db, nil)
 	resolved, err := repo.ResolveCodexFingerprintSessionState(
-		context.Background(), 27, threadHash, now, true, startedAt, now.Add(-2*time.Hour), now.Add(-48*time.Hour),
+		context.Background(), service.CodexFingerprintSessionRequest{
+			AccountID: 27, SessionScopeHash: scopeHash, ThreadSourceHashes: []string{threadHash}, Now: now,
+			RotationAllowed: true, MinAgeBefore: now.Add(-72 * time.Hour), IdleBefore: now.Add(-2 * time.Hour),
+			MaxAgeBefore: now.Add(-7 * 24 * time.Hour), OldEpochCutoff: now.Add(-48 * time.Hour),
+		},
 	)
 
 	require.NoError(t, err)
 	require.Equal(t, int64(5), resolved.State.Epoch)
 	require.Equal(t, int64(3), resolved.BoundEpoch)
+	require.Equal(t, scopeHash, resolved.BoundSessionScopeHash)
 	require.False(t, resolved.Rotated)
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestShouldRotateCodexFingerprintScopeUsesIdleAndMaxAgeGates(t *testing.T) {
+	now := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	request := service.CodexFingerprintSessionRequest{
+		RotationAllowed: true,
+		MinAgeBefore:    now.Add(-72 * time.Hour),
+		IdleBefore:      now.Add(-2 * time.Hour),
+		MaxAgeBefore:    now.Add(-7 * 24 * time.Hour),
+	}
+
+	require.True(t, shouldRotateCodexFingerprintScope(
+		request,
+		service.CodexFingerprintState{EpochStartedAt: now.Add(-80 * time.Hour)},
+		now.Add(-3*time.Hour),
+	), "达到最短年龄且空闲时应轮换")
+	require.False(t, shouldRotateCodexFingerprintScope(
+		request,
+		service.CodexFingerprintState{EpochStartedAt: now.Add(-80 * time.Hour)},
+		now.Add(-time.Hour),
+	), "未达到最长年龄时不得跳过空闲门")
+	require.True(t, shouldRotateCodexFingerprintScope(
+		request,
+		service.CodexFingerprintState{EpochStartedAt: now.Add(-8 * 24 * time.Hour)},
+		now.Add(-time.Hour),
+	), "达到最长年龄后应允许新 Thread 兜底轮换")
+	request.RotationAllowed = false
+	require.False(t, shouldRotateCodexFingerprintScope(
+		request,
+		service.CodexFingerprintState{EpochStartedAt: now.Add(-8 * 24 * time.Hour)},
+		now.Add(-3*time.Hour),
+	), "作用域存在活跃 WS 时不得轮换")
 }

@@ -64,6 +64,8 @@ type openAIWSAcquireRequest struct {
 	Account *Account
 	WSURL   string
 	Headers http.Header
+	// FingerprintSessionScope 仅用于本地连接池按逻辑 Session 作用域判断轮换忙碌与清理。
+	FingerprintSessionScope string
 	// HeadersFactory is evaluated inside dialConn. It exists so credentials
 	// whose authorization is per-dial (Agent Identity) are never cached in
 	// lastAcquire or delayed prewarm state.
@@ -245,9 +247,10 @@ type openAIWSConn struct {
 	id string
 	ws openAIWSClientConn
 
-	handshakeHeaders       http.Header
-	handshakeCompatibility openAIWSHandshakeCompatibilityKey
-	routingAffinity        string
+	handshakeHeaders        http.Header
+	handshakeCompatibility  openAIWSHandshakeCompatibilityKey
+	routingAffinity         string
+	fingerprintSessionScope string
 
 	leaseCh   chan struct{}
 	closedCh  chan struct{}
@@ -562,18 +565,42 @@ func (c *openAIWSConn) markPrewarmed() {
 }
 
 type openAIWSAccountPool struct {
-	mu            sync.Mutex
-	conns         map[string]*openAIWSConn
-	pinnedConns   map[string]int
-	changedCh     chan struct{}
-	creating      int
-	generation    uint64
-	lastCleanupAt time.Time
-	lastAcquire   *openAIWSAcquireRequest
-	prewarmActive bool
-	prewarmUntil  time.Time
-	prewarmFails  int
-	prewarmFailAt time.Time
+	mu                     sync.Mutex
+	conns                  map[string]*openAIWSConn
+	pinnedConns            map[string]int
+	creatingBySessionScope map[string]int
+	changedCh              chan struct{}
+	creating               int
+	generation             uint64
+	lastCleanupAt          time.Time
+	lastAcquire            *openAIWSAcquireRequest
+	prewarmActive          bool
+	prewarmUntil           time.Time
+	prewarmFails           int
+	prewarmFailAt          time.Time
+}
+
+func (ap *openAIWSAccountPool) addCreatingLocked(sessionScope string, delta int) {
+	if ap == nil || delta == 0 {
+		return
+	}
+	sessionScope = strings.TrimSpace(sessionScope)
+	ap.creating += delta
+	if ap.creating < 0 {
+		ap.creating = 0
+	}
+	if sessionScope == "" {
+		return
+	}
+	if ap.creatingBySessionScope == nil {
+		ap.creatingBySessionScope = make(map[string]int)
+	}
+	count := ap.creatingBySessionScope[sessionScope] + delta
+	if count <= 0 {
+		delete(ap.creatingBySessionScope, sessionScope)
+		return
+	}
+	ap.creatingBySessionScope[sessionScope] = count
 }
 
 func (ap *openAIWSAccountPool) changeChannelLocked() chan struct{} {
@@ -1092,7 +1119,7 @@ retryAcquire:
 	if len(ap.conns)+ap.creating < effectiveMaxConns {
 		connPick := time.Since(pickStartedAt)
 		p.recordConnPickDuration(connPick)
-		ap.creating++
+		ap.addCreatingLocked(req.FingerprintSessionScope, 1)
 		ap.mu.Unlock()
 		closeOpenAIWSConns(evicted)
 
@@ -1100,7 +1127,7 @@ retryAcquire:
 
 		ap = p.getOrCreateAccountPool(accountID)
 		ap.mu.Lock()
-		ap.creating--
+		ap.addCreatingLocked(req.FingerprintSessionScope, -1)
 		if ap.generation != acquireGeneration {
 			ap.signalChangedLocked()
 			ap.mu.Unlock()
@@ -1516,6 +1543,29 @@ func (p *openAIWSConnPool) AccountPoolRotationBusy(accountID int64) bool {
 	return inflight > 0 || waiters > 0 || ap.creating > 0 || len(ap.pinnedConns) > 0
 }
 
+// SessionScopeRotationBusy 只检查指定指纹 Session 作用域的真实 WS 活动。
+func (p *openAIWSConnPool) SessionScopeRotationBusy(accountID int64, sessionScope string) bool {
+	sessionScope = strings.TrimSpace(sessionScope)
+	if p == nil || accountID <= 0 || sessionScope == "" {
+		return false
+	}
+	ap, ok := p.getAccountPool(accountID)
+	if !ok || ap == nil {
+		return false
+	}
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	for id, conn := range ap.conns {
+		if conn == nil || conn.fingerprintSessionScope != sessionScope {
+			continue
+		}
+		if conn.isLeased() || conn.waiters.Load() > 0 || ap.pinnedConns[id] > 0 {
+			return true
+		}
+	}
+	return ap.creatingBySessionScope[sessionScope] > 0
+}
+
 func (p *openAIWSConnPool) ensureTargetIdleAsync(accountID int64) {
 	if p == nil || accountID <= 0 {
 		return
@@ -1562,7 +1612,7 @@ func (p *openAIWSConnPool) ensureTargetIdleAsync(accountID int64) {
 	if cooldown := p.prewarmCooldown(); cooldown > 0 {
 		ap.prewarmUntil = now.Add(cooldown)
 	}
-	ap.creating += need
+	ap.addCreatingLocked(req.FingerprintSessionScope, need)
 	p.metrics.scaleUpTotal.Add(int64(need))
 
 	go p.prewarmConns(accountID, req, need, generation)
@@ -1642,9 +1692,7 @@ func (p *openAIWSConnPool) prewarmConns(accountID int64, req openAIWSAcquireRequ
 			return
 		}
 		ap.mu.Lock()
-		if ap.creating > 0 {
-			ap.creating--
-		}
+		ap.addCreatingLocked(req.FingerprintSessionScope, -1)
 		if err != nil {
 			ap.prewarmFails++
 			ap.prewarmFailAt = time.Now()
@@ -1703,6 +1751,43 @@ func (p *openAIWSConnPool) ClearAccount(accountID int64) {
 	ap.prewarmUntil = time.Time{}
 	ap.prewarmFails = 0
 	ap.prewarmFailAt = time.Time{}
+	ap.signalChangedLocked()
+	ap.mu.Unlock()
+	closeOpenAIWSConns(conns)
+}
+
+// ClearSessionScope 仅淘汰一个逻辑 Session 作用域的连接，不干扰同账号其他作用域。
+func (p *openAIWSConnPool) ClearSessionScope(accountID int64, sessionScope string) {
+	sessionScope = strings.TrimSpace(sessionScope)
+	if p == nil || accountID <= 0 || sessionScope == "" {
+		return
+	}
+	ap, ok := p.getAccountPool(accountID)
+	if !ok || ap == nil {
+		return
+	}
+	ap.mu.Lock()
+	conns := make([]*openAIWSConn, 0)
+	for id, conn := range ap.conns {
+		if conn == nil || conn.fingerprintSessionScope != sessionScope {
+			continue
+		}
+		// 忙碌检查与提交之间仍可能出现租约竞争；保留活跃连接，避免轮换打断旧 Thread。
+		if conn.isLeased() || conn.waiters.Load() > 0 || ap.pinnedConns[id] > 0 {
+			continue
+		}
+		delete(ap.conns, id)
+		delete(ap.pinnedConns, id)
+		conns = append(conns, conn)
+	}
+	if ap.lastAcquire != nil && ap.lastAcquire.FingerprintSessionScope == sessionScope {
+		ap.generation++
+		ap.lastAcquire = nil
+		ap.prewarmUntil = time.Time{}
+		ap.prewarmActive = false
+		ap.prewarmFails = 0
+		ap.prewarmFailAt = time.Time{}
+	}
 	ap.signalChangedLocked()
 	ap.mu.Unlock()
 	closeOpenAIWSConns(conns)
@@ -1819,6 +1904,7 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 	pooledConn := newOpenAIWSConn(id, req.Account.ID, conn, handshakeHeaders)
 	pooledConn.handshakeCompatibility = normalizeOpenAIWSHandshakeCompatibility(req.Headers)
 	pooledConn.routingAffinity = normalizeOpenAIWSRoutingAffinity(req.Headers)
+	pooledConn.fingerprintSessionScope = strings.TrimSpace(req.FingerprintSessionScope)
 	return pooledConn, nil
 }
 
@@ -1986,6 +2072,7 @@ func cloneOpenAIWSAcquireRequest(req openAIWSAcquireRequest) openAIWSAcquireRequ
 	copied.WSURL = stringsTrim(req.WSURL)
 	copied.ProxyURL = stringsTrim(req.ProxyURL)
 	copied.PreferredConnID = stringsTrim(req.PreferredConnID)
+	copied.FingerprintSessionScope = stringsTrim(req.FingerprintSessionScope)
 	return copied
 }
 

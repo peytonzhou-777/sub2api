@@ -1210,6 +1210,57 @@ func TestOpenAIWSConnPool_SnapshotIdleConnsForPing_SkipsInvalidEntries(t *testin
 	require.Equal(t, idle.id, candidates[0].conn.id)
 }
 
+func TestOpenAIWSConnPool_SessionScopeRotationOnlyTouchesTargetScope(t *testing.T) {
+	pool := &openAIWSConnPool{}
+	accountID := int64(321)
+	target := newOpenAIWSConn("target", accountID, &openAIWSFakeConn{}, nil)
+	target.fingerprintSessionScope = "scope-a"
+	require.True(t, target.tryAcquire())
+	other := newOpenAIWSConn("other", accountID, &openAIWSFakeConn{}, nil)
+	other.fingerprintSessionScope = "scope-b"
+	ap := &openAIWSAccountPool{
+		conns:       map[string]*openAIWSConn{target.id: target, other.id: other},
+		pinnedConns: make(map[string]int),
+	}
+	pool.accounts.Store(accountID, ap)
+
+	require.True(t, pool.SessionScopeRotationBusy(accountID, "scope-a"))
+	require.False(t, pool.SessionScopeRotationBusy(accountID, "scope-b"))
+	target.release()
+	pool.ClearSessionScope(accountID, "scope-a")
+
+	ap.mu.Lock()
+	_, targetExists := ap.conns[target.id]
+	_, otherExists := ap.conns[other.id]
+	ap.mu.Unlock()
+	require.False(t, targetExists)
+	require.True(t, otherExists)
+	select {
+	case <-target.closedCh:
+	default:
+		t.Fatal("目标作用域连接未关闭")
+	}
+}
+
+func TestOpenAIWSConnPool_SessionScopeRotationTracksCreatingByScope(t *testing.T) {
+	pool := &openAIWSConnPool{}
+	accountID := int64(322)
+	ap := &openAIWSAccountPool{
+		conns:       make(map[string]*openAIWSConn),
+		pinnedConns: make(map[string]int),
+	}
+	ap.addCreatingLocked("scope-a", 1)
+	pool.accounts.Store(accountID, ap)
+
+	require.True(t, pool.SessionScopeRotationBusy(accountID, "scope-a"))
+	require.False(t, pool.SessionScopeRotationBusy(accountID, "scope-b"))
+
+	ap.mu.Lock()
+	ap.addCreatingLocked("scope-a", -1)
+	ap.mu.Unlock()
+	require.False(t, pool.SessionScopeRotationBusy(accountID, "scope-a"))
+}
+
 func TestOpenAIWSConnPool_RunBackgroundCleanupSweep_SkipsInvalidAndUsesAccountCap(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 4

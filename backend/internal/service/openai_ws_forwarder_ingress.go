@@ -643,9 +643,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	// 首次解析 payload 时握手头尚未构造；现在按实际 fingerprint scope 重新解析首选连接。
 	refreshIngressRouteState(firstPayload)
 	baseAcquireReq := openAIWSAcquireRequest{
-		Account: account,
-		WSURL:   wsURL,
-		Headers: wsHeaders,
+		Account:                 account,
+		WSURL:                   wsURL,
+		Headers:                 wsHeaders,
+		FingerprintSessionScope: stagedCodexFingerprintSessionScopeHash(c),
 		HeadersFactory: func(factoryCtx context.Context, headers http.Header) (http.Header, error) {
 			return s.refreshOpenAIAgentIdentityHeaders(factoryCtx, account, headers)
 		},

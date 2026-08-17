@@ -2,11 +2,13 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
@@ -19,6 +21,30 @@ import (
 // output_item.done 携带 compaction item + response.completed。
 const compactProbeSSESuccessBody = "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"compaction\",\"id\":\"cmp_probe\",\"encrypted_content\":\"blob\"}}\n\n" +
 	"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_probe\",\"output\":[]}}\n\n"
+
+type compactFingerprintAccountRepo struct {
+	*snapshotUpdateAccountRepo
+	state CodexFingerprintState
+}
+
+func (r *compactFingerprintAccountRepo) ValidateCodexFingerprintSecret(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}
+
+func (r *compactFingerprintAccountRepo) GetOrInitializeCodexFingerprintState(_ context.Context, _ int64, _ time.Time) (*CodexFingerprintState, error) {
+	state := r.state
+	return &state, nil
+}
+
+func (r *compactFingerprintAccountRepo) ResolveCodexFingerprintSessionState(_ context.Context, request CodexFingerprintSessionRequest) (*CodexFingerprintSessionResolution, error) {
+	return &CodexFingerprintSessionResolution{
+		State:                   r.state,
+		BoundEpoch:              r.state.Epoch,
+		MatchedThreadSourceHash: request.ThreadSourceHashes[0],
+		BoundSessionScopeHash:   request.SessionScopeHash,
+		Created:                 true,
+	}, nil
+}
 
 func TestAccountTestService_TestAccountConnection_OpenAICompactOAuthSuccessPersistsSupport(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -271,6 +297,8 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeIdentityMatc
 	gin.SetMode(gin.TestMode)
 
 	updateCalls := make(chan map[string]any, 1)
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	state := CodexFingerprintState{Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2, Epoch: 3, EpochStartedAt: startedAt}
 	account := Account{
 		ID:          6,
 		Name:        "openai-oauth-identity",
@@ -284,18 +312,25 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeIdentityMatc
 			"chatgpt_account_id": "chatgpt-acc",
 		},
 		// 收敛是显式 opt-in（#5610），这里显式开启以验证探测身份与真实流量同构。
-		Extra: map[string]any{"codex_fingerprint_mode": "session"},
+		Extra:                map[string]any{"codex_fingerprint_mode": "session"},
+		CodexFingerprintSeed: state.Seed, CodexFingerprintVersion: state.Version,
+		CodexFingerprintEpoch: state.Epoch, CodexFingerprintEpochStartedAt: &startedAt,
 	}
-	repo := &snapshotUpdateAccountRepo{
+	baseRepo := &snapshotUpdateAccountRepo{
 		stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}},
 		updateExtraCalls:      updateCalls,
 	}
+	repo := &compactFingerprintAccountRepo{snapshotUpdateAccountRepo: baseRepo, state: state}
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
 		Body:       io.NopCloser(strings.NewReader(compactProbeSSESuccessBody)),
 	}}
-	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
+	secret := string(testCodexFingerprintV2Secret())
+	svc := &AccountTestService{
+		accountRepo: repo, httpUpstream: upstream,
+		cfg: &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: secret}},
+	}
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -303,15 +338,29 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeIdentityMatc
 
 	require.NoError(t, svc.TestAccountConnection(c, account.ID, "gpt-5.4", "", AccountTestModeCompact))
 
-	// 显式 session 收敛模式：出站身份 = 账号级收敛值
-	converged := resolveConvergedSessionID(&account)
+	// 显式 session 收敛模式：探测使用与真实 Responses 流量相同的 v2 作用域。
+	converged := deriveCodexFingerprintUUIDV2(
+		[]byte(secret), mustDecodeCodexFingerprintSeedForTest(t, state.Seed), state.Epoch,
+		codexFingerprintKindSession, codexFingerprintScopedDerivationSource("protocol:responses", "account-session"),
+	)
 	require.Equal(t, converged, upstream.lastReq.Header.Get("session-id"))
 	require.Equal(t, converged, upstream.lastReq.Header.Get("session_id"))
-	require.Equal(t, resolveConvergedInstallationID(&account), upstream.lastReq.Header.Get("x-codex-installation-id"),
+	expectedInstallation := deriveCodexFingerprintUUIDV2(
+		[]byte(secret), mustDecodeCodexFingerprintSeedForTest(t, state.Seed), 0,
+		codexFingerprintKindInstallation, "account-device",
+	)
+	require.Equal(t, expectedInstallation, upstream.lastReq.Header.Get("x-codex-installation-id"),
 		"真实 Codex 每个请求必带 installation-id，探测不得缺失")
 	require.NotContains(t, upstream.lastReq.Header.Get("session-id"), "probe_compact",
 		"探测标识不得是可被上游一眼识别的字面量")
 	<-updateCalls
+}
+
+func mustDecodeCodexFingerprintSeedForTest(t *testing.T, seed string) []byte {
+	t.Helper()
+	decoded, err := decodeCodexFingerprintSeed(seed)
+	require.NoError(t, err)
+	return decoded
 }
 
 func TestCompactProbeSessionID_IsUUIDShaped(t *testing.T) {

@@ -144,14 +144,44 @@ func resolveConvergedThreadID(account *Account, clientSessionID string) string {
 // 由 resolveCodexFingerprintIDs 一次性生成，同一个实例在头改写和体改写之间共享，
 // 确保所有载体中的 turn_id 等随机字段一致。
 type codexFingerprintIDs struct {
-	mode           codexFingerprintMode
-	installationID string
-	sessionID      string
-	threadID       string
-	turnID         string
-	windowID       string
-	promptCacheKey string
-	requestID      string
+	mode             codexFingerprintMode
+	sessionScopeHash string
+	installationID   string
+	sessionID        string
+	threadID         string
+	turnID           string
+	windowID         string
+	promptCacheKey   string
+	requestID        string
+}
+
+func stagedCodexFingerprintSessionScopeHash(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	value, ok := c.Get(codexFingerprintIDsContextKey)
+	if !ok {
+		return ""
+	}
+	ids, ok := value.(*codexFingerprintIDs)
+	if !ok || ids == nil {
+		return ""
+	}
+	return strings.TrimSpace(ids.sessionScopeHash)
+}
+
+// stagedCodexFingerprintControlsSession 表示本 attempt 已由指纹层接管 Session。
+// device 模式只接管设备标识，仍保留兼容层原有的 Session 逻辑。
+func stagedCodexFingerprintControlsSession(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	value, ok := c.Get(codexFingerprintIDsContextKey)
+	if !ok {
+		return false
+	}
+	ids, ok := value.(*codexFingerprintIDs)
+	return ok && ids != nil && ids.mode != codexFingerprintDevice
 }
 
 // resolveCodexFingerprintIDs 按收敛模式计算出站 ID 集合。

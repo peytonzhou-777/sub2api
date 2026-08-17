@@ -12,10 +12,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	openaiidentity "github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
+	"go.uber.org/zap"
 )
 
 const (
@@ -56,9 +58,12 @@ type CodexFingerprintState struct {
 // CodexFingerprintSessionResolution 同时返回账号当前 epoch 与本 Thread 的绑定 epoch。
 // 两者必须分离，旧 Thread 不能污染账号状态缓存或后台清理基准。
 type CodexFingerprintSessionResolution struct {
-	State      CodexFingerprintState
-	BoundEpoch int64
-	Rotated    bool
+	State                   CodexFingerprintState
+	BoundEpoch              int64
+	MatchedThreadSourceHash string
+	BoundSessionScopeHash   string
+	Rotated                 bool
+	Created                 bool
 }
 
 func (r CodexFingerprintSessionResolution) valid() bool {
@@ -71,31 +76,51 @@ type CodexFingerprintStateRepository interface {
 	GetOrInitializeCodexFingerprintState(ctx context.Context, accountID int64, now time.Time) (*CodexFingerprintState, error)
 }
 
+// CodexFingerprintSecretRepository 在共享数据库中校验各实例使用同一集群密钥。
+type CodexFingerprintSecretRepository interface {
+	ValidateCodexFingerprintSecret(ctx context.Context, secretHash string, now time.Time) error
+}
+
 // CodexFingerprintSessionRepository 原子解析 Thread 绑定 epoch，并在满足门槛时轮换当前 Session。
 type CodexFingerprintSessionRepository interface {
 	ResolveCodexFingerprintSessionState(
 		ctx context.Context,
-		accountID int64,
-		threadSourceHash string,
-		now time.Time,
-		allowRotation bool,
-		expectedEpochStartedAt time.Time,
-		idleBefore time.Time,
-		oldEpochCutoff time.Time,
+		request CodexFingerprintSessionRequest,
 	) (*CodexFingerprintSessionResolution, error)
+}
+
+// CodexFingerprintSessionRequest 描述一个作用域内的 Thread 绑定与轮换门槛。
+type CodexFingerprintSessionRequest struct {
+	AccountID          int64
+	SessionScopeHash   string
+	ThreadSourceHashes []string
+	Now                time.Time
+	RotationAllowed    bool
+	MinAgeBefore       time.Time
+	IdleBefore         time.Time
+	MaxAgeBefore       time.Time
+	OldEpochCutoff     time.Time
+}
+
+type codexFingerprintRotationThresholds struct {
+	MinAgeBefore time.Time
+	IdleBefore   time.Time
+	MaxAgeBefore time.Time
 }
 
 // codexFingerprintOriginalIDs 保存本次逻辑请求的客户端原始标识。
 // 构造完成后只读取，重试必须复用同一份输入，避免同一逻辑 turn 漂移。
 type codexFingerprintOriginalIDs struct {
-	clientScope     string
-	threadScope     string
-	clientSessionID string
-	threadID        string
-	turnID          string
-	windowID        string
-	promptCacheKey  string
-	requestID       string
+	clientScope      string
+	threadScope      string
+	sessionScopeHash string
+	legacyUnscoped   bool
+	clientSessionID  string
+	threadID         string
+	turnID           string
+	windowID         string
+	promptCacheKey   string
+	requestID        string
 }
 
 func (s CodexFingerprintState) valid() bool {
@@ -132,11 +157,11 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 		Epoch:          account.CodexFingerprintEpoch,
 		EpochStartedAt: derefTime(account.CodexFingerprintEpochStartedAt),
 	}
-	if state.Version == codexFingerprintAlgorithmV2 && secret == "" {
+	if secret == "" {
 		return nil, errCodexFingerprintSecretInvalid
 	}
-	if secret == "" {
-		return nil, nil
+	if err := s.validateCodexFingerprintClusterSecret(ctx, secret); err != nil {
+		return nil, err
 	}
 	now := time.Now()
 	mode := account.GetCodexFingerprintMode()
@@ -153,14 +178,20 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 	if original.threadID == "" {
 		original.threadID = "logical-turn:" + original.turnID
 	}
-	original.clientScope = resolveCodexFingerprintClientScope(c, headers)
+	identityHidden := codexIdentityEnforcement.Load() || account.GetOpenAIUserAgent() != ""
+	if s != nil && s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
+		identityHidden = true
+	}
+	original.clientScope = resolveCodexFingerprintSessionScope(c, headers, identityHidden)
 	original.threadScope = resolveCodexFingerprintThreadScope(c, original.clientScope)
+	original.sessionScopeHash = codexFingerprintSessionScopeHash([]byte(secret), original.clientScope)
 	if mode != codexFingerprintDevice && original.threadID == "" {
 		return nil, errCodexFingerprintThreadMissing
 	}
 	if original.requestID == "" {
 		original.requestID = original.turnID
 	}
+	initializedState := false
 	if !state.valid() {
 		stateRepo, ok := s.accountRepo.(CodexFingerprintStateRepository)
 		if !ok {
@@ -183,11 +214,19 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 				return nil, errors.New("initialize codex fingerprint state: invalid persisted state")
 			}
 			state = *initialized
+			initializedState = true
 			s.codexFingerprintStates.Store(account.ID, codexFingerprintStateCacheEntry{
 				state:     state,
 				expiresAt: now.Add(codexFingerprintStateTTL),
 			})
 		}
+	}
+	if initializedState {
+		logger.L().Info("codex fingerprint state initialized",
+			zap.Int64("account_id", account.ID),
+			zap.String("algorithm_version", state.Version),
+			zap.Int64("epoch", state.Epoch),
+		)
 	}
 	if !state.valid() {
 		return nil, errors.New("invalid codex fingerprint state")
@@ -202,15 +241,31 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 			[]byte(secret),
 			codexFingerprintScopedDerivationSource(original.threadScope, original.threadID),
 		)
+		legacyClientScope := resolveCodexFingerprintLegacyClientScope(c, headers)
+		legacyThreadScope := resolveCodexFingerprintThreadScope(c, legacyClientScope)
+		legacyClientThreadHash := codexFingerprintThreadSourceHash(
+			[]byte(secret),
+			codexFingerprintScopedDerivationSource(legacyThreadScope, original.threadID),
+		)
+		legacyAccountThreadHash := codexFingerprintThreadSourceHash([]byte(secret), original.threadID)
+		thresholds := s.codexFingerprintRotationThresholds(account.ID, original.sessionScopeHash, now)
+		rotationAllowed := true
+		if s.openaiWSPool != nil {
+			rotationAllowed = !s.openaiWSPool.SessionScopeRotationBusy(account.ID, original.sessionScopeHash)
+		}
 		resolved, err := sessionRepo.ResolveCodexFingerprintSessionState(
 			ctx,
-			account.ID,
-			threadSourceHash,
-			now,
-			s.shouldRotateCodexFingerprintSession(account, state, now),
-			state.EpochStartedAt,
-			now.Add(-s.codexFingerprintIdleGate()),
-			now.Add(-s.codexFingerprintOldEpochGrace()),
+			CodexFingerprintSessionRequest{
+				AccountID:          account.ID,
+				SessionScopeHash:   original.sessionScopeHash,
+				ThreadSourceHashes: uniqueCodexFingerprintHashes(threadSourceHash, legacyClientThreadHash, legacyAccountThreadHash),
+				Now:                now,
+				RotationAllowed:    rotationAllowed,
+				MinAgeBefore:       thresholds.MinAgeBefore,
+				IdleBefore:         thresholds.IdleBefore,
+				MaxAgeBefore:       thresholds.MaxAgeBefore,
+				OldEpochCutoff:     now.Add(-s.codexFingerprintOldEpochGrace()),
+			},
 		)
 		if err != nil {
 			return nil, fmt.Errorf("resolve codex fingerprint session state: %w", err)
@@ -218,14 +273,48 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 		if resolved == nil || !resolved.valid() {
 			return nil, errors.New("resolve codex fingerprint session state: invalid persisted state")
 		}
+		if resolved.Rotated {
+			logger.L().Info("codex fingerprint session rotated",
+				zap.Int64("account_id", account.ID),
+				zap.String("scope_hash", truncateCodexFingerprintHash(resolved.BoundSessionScopeHash)),
+				zap.Int64("epoch", resolved.State.Epoch),
+				zap.String("reason", "age_policy"),
+			)
+		}
+		if resolved.Created {
+			logger.L().Info("codex fingerprint thread scope created",
+				zap.Int64("account_id", account.ID),
+				zap.String("scope_hash", truncateCodexFingerprintHash(resolved.BoundSessionScopeHash)),
+				zap.Int64("epoch", resolved.BoundEpoch),
+			)
+		}
 		state = resolved.State
 		attemptEpoch = resolved.BoundEpoch
-		s.codexFingerprintStates.Store(account.ID, codexFingerprintStateCacheEntry{
-			state:     state,
-			expiresAt: now.Add(codexFingerprintStateTTL),
-		})
+		switch resolved.MatchedThreadSourceHash {
+		case legacyAccountThreadHash:
+			original.clientScope = ""
+			original.threadScope = ""
+			original.sessionScopeHash = ""
+			original.legacyUnscoped = true
+			logger.L().Info("codex fingerprint legacy thread binding matched",
+				zap.Int64("account_id", account.ID),
+				zap.String("scope_hash", "legacy-unscoped"),
+				zap.Int64("epoch", resolved.BoundEpoch),
+			)
+		case legacyClientThreadHash:
+			original.clientScope = legacyClientScope
+			original.threadScope = legacyThreadScope
+			original.sessionScopeHash = resolved.BoundSessionScopeHash
+			logger.L().Info("codex fingerprint legacy thread binding matched",
+				zap.Int64("account_id", account.ID),
+				zap.String("scope_hash", truncateCodexFingerprintHash(resolved.BoundSessionScopeHash)),
+				zap.Int64("epoch", resolved.BoundEpoch),
+			)
+		default:
+			original.sessionScopeHash = resolved.BoundSessionScopeHash
+		}
 		if resolved.Rotated && s.openaiWSPool != nil {
-			s.openaiWSPool.ClearAccount(account.ID)
+			s.openaiWSPool.ClearSessionScope(account.ID, resolved.BoundSessionScopeHash)
 		}
 	}
 	return newCodexFingerprintContextV2(
@@ -234,20 +323,97 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 	)
 }
 
-// resolveCodexFingerprintClientScope 将稳定客户端族映射成账号内共享的会话槽位。
-// HTTP/WS 传输方式不参与；只有缺失客户端身份时才按 chat/responses 协议族兜底。
-func resolveCodexFingerprintClientScope(c *gin.Context, headers http.Header) string {
+func (s *OpenAIGatewayService) validateCodexFingerprintClusterSecret(ctx context.Context, secret string) error {
+	secretHash := sha256.Sum256([]byte("codex-fingerprint-cluster-secret:v1\x00" + secret))
+	secretID := hex.EncodeToString(secretHash[:])
+	if _, ok := s.codexFingerprintSecretIDs.Load(secretID); ok {
+		return nil
+	}
+	repo, ok := s.accountRepo.(CodexFingerprintSecretRepository)
+	if !ok {
+		return errors.New("codex fingerprint secret repository unavailable")
+	}
+	if err := repo.ValidateCodexFingerprintSecret(ctx, secretID, time.Now()); err != nil {
+		return fmt.Errorf("validate codex fingerprint cluster secret: %w", err)
+	}
+	s.codexFingerprintSecretIDs.Store(secretID, struct{}{})
+	logger.L().Info("codex fingerprint cluster secret validated",
+		zap.String("secret_id", truncateCodexFingerprintHash(secretID)),
+	)
+	return nil
+}
+
+func truncateCodexFingerprintHash(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= 12 {
+		return value
+	}
+	return value[:12]
+}
+
+// resolveCodexFingerprintSessionScope 只按上游实际可见的身份拆分 Session。
+// 默认强制统一身份时按语义协议收敛；仅真实身份出站时按稳定客户端族隔离。
+func resolveCodexFingerprintSessionScope(c *gin.Context, headers http.Header, identityEnforced bool) string {
 	if headers == nil && c != nil && c.Request != nil {
 		headers = c.Request.Header
 	}
 	userAgent := ""
-	originator := ""
+	if headers != nil {
+		userAgent = strings.TrimSpace(headers.Get("User-Agent"))
+	}
+	if !identityEnforced {
+		family := resolveCodexFingerprintVisibleClientFamily(userAgent)
+		if family != "" {
+			return "client:" + family
+		}
+	}
+	return "protocol:" + resolveCodexFingerprintProtocolFamily(c)
+}
+
+// resolveCodexFingerprintVisibleClientFamily 与关闭强制统一后的最终身份配对保持同源。
+// 非官方 UA 会被出站收口整体回退，不能仅凭入口 originator 虚构独立客户端槽位。
+func resolveCodexFingerprintVisibleClientFamily(userAgent string) string {
+	originator, pairedUA, ok := openaiidentity.PairCodexClientIdentity(userAgent)
+	if !ok {
+		return ""
+	}
+	if value := NormalizeSessionUserAgent(originator); value != "" {
+		return value
+	}
+	return NormalizeSessionUserAgent(pairedUA)
+}
+
+// resolveCodexFingerprintLegacyClientScope 保留上一版原始客户端槽位，供旧 Thread 续用。
+func resolveCodexFingerprintLegacyClientScope(c *gin.Context, headers http.Header) string {
+	if headers == nil && c != nil && c.Request != nil {
+		headers = c.Request.Header
+	}
+	userAgent, originator := "", ""
 	if headers != nil {
 		userAgent = strings.TrimSpace(headers.Get("User-Agent"))
 		originator = strings.TrimSpace(headers.Get("originator"))
 	}
-	family := resolveCodexFingerprintClientFamily(c, userAgent, originator)
+	family := resolveCodexFingerprintClientFamily(userAgent, originator)
+	if family == "" {
+		family = resolveCodexFingerprintLegacyUnknownClientFamily(c)
+	}
 	return "client:" + family
+}
+
+// resolveCodexFingerprintLegacyUnknownClientFamily 逐字保留上一版缺失身份时的路径回退。
+func resolveCodexFingerprintLegacyUnknownClientFamily(c *gin.Context) string {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return "unknown"
+	}
+	path := strings.ToLower(strings.TrimSpace(c.Request.URL.Path))
+	switch {
+	case strings.Contains(path, "/chat/completions"):
+		return "unknown-chat"
+	case strings.Contains(path, "/responses"):
+		return "unknown-responses"
+	default:
+		return "unknown"
+	}
 }
 
 // resolveCodexFingerprintThreadScope 在客户端会话槽位内继续按下游 API Key 隔离 Thread。
@@ -255,7 +421,7 @@ func resolveCodexFingerprintThreadScope(c *gin.Context, clientScope string) stri
 	return fmt.Sprintf("api-key:%d:%s", getAPIKeyIDFromContext(c), strings.TrimSpace(clientScope))
 }
 
-func resolveCodexFingerprintClientFamily(c *gin.Context, userAgent, originator string) string {
+func resolveCodexFingerprintClientFamily(userAgent, originator string) string {
 	identity := strings.ToLower(strings.TrimSpace(userAgent + "\n" + originator))
 	switch {
 	case strings.Contains(identity, "openclaw"):
@@ -270,16 +436,24 @@ func resolveCodexFingerprintClientFamily(c *gin.Context, userAgent, originator s
 	if value := NormalizeSessionUserAgent(userAgent); value != "" {
 		return "ua:" + value
 	}
-	if c != nil && c.Request != nil && c.Request.URL != nil {
-		path := strings.ToLower(strings.TrimSpace(c.Request.URL.Path))
-		switch {
-		case strings.Contains(path, "/chat/completions"):
-			return "unknown-chat"
-		case strings.Contains(path, "/responses"):
-			return "unknown-responses"
-		}
+	return ""
+}
+
+func resolveCodexFingerprintProtocolFamily(c *gin.Context) string {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return "unknown"
 	}
-	return "unknown"
+	path := strings.ToLower(strings.TrimSpace(c.Request.URL.Path))
+	switch {
+	case isOpenAIResponsesCompactPath(c):
+		return "responses-compact"
+	case strings.Contains(path, "/chat/completions"), strings.Contains(path, "/messages"):
+		return "chat"
+	case strings.Contains(path, "/responses"):
+		return "responses"
+	default:
+		return "unknown"
+	}
 }
 
 // codexFingerprintScopedDerivationSource 使用带长度边界的客户端槽位前缀，
@@ -299,26 +473,63 @@ func codexFingerprintThreadSourceHash(clusterSecret []byte, source string) strin
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// shouldRotateCodexFingerprintSession 只读取账号上游活动与 WS 连接状态，不接触用户粘性数据。
-func (s *OpenAIGatewayService) shouldRotateCodexFingerprintSession(account *Account, state CodexFingerprintState, now time.Time) bool {
-	if s == nil || s.cfg == nil || account == nil || account.LastUsedAt == nil || state.EpochStartedAt.IsZero() {
-		return false
-	}
-	minAgeHours := s.cfg.Gateway.CodexFingerprintMinSessionAgeHours
-	idleMinutes := s.cfg.Gateway.CodexFingerprintIdleGateMinutes
-	if minAgeHours <= 0 || idleMinutes <= 0 || now.Before(state.EpochStartedAt) || now.Before(*account.LastUsedAt) {
-		return false
-	}
-	if now.Sub(state.EpochStartedAt) < time.Duration(minAgeHours)*time.Hour ||
-		now.Sub(*account.LastUsedAt) < time.Duration(idleMinutes)*time.Minute {
-		return false
-	}
-	if s.openaiWSPool != nil {
-		if s.openaiWSPool.AccountPoolRotationBusy(account.ID) {
-			return false
+func codexFingerprintSessionScopeHash(clusterSecret []byte, scope string) string {
+	mac := hmac.New(sha256.New, clusterSecret)
+	writeCodexFingerprintHMACPart(mac, []byte("codex-fp-session-scope:v1"))
+	writeCodexFingerprintHMACPart(mac, []byte(strings.TrimSpace(scope)))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func uniqueCodexFingerprintHashes(values ...string) []string {
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
 		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
 	}
-	return true
+	return result
+}
+
+// codexFingerprintRotationThresholds 生成作用域独立的年龄、空闲和最长寿命门槛。
+func (s *OpenAIGatewayService) codexFingerprintRotationThresholds(accountID int64, scopeHash string, now time.Time) codexFingerprintRotationThresholds {
+	minAgeHours, maxAgeHours, idleMinutes, jitterHours := 72, 168, 120, 24
+	if s != nil && s.cfg != nil {
+		minAgeHours = s.cfg.Gateway.CodexFingerprintMinSessionAgeHours
+		maxAgeHours = s.cfg.Gateway.CodexFingerprintMaxSessionAgeHours
+		idleMinutes = s.cfg.Gateway.CodexFingerprintIdleGateMinutes
+		jitterHours = s.cfg.Gateway.CodexFingerprintRotationJitterHours
+	}
+	if minAgeHours <= 0 {
+		minAgeHours = 72
+	}
+	if maxAgeHours < minAgeHours {
+		maxAgeHours = 168
+	}
+	if idleMinutes <= 0 {
+		idleMinutes = 120
+	}
+	jitter := codexFingerprintRotationJitter(accountID, scopeHash, jitterHours)
+	return codexFingerprintRotationThresholds{
+		MinAgeBefore: now.Add(-(time.Duration(minAgeHours)*time.Hour + jitter)),
+		IdleBefore:   now.Add(-time.Duration(idleMinutes) * time.Minute),
+		MaxAgeBefore: now.Add(-(time.Duration(maxAgeHours)*time.Hour + jitter)),
+	}
+}
+
+func codexFingerprintRotationJitter(accountID int64, scopeHash string, maxHours int) time.Duration {
+	if accountID <= 0 || maxHours <= 0 {
+		return 0
+	}
+	sum := sha256.Sum256([]byte(fmt.Sprintf("codex-fp-rotation-jitter:v1:%d:%s", accountID, strings.TrimSpace(scopeHash))))
+	seconds := binary.BigEndian.Uint64(sum[:8]) % uint64(time.Duration(maxHours)*time.Hour/time.Second)
+	return time.Duration(seconds) * time.Second
 }
 
 func (s *OpenAIGatewayService) codexFingerprintOldEpochGrace() time.Duration {
@@ -351,16 +562,17 @@ func codexFingerprintLogicalTurnSource(c *gin.Context) string {
 	return source
 }
 
-// applyCodexFingerprintRawForAttempt 在账号选定后统一改写 WS/透传 JSON，并暂存同一份握手头身份。
-func (s *OpenAIGatewayService) applyCodexFingerprintRawForAttempt(
+// prepareCodexFingerprintForAttempt 在最终账号选定后只解析一次指纹，并暂存给请求头构造器。
+func (s *OpenAIGatewayService) prepareCodexFingerprintForAttempt(
 	ctx context.Context,
 	c *gin.Context,
 	account *Account,
 	body []byte,
 	newLogicalTurn bool,
-) ([]byte, error) {
+) (*codexFingerprintIDs, error) {
 	if account == nil || !account.IsOpenAIOAuth() {
-		return body, nil
+		stageCodexFingerprintIDs(c, nil)
+		return nil, nil
 	}
 	if newLogicalTurn && c != nil {
 		c.Set(codexFingerprintLogicalTurnSourceContextKey, "")
@@ -371,14 +583,37 @@ func (s *OpenAIGatewayService) applyCodexFingerprintRawForAttempt(
 	}
 	fpContext, err := s.resolveCodexFingerprintContextForAttempt(ctx, c, account, headers, body)
 	if err != nil {
-		return body, err
+		logger.L().Error("codex fingerprint state error",
+			zap.Int64("account_id", account.ID),
+			zap.Error(err),
+		)
+		return nil, err
 	}
 	fpIDs := codexFingerprintIDsFromContext(fpContext)
 	if fpIDs == nil {
 		fpIDs = resolveCodexFingerprintIDsFromRequest(account, headers)
 	}
 	stageCodexFingerprintIDs(c, fpIDs)
+	return fpIDs, nil
+}
+
+// applyCodexFingerprintForAttempt 统一处理 HTTP/WS JSON；compact 可仅暂存头而不改 body。
+func (s *OpenAIGatewayService) applyCodexFingerprintForAttempt(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+	newLogicalTurn bool,
+	rewriteBody bool,
+) ([]byte, error) {
+	fpIDs, err := s.prepareCodexFingerprintForAttempt(ctx, c, account, body, newLogicalTurn)
+	if err != nil {
+		return body, err
+	}
 	if fpIDs == nil {
+		return body, nil
+	}
+	if !rewriteBody {
 		return body, nil
 	}
 	next, changed, err := applyCodexFingerprintClientMetadataRaw(body, fpIDs)
@@ -389,6 +624,17 @@ func (s *OpenAIGatewayService) applyCodexFingerprintRawForAttempt(
 		return body, nil
 	}
 	return next, nil
+}
+
+// applyCodexFingerprintRawForAttempt 在账号选定后统一改写 WS/透传 JSON，并暂存同一份握手头身份。
+func (s *OpenAIGatewayService) applyCodexFingerprintRawForAttempt(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+	newLogicalTurn bool,
+) ([]byte, error) {
+	return s.applyCodexFingerprintForAttempt(ctx, c, account, body, newLogicalTurn, true)
 }
 
 func derefTime(value *time.Time) time.Time {
@@ -460,14 +706,15 @@ func codexFingerprintIDsFromContext(fp *CodexFingerprintContext) *codexFingerpri
 		return nil
 	}
 	return &codexFingerprintIDs{
-		mode:           fp.mode,
-		installationID: fp.installationID,
-		sessionID:      fp.sessionID,
-		threadID:       fp.threadID,
-		turnID:         fp.turnID,
-		windowID:       fp.windowID,
-		promptCacheKey: fp.promptCacheKey,
-		requestID:      fp.requestID,
+		mode:             fp.mode,
+		sessionScopeHash: fp.sessionScopeHash,
+		installationID:   fp.installationID,
+		sessionID:        fp.sessionID,
+		threadID:         fp.threadID,
+		turnID:           fp.turnID,
+		windowID:         fp.windowID,
+		promptCacheKey:   fp.promptCacheKey,
+		requestID:        fp.requestID,
 	}
 }
 
@@ -477,6 +724,7 @@ type CodexFingerprintContext struct {
 	mode             codexFingerprintMode
 	algorithmVersion string
 	sessionEpoch     int64
+	sessionScopeHash string
 	installationID   string
 	sessionID        string
 	threadID         string
@@ -594,6 +842,7 @@ func newCodexFingerprintContextV2(
 		mode:             mode,
 		algorithmVersion: codexFingerprintAlgorithmV2,
 		sessionEpoch:     epoch,
+		sessionScopeHash: strings.TrimSpace(original.sessionScopeHash),
 		installationID:   strings.TrimSpace(configuredDeviceID),
 	}
 	if ctx.installationID == "" {
@@ -601,6 +850,9 @@ func newCodexFingerprintContextV2(
 	}
 	if mode == codexFingerprintDevice {
 		return ctx, nil
+	}
+	if original.legacyUnscoped {
+		return populateLegacyUnscopedCodexFingerprintContext(ctx, clusterSecret, seed, epoch, mode, original)
 	}
 
 	ctx.sessionID = deriveCodexFingerprintUUIDV2(
@@ -647,6 +899,46 @@ func newCodexFingerprintContextV2(
 	if value := strings.TrimSpace(original.requestID); value != "" {
 		ctx.requestID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindRequest,
 			codexFingerprintScopedDerivationSource(threadScope, value))
+	}
+	return ctx, nil
+}
+
+// populateLegacyUnscopedCodexFingerprintContext 保持 v2 初版 Thread 的派生结果不变。
+func populateLegacyUnscopedCodexFingerprintContext(
+	ctx *CodexFingerprintContext,
+	clusterSecret, seed []byte,
+	epoch int64,
+	mode codexFingerprintMode,
+	original codexFingerprintOriginalIDs,
+) (*CodexFingerprintContext, error) {
+	ctx.sessionID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindSession, "account-session")
+	if mode == codexFingerprintFull {
+		ctx.threadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread, "account-thread")
+		ctx.turnID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindTurn, original.turnID)
+		ctx.windowID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindWindow, "account-window")
+		return ctx, nil
+	}
+	threadSource := strings.TrimSpace(original.threadID)
+	if threadSource == "" {
+		threadSource = strings.TrimSpace(original.clientSessionID)
+	}
+	if threadSource == "" {
+		return nil, errCodexFingerprintThreadMissing
+	}
+	ctx.threadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread, threadSource)
+	if value := strings.TrimSpace(original.turnID); value != "" {
+		ctx.turnID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindTurn, value)
+	}
+	windowSource := strings.TrimSpace(original.windowID)
+	if windowSource == "" {
+		windowSource = threadSource + ":0"
+	}
+	ctx.windowID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindWindow, windowSource)
+	if value := strings.TrimSpace(original.promptCacheKey); value != "" {
+		ctx.promptCacheKey = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindPromptCache, value)
+	}
+	if value := strings.TrimSpace(original.requestID); value != "" {
+		ctx.requestID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindRequest, value)
 	}
 	return ctx, nil
 }

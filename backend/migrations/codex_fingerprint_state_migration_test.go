@@ -31,3 +31,17 @@ func TestMigration230AddsThreadEpochBindings(t *testing.T) {
 	require.Contains(t, sql, "CHECK (source_hash ~ '^[0-9a-f]{64}$')")
 	require.Contains(t, sql, "CHECK (session_epoch > 0)")
 }
+
+func TestMigration232AddsScopedSessionRotation(t *testing.T) {
+	content, err := FS.ReadFile("232_openai_codex_fingerprint_session_scopes.sql")
+	require.NoError(t, err)
+
+	sql := strings.Join(strings.Fields(string(content)), " ")
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS codex_fingerprint_session_scopes")
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS codex_fingerprint_cluster_secrets")
+	require.Contains(t, sql, "PRIMARY KEY (account_id, scope_hash)")
+	require.Contains(t, sql, "rotation_count BIGINT NOT NULL DEFAULT 0")
+	require.Contains(t, sql, "secret_hash CHAR(64) NOT NULL")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS session_scope_hash CHAR(64)")
+	require.Contains(t, sql, "CHECK (session_epoch > 0)")
+}
