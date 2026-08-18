@@ -54,6 +54,9 @@
             <button class="btn btn-secondary" @click="selectCurrentPage">选择当前页</button>
             <button class="btn btn-secondary" @click="selectAllFiltered">选择全部筛选结果</button>
             <button class="btn btn-secondary" @click="clearSelection">清空选择</button>
+            <button class="btn btn-secondary" :disabled="selectedIds.size < 2 || defaultsLoading" @click="openBulkWindowEditor">
+              <Icon name="edit" size="sm" />批量设置统计窗口
+            </button>
             <span v-if="defaultsLoading" class="text-gray-500">正在读取账号窗口...</span>
           </div>
 
@@ -268,6 +271,17 @@
       </section>
     </div>
 
+    <BaseDialog :show="showBulkWindowEditor" title="批量设置统计窗口" width="normal" @close="showBulkWindowEditor = false">
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600 dark:text-gray-300">本次将修改已选择的 {{ selectedIds.size }} 个账号。账号原有的统计比例模式和手动比例保持不变。</p>
+        <p v-if="!bulkWindowDraft.period_start && !bulkWindowDraft.period_end" class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">所选账号当前窗口不一致，请明确设置统一的开始和结束时间。</p>
+        <label class="block"><span class="input-label">开始时间</span><input v-model="bulkWindowDraft.period_start" type="datetime-local" class="input" /></label>
+        <label class="block"><span class="input-label">结束时间</span><input v-model="bulkWindowDraft.period_end" type="datetime-local" class="input" /></label>
+        <p class="text-sm text-gray-500">窗口时长：{{ bulkWindowDuration }}</p>
+      </div>
+      <template #footer><button class="btn btn-secondary" @click="showBulkWindowEditor = false">取消</button><button class="btn btn-primary" @click="saveBulkWindowEditor">应用到所选账号</button></template>
+    </BaseDialog>
+
     <BaseDialog :show="Boolean(editingAccount)" title="修改账号统计设置" width="normal" @close="editingAccount = null">
       <div v-if="editingAccount && editDraft" class="space-y-4">
         <div><p class="font-medium">{{ editingAccount.name }}</p><p class="text-xs text-gray-500">#{{ editingAccount.id }} · {{ editingAccount.status }}</p></div>
@@ -355,6 +369,8 @@ const historyFilters = reactive({ account: '', status: '', admin_id: '', execute
 const historyStatuses = ['running', 'executing', 'ready', 'not_eligible', 'partial', 'failed', 'executed', 'incomplete', 'expired']
 const editingAccount = ref<Account | null>(null)
 const editDraft = ref<EditableDraft | null>(null)
+const showBulkWindowEditor = ref(false)
+const bulkWindowDraft = reactive({ period_start: '', period_end: '' })
 const showCreateConfirm = ref(false)
 const createResponsibilityConfirmed = ref(false)
 const showErrorAccountConfirm = ref(false)
@@ -388,6 +404,7 @@ const selectedErrorAccounts = computed(() => accounts.value.filter((item) => sel
 const selectedRiskCount = computed(() => [...selectedIds.value].filter((id) => Boolean(drafts.get(id)?.risk)).length)
 const canRetry = computed(() => Boolean(activeBatch.value && activeBatch.value.failed_user_count > 0 && (activeBatch.value.status === 'partial' || (activeBatch.value.status === 'failed' && activeBatch.value.failure_stage === 'execution'))))
 const editWindowDuration = computed(() => editDraft.value ? durationText(editDraft.value.period_start, editDraft.value.period_end) : '-')
+const bulkWindowDuration = computed(() => bulkWindowDraft.period_start && bulkWindowDraft.period_end ? durationText(bulkWindowDraft.period_start, bulkWindowDraft.period_end) : '-')
 
 function errorMessage(error: unknown): string {
   if (typeof error === 'object' && error && 'message' in error) return String((error as { message?: unknown }).message || '操作失败')
@@ -521,6 +538,54 @@ function effectiveRatioText(id: number) {
   const draft = drafts.get(id)
   return draft?.ratio_mode === 'manual' ? draft.manual_ratio || '0' : draft?.auto_stat_ratio || '0'
 }
+
+// applyWindowToDraft 统一更新单账号和批量编辑后的窗口派生字段。
+function applyWindowToDraft(draft: EditableDraft, periodStart: string, periodEnd: string): EditableDraft {
+  const durationMs = new Date(periodEnd).getTime() - new Date(periodStart).getTime()
+  const autoRatio = Math.max(0, Math.min(100, ((7 * 86400000 - durationMs) / (7 * 86400000)) * 100))
+  const windowChanged = draft.period_start !== periodStart || draft.period_end !== periodEnd
+  return {
+    ...draft,
+    period_start: periodStart,
+    period_end: periodEnd,
+    auto_stat_ratio: autoRatio.toFixed(8),
+    window_source: windowChanged ? 'manual' : draft.window_source,
+    risk: windowChanged ? '' : draft.risk,
+    window_modified: draft.window_modified || windowChanged
+  }
+}
+
+function openBulkWindowEditor() {
+  if (selectedIds.value.size < 2) return
+  const selectedDrafts = [...selectedIds.value].map((id) => drafts.get(id))
+  if (selectedDrafts.some((draft) => !draft)) {
+    appStore.showError('仍有账号未加载默认窗口')
+    return
+  }
+  const first = selectedDrafts[0]!
+  const haveSameWindow = selectedDrafts.every((draft) => draft?.period_start === first.period_start && draft.period_end === first.period_end)
+  bulkWindowDraft.period_start = haveSameWindow ? localInput(first.period_start) : ''
+  bulkWindowDraft.period_end = haveSameWindow ? localInput(first.period_end) : ''
+  showBulkWindowEditor.value = true
+}
+
+function saveBulkWindowEditor() {
+  const start = new Date(bulkWindowDraft.period_start)
+  const end = new Date(bulkWindowDraft.period_end)
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
+    appStore.showError('结束时间必须晚于开始时间')
+    return
+  }
+  const periodStart = inputToISO(bulkWindowDraft.period_start)
+  const periodEnd = inputToISO(bulkWindowDraft.period_end)
+  for (const id of selectedIds.value) {
+    const draft = drafts.get(id)
+    if (draft) drafts.set(id, applyWindowToDraft(draft, periodStart, periodEnd))
+  }
+  showBulkWindowEditor.value = false
+  appStore.showSuccess(`已为 ${selectedIds.value.size} 个账号设置统一统计窗口`)
+}
+
 function openAccountEditor(account: Account) {
   const draft = drafts.get(account.id)
   if (!draft) return
@@ -540,22 +605,16 @@ function saveAccountEditor() {
     appStore.showError('统计比例必须在 0% 到 100% 之间')
     return
   }
-  const durationMs = end.getTime() - start.getTime()
-  const autoRatio = Math.max(0, Math.min(100, ((7 * 86400000 - durationMs) / (7 * 86400000)) * 100))
   const previous = drafts.get(editingAccount.value.id)
+  if (!previous) return
   const startChanged = !previous || editDraft.value.period_start !== localInput(previous.period_start)
   const endChanged = !previous || editDraft.value.period_end !== localInput(previous.period_end)
   const periodStart = startChanged ? inputToISO(editDraft.value.period_start) : previous.period_start
   const periodEnd = endChanged ? inputToISO(editDraft.value.period_end) : previous.period_end
-  const windowChanged = startChanged || endChanged
   drafts.set(editingAccount.value.id, {
-    ...editDraft.value,
-    period_start: periodStart,
-    period_end: periodEnd,
-    auto_stat_ratio: autoRatio.toFixed(8),
-    window_source: windowChanged ? 'manual' : editDraft.value.window_source,
-    risk: windowChanged ? '' : editDraft.value.risk,
-    window_modified: editDraft.value.window_modified || windowChanged
+    ...applyWindowToDraft(previous, periodStart, periodEnd),
+    ratio_mode: editDraft.value.ratio_mode,
+    manual_ratio: editDraft.value.manual_ratio
   })
   editingAccount.value = null
 }

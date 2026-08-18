@@ -19,6 +19,13 @@ describe('ResetRebatesView v2 contract', () => {
     expect(source).toContain('发放比例')
   })
 
+  it('supports applying one statistics window to multiple selected accounts', () => {
+    expect(source).toContain('批量设置统计窗口')
+    expect(source).toContain('本次将修改已选择的 {{ selectedIds.size }} 个账号')
+    expect(source).toContain('applyWindowToDraft')
+    expect(source).toContain('账号原有的统计比例模式和手动比例保持不变')
+  })
+
   it('requires risk confirmation and reports per-user failures', () => {
     expect(source).toContain('系统不提供周期防重')
     expect(source).toContain('确认选择错误状态账号')
