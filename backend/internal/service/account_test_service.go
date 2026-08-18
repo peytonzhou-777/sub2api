@@ -2076,6 +2076,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 		fingerprintService := &OpenAIGatewayService{accountRepo: s.accountRepo, cfg: s.cfg}
 		fingerprintContext, _ := gin.CreateTestContext(nil)
 		fingerprintContext.Request = req
+		SetOpenAIClientTransport(fingerprintContext, OpenAIClientTransportHTTP)
 		fpIDs, fpErr := fingerprintService.prepareCodexFingerprintForAttempt(ctx, fingerprintContext, account, payloadBytes, true)
 		if fpErr != nil {
 			return s.sendErrorAndEnd(c, "Failed to prepare Codex fingerprint: "+fpErr.Error())

@@ -341,7 +341,7 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeIdentityMatc
 	// 显式 session 收敛模式：探测使用与真实 Responses 流量相同的 v2 作用域。
 	converged := deriveCodexFingerprintUUIDV2(
 		[]byte(secret), mustDecodeCodexFingerprintSeedForTest(t, state.Seed), state.Epoch,
-		codexFingerprintKindSession, codexFingerprintScopedDerivationSource("protocol:responses", "account-session"),
+		codexFingerprintKindSession, codexFingerprintScopedDerivationSource("protocol:responses:transport:http", "account-session"),
 	)
 	require.Equal(t, converged, upstream.lastReq.Header.Get("session-id"))
 	require.Equal(t, converged, upstream.lastReq.Header.Get("session_id"))

@@ -827,6 +827,36 @@ func TestOpenAIResponses_SetsClientTransportHTTP(t *testing.T) {
 	require.Equal(t, service.OpenAIClientTransportHTTP, service.GetOpenAIClientTransport(c))
 }
 
+func TestOpenAIChatCompletions_SetsClientTransportHTTP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/chat/completions", strings.NewReader(`{"model":"gpt-5"}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	h := &OpenAIGatewayHandler{}
+	h.ChatCompletions(c)
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	require.Equal(t, service.OpenAIClientTransportHTTP, service.GetOpenAIClientTransport(c))
+}
+
+func TestOpenAIMessages_SetsClientTransportHTTP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/messages", strings.NewReader(`{"model":"gpt-5"}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	h := &OpenAIGatewayHandler{}
+	h.Messages(c)
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	require.Equal(t, service.OpenAIClientTransportHTTP, service.GetOpenAIClientTransport(c))
+}
+
 func TestOpenAIResponses_RejectsMessageIDAsPreviousResponseID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

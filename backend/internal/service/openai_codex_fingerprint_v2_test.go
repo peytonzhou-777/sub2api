@@ -106,62 +106,144 @@ func TestResolveCodexFingerprintContextScopesThreadsAndDerivesRequestID(t *testi
 		CodexFingerprintEpoch:          3,
 		CodexFingerprintEpochStartedAt: &startedAt,
 	}
+	repo := &codexFingerprintSessionRepoStub{state: CodexFingerprintState{
+		Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2,
+		Epoch: 3, EpochStartedAt: startedAt,
+	}}
 	svc := &OpenAIGatewayService{
 		cfg: &config.Config{Gateway: config.GatewayConfig{
 			CodexFingerprintSecret: string(testCodexFingerprintV2Secret()),
 		}},
-		accountRepo: &codexFingerprintSessionRepoStub{state: CodexFingerprintState{
-			Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2,
-			Epoch: 3, EpochStartedAt: startedAt,
-		}},
+		accountRepo: repo,
 	}
-	resolve := func(apiKeyID int64) *CodexFingerprintContext {
+	resolve := func(apiKeyID int64, transport OpenAIClientTransport) (*CodexFingerprintContext, string) {
 		c, _ := gin.CreateTestContext(nil)
 		c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
 		c.Request.Header.Set("session-id", "shared-client-session")
 		c.Set("api_key", &APIKey{ID: apiKeyID})
+		SetOpenAIClientTransport(c, transport)
 		fp, err := svc.resolveCodexFingerprintContextForAttempt(context.Background(), c, account, c.Request.Header, []byte(`{"input":"hello"}`))
 		require.NoError(t, err)
-		return fp
+		return fp, repo.lastRequest.SessionScopeHash
 	}
 
-	first := resolve(101)
-	second := resolve(202)
-	require.Equal(t, first.SessionID(), second.SessionID(), "相同客户端类型的不同 API Key 应共用 Session")
-	require.NotEqual(t, first.ThreadID(), second.ThreadID(), "不同 API Key 的同名客户端 Session 必须隔离")
-	require.NotEmpty(t, first.RequestID())
-	require.NotEqual(t, first.ThreadID(), first.RequestID(), "请求 ID 不得回退为固定 Thread ID")
+	httpFirst, httpScopeHash := resolve(101, OpenAIClientTransportHTTP)
+	httpSecond, httpSecondScopeHash := resolve(202, OpenAIClientTransportHTTP)
+	wsFirst, wsScopeHash := resolve(303, OpenAIClientTransportWS)
+	wsSecond, wsSecondScopeHash := resolve(404, OpenAIClientTransportWS)
+	require.Equal(t, httpFirst.SessionID(), httpSecond.SessionID(), "相同入站传输的不同 API Key 应共用 Session")
+	require.Equal(t, wsFirst.SessionID(), wsSecond.SessionID(), "相同入站传输的不同 API Key 应共用 Session")
+	require.NotEqual(t, httpFirst.SessionID(), wsFirst.SessionID(), "HTTP 与 WS 入站必须使用独立 Session")
+	require.Equal(t, httpScopeHash, httpSecondScopeHash)
+	require.Equal(t, wsScopeHash, wsSecondScopeHash)
+	require.NotEqual(t, httpScopeHash, wsScopeHash, "HTTP 与 WS 必须使用独立的持久化轮换作用域")
+	require.NotEqual(t, httpFirst.ThreadID(), httpSecond.ThreadID(), "不同 API Key 的同名客户端 Session 必须隔离")
+	require.NotEmpty(t, httpFirst.RequestID())
+	require.NotEqual(t, httpFirst.ThreadID(), httpFirst.RequestID(), "请求 ID 不得回退为固定 Thread ID")
 }
 
 func TestResolveCodexFingerprintSessionScopeUsesUpstreamVisibility(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	resolve := func(path, userAgent, originator string, identityEnforced bool) string {
+	resolve := func(path, userAgent, originator string, identityEnforced bool, transport OpenAIClientTransport) string {
 		c, _ := gin.CreateTestContext(nil)
 		c.Request, _ = http.NewRequest(http.MethodPost, path, nil)
 		c.Request.Header.Set("User-Agent", userAgent)
 		c.Request.Header.Set("originator", originator)
 		c.Set("api_key", &APIKey{ID: 101})
+		SetOpenAIClientTransport(c, transport)
 		return resolveCodexFingerprintSessionScope(c, c.Request.Header, identityEnforced)
 	}
 
-	codexResponses := resolve("/v1/responses", "codex_cli_rs/0.101.0", "codex_cli_rs", true)
-	openClawResponses := resolve("/v1/responses", "OpenClaw/2026.9.0", "openclaw", true)
-	codexChat := resolve("/v1/chat/completions", "codex_cli_rs/0.102.0", "codex_cli_rs", true)
+	codexResponses := resolve("/v1/responses", "codex_cli_rs/0.101.0", "codex_cli_rs", true, OpenAIClientTransportHTTP)
+	openClawResponses := resolve("/v1/responses", "OpenClaw/2026.9.0", "openclaw", true, OpenAIClientTransportHTTP)
+	codexResponsesWS := resolve("/v1/responses", "codex_cli_rs/0.101.0", "codex_cli_rs", true, OpenAIClientTransportWS)
+	codexChat := resolve("/v1/chat/completions", "codex_cli_rs/0.102.0", "codex_cli_rs", true, OpenAIClientTransportHTTP)
 	require.Equal(t, codexResponses, openClawResponses, "身份被统一后同协议必须共用 Session")
+	require.NotEqual(t, codexResponses, codexResponsesWS, "身份被统一后仍须按 HTTP/WS 入站传输隔离")
 	require.NotEqual(t, codexResponses, codexChat, "身份不可见时按语义协议隔离")
 
-	codexVisible := resolve("/v1/responses", "codex_cli_rs/0.101.0", "codex_cli_rs", false)
-	vscodeVisible := resolve("/v1/responses", "codex_vscode/0.101.0", "codex_vscode", false)
-	openClawFallback := resolve("/v1/responses", "OpenClaw/2026.9.0", "openclaw", false)
-	codexVisibleChat := resolve("/v1/chat/completions", "codex_cli_rs/0.102.0", "codex_cli_rs", false)
+	codexVisible := resolve("/v1/responses", "codex_cli_rs/0.101.0", "codex_cli_rs", false, OpenAIClientTransportHTTP)
+	vscodeVisible := resolve("/v1/responses", "codex_vscode/0.101.0", "codex_vscode", false, OpenAIClientTransportHTTP)
+	openClawFallback := resolve("/v1/responses", "OpenClaw/2026.9.0", "openclaw", false, OpenAIClientTransportHTTP)
+	codexVisibleChat := resolve("/v1/chat/completions", "codex_cli_rs/0.102.0", "codex_cli_rs", false, OpenAIClientTransportHTTP)
+	codexVisibleWS := resolve("/v1/responses", "codex_cli_rs/0.102.0", "codex_cli_rs", false, OpenAIClientTransportWS)
 	require.NotEqual(t, codexVisible, vscodeVisible, "可配对且真实出站的不同官方客户端必须分槽")
 	require.Equal(t, codexVisible, codexVisibleChat, "同一可见客户端不因协议或版本变化切换 Session")
+	require.NotEqual(t, codexVisible, codexVisibleWS, "同一可见客户端的 HTTP/WS 入站必须分槽")
 	require.Equal(t, openClawFallback, codexResponses, "无法真实出站的 OpenClaw 身份必须按协议收敛")
 	require.NotEqual(t,
-		resolve("/v1/chat/completions", "", "", false),
-		resolve("/v1/responses", "", "", false),
+		resolve("/v1/chat/completions", "", "", false, OpenAIClientTransportHTTP),
+		resolve("/v1/responses", "", "", false, OpenAIClientTransportHTTP),
 		"身份缺失时必须按协议族兜底隔离",
 	)
+	require.Equal(t,
+		"protocol:responses",
+		resolve("/v1/responses", "", "", true, OpenAIClientTransportUnknown),
+		"无法识别传输时必须保留原有最收敛作用域",
+	)
+}
+
+func TestResolveCodexFingerprintContextPreservesTransportAgnosticThreadBinding(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	state := CodexFingerprintState{
+		Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2,
+		Epoch: 3, EpochStartedAt: startedAt,
+	}
+	account := &Account{
+		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Credentials:          map[string]any{"user_agent": "codex_cli_rs/0.101.0"},
+		Extra:                map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
+		CodexFingerprintSeed: state.Seed, CodexFingerprintVersion: state.Version,
+		CodexFingerprintEpoch: state.Epoch, CodexFingerprintEpochStartedAt: &startedAt,
+	}
+	c, _ := gin.CreateTestContext(nil)
+	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Request.Header.Set("session-id", "legacy-client-session")
+	c.Set("api_key", &APIKey{ID: 101})
+	SetOpenAIClientTransport(c, OpenAIClientTransportWS)
+
+	secret := testCodexFingerprintV2Secret()
+	legacyScope := resolveCodexFingerprintTransportAgnosticSessionScope(c, c.Request.Header, true)
+	legacyThreadScope := resolveCodexFingerprintThreadScope(c, legacyScope)
+	legacyThreadHash := codexFingerprintThreadSourceHash(
+		secret,
+		codexFingerprintScopedDerivationSource(legacyThreadScope, "legacy-client-session"),
+	)
+	legacyScopeHash := codexFingerprintSessionScopeHash(secret, legacyScope)
+	repo := &codexFingerprintSessionRepoStub{
+		state: state, matchedHash: legacyThreadHash, boundScopeHash: legacyScopeHash,
+	}
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{Gateway: config.GatewayConfig{
+			CodexFingerprintSecret: string(secret),
+		}},
+		accountRepo: repo,
+	}
+
+	fp, err := svc.resolveCodexFingerprintContextForAttempt(
+		context.Background(), c, account, c.Request.Header, []byte(`{"input":"hello"}`),
+	)
+	require.NoError(t, err)
+	legacyFP, err := newCodexFingerprintContextV2(
+		secret,
+		state.Seed,
+		state.Epoch,
+		codexFingerprintSession,
+		"",
+		codexFingerprintOriginalIDs{
+			clientScope:     legacyScope,
+			threadScope:     legacyThreadScope,
+			clientSessionID: "legacy-client-session",
+			threadID:        "legacy-client-session",
+		},
+	)
+	require.NoError(t, err)
+	require.NotEqual(t, legacyScopeHash, repo.lastRequest.SessionScopeHash, "新 WS 作用域必须区别于旧无传输作用域")
+	require.Contains(t, repo.lastRequest.ThreadSourceHashes, legacyThreadHash)
+	require.Equal(t, legacyScopeHash, fp.sessionScopeHash)
+	require.Equal(t, legacyFP.SessionID(), fp.SessionID(), "旧 Thread 必须继续使用旧 Session 派生输入")
+	require.Equal(t, legacyFP.ThreadID(), fp.ThreadID(), "旧 Thread 不得因新增传输维度改变")
 }
 
 func TestResolveCodexFingerprintLegacyClientScopePreservesCompactFallback(t *testing.T) {
@@ -491,6 +573,7 @@ func TestApplyCodexFingerprintForAttemptSharesChatSessionAcrossAPIKeys(t *testin
 		c.Request, _ = http.NewRequest(http.MethodPost, path, nil)
 		c.Request.Header.Set("session-id", "same-client-session")
 		c.Set("api_key", &APIKey{ID: apiKeyID})
+		SetOpenAIClientTransport(c, OpenAIClientTransportHTTP)
 		body, err := svc.applyCodexFingerprintForAttempt(context.Background(), c, account, []byte(`{"input":"hello"}`), false, true)
 		require.NoError(t, err)
 		return gjson.GetBytes(body, "client_metadata.session_id").String(), gjson.GetBytes(body, "client_metadata.thread_id").String()
@@ -519,6 +602,7 @@ func TestApplyCodexFingerprintForAttemptCompactOnlyStagesHeaders(t *testing.T) {
 	c, _ := gin.CreateTestContext(nil)
 	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses/compact", nil)
 	c.Request.Header.Set("session-id", "compact-session")
+	SetOpenAIClientTransport(c, OpenAIClientTransportHTTP)
 	body := []byte(`{"model":"gpt-5.6-sol","input":"hello"}`)
 
 	updated, err := svc.applyCodexFingerprintForAttempt(context.Background(), c, account, body, false, false)

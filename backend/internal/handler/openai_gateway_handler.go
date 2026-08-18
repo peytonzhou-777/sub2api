@@ -926,6 +926,7 @@ func (h *OpenAIGatewayHandler) logOpenAIRemoteCompactOutcome(c *gin.Context, sta
 func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	streamStarted := false
 	defer h.recoverAnthropicMessagesPanic(c, &streamStarted)
+	setOpenAIClientTransportHTTP(c)
 
 	requestStart := time.Now()
 

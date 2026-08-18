@@ -241,6 +241,12 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 			[]byte(secret),
 			codexFingerprintScopedDerivationSource(original.threadScope, original.threadID),
 		)
+		legacyTransportAgnosticScope := resolveCodexFingerprintTransportAgnosticSessionScope(c, headers, identityHidden)
+		legacyTransportAgnosticThreadScope := resolveCodexFingerprintThreadScope(c, legacyTransportAgnosticScope)
+		legacyTransportAgnosticThreadHash := codexFingerprintThreadSourceHash(
+			[]byte(secret),
+			codexFingerprintScopedDerivationSource(legacyTransportAgnosticThreadScope, original.threadID),
+		)
 		legacyClientScope := resolveCodexFingerprintLegacyClientScope(c, headers)
 		legacyThreadScope := resolveCodexFingerprintThreadScope(c, legacyClientScope)
 		legacyClientThreadHash := codexFingerprintThreadSourceHash(
@@ -256,15 +262,20 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 		resolved, err := sessionRepo.ResolveCodexFingerprintSessionState(
 			ctx,
 			CodexFingerprintSessionRequest{
-				AccountID:          account.ID,
-				SessionScopeHash:   original.sessionScopeHash,
-				ThreadSourceHashes: uniqueCodexFingerprintHashes(threadSourceHash, legacyClientThreadHash, legacyAccountThreadHash),
-				Now:                now,
-				RotationAllowed:    rotationAllowed,
-				MinAgeBefore:       thresholds.MinAgeBefore,
-				IdleBefore:         thresholds.IdleBefore,
-				MaxAgeBefore:       thresholds.MaxAgeBefore,
-				OldEpochCutoff:     now.Add(-s.codexFingerprintOldEpochGrace()),
+				AccountID:        account.ID,
+				SessionScopeHash: original.sessionScopeHash,
+				ThreadSourceHashes: uniqueCodexFingerprintHashes(
+					threadSourceHash,
+					legacyTransportAgnosticThreadHash,
+					legacyClientThreadHash,
+					legacyAccountThreadHash,
+				),
+				Now:             now,
+				RotationAllowed: rotationAllowed,
+				MinAgeBefore:    thresholds.MinAgeBefore,
+				IdleBefore:      thresholds.IdleBefore,
+				MaxAgeBefore:    thresholds.MaxAgeBefore,
+				OldEpochCutoff:  now.Add(-s.codexFingerprintOldEpochGrace()),
 			},
 		)
 		if err != nil {
@@ -291,6 +302,19 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 		state = resolved.State
 		attemptEpoch = resolved.BoundEpoch
 		switch resolved.MatchedThreadSourceHash {
+		case threadSourceHash:
+			original.sessionScopeHash = resolved.BoundSessionScopeHash
+		case legacyTransportAgnosticThreadHash:
+			// 改动前的 Thread 继续使用未区分 HTTP/WS 的 Session，避免续聊中途换身份。
+			original.clientScope = legacyTransportAgnosticScope
+			original.threadScope = legacyTransportAgnosticThreadScope
+			original.sessionScopeHash = resolved.BoundSessionScopeHash
+			logger.L().Info("codex fingerprint legacy thread binding matched",
+				zap.Int64("account_id", account.ID),
+				zap.String("scope_hash", truncateCodexFingerprintHash(resolved.BoundSessionScopeHash)),
+				zap.Int64("epoch", resolved.BoundEpoch),
+				zap.String("legacy_scope", "transport_agnostic"),
+			)
 		case legacyAccountThreadHash:
 			original.clientScope = ""
 			original.threadScope = ""
@@ -351,9 +375,24 @@ func truncateCodexFingerprintHash(value string) string {
 	return value[:12]
 }
 
-// resolveCodexFingerprintSessionScope 只按上游实际可见的身份拆分 Session。
-// 默认强制统一身份时按语义协议收敛；仅真实身份出站时按稳定客户端族隔离。
+// resolveCodexFingerprintSessionScope 按上游可见身份和稳定的客户端入站传输拆分 Session。
+// HTTP Bridge 属于 WS 客户端的内部降级，因此仍保留 WS 入站作用域，不按单次出站链路漂移。
 func resolveCodexFingerprintSessionScope(c *gin.Context, headers http.Header, identityEnforced bool) string {
+	baseScope := resolveCodexFingerprintTransportAgnosticSessionScope(c, headers, identityEnforced)
+	switch GetOpenAIClientTransport(c) {
+	case OpenAIClientTransportHTTP:
+		return baseScope + ":transport:http"
+	case OpenAIClientTransportWS:
+		return baseScope + ":transport:ws"
+	default:
+		// 无法识别传输时保持原有最收敛作用域，也为非网关内部调用保留兼容。
+		return baseScope
+	}
+}
+
+// resolveCodexFingerprintTransportAgnosticSessionScope 逐字保留加入传输维度前的作用域规则，
+// 既作为未知传输的保守回退，也用于旧 Thread 绑定续接。
+func resolveCodexFingerprintTransportAgnosticSessionScope(c *gin.Context, headers http.Header, identityEnforced bool) string {
 	if headers == nil && c != nil && c.Request != nil {
 		headers = c.Request.Header
 	}
