@@ -310,12 +310,18 @@ func GetActualOpenAIUpstreamEndpoint(c *gin.Context) string {
 }
 
 type OpenAIWSRetryMetricsSnapshot struct {
-	RetryAttemptsTotal            int64 `json:"retry_attempts_total"`
-	RetryBackoffMsTotal           int64 `json:"retry_backoff_ms_total"`
-	RetryExhaustedTotal           int64 `json:"retry_exhausted_total"`
-	NonRetryableFastFallbackTotal int64 `json:"non_retryable_fast_fallback_total"`
-	TurnStateStrippedTotal        int64 `json:"turn_state_stripped_total"`
-	ContinuationRejectedTotal     int64 `json:"continuation_rejected_total"`
+	RetryAttemptsTotal                      int64 `json:"retry_attempts_total"`
+	RetryBackoffMsTotal                     int64 `json:"retry_backoff_ms_total"`
+	RetryExhaustedTotal                     int64 `json:"retry_exhausted_total"`
+	NonRetryableFastFallbackTotal           int64 `json:"non_retryable_fast_fallback_total"`
+	TurnStateStrippedTotal                  int64 `json:"turn_state_stripped_total"`
+	ContinuationRejectedTotal               int64 `json:"continuation_rejected_total"`
+	IngressTransportRecoveryAttemptsTotal   int64 `json:"ingress_transport_recovery_attempts_total"`
+	IngressTransportRecoverySuccessTotal    int64 `json:"ingress_transport_recovery_success_total"`
+	IngressTransportRecoveryFailureTotal    int64 `json:"ingress_transport_recovery_failure_total"`
+	IngressTransportRecoverySuppressedTotal int64 `json:"ingress_transport_recovery_suppressed_total"`
+	IngressTransportRecoveryMsTotal         int64 `json:"ingress_transport_recovery_ms_total"`
+	IngressStaleBindingCleanupTotal         int64 `json:"ingress_stale_binding_cleanup_total"`
 }
 
 type OpenAICompatibilityFallbackMetricsSnapshot struct {
@@ -334,12 +340,18 @@ type OpenAICompatibilityFallbackMetricsSnapshot struct {
 }
 
 type openAIWSRetryMetrics struct {
-	retryAttempts            atomic.Int64
-	retryBackoffMs           atomic.Int64
-	retryExhausted           atomic.Int64
-	nonRetryableFastFallback atomic.Int64
-	turnStateStripped        atomic.Int64
-	continuationRejected     atomic.Int64
+	retryAttempts              atomic.Int64
+	retryBackoffMs             atomic.Int64
+	retryExhausted             atomic.Int64
+	nonRetryableFastFallback   atomic.Int64
+	turnStateStripped          atomic.Int64
+	continuationRejected       atomic.Int64
+	ingressRecoveryAttempts    atomic.Int64
+	ingressRecoverySuccess     atomic.Int64
+	ingressRecoveryFailure     atomic.Int64
+	ingressRecoverySuppressed  atomic.Int64
+	ingressRecoveryMs          atomic.Int64
+	ingressStaleBindingCleanup atomic.Int64
 }
 
 type accountWriteThrottle struct {
@@ -985,17 +997,59 @@ func (s *OpenAIGatewayService) RecordOpenAIContinuationRejected() {
 	}
 }
 
+func (s *OpenAIGatewayService) recordOpenAIWSIngressRecoveryAttempt() {
+	if s != nil {
+		s.openaiWSRetryMetrics.ingressRecoveryAttempts.Add(1)
+	}
+}
+
+func (s *OpenAIGatewayService) recordOpenAIWSIngressRecoverySuccess() {
+	if s != nil {
+		s.openaiWSRetryMetrics.ingressRecoverySuccess.Add(1)
+	}
+}
+
+func (s *OpenAIGatewayService) recordOpenAIWSIngressRecoveryFailure() {
+	if s != nil {
+		s.openaiWSRetryMetrics.ingressRecoveryFailure.Add(1)
+	}
+}
+
+func (s *OpenAIGatewayService) recordOpenAIWSIngressRecoverySuppressed() {
+	if s != nil {
+		s.openaiWSRetryMetrics.ingressRecoverySuppressed.Add(1)
+	}
+}
+
+func (s *OpenAIGatewayService) recordOpenAIWSIngressRecoveryDuration(duration time.Duration) {
+	if s != nil && duration > 0 {
+		s.openaiWSRetryMetrics.ingressRecoveryMs.Add(duration.Milliseconds())
+	}
+}
+
+func (s *OpenAIGatewayService) recordOpenAIWSIngressStaleBindingCleanup(deleted int) {
+	if s != nil && deleted > 0 {
+		s.openaiWSRetryMetrics.ingressStaleBindingCleanup.Add(int64(deleted))
+	}
+}
+
 func (s *OpenAIGatewayService) SnapshotOpenAIWSRetryMetrics() OpenAIWSRetryMetricsSnapshot {
 	if s == nil {
 		return OpenAIWSRetryMetricsSnapshot{}
 	}
 	return OpenAIWSRetryMetricsSnapshot{
-		RetryAttemptsTotal:            s.openaiWSRetryMetrics.retryAttempts.Load(),
-		RetryBackoffMsTotal:           s.openaiWSRetryMetrics.retryBackoffMs.Load(),
-		RetryExhaustedTotal:           s.openaiWSRetryMetrics.retryExhausted.Load(),
-		NonRetryableFastFallbackTotal: s.openaiWSRetryMetrics.nonRetryableFastFallback.Load(),
-		TurnStateStrippedTotal:        s.openaiWSRetryMetrics.turnStateStripped.Load(),
-		ContinuationRejectedTotal:     s.openaiWSRetryMetrics.continuationRejected.Load(),
+		RetryAttemptsTotal:                      s.openaiWSRetryMetrics.retryAttempts.Load(),
+		RetryBackoffMsTotal:                     s.openaiWSRetryMetrics.retryBackoffMs.Load(),
+		RetryExhaustedTotal:                     s.openaiWSRetryMetrics.retryExhausted.Load(),
+		NonRetryableFastFallbackTotal:           s.openaiWSRetryMetrics.nonRetryableFastFallback.Load(),
+		TurnStateStrippedTotal:                  s.openaiWSRetryMetrics.turnStateStripped.Load(),
+		ContinuationRejectedTotal:               s.openaiWSRetryMetrics.continuationRejected.Load(),
+		IngressTransportRecoveryAttemptsTotal:   s.openaiWSRetryMetrics.ingressRecoveryAttempts.Load(),
+		IngressTransportRecoverySuccessTotal:    s.openaiWSRetryMetrics.ingressRecoverySuccess.Load(),
+		IngressTransportRecoveryFailureTotal:    s.openaiWSRetryMetrics.ingressRecoveryFailure.Load(),
+		IngressTransportRecoverySuppressedTotal: s.openaiWSRetryMetrics.ingressRecoverySuppressed.Load(),
+		IngressTransportRecoveryMsTotal:         s.openaiWSRetryMetrics.ingressRecoveryMs.Load(),
+		IngressStaleBindingCleanupTotal:         s.openaiWSRetryMetrics.ingressStaleBindingCleanup.Load(),
 	}
 }
 

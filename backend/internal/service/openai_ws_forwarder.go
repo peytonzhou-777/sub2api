@@ -43,8 +43,7 @@ const (
 	openAIWSStoreDisabledConnModeAdaptive = "adaptive"
 	openAIWSStoreDisabledConnModeOff      = "off"
 
-	openAIWSIngressStagePreviousResponseNotFound = "previous_response_not_found"
-	openAIWSMaxPrevResponseIDDeletePasses        = 8
+	openAIWSMaxPrevResponseIDDeletePasses = 8
 )
 
 var openAIWSLogValueReplacer = strings.NewReplacer(
@@ -53,8 +52,6 @@ var openAIWSLogValueReplacer = strings.NewReplacer(
 	"warning", "warnx",
 	"failed", "fail",
 )
-
-var openAIWSIngressPreflightPingIdle = 20 * time.Second
 
 // openAIWSFallbackError 表示可安全回退到 HTTP 的 WS 错误（尚未写下游）。
 type openAIWSFallbackError struct {
@@ -91,9 +88,10 @@ type OpenAIWSClientCloseError struct {
 }
 
 type openAIWSIngressTurnError struct {
-	stage           string
-	cause           error
-	wroteDownstream bool
+	stage            string
+	cause            error
+	wroteDownstream  bool
+	sawUpstreamEvent bool
 }
 
 func (e *openAIWSIngressTurnError) Error() string {
@@ -124,6 +122,15 @@ func wrapOpenAIWSIngressTurnError(stage string, cause error, wroteDownstream boo
 	}
 }
 
+func wrapOpenAIWSIngressTurnErrorAfterEvent(stage string, cause error, wroteDownstream, sawUpstreamEvent bool) error {
+	err := wrapOpenAIWSIngressTurnError(stage, cause, wroteDownstream)
+	var turnErr *openAIWSIngressTurnError
+	if errors.As(err, &turnErr) && turnErr != nil {
+		turnErr.sawUpstreamEvent = sawUpstreamEvent
+	}
+	return err
+}
+
 func isOpenAIWSIngressTurnRetryable(err error) bool {
 	var turnErr *openAIWSIngressTurnError
 	if !errors.As(err, &turnErr) || turnErr == nil {
@@ -132,7 +139,7 @@ func isOpenAIWSIngressTurnRetryable(err error) bool {
 	if errors.Is(turnErr.cause, context.Canceled) || errors.Is(turnErr.cause, context.DeadlineExceeded) {
 		return false
 	}
-	if turnErr.wroteDownstream {
+	if turnErr.wroteDownstream || turnErr.sawUpstreamEvent {
 		return false
 	}
 	switch turnErr.stage {
@@ -141,6 +148,14 @@ func isOpenAIWSIngressTurnRetryable(err error) bool {
 	default:
 		return false
 	}
+}
+
+func isOpenAIWSIngressTransportFailure(err error) bool {
+	var turnErr *openAIWSIngressTurnError
+	if !errors.As(err, &turnErr) || turnErr == nil {
+		return false
+	}
+	return turnErr.stage == "write_upstream" || turnErr.stage == "read_upstream"
 }
 
 func openAIWSIngressTurnRetryReason(err error) string {
@@ -152,17 +167,6 @@ func openAIWSIngressTurnRetryReason(err error) string {
 		return "unknown"
 	}
 	return turnErr.stage
-}
-
-func isOpenAIWSIngressPreviousResponseNotFound(err error) bool {
-	var turnErr *openAIWSIngressTurnError
-	if !errors.As(err, &turnErr) || turnErr == nil {
-		return false
-	}
-	if strings.TrimSpace(turnErr.stage) != openAIWSIngressStagePreviousResponseNotFound {
-		return false
-	}
-	return !turnErr.wroteDownstream
 }
 
 // NewOpenAIWSClientCloseError 创建一个客户端 WS 关闭错误。
@@ -299,13 +303,6 @@ func (s *OpenAIGatewayService) openAIWSResponseStickyTTL() time.Duration {
 		}
 	}
 	return time.Hour
-}
-
-func (s *OpenAIGatewayService) openAIWSIngressPreviousResponseRecoveryEnabled() bool {
-	if s != nil && s.cfg != nil {
-		return s.cfg.Gateway.OpenAIWS.IngressPreviousResponseRecoveryEnabled
-	}
-	return true
 }
 
 func (s *OpenAIGatewayService) openAIWSReadTimeout() time.Duration {

@@ -566,6 +566,12 @@ func TestLoadDefaultOpenAIWSConfig(t *testing.T) {
 	if cfg.Gateway.OpenAIWS.MaxIngressConnectionsPerAPIKey != 64 {
 		t.Fatalf("Gateway.OpenAIWS.MaxIngressConnectionsPerAPIKey = %d, want 64", cfg.Gateway.OpenAIWS.MaxIngressConnectionsPerAPIKey)
 	}
+	if cfg.Gateway.OpenAIWS.MinIdlePerAccount != 0 {
+		t.Fatalf("Gateway.OpenAIWS.MinIdlePerAccount = %d, want 0", cfg.Gateway.OpenAIWS.MinIdlePerAccount)
+	}
+	if cfg.Gateway.OpenAIWS.IngressPreviousResponseRecoveryEnabled {
+		t.Fatalf("Gateway.OpenAIWS.IngressPreviousResponseRecoveryEnabled = true, want false")
+	}
 }
 
 func TestLoadOpenAIWSClientFirstMessageTimeoutFromEnv(t *testing.T) {

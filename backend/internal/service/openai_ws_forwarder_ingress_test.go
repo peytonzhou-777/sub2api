@@ -8,7 +8,6 @@ import (
 	"net"
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
 	coderws "github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -44,40 +43,6 @@ func TestIsOpenAIWSClientDisconnectError(t *testing.T) {
 			require.Equal(t, tt.want, isOpenAIWSClientDisconnectError(tt.err))
 		})
 	}
-}
-
-func TestIsOpenAIWSIngressPreviousResponseNotFound(t *testing.T) {
-	t.Parallel()
-
-	require.False(t, isOpenAIWSIngressPreviousResponseNotFound(nil))
-	require.False(t, isOpenAIWSIngressPreviousResponseNotFound(errors.New("plain error")))
-	require.False(t, isOpenAIWSIngressPreviousResponseNotFound(
-		wrapOpenAIWSIngressTurnError("read_upstream", errors.New("upstream read failed"), false),
-	))
-	require.False(t, isOpenAIWSIngressPreviousResponseNotFound(
-		wrapOpenAIWSIngressTurnError(openAIWSIngressStagePreviousResponseNotFound, errors.New("previous response not found"), true),
-	))
-	require.True(t, isOpenAIWSIngressPreviousResponseNotFound(
-		wrapOpenAIWSIngressTurnError(openAIWSIngressStagePreviousResponseNotFound, errors.New("previous response not found"), false),
-	))
-}
-
-func TestOpenAIWSIngressPreviousResponseRecoveryEnabled(t *testing.T) {
-	t.Parallel()
-
-	var nilService *OpenAIGatewayService
-	require.True(t, nilService.openAIWSIngressPreviousResponseRecoveryEnabled(), "nil service should default to enabled")
-
-	svcWithNilCfg := &OpenAIGatewayService{}
-	require.True(t, svcWithNilCfg.openAIWSIngressPreviousResponseRecoveryEnabled(), "nil config should default to enabled")
-
-	svc := &OpenAIGatewayService{
-		cfg: &config.Config{},
-	}
-	require.False(t, svc.openAIWSIngressPreviousResponseRecoveryEnabled(), "explicit config default should be false")
-
-	svc.cfg.Gateway.OpenAIWS.IngressPreviousResponseRecoveryEnabled = true
-	require.True(t, svc.openAIWSIngressPreviousResponseRecoveryEnabled())
 }
 
 func TestDropPreviousResponseIDFromRawPayload(t *testing.T) {

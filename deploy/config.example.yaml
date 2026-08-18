@@ -359,10 +359,10 @@ gateway:
     force_http: false
     # 允许在 WSv2 下按策略恢复 store=true（默认 false）
     allow_store_recovery: false
-    # ingress 模式收到 previous_response_not_found 时，自动去掉 previous_response_id 重试一次（默认 true）
-    ingress_previous_response_recovery_enabled: true
+    # 兼容旧配置；ctx_pool 不再对 previous_response_not_found 改写并重放请求
+    ingress_previous_response_recovery_enabled: false
     # store=false 且无可复用会话连接时的策略：
-    # strict=强制新建连接（隔离优先），adaptive=仅在高风险失败后强制新建，off=尽量复用（性能优先）
+    # strict=强制新建连接（隔离优先），adaptive=仅在高风险失败后强制新建，off=同一逻辑会话内尽量复用
     store_disabled_conn_mode: strict
     # store=false 且无可复用会话连接时，是否强制新建连接（默认 true，优先会话隔离）
     # 兼容旧配置：仅在 store_disabled_conn_mode 未配置时生效
@@ -374,7 +374,8 @@ gateway:
     responses_websockets_v2: true
     # 连接池参数（按账号池化复用）
     max_conns_per_account: 128
-    min_idle_per_account: 4
+    # 按需建连；即使旧部署显式配置非 0，服务也不会在无业务请求时主动补池
+    min_idle_per_account: 0
     max_idle_per_account: 12
     # 是否按账号并发动态计算连接池上限：
     # effective_max_conns = min(max_conns_per_account, ceil(account.concurrency * factor))

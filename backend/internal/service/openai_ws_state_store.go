@@ -46,10 +46,11 @@ type openAIWSSessionConnBinding struct {
 // openAIWSConnectionTarget 描述连接可复用的完整上游目标。
 // 任一字段变化都必须按未命中处理，避免旧账号或旧 epoch 的连接被透明复用。
 type openAIWSConnectionTarget struct {
-	accountID        int64
-	fingerprintScope string
-	transport        OpenAIUpstreamTransport
-	wsURL            string
+	accountID              int64
+	handshakeCompatibility openAIWSHandshakeCompatibilityKey
+	transport              OpenAIUpstreamTransport
+	wsURL                  string
+	proxyURL               string
 }
 
 func newOpenAIWSConnectionTarget(account *Account, transport OpenAIUpstreamTransport, wsURL string, headers http.Header) openAIWSConnectionTarget {
@@ -58,7 +59,10 @@ func newOpenAIWSConnectionTarget(account *Account, transport OpenAIUpstreamTrans
 		return target
 	}
 	target.accountID = account.ID
-	target.fingerprintScope = normalizeOpenAIWSFingerprintScope(headers)
+	target.handshakeCompatibility = normalizeOpenAIWSHandshakeCompatibility(headers)
+	if account.ProxyID != nil && account.Proxy != nil {
+		target.proxyURL = strings.TrimSpace(account.Proxy.URL())
+	}
 	return target
 }
 
@@ -120,6 +124,10 @@ type openAIWSTargetStateStore interface {
 	GetResponseConnForTarget(responseID string, expected openAIWSConnectionTarget) (string, bool)
 	BindSessionConnForTarget(groupID int64, sessionHash string, target openAIWSConnectionTarget, connID string, ttl time.Duration)
 	GetSessionConnForTarget(groupID int64, sessionHash string, expected openAIWSConnectionTarget) (string, bool)
+}
+
+type openAIWSConnBindingCleanupStore interface {
+	DeleteConnBindings(connID string) int
 }
 
 type defaultOpenAIWSStateStore struct {
@@ -435,6 +443,45 @@ func (s *defaultOpenAIWSStateStore) DeleteSessionConn(groupID int64, sessionHash
 	s.sessionToConnMu.Lock()
 	delete(s.sessionToConn, key)
 	s.sessionToConnMu.Unlock()
+}
+
+// DeleteConnBindings 清理本实例内所有指向失效连接的 response/session 索引。
+func (s *defaultOpenAIWSStateStore) DeleteConnBindings(connID string) int {
+	if s == nil {
+		return 0
+	}
+	connID = strings.TrimSpace(connID)
+	if connID == "" {
+		return 0
+	}
+
+	deleted := 0
+	s.responseToConnMu.Lock()
+	for key, binding := range s.responseToConn {
+		if strings.TrimSpace(binding.connID) == connID {
+			delete(s.responseToConn, key)
+			deleted++
+		}
+	}
+	s.responseToConnMu.Unlock()
+
+	s.sessionToConnMu.Lock()
+	for key, binding := range s.sessionToConn {
+		if strings.TrimSpace(binding.connID) == connID {
+			delete(s.sessionToConn, key)
+			deleted++
+		}
+	}
+	s.sessionToConnMu.Unlock()
+	return deleted
+}
+
+func deleteOpenAIWSConnBindings(store OpenAIWSStateStore, connID string) int {
+	cleaner, ok := store.(openAIWSConnBindingCleanupStore)
+	if !ok {
+		return 0
+	}
+	return cleaner.DeleteConnBindings(connID)
 }
 
 func (s *defaultOpenAIWSStateStore) maybeCleanup() {

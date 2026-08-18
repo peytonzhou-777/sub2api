@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +12,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestOpenAIWSIngressTurnRetryable_OnlyBeforeAnyEvent(t *testing.T) {
+	transportErr := errors.New("upstream connection closed")
+	require.True(t, isOpenAIWSIngressTurnRetryable(wrapOpenAIWSIngressTurnError("write_upstream", transportErr, false)))
+	require.True(t, isOpenAIWSIngressTurnRetryable(wrapOpenAIWSIngressTurnErrorAfterEvent("read_upstream", transportErr, false, false)))
+	require.False(t, isOpenAIWSIngressTurnRetryable(wrapOpenAIWSIngressTurnErrorAfterEvent("read_upstream", transportErr, false, true)), "读取到任意上游事件后不得重放")
+	require.False(t, isOpenAIWSIngressTurnRetryable(wrapOpenAIWSIngressTurnErrorAfterEvent("read_upstream", transportErr, true, true)), "写出任意下游事件后不得重放")
+	require.False(t, isOpenAIWSIngressTurnRetryable(wrapOpenAIWSIngressTurnError("read_upstream", context.Canceled, false)))
+	require.False(t, isOpenAIWSIngressTurnRetryable(transportErr), "普通业务错误不得进入传输恢复")
+}
 
 // TestIsOpenAIWSTokenEvent_TerminalEventsExcluded 覆盖 isOpenAIWSTokenEvent 的回归用例。
 // 重点验证终止事件（response.completed / response.done）不再被当作 token event，

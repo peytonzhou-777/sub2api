@@ -193,6 +193,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		},
 		PreferredConnID: preferredConnID,
 		ForceNewConn:    forceNewConn,
+		SessionAffinity: sessionHash,
 		ProxyURL: func() string {
 			if account.ProxyID != nil && account.Proxy != nil {
 				return account.Proxy.URL()

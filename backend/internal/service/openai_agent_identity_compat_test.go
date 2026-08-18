@@ -242,7 +242,7 @@ func TestValidateOpenAIWSBearerTokenAllowsAgentIdentityWithoutStoredToken(t *tes
 	})
 }
 
-func TestOpenAIWSConnPoolHeadersFactoryRunsAtDialAndStalePrewarmIsDiscarded(t *testing.T) {
+func TestOpenAIWSConnPoolPrewarmDoesNotDialOrGenerateAuthorization(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 1
 	pool := newOpenAIWSConnPool(cfg)
@@ -272,8 +272,11 @@ func TestOpenAIWSConnPoolHeadersFactoryRunsAtDialAndStalePrewarmIsDiscarded(t *t
 	ap.mu.Unlock()
 
 	pool.prewarmConns(accountID, req, 1, generation)
-	require.Equal(t, 1, factoryCalls, "prewarm must generate authorization inside the actual dial")
-	require.Equal(t, "AgentAssertion dial-1", latestHeader)
+	require.Zero(t, factoryCalls, "没有真实业务请求时不得生成认证头或发起预热连接")
+	require.Empty(t, latestHeader)
+	ap.mu.Lock()
+	require.Empty(t, ap.conns)
+	ap.mu.Unlock()
 
 	pool.ClearAccount(accountID)
 	ap.mu.Lock()
@@ -282,7 +285,7 @@ func TestOpenAIWSConnPoolHeadersFactoryRunsAtDialAndStalePrewarmIsDiscarded(t *t
 	require.Equal(t, generation+1, ap.generation)
 	ap.mu.Unlock()
 
-	// A prewarm captured before ClearAccount must not be admitted after recovery.
+	// ClearAccount 前捕获的预热任务同样不得创建连接。
 	pool.prewarmConns(accountID, req, 1, generation)
 	ap.mu.Lock()
 	require.Empty(t, ap.conns)

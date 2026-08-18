@@ -31,21 +31,37 @@ func TestOpenAIWSStateStore_BindGetDeleteResponseAccount(t *testing.T) {
 
 func TestOpenAIWSStateStoreConnectionTargetIsolation(t *testing.T) {
 	store := NewOpenAIWSStateStore(nil)
+	proxyAID := int64(1)
+	proxyBID := int64(2)
 	accountA := &Account{ID: 101, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Extra:                   map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
-		CodexFingerprintVersion: "v2", CodexFingerprintEpoch: 3}
+		CodexFingerprintVersion: "v2", CodexFingerprintEpoch: 3,
+		ProxyID: &proxyAID, Proxy: &Proxy{ID: proxyAID, Protocol: "http", Host: "proxy-a.example", Port: 8080}}
 	accountB := &Account{ID: 102, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Extra:                   map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
 		CodexFingerprintVersion: "v2", CodexFingerprintEpoch: 3}
+	accountNextProxy := *accountA
+	accountNextProxy.ProxyID = &proxyBID
+	accountNextProxy.Proxy = &Proxy{ID: proxyBID, Protocol: "http", Host: "proxy-b.example", Port: 8080}
 	headersA := http.Header{
 		"X-Codex-Installation-Id": []string{"device-a"},
 		"Session-Id":              []string{"session-3"},
+		"User-Agent":              []string{"codex-cli/1.2.3"},
+		"Originator":              []string{"codex_cli_rs"},
+		"OpenAI-Beta":             []string{"responses_websockets=2026-02-06"},
 	}
 	headersNextEpoch := headersA.Clone()
 	headersNextEpoch.Set("session-id", "session-4")
+	headersNextUserAgent := headersA.Clone()
+	headersNextUserAgent.Set("user-agent", "codex-cli/1.2.4")
+	headersNextBeta := headersA.Clone()
+	headersNextBeta.Set("openai-beta", "responses_websockets=2027-01-01")
 	targetA := newOpenAIWSConnectionTarget(accountA, OpenAIUpstreamTransportResponsesWebsocketV2, "wss://api.openai.com/v1/responses", headersA)
 	targetB := newOpenAIWSConnectionTarget(accountB, OpenAIUpstreamTransportResponsesWebsocketV2, "wss://api.openai.com/v1/responses", headersA)
 	nextEpoch := newOpenAIWSConnectionTarget(accountA, OpenAIUpstreamTransportResponsesWebsocketV2, "wss://api.openai.com/v1/responses", headersNextEpoch)
+	nextUserAgent := newOpenAIWSConnectionTarget(accountA, OpenAIUpstreamTransportResponsesWebsocketV2, "wss://api.openai.com/v1/responses", headersNextUserAgent)
+	nextBeta := newOpenAIWSConnectionTarget(accountA, OpenAIUpstreamTransportResponsesWebsocketV2, "wss://api.openai.com/v1/responses", headersNextBeta)
+	nextProxy := newOpenAIWSConnectionTarget(&accountNextProxy, OpenAIUpstreamTransportResponsesWebsocketV2, "wss://api.openai.com/v1/responses", headersA)
 
 	bindOpenAIWSResponseConn(store, "resp_target", targetA, "conn_a", time.Minute)
 	bindOpenAIWSSessionConn(store, 9, "session_target", targetA, "conn_a", time.Minute)
@@ -56,6 +72,12 @@ func TestOpenAIWSStateStoreConnectionTargetIsolation(t *testing.T) {
 	_, ok = getOpenAIWSResponseConn(store, "resp_target", targetB)
 	require.False(t, ok)
 	_, ok = getOpenAIWSResponseConn(store, "resp_target", nextEpoch)
+	require.False(t, ok)
+	_, ok = getOpenAIWSResponseConn(store, "resp_target", nextUserAgent)
+	require.False(t, ok)
+	_, ok = getOpenAIWSResponseConn(store, "resp_target", nextBeta)
+	require.False(t, ok)
+	_, ok = getOpenAIWSResponseConn(store, "resp_target", nextProxy)
 	require.False(t, ok)
 	_, ok = getOpenAIWSSessionConn(store, 9, "session_target", targetB)
 	require.False(t, ok)
@@ -135,6 +157,33 @@ func TestOpenAIWSStateStore_SessionConnTTL(t *testing.T) {
 	time.Sleep(60 * time.Millisecond)
 	_, ok = store.GetSessionConn(9, "session_hash_conn_1")
 	require.False(t, ok)
+}
+
+func TestOpenAIWSStateStore_DeleteConnBindings(t *testing.T) {
+	raw := NewOpenAIWSStateStore(nil)
+	store, ok := raw.(*defaultOpenAIWSStateStore)
+	require.True(t, ok)
+
+	store.BindResponseConn("resp_old_1", "conn_old", time.Minute)
+	store.BindResponseConn("resp_old_2", "conn_old", time.Minute)
+	store.BindResponseConn("resp_keep", "conn_keep", time.Minute)
+	store.BindSessionConn(9, "session_old", "conn_old", time.Minute)
+	store.BindSessionConn(9, "session_keep", "conn_keep", time.Minute)
+
+	require.Equal(t, 3, store.DeleteConnBindings("conn_old"))
+	_, ok = store.GetResponseConn("resp_old_1")
+	require.False(t, ok)
+	_, ok = store.GetResponseConn("resp_old_2")
+	require.False(t, ok)
+	_, ok = store.GetSessionConn(9, "session_old")
+	require.False(t, ok)
+
+	connID, ok := store.GetResponseConn("resp_keep")
+	require.True(t, ok)
+	require.Equal(t, "conn_keep", connID)
+	connID, ok = store.GetSessionConn(9, "session_keep")
+	require.True(t, ok)
+	require.Equal(t, "conn_keep", connID)
 }
 
 func TestOpenAIWSStateStore_GetResponseAccount_NoStaleAfterCacheMiss(t *testing.T) {
