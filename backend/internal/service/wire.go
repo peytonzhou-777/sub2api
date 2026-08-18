@@ -932,6 +932,9 @@ func ProvideAccountPoolService(source AccountPoolSource, cache AccountPoolSnapsh
 	if reader, ok := accountRepo.(AccountPoolUserRelationReader); ok {
 		pool.SetUserRelationReader(reader)
 	}
+	if reader, ok := accountRepo.(AccountPoolResidentStatsReader); ok {
+		pool.SetResidentStatsReader(reader)
+	}
 	return pool
 }
 

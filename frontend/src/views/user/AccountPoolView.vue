@@ -80,8 +80,8 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-700 dark:bg-dark-900">
-              <tr v-if="loading && !page.items.length"><td colspan="8" class="px-4 py-12 text-center text-gray-500">{{ t('common.loading') }}</td></tr>
-              <tr v-else-if="!page.items.length"><td colspan="8" class="px-4 py-12 text-center text-gray-500">{{ submittedId ? t('accountPool.deletedOrMissing') : t('common.noData') }}</td></tr>
+              <tr v-if="loading && !page.items.length"><td colspan="9" class="px-4 py-12 text-center text-gray-500">{{ t('common.loading') }}</td></tr>
+              <tr v-else-if="!page.items.length"><td colspan="9" class="px-4 py-12 text-center text-gray-500">{{ submittedId ? t('accountPool.deletedOrMissing') : t('common.noData') }}</td></tr>
               <tr v-for="(account, accountIndex) in page.items" :key="account.id">
                 <td class="whitespace-nowrap px-4 py-3 font-mono text-sm font-medium">#{{ account.id }}</td>
                 <td class="min-w-56 px-4 py-3 text-sm">
@@ -113,6 +113,19 @@
                     </span>
                     <span v-if="!account.is_current_residence && !account.is_historical_contact" class="text-gray-400 dark:text-gray-500">--</span>
                   </div>
+                </td>
+                <td class="min-w-28 px-4 py-3 text-sm">
+                  <div v-if="account.residents?.applicable" class="flex flex-col gap-1">
+                    <div data-test="resident-active" class="flex items-center justify-between gap-3 whitespace-nowrap">
+                      <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('accountPool.residents.active') }}</span>
+                      <span class="font-semibold text-emerald-600 dark:text-emerald-400">{{ account.residents.active }}</span>
+                    </div>
+                    <div data-test="resident-total" class="flex items-center justify-between gap-3 whitespace-nowrap">
+                      <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('accountPool.residents.total') }}</span>
+                      <span class="font-medium text-gray-700 dark:text-gray-200">{{ account.residents.total }}</span>
+                    </div>
+                  </div>
+                  <span v-else data-test="resident-not-applicable" class="text-gray-400 dark:text-gray-500">--</span>
                 </td>
                 <td class="whitespace-nowrap px-4 py-3 text-sm"><AccountPoolCapacityCell :capacity="account.capacity" /></td>
                 <td class="min-w-64 px-4 py-3 text-sm"><AccountPoolUsageCell :windows="account.usage_windows" /></td>
@@ -197,6 +210,7 @@ const columns = computed(() => [
   { key: 'id' as const, label: t('accountPool.columns.id'), sortable: true },
   { key: 'platformType' as const, label: t('accountPool.columns.platformType'), sortable: false },
   { key: 'relation' as const, label: t('accountPool.columns.relation'), sortable: false },
+  { key: 'residents' as const, label: t('accountPool.columns.residents'), sortable: false },
   { key: 'capacity' as const, label: t('accountPool.columns.capacity'), sortable: false },
   { key: 'usageWindow' as const, label: t('accountPool.columns.usageWindow'), sortable: false },
   { key: 'personalUsage' as const, label: t('accountPool.columns.personalUsage'), sortable: false },

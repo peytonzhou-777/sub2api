@@ -4,9 +4,48 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/lib/pq"
 )
+
+// ListAccountPoolResidentStats 批量统计账号的有效居民总数和指定窗口内的活跃居民数。
+func (r *accountRepository) ListAccountPoolResidentStats(ctx context.Context, accountIDs []int64, activeSince time.Time) (map[int64]service.AccountPoolResidentStats, error) {
+	stats := make(map[int64]service.AccountPoolResidentStats, len(accountIDs))
+	if len(accountIDs) == 0 {
+		return stats, nil
+	}
+	if r == nil || r.sql == nil {
+		return nil, errors.New("openai user affinity storage unavailable")
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT account_id,
+		       COUNT(DISTINCT user_id) FILTER (
+		           WHERE last_active_at >= $2
+		       ) AS active,
+		       COUNT(DISTINCT user_id) AS total
+		FROM user_account_placements
+		WHERE account_id = ANY($1)
+		  AND status = 'active'
+		  AND expires_at > NOW()
+		  AND (scope_key = 'openai' OR scope_key LIKE 'openai:v1:%')
+		GROUP BY account_id
+		ORDER BY account_id`, pq.Array(accountIDs), activeSince.UTC())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var accountID int64
+		var stat service.AccountPoolResidentStats
+		if err := rows.Scan(&accountID, &stat.Active, &stat.Total); err != nil {
+			return nil, err
+		}
+		stats[accountID] = stat
+	}
+	return stats, rows.Err()
+}
 
 // ListAccountPoolUserRelations 返回当前用户的有效 OpenAI 居住、七日触达和历史触达关系。
 func (r *accountRepository) ListAccountPoolUserRelations(ctx context.Context, userID int64) ([]service.AccountPoolUserRelation, error) {

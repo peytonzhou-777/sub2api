@@ -183,6 +183,7 @@ describe('AccountPoolView', () => {
           reset_count: 0,
           reset_count_state: 'fresh',
           status: { code: 'active', resume_at: null, models: [] },
+          residents: { active: 3, total: 8, applicable: true },
           is_current_residence: true,
           is_seven_day_contact: true,
           is_historical_contact: true,
@@ -202,6 +203,7 @@ describe('AccountPoolView', () => {
       'accountPool.columns.id',
       'accountPool.columns.platformType',
       'accountPool.columns.relation',
+      'accountPool.columns.residents',
       'accountPool.columns.capacity',
       'accountPool.columns.usageWindow',
       'accountPool.columns.personalUsage',
@@ -212,6 +214,8 @@ describe('AccountPoolView', () => {
     expect(wrapper.text()).toContain('Plus')
     expect(wrapper.text()).toContain('accountPool.relations.currentResidence')
     expect(wrapper.text()).toContain('accountPool.relations.sevenDayContact')
+    expect(wrapper.get('[data-test="resident-active"]').text()).toContain('3')
+    expect(wrapper.get('[data-test="resident-total"]').text()).toContain('8')
     expect(wrapper.text()).toContain('0%')
     expect(wrapper.text()).not.toContain('admin.accounts.subscriptionExpires')
     expect(wrapper.text()).not.toContain('admin.accounts.openai.compactSupported')
@@ -235,6 +239,7 @@ describe('AccountPoolView', () => {
             reset_count: null,
             reset_count_state: 'unavailable',
             status: { code: 'active', resume_at: null, models: [] },
+            residents: { active: 0, total: 0, applicable: true },
             is_current_residence: false,
             is_seven_day_contact: true,
             is_historical_contact: true,
@@ -261,6 +266,55 @@ describe('AccountPoolView', () => {
     await vi.advanceTimersByTimeAsync(1)
     await flushPromises()
     expect(getPersonalUsage).toHaveBeenCalledWith(91, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    wrapper.unmount()
+  })
+
+  it('居民列保留零值，并对非 OpenAI 账号显示不适用', async () => {
+    listAccountPool.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            id: 21,
+            platform: 'openai',
+            type: 'oauth',
+            capacity: { current_concurrency: 0, max_concurrency: 10, observed_at: null, state: 'fresh' },
+            usage_windows: [],
+            reset_count: null,
+            reset_count_state: 'unavailable',
+            status: { code: 'active', resume_at: null, models: [] },
+            residents: { active: 0, total: 0, applicable: true },
+            is_current_residence: false,
+            is_seven_day_contact: false,
+            is_historical_contact: false,
+          },
+          {
+            id: 22,
+            platform: 'gemini',
+            type: 'oauth',
+            capacity: { current_concurrency: 0, max_concurrency: 10, observed_at: null, state: 'fresh' },
+            usage_windows: [],
+            reset_count: null,
+            reset_count_state: 'not_applicable',
+            status: { code: 'active', resume_at: null, models: [] },
+            residents: { active: 0, total: 0, applicable: false },
+            is_current_residence: false,
+            is_seven_day_contact: false,
+            is_historical_contact: false,
+          },
+        ],
+        total: 2,
+        page: 1,
+        page_size: 20,
+        pages: 1,
+      },
+      notModified: false,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="resident-active"]').text()).toContain('0')
+    expect(wrapper.get('[data-test="resident-total"]').text()).toContain('0')
+    expect(wrapper.get('[data-test="resident-not-applicable"]').text()).toBe('--')
     wrapper.unmount()
   })
 })

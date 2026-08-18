@@ -117,8 +117,21 @@ type accountPoolUserRelationReaderStub struct {
 	err       error
 }
 
+type accountPoolResidentStatsReaderStub struct {
+	stats       map[int64]AccountPoolResidentStats
+	err         error
+	accountIDs  []int64
+	activeSince time.Time
+}
+
 func (r accountPoolUserRelationReaderStub) ListAccountPoolUserRelations(context.Context, int64) ([]AccountPoolUserRelation, error) {
 	return r.relations, r.err
+}
+
+func (r *accountPoolResidentStatsReaderStub) ListAccountPoolResidentStats(_ context.Context, accountIDs []int64, activeSince time.Time) (map[int64]AccountPoolResidentStats, error) {
+	r.accountIDs = append([]int64(nil), accountIDs...)
+	r.activeSince = activeSince
+	return r.stats, r.err
 }
 
 func (r *accountPoolPersonalUsageReaderStub) GetUserAccountPersonalUsage(ctx context.Context, _ int64, _ int64, _, _, _ time.Time) (*AccountPoolPersonalUsageStats, error) {
@@ -234,6 +247,7 @@ func TestAccountPoolListForUserFiltersBeforePaginationAndProjectsRelations(t *te
 		{AccountID: 12, IsSevenDayContact: true, IsHistoricalContact: true},
 		{AccountID: 13, IsHistoricalContact: true},
 	}})
+	svc.SetResidentStatsReader(&accountPoolResidentStatsReaderStub{})
 
 	page, err := svc.ListForUser(context.Background(), "epoch-a", 42, 1, 1, AccountPoolListQuery{
 		Relation: AccountPoolRelationHistoricalContact,
@@ -341,6 +355,40 @@ func TestAccountPoolDatabaseFallbackPreservesStatusFilterAndOrder(t *testing.T) 
 	}
 }
 
+func TestAccountPoolDatabaseFallbackProjectsResidentStats(t *testing.T) {
+	now := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	source := &accountPoolBuildSource{records: []AccountPoolSourceRecord{
+		{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true},
+		{ID: 12, Platform: PlatformGemini, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true},
+		{ID: 13, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true},
+	}}
+	reader := &accountPoolResidentStatsReaderStub{stats: map[int64]AccountPoolResidentStats{
+		11: {Active: 3, Total: 8},
+	}}
+	svc := NewAccountPoolService(source, nil, nil, AccountPoolOptions{})
+	svc.now = func() time.Time { return now }
+	svc.SetResidentStatsReader(reader)
+
+	page, err := svc.listAccountPoolDatabaseFallback(context.Background(), 1, 20, AccountPoolListQuery{
+		Status: "active", SortBy: AccountPoolSortByID, SortOrder: AccountPoolSortAsc,
+	})
+	if err != nil {
+		t.Fatalf("数据库降级居民统计: %v", err)
+	}
+	if len(page.Items) != 3 || page.Items[0].Residents.Active != 3 || page.Items[0].Residents.Total != 8 || !page.Items[0].Residents.Applicable {
+		t.Fatalf("OpenAI 居民统计投影错误: %+v", page.Items)
+	}
+	if page.Items[1].Residents.Applicable {
+		t.Fatalf("非 OpenAI 账号不应适用居民统计: %+v", page.Items[1].Residents)
+	}
+	if got := page.Items[2].Residents; !got.Applicable || got.Active != 0 || got.Total != 0 {
+		t.Fatalf("无居民的 OpenAI 账号应保留零值: %+v", got)
+	}
+	if len(reader.accountIDs) != 2 || reader.accountIDs[0] != 11 || reader.accountIDs[1] != 13 || !reader.activeSince.Equal(now.Add(-time.Hour)) {
+		t.Fatalf("居民统计读取参数错误: ids=%v activeSince=%s", reader.accountIDs, reader.activeSince)
+	}
+}
+
 func TestAccountPoolPresentationProjection(t *testing.T) {
 	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	svc := NewAccountPoolService(nil, nil, nil, AccountPoolOptions{})
@@ -429,6 +477,49 @@ func TestAccountPoolReconcileAllowsUnavailableConcurrencyWithoutPreviousGenerati
 	}
 	if len(cache.written) != 1 || cache.written[0].Capacity.State != AccountPoolFreshnessUnavailable {
 		t.Fatalf("首次预热并发应为 unavailable，得到 %+v", cache.written)
+	}
+}
+
+func TestAccountPoolReconcilePublishesResidentStats(t *testing.T) {
+	now := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	cache := &accountPoolBuildCache{acquired: true, renewed: true}
+	source := &accountPoolBuildSource{records: []AccountPoolSourceRecord{
+		{ID: 7, Platform: PlatformOpenAI, Type: AccountTypeOAuth},
+		{ID: 8, Platform: PlatformAnthropic, Type: AccountTypeOAuth},
+	}}
+	reader := &accountPoolResidentStatsReaderStub{stats: map[int64]AccountPoolResidentStats{
+		7: {Active: 2, Total: 5},
+	}}
+	svc := NewAccountPoolService(source, cache, accountPoolConcurrencyReader{}, AccountPoolOptions{})
+	svc.now = func() time.Time { return now }
+	svc.SetResidentStatsReader(reader)
+
+	if err := svc.Reconcile(context.Background(), "generation-residents", "epoch-a"); err != nil {
+		t.Fatalf("发布居民统计快照: %v", err)
+	}
+	if cache.writeCalls != 1 || len(cache.written) != 2 {
+		t.Fatalf("应发布完整居民统计快照: calls=%d items=%+v", cache.writeCalls, cache.written)
+	}
+	if got := cache.written[0].Residents; !got.Applicable || got.Active != 2 || got.Total != 5 {
+		t.Fatalf("OpenAI 居民统计错误: %+v", got)
+	}
+	if got := cache.written[1].Residents; got.Applicable {
+		t.Fatalf("非 OpenAI 账号不应适用居民统计: %+v", got)
+	}
+	if len(reader.accountIDs) != 1 || reader.accountIDs[0] != 7 || !reader.activeSince.Equal(now.Add(-time.Hour)) {
+		t.Fatalf("快照居民统计读取参数错误: ids=%v activeSince=%s", reader.accountIDs, reader.activeSince)
+	}
+}
+
+func TestAccountPoolReconcileDoesNotPublishWhenResidentStatsFail(t *testing.T) {
+	cache := &accountPoolBuildCache{acquired: true, renewed: true}
+	source := &accountPoolBuildSource{records: []AccountPoolSourceRecord{{ID: 7, Platform: PlatformOpenAI, Type: AccountTypeOAuth}}}
+	svc := NewAccountPoolService(source, cache, accountPoolConcurrencyReader{}, AccountPoolOptions{})
+	svc.SetResidentStatsReader(&accountPoolResidentStatsReaderStub{err: errors.New("database unavailable")})
+
+	err := svc.Reconcile(context.Background(), "generation-residents", "epoch-a")
+	if err == nil || !strings.Contains(err.Error(), "resident stats") || cache.writeCalls != 0 {
+		t.Fatalf("居民统计失败时不得发布快照: err=%v calls=%d", err, cache.writeCalls)
 	}
 }
 

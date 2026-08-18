@@ -13,7 +13,7 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-const AccountPoolSchemaVersion = 3
+const AccountPoolSchemaVersion = 5
 
 const (
 	AccountPoolSortByID     = "id"
@@ -87,6 +87,7 @@ type PublicAccountPoolAccount struct {
 	ResetCount      *int                           `json:"reset_count"`
 	ResetCountState string                         `json:"reset_count_state"`
 	Status          PublicAccountPoolStatus        `json:"status"`
+	Residents       PublicAccountPoolResidents     `json:"residents"`
 	// 用户关系只在请求响应阶段投影，绝不写入公共号池快照。
 	IsCurrentResidence  bool `json:"is_current_residence"`
 	IsSevenDayContact   bool `json:"is_seven_day_contact"`
@@ -221,6 +222,7 @@ type AccountPoolService struct {
 	now                 func() time.Time
 	personalUsageReader AccountPoolPersonalUsageReader
 	userRelationReader  AccountPoolUserRelationReader
+	residentStatsReader AccountPoolResidentStatsReader
 	personalUsageMu     sync.Mutex
 	personalUsageCache  map[string]accountPoolPersonalUsageCacheEntry
 	personalUsageSF     singleflight.Group
@@ -308,8 +310,13 @@ func (s *AccountPoolService) Reconcile(ctx context.Context, generation, enabledE
 			}
 		}
 		now := s.now().UTC()
+		residentStats, residentErr := s.readResidentStats(buildCtx, records, now)
+		if residentErr != nil {
+			return fmt.Errorf("read account pool resident stats: %w", residentErr)
+		}
 		for _, record := range records {
 			item := s.mapPublicAccount(record, counts, now)
+			applyAccountPoolResidentStats(&item, record, residentStats)
 			if previous, ok := previousCapacities[record.ID]; ok {
 				previous.MaxConcurrency = record.Concurrency
 				item.Capacity = previous
@@ -361,13 +368,18 @@ func (s *AccountPoolService) List(ctx context.Context, enabledEpoch string, page
 }
 
 func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context, page, pageSize int, query AccountPoolListQuery) (*AccountPoolPage, error) {
+	now := s.now().UTC()
 	// ID 查询及普通 ID 排序仍使用数据库分页；状态条件需要按公开派生状态统一计算。
 	if query.Relation == "" && (query.AccountID != nil || (query.Status == "" && query.SortBy == AccountPoolSortByID)) {
 		records, total, err := s.source.ListAccountPoolPage(ctx, page, pageSize, query.AccountID, query.SortOrder)
 		if err != nil {
 			return nil, fmt.Errorf("account pool database fallback: %w", err)
 		}
-		items := s.mapAccountPoolFallbackRecords(records)
+		residentStats, residentErr := s.readResidentStats(ctx, records, now)
+		if residentErr != nil {
+			return nil, fmt.Errorf("read account pool resident stats: %w", residentErr)
+		}
+		items := s.mapAccountPoolFallbackRecords(records, residentStats, now)
 		if query.Status != "" {
 			items = filterAccountPoolItemsByStatus(items, query.Status)
 			total = int64(len(items))
@@ -385,7 +397,11 @@ func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context
 		if len(records) == 0 {
 			break
 		}
-		items = append(items, s.mapAccountPoolFallbackRecords(records)...)
+		residentStats, residentErr := s.readResidentStats(ctx, records, now)
+		if residentErr != nil {
+			return nil, fmt.Errorf("read account pool resident stats: %w", residentErr)
+		}
+		items = append(items, s.mapAccountPoolFallbackRecords(records, residentStats, now)...)
 		afterID = records[len(records)-1].ID
 		if !hasMore {
 			break
@@ -403,11 +419,11 @@ func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context
 	return newAccountPoolPage(items[start:end], total, page, pageSize), nil
 }
 
-func (s *AccountPoolService) mapAccountPoolFallbackRecords(records []AccountPoolSourceRecord) []PublicAccountPoolAccount {
+func (s *AccountPoolService) mapAccountPoolFallbackRecords(records []AccountPoolSourceRecord, residentStats map[int64]AccountPoolResidentStats, now time.Time) []PublicAccountPoolAccount {
 	items := make([]PublicAccountPoolAccount, 0, len(records))
-	now := s.now().UTC()
 	for _, record := range records {
 		item := s.mapPublicAccount(record, nil, now)
+		applyAccountPoolResidentStats(&item, record, residentStats)
 		// 数据库降级只展示基础字段，不能把持久化观测冒充当前动态状态。
 		item.UsageWindows = []PublicAccountPoolUsageWindow{}
 		item.ResetCount = nil

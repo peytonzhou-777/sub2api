@@ -36,6 +36,11 @@ export interface AccountPoolAccount {
     resume_at: string | null
     models: Array<{ kind: string; model: string; resume_at: string | null }>
   }
+  residents: {
+    active: number
+    total: number
+    applicable: boolean
+  }
   is_current_residence: boolean
   is_seven_day_contact: boolean
   is_historical_contact: boolean
