@@ -9,14 +9,67 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSelectOpenAIUserAffinityCandidateBestFit7DThen5D(t *testing.T) {
+func TestSelectOpenAIUserAffinityCandidatePrefersMostRemaining7D(t *testing.T) {
 	cfg := DefaultOpenAIUserAffinityConfig()
 	selected, ok := SelectOpenAIUserAffinityCandidate(cfg, []OpenAIUserAffinityCandidate{
 		{AccountID: 1, Available7DRatio: 0.70, Available5HRatio: 0.80, Quota5HKnown: true, Quota7DKnown: true},
 		{AccountID: 2, Available7DRatio: 0.60, Available5HRatio: 0.95, Quota5HKnown: true, Quota7DKnown: true},
 	}, 0, 0, time.Now())
-	if !ok || selected.AccountID != 2 {
-		t.Fatalf("selected=%+v ok=%v, want account 2", selected, ok)
+	if !ok || selected.AccountID != 1 {
+		t.Fatalf("selected=%+v ok=%v, want account 1", selected, ok)
+	}
+}
+
+func TestSelectOpenAIUserAffinityCandidatePrefersFewerContactsWithinPrimaryTolerance(t *testing.T) {
+	cfg := DefaultOpenAIUserAffinityConfig()
+	selected, ok := SelectOpenAIUserAffinityCandidate(cfg, []OpenAIUserAffinityCandidate{
+		{AccountID: 1, Available7DRatio: 0.70, Available5HRatio: 0.95, Quota5HKnown: true, Quota7DKnown: true, ActiveContactUsers: 8},
+		{AccountID: 2, Available7DRatio: 0.695, Available5HRatio: 0.60, Quota5HKnown: true, Quota7DKnown: true, ActiveContactUsers: 1},
+	}, 0, 0, time.Now())
+	require.True(t, ok)
+	require.Equal(t, int64(2), selected.AccountID)
+}
+
+func TestSelectOpenAIUserAffinityCandidateKeepsQuotaPriorityOutsideTolerance(t *testing.T) {
+	cfg := DefaultOpenAIUserAffinityConfig()
+	selected, ok := SelectOpenAIUserAffinityCandidate(cfg, []OpenAIUserAffinityCandidate{
+		{AccountID: 1, Available7DRatio: 0.70, Available5HRatio: 0.80, Quota5HKnown: true, Quota7DKnown: true, ActiveContactUsers: 8},
+		{AccountID: 2, Available7DRatio: 0.68, Available5HRatio: 0.95, Quota5HKnown: true, Quota7DKnown: true, ActiveContactUsers: 1},
+	}, 0, 0, time.Now())
+	require.True(t, ok)
+	require.Equal(t, int64(1), selected.AccountID)
+}
+
+func TestSelectOpenAIUserAffinityCandidateUsesSecondaryQuotaAfterContactCount(t *testing.T) {
+	cfg := DefaultOpenAIUserAffinityConfig()
+	selected, ok := SelectOpenAIUserAffinityCandidate(cfg, []OpenAIUserAffinityCandidate{
+		{AccountID: 2, Available7DRatio: 0.695, Available5HRatio: 0.90, Quota5HKnown: true, Quota7DKnown: true, ActiveContactUsers: 2},
+		{AccountID: 1, Available7DRatio: 0.70, Available5HRatio: 0.80, Quota5HKnown: true, Quota7DKnown: true, ActiveContactUsers: 2},
+	}, 0, 0, time.Now())
+	require.True(t, ok)
+	require.Equal(t, int64(2), selected.AccountID)
+}
+
+func TestSelectOpenAIUserAffinityCandidateSupports5HPrimary(t *testing.T) {
+	cfg := DefaultOpenAIUserAffinityConfig()
+	cfg.BestFitStrategy = OpenAIUserAffinityBestFit5HThen7D
+	selected, ok := SelectOpenAIUserAffinityCandidate(cfg, []OpenAIUserAffinityCandidate{
+		{AccountID: 1, Available7DRatio: 0.40, Available5HRatio: 0.80, Quota5HKnown: true, Quota7DKnown: true},
+		{AccountID: 2, Available7DRatio: 0.90, Available5HRatio: 0.70, Quota5HKnown: true, Quota7DKnown: true},
+	}, 0, 0, time.Now())
+	require.True(t, ok)
+	require.Equal(t, int64(1), selected.AccountID)
+}
+
+func TestSelectOpenAIUserAffinityCandidateIsDeterministicAcrossInputOrder(t *testing.T) {
+	cfg := DefaultOpenAIUserAffinityConfig()
+	account1 := OpenAIUserAffinityCandidate{AccountID: 1, Available7DRatio: 0.70, Available5HRatio: 0.80, Quota5HKnown: true, Quota7DKnown: true, ActiveContactUsers: 2}
+	account2 := OpenAIUserAffinityCandidate{AccountID: 2, Available7DRatio: 0.70, Available5HRatio: 0.80, Quota5HKnown: true, Quota7DKnown: true, ActiveContactUsers: 2}
+
+	for _, candidates := range [][]OpenAIUserAffinityCandidate{{account1, account2}, {account2, account1}} {
+		selected, ok := SelectOpenAIUserAffinityCandidate(cfg, candidates, 0, 0, time.Now())
+		require.True(t, ok)
+		require.Equal(t, int64(1), selected.AccountID)
 	}
 }
 

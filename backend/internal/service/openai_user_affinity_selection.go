@@ -3,7 +3,6 @@ package service
 import (
 	"fmt"
 	"math"
-	"sort"
 	"time"
 )
 
@@ -42,8 +41,8 @@ func openAIUserAffinityScopeKey(groupID *int64, requireCompact bool, endpointCap
 	return "openai:v1:group:" + group + ":lane:" + lane
 }
 
-// SelectOpenAIUserAffinityCandidate 按额度主窗口 Best Fit 选择新居民账号。
-// 先比较配置的主窗口剩余额度，再用另一窗口收敛；接近时以唯一触达用户数打破平局。
+// SelectOpenAIUserAffinityCandidate 按额度主窗口选择剩余容量更充足的新居民账号。
+// 主窗口接近时优先选择触达用户较少者，再用辅助窗口和账号 ID 保证结果确定。
 func SelectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates []OpenAIUserAffinityCandidate, demand5H, demand7D float64, now time.Time) (*OpenAIUserAffinityCandidate, bool) {
 	if len(candidates) == 0 {
 		return nil, false
@@ -73,26 +72,55 @@ func SelectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates 
 	if cfg.BestFitStrategy == OpenAIUserAffinityBestFit5HThen7D {
 		primary, secondary = secondary, primary
 	}
-	sort.SliceStable(valid, func(i, j int) bool {
-		residentI := valid[i].UserAlreadyActive || valid[i].UserAlreadyResident
-		residentJ := valid[j].UserAlreadyActive || valid[j].UserAlreadyResident
-		if residentI != residentJ {
-			return residentI
+
+	// 跨 scope 已居住账号仍优先，避免同一用户扩散到更多账号。
+	residentPool := make([]OpenAIUserAffinityCandidate, 0, len(valid))
+	for _, candidate := range valid {
+		if candidate.UserAlreadyActive || candidate.UserAlreadyResident {
+			residentPool = append(residentPool, candidate)
 		}
-		pi, pj := primary(valid[i]), primary(valid[j])
-		if !nearlyEqualAffinityRatio(pi, pj, cfg.BestFitCloseToleranceRatio) {
-			return pi < pj
+	}
+	if len(residentPool) > 0 {
+		valid = residentPool
+	}
+
+	// 先以主窗口最大剩余量为基准形成容差集合，避免近似比较破坏排序传递性。
+	bestPrimary := primary(valid[0])
+	for _, candidate := range valid[1:] {
+		if value := primary(candidate); value > bestPrimary {
+			bestPrimary = value
 		}
-		si, sj := secondary(valid[i]), secondary(valid[j])
-		if !nearlyEqualAffinityRatio(si, sj, cfg.BestFitCloseToleranceRatio) {
-			return si < sj
+	}
+	primaryPool := make([]OpenAIUserAffinityCandidate, 0, len(valid))
+	for _, candidate := range valid {
+		if nearlyEqualAffinityRatio(primary(candidate), bestPrimary, cfg.BestFitCloseToleranceRatio) {
+			primaryPool = append(primaryPool, candidate)
 		}
-		if valid[i].ActiveContactUsers != valid[j].ActiveContactUsers {
-			return valid[i].ActiveContactUsers < valid[j].ActiveContactUsers
+	}
+
+	minContactUsers := primaryPool[0].ActiveContactUsers
+	for _, candidate := range primaryPool[1:] {
+		if candidate.ActiveContactUsers < minContactUsers {
+			minContactUsers = candidate.ActiveContactUsers
 		}
-		return valid[i].AccountID < valid[j].AccountID
-	})
-	return &valid[0], true
+	}
+	contactPool := make([]OpenAIUserAffinityCandidate, 0, len(primaryPool))
+	for _, candidate := range primaryPool {
+		if candidate.ActiveContactUsers == minContactUsers {
+			contactPool = append(contactPool, candidate)
+		}
+	}
+
+	selected := contactPool[0]
+	selectedSecondary := secondary(selected)
+	for _, candidate := range contactPool[1:] {
+		candidateSecondary := secondary(candidate)
+		if candidateSecondary > selectedSecondary || candidateSecondary == selectedSecondary && candidate.AccountID < selected.AccountID {
+			selected = candidate
+			selectedSecondary = candidateSecondary
+		}
+	}
+	return &selected, true
 }
 
 func effectiveMaxContactUsers(cfg OpenAIUserAffinityConfig, override int) int {

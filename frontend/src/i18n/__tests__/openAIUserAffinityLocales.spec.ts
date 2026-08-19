@@ -8,6 +8,9 @@ describe('OpenAI 用户粘性调度翻译', () => {
     expect(zh.admin.settings.openAIUserAffinity).toMatchObject({
       title: 'OpenAI 用户粘性调度',
       modes: { enforce: '强制执行', shadow: '影子模式' },
+      bestFitStrategy: '额度优先窗口',
+      bestFitStrategyHint: expect.stringContaining('剩余额度更多'),
+      closeTolerance: '主窗口接近容差',
       touchSuccessModes: {
         upstreamAccepted: '上游已接受请求',
         responseCompleted: '响应已完成'
@@ -24,6 +27,9 @@ describe('OpenAI 用户粘性调度翻译', () => {
     expect(en.admin.settings.openAIUserAffinity).toMatchObject({
       title: 'OpenAI User Affinity Scheduling',
       modes: { enforce: 'Enforce', shadow: 'Shadow' },
+      bestFitStrategy: 'Quota priority window',
+      bestFitStrategyHint: expect.stringContaining('more projected remaining quota'),
+      closeTolerance: 'Primary-window close tolerance',
       touchSuccessModes: {
         upstreamAccepted: 'Upstream accepted the request',
         responseCompleted: 'Response completed'

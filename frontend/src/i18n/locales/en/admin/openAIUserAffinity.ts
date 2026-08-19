@@ -13,8 +13,8 @@ export const openAIUserAffinitySettings = {
   mode: 'Mode',
   modeHint: 'Enforce changes account selection. Shadow only evaluates and records decisions without changing the existing scheduler result.',
   modes: { enforce: 'Enforce', shadow: 'Shadow' },
-  bestFitStrategy: 'Best Fit primary window',
-  bestFitStrategyHint: 'Choose the quota window compared first for new-resident placement; near-ties also consider the other window and contacted-user count.',
+  bestFitStrategy: 'Quota priority window',
+  bestFitStrategyHint: 'New residents prefer the account with more projected remaining quota in this window. Near-ties prefer fewer contacted users, then compare the other window.',
   bestFitStrategies: {
     sevenDayThenFiveHour: '7-day quota first, 5-hour quota second',
     fiveHourThenSevenDay: '5-hour quota first, 7-day quota second'
@@ -40,15 +40,15 @@ export const openAIUserAffinitySettings = {
   jitterMax: 'Maximum follower jitter (ms)',
   jitterMaxHint: 'Maximum randomized delay between adjacent FIFO follower requests after the same user\'s leader succeeds.',
   demandQuantile: 'Cold-start demand quantile',
-  demandQuantileHint: 'Historical usage quantile used to estimate a new resident\'s 5-hour and 7-day quota demand during Best Fit.',
+  demandQuantileHint: 'Historical usage quantile used to estimate a new resident\'s 5-hour and 7-day quota demand during account selection.',
   reserve5h: '5h quota reserve ratio',
   reserve5hHint: 'Stop accepting new residents when remaining 5-hour quota enters this reserve, while continuing to serve existing residents.',
   reserve7d: '7d quota reserve ratio',
   reserve7dHint: 'Stop accepting new residents when remaining 7-day quota enters this reserve, while continuing to serve existing residents.',
-  closeTolerance: 'Best Fit close tolerance',
-  closeToleranceHint: 'When post-placement quota headroom differs by no more than this ratio, prefer the account with fewer currently contacted users.',
+  closeTolerance: 'Primary-window close tolerance',
+  closeToleranceHint: 'When projected remaining quota in the primary window differs by no more than this ratio, prefer the account with fewer currently contacted users.',
   reentryOvercommit: 'Allow resident reentry overcommit',
   reentryOvercommitHint: 'Allow returning residents to temporarily exceed the contact limit; block new residents while overcommitted.',
   resetExcludeSource: 'Exclude source account after reset',
-  resetExcludeSourceHint: 'After an admin resets a residence, do not immediately choose the previous account during the next Best Fit.'
+  resetExcludeSourceHint: 'After an admin resets a residence, do not immediately choose the previous account during the next residence assignment.'
 }

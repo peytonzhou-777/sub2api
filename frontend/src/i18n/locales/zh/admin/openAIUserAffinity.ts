@@ -13,8 +13,8 @@ export const openAIUserAffinitySettings = {
   mode: '运行模式',
   modeHint: '强制执行会实际改变账号选择；影子模式仅计算并记录决策，不改变现有调度结果。',
   modes: { enforce: '强制执行', shadow: '影子模式' },
-  bestFitStrategy: 'Best Fit 主窗口',
-  bestFitStrategyHint: '新居民装箱时优先比较的额度窗口；主窗口接近时再参考另一窗口与触达用户数。',
+  bestFitStrategy: '额度优先窗口',
+  bestFitStrategyHint: '新居民优先选择该窗口预计分配后剩余额度更多的账号；主窗口接近时优先选择当前触达用户较少的账号，再比较另一窗口。',
   bestFitStrategies: {
     sevenDayThenFiveHour: '7 天额度优先，5 小时额度辅助',
     fiveHourThenSevenDay: '5 小时额度优先，7 天额度辅助'
@@ -40,15 +40,15 @@ export const openAIUserAffinitySettings = {
   jitterMax: '错峰最大间隔（毫秒）',
   jitterMaxHint: '同用户 leader 成功后，FIFO 释放相邻 follower 请求的最大随机间隔。',
   demandQuantile: '冷启动需求分位数',
-  demandQuantileHint: '新居民 Best Fit 时，按该历史用量分位数估算用户的 5h 与 7d 额度需求。',
+  demandQuantileHint: '新居民选择账号时，按该历史用量分位数估算用户的 5h 与 7d 额度需求。',
   reserve5h: '5h 额度保留比例',
   reserve5hHint: '5h 剩余额度进入该保留区后，账号停止接收新居民，但继续服务已有居民。',
   reserve7d: '7d 额度保留比例',
   reserve7dHint: '7d 剩余额度进入该保留区后，账号停止接收新居民，但继续服务已有居民。',
-  closeTolerance: 'Best Fit 接近容差',
-  closeToleranceHint: '候选账号的分配后剩余额度差距在此比例内时，再优先选择当前触达用户数较少的账号。',
+  closeTolerance: '主窗口接近容差',
+  closeToleranceHint: '候选账号的主窗口预计剩余额度差距在此比例内时，优先选择当前触达用户数较少的账号。',
   reentryOvercommit: '居民回流允许短暂超配',
   reentryOvercommitHint: '已有居民重新触达时可短暂超过账号触达上限；超配期间禁止新居民进入。',
   resetExcludeSource: '手动重置后排除原账号',
-  resetExcludeSourceHint: '管理员重置用户归属后，重新 Best Fit 时不立即选回重置前的账号。'
+  resetExcludeSourceHint: '管理员重置用户归属后，重新选择居住账号时不立即选回重置前的账号。'
 }

@@ -273,7 +273,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityMigrationTarget(ctx conte
 	return nil, true, ErrNoAvailableAccounts
 }
 
-// selectOpenAIUserAffinityNewResident 按 7d/5h 额度和当前触达容量为新居民装箱。
+// selectOpenAIUserAffinityNewResident 按 7d/5h 剩余容量和当前触达用户数为新居民选择账号。
 func (s *OpenAIGatewayService) selectOpenAIUserAffinityNewResident(ctx context.Context, groupID *int64, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, requiredCapability OpenAIEndpointCapability, requiredImageCapability OpenAIImagesCapability, requiredTransport OpenAIUpstreamTransport, scopeKey string, config OpenAIUserAffinityConfig, now time.Time) (*AccountSelectionResult, bool, error) {
 	userID, _ := ctx.Value(ctxkey.UserID).(int64)
 	demand := s.predictOpenAIUserAffinityDemand(ctx, userID, config)
