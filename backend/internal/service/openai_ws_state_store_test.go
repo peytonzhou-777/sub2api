@@ -71,7 +71,8 @@ func TestOpenAIWSReplayCheckpointMaterializesAcrossConnectionCleanup(t *testing.
 
 func TestOpenAIWSReplayCheckpointMissingParentStaysKnownButBlocked(t *testing.T) {
 	store := NewOpenAIWSStateStore(nil)
-	replayStore := store.(openAIWSReplayCheckpointStateStore)
+	replayStore, ok := store.(openAIWSReplayCheckpointStateStore)
+	require.True(t, ok)
 	target := newOpenAIWSConnectionTarget(
 		&Account{ID: 102, Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
 		OpenAIUpstreamTransportResponsesWebsocketV2,
@@ -399,6 +400,13 @@ func (c *openAIWSStateStoreTimeoutProbeCache) ClaimGrokVideoBilled(_ context.Con
 
 func (c *openAIWSStateStoreTimeoutProbeCache) ReleaseGrokVideoBilled(_ context.Context, _ string) error {
 	return nil
+}
+
+func (c *openAIWSStateStoreTimeoutProbeCache) SetReasoningContent(_ context.Context, _ string, _ string, _ time.Duration) error {
+	return nil
+}
+func (c *openAIWSStateStoreTimeoutProbeCache) GetReasoningContent(_ context.Context, _ string) (string, error) {
+	return "", ErrReasoningContentNotFound
 }
 
 func TestOpenAIWSStateStore_RedisOpsUseShortTimeout(t *testing.T) {

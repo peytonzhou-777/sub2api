@@ -10,7 +10,7 @@ import (
 
 // evaluateOpenAIUserAffinityShadow 只计算推荐账号，不抢槽、不写归属和触达状态。
 func (s *OpenAIGatewayService) evaluateOpenAIUserAffinityShadow(ctx context.Context, req OpenAIAccountScheduleRequest) int64 {
-	if s == nil || s.settingService == nil || normalizeOpenAICompatiblePlatform(req.Platform) != PlatformOpenAI {
+	if s == nil || s.settingService == nil || NormalizeOpenAICompatiblePlatform(req.Platform) != PlatformOpenAI {
 		return 0
 	}
 	config, err := s.settingService.GetOpenAIUserAffinityConfig(ctx)

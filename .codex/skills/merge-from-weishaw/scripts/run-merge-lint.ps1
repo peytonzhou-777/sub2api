@@ -302,8 +302,12 @@ function Get-ChangedGoPackages {
         foreach ($directory in $directories) {
             $relativeDirectory = $directory.Substring('backend/'.Length)
             $packageArgument = './' + $relativeDirectory
-            & go list $packageArgument *> $null
+            $listOutput = @(& go list $packageArgument 2>&1)
             if ($LASTEXITCODE -ne 0) {
+                if (($listOutput -join "`n") -match 'build constraints exclude all Go files') {
+                    Write-Host "TAINT_SKIP_BUILD_TAGS=$directory"
+                    continue
+                }
                 throw "无法解析本地变更 package：$packageArgument"
             }
             $packages += $packageArgument

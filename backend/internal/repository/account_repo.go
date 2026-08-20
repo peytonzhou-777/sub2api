@@ -71,6 +71,23 @@ var schedulerNeutralExtraKeys = map[string]struct{}{
 
 const postgresParameterBatchSize = 50000
 
+func stripCodexFingerprintSeedFromExtraUpdate(extra map[string]any) map[string]any {
+	if extra == nil {
+		return nil
+	}
+	if _, exists := extra["codex_fingerprint_seed"]; !exists {
+		return extra
+	}
+	stripped := make(map[string]any, len(extra)-1)
+	for key, value := range extra {
+		if key == "codex_fingerprint_seed" {
+			continue
+		}
+		stripped[key] = value
+	}
+	return stripped
+}
+
 // NewAccountRepository 创建账户仓储实例。
 // 这是对外暴露的构造函数，返回接口类型以便于依赖注入。
 func NewAccountRepository(client *dbent.Client, sqlDB *sql.DB, schedulerCache service.SchedulerCache) service.AccountRepository {
@@ -2520,6 +2537,7 @@ func (r *accountRepository) AutoPauseExpiredAccounts(ctx context.Context, now ti
 }
 
 func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates map[string]any) error {
+	updates = stripCodexFingerprintSeedFromExtraUpdate(updates)
 	if len(updates) == 0 {
 		return nil
 	}
@@ -2854,6 +2872,7 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 	if len(ids) == 0 {
 		return 0, nil
 	}
+	updates.Extra = stripCodexFingerprintSeedFromExtraUpdate(updates.Extra)
 
 	setClauses := make([]string, 0, 8)
 	args := make([]any, 0, 8)

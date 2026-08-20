@@ -993,27 +993,43 @@ retryAcquire:
 			closeOpenAIWSConns(evicted)
 			lease := &openAIWSConnLease{pool: p, accountID: accountID, conn: best, connPick: connPick, reused: true}
 			p.metrics.acquireReuseTotal.Add(1)
+			p.recordLastSuccessfulAcquire(accountID, acquireGeneration, req)
+			p.ensureTargetIdleAsync(accountID)
 			return lease, nil
 		}
-		for _, conn := range ap.conns {
-			if conn == nil || conn == best || !conn.matchesAcquireRequest(req, compatibility) || !conn.matchesRoutingAffinity(routingAffinity) {
-				continue
-			}
-			if conn.tryAcquire() {
-				connPick := time.Since(pickStartedAt)
-				p.recordConnPickDuration(connPick)
-				ap.mu.Unlock()
-				closeOpenAIWSConns(evicted)
-				lease := &openAIWSConnLease{pool: p, accountID: accountID, conn: conn, connPick: connPick, reused: true}
-				p.metrics.acquireReuseTotal.Add(1)
-				return lease, nil
+		if routingAffinity == "" || len(ap.conns)+ap.creating >= effectiveMaxConns {
+			for _, conn := range ap.conns {
+				if conn == nil || conn == best || !conn.matchesAcquireRequest(req, compatibility) {
+					continue
+				}
+				if conn.tryAcquire() {
+					connPick := time.Since(pickStartedAt)
+					p.recordConnPickDuration(connPick)
+					ap.mu.Unlock()
+					closeOpenAIWSConns(evicted)
+					if p.shouldHealthCheckConn(conn) {
+						if err := conn.pingWithTimeout(openAIWSConnHealthCheckTO); err != nil {
+							conn.close()
+							p.evictConn(accountID, conn.id)
+							if retry < 1 {
+								return p.acquire(ctx, req, retry+1)
+							}
+							return nil, err
+						}
+					}
+					lease := &openAIWSConnLease{pool: p, accountID: accountID, conn: conn, connPick: connPick, reused: true}
+					p.metrics.acquireReuseTotal.Add(1)
+					p.recordLastSuccessfulAcquire(accountID, acquireGeneration, req)
+					p.ensureTargetIdleAsync(accountID)
+					return lease, nil
+				}
 			}
 		}
 	}
 
 	if !req.ForceNewConn && len(ap.conns)+ap.creating >= effectiveMaxConns {
 		affine := p.pickLeastBusyConnWithRoutingAffinityLocked(ap, req, compatibility, routingAffinity)
-		if idle := p.pickOldestIdleConnWithoutHandshakeCompatibilityOrRoutingAffinityLocked(ap, req, compatibility, routingAffinity); idle != nil {
+		if idle := p.pickOldestIdleConnWithoutAcquireCompatibilityLocked(ap, req, compatibility); idle != nil {
 			delete(ap.conns, idle.id)
 			evicted = append(evicted, idle)
 			p.metrics.scaleDownTotal.Add(1)
@@ -1196,11 +1212,10 @@ func (p *openAIWSConnPool) pickOldestIdleConnLocked(ap *openAIWSAccountPool) *op
 	return oldest
 }
 
-func (p *openAIWSConnPool) pickOldestIdleConnWithoutHandshakeCompatibilityOrRoutingAffinityLocked(
+func (p *openAIWSConnPool) pickOldestIdleConnWithoutAcquireCompatibilityLocked(
 	ap *openAIWSAccountPool,
 	req openAIWSAcquireRequest,
 	compatibility openAIWSHandshakeCompatibilityKey,
-	routingAffinity string,
 ) *openAIWSConn {
 	if ap == nil || len(ap.conns) == 0 {
 		return nil
@@ -1208,7 +1223,7 @@ func (p *openAIWSConnPool) pickOldestIdleConnWithoutHandshakeCompatibilityOrRout
 	var oldest *openAIWSConn
 	for _, conn := range ap.conns {
 		if conn == nil ||
-			(conn.matchesAcquireRequest(req, compatibility) && conn.matchesRoutingAffinity(routingAffinity)) ||
+			conn.matchesAcquireRequest(req, compatibility) ||
 			conn.isLeased() || conn.waiters.Load() > 0 || p.isConnPinnedLocked(ap, conn.id) {
 			continue
 		}
@@ -1901,13 +1916,6 @@ func cloneOpenAIWSAcquireRequestPtr(req *openAIWSAcquireRequest) *openAIWSAcquir
 	}
 	copied := cloneOpenAIWSAcquireRequest(*req)
 	return &copied
-}
-
-func sameOpenAIWSPrewarmTarget(a, b openAIWSAcquireRequest) bool {
-	return stringsTrim(a.WSURL) == stringsTrim(b.WSURL) &&
-		stringsTrim(a.ProxyURL) == stringsTrim(b.ProxyURL) &&
-		stringsTrim(a.SessionAffinity) == stringsTrim(b.SessionAffinity) &&
-		normalizeOpenAIWSHandshakeCompatibility(a.Headers) == normalizeOpenAIWSHandshakeCompatibility(b.Headers)
 }
 
 func normalizeOpenAIWSBetaFeatures(headers http.Header) string {

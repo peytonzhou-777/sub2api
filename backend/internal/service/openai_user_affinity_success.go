@@ -75,6 +75,15 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinityFailure(ctx context.Conte
 	s.failOpenAIUserAffinityReentryLeader(ctx)
 }
 
+// DiscardOpenAIUserAffinityAccepted 丢弃安全重放前一次尝试留下的 accepted 暂态，
+// 不把同一逻辑 turn 的内部重试计为用户亲和性失败。
+func (s *OpenAIGatewayService) DiscardOpenAIUserAffinityAccepted(ctx context.Context, accountID int64, eventKeys ...string) {
+	if s == nil || accountID <= 0 {
+		return
+	}
+	s.openaiAffinity.accepted.Delete(openAIUserAffinitySuccessKey(ctx, accountID, eventKeys...))
+}
+
 func (s *OpenAIGatewayService) touchOpenAIUserAffinity(ctx context.Context, accountID int64, config OpenAIUserAffinityConfig) bool {
 	userID, ok := ctx.Value(ctxkey.UserID).(int64)
 	if !ok || userID <= 0 {

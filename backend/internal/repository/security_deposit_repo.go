@@ -515,7 +515,7 @@ RETURNING ak.id`,
 	if err != nil {
 		return nil, fmt.Errorf("disable insufficient security deposit api keys: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := make([]int64, 0)
 	for rows.Next() {
 		var id int64
@@ -639,7 +639,7 @@ ORDER BY bucket_type`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query security deposit accounts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var account service.SecurityDepositAccountRecord
 		if err := rows.Scan(&account.BucketType, &account.BalanceCents, &account.RefundReservedCents, &account.Version); err != nil {
@@ -670,7 +670,7 @@ LIMIT 200`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query security deposit lots: %w", err)
 	}
-	defer lotRows.Close()
+	defer func() { _ = lotRows.Close() }()
 	for lotRows.Next() {
 		var lot service.SecurityDepositLot
 		if err := lotRows.Scan(
@@ -948,7 +948,9 @@ RETURNING ak.id`,
 	for disabledRows.Next() {
 		var keyID int64
 		if err := disabledRows.Scan(&keyID); err != nil {
-			disabledRows.Close()
+			if closeErr := disabledRows.Close(); closeErr != nil {
+				return nil, fmt.Errorf("scan disabled security deposit api key: %v; close rows: %w", err, closeErr)
+			}
 			return nil, fmt.Errorf("scan disabled security deposit api key: %w", err)
 		}
 		result.DisabledKeyIDs = append(result.DisabledKeyIDs, keyID)
@@ -996,7 +998,7 @@ FOR UPDATE`, userID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("lock security deposit accounts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var bucketType string
 		var balance, refundReserved int64
@@ -1022,7 +1024,7 @@ FOR UPDATE`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("lock security deposit lots for penalty: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	lots := make([]securityDepositPenaltyLot, 0)
 	for rows.Next() {
 		var lot securityDepositPenaltyLot
@@ -1110,7 +1112,7 @@ LIMIT $3 OFFSET $4`, search, pattern, pageSize, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query security deposit users: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	items := make([]service.AdminSecurityDepositUserSummary, 0, pageSize)
 	for rows.Next() {
 		var item service.AdminSecurityDepositUserSummary
@@ -1191,7 +1193,7 @@ LIMIT $2`, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query security deposit ledger: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	items := make([]service.SecurityDepositLedgerEntry, 0)
 	for rows.Next() {
 		var item service.SecurityDepositLedgerEntry
@@ -1213,7 +1215,7 @@ LIMIT $2`, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query security deposit refunds: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	items := make([]service.SecurityDepositRefundView, 0)
 	for rows.Next() {
 		var item service.SecurityDepositRefundView
@@ -1238,7 +1240,7 @@ LIMIT $2`, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query security deposit violations: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	items := make([]service.SecurityDepositViolationView, 0)
 	for rows.Next() {
 		var item service.SecurityDepositViolationView

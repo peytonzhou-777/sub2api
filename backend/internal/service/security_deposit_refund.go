@@ -550,7 +550,7 @@ func (s *SecurityDepositService) finishSecurityDepositRefundChange(ctx context.C
 }
 
 func (s *SecurityDepositService) finishAdminAutomaticSecurityDepositRefund(ctx context.Context, repo SecurityDepositRefundRepository, refundID string, response *payment.RefundResponse, gatewayErr error, result **SecurityDepositRefundRecord) error {
-	state := SecurityDepositRefundStateSucceeded
+	var state string
 	providerRefundID := ""
 	snapshot := map[string]any{}
 	if response != nil {

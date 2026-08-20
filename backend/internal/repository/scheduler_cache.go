@@ -966,18 +966,6 @@ func filterSchedulerCredentials(credentials map[string]any) map[string]any {
 	return snapshot.ToAccount().Credentials
 }
 
-func filterSchedulerExtra(extra map[string]any) map[string]any {
-	snapshot := service.NewSchedulerAccountSnapshot(service.Account{Extra: extra})
-	if snapshot.Extra != nil && snapshot.Extra.UpstreamBillingProbe != nil {
-		if filtered := filterSchedulerUpstreamBillingProbe(snapshot.Extra.UpstreamBillingProbe); filtered != nil {
-			snapshot.Extra.UpstreamBillingProbe = filtered
-		} else {
-			snapshot.Extra.UpstreamBillingProbe = nil
-		}
-	}
-	return snapshot.ToAccount().Extra
-}
-
 func filterSchedulerUpstreamBillingProbe(value any) map[string]any {
 	source, ok := value.(map[string]any)
 	if !ok {

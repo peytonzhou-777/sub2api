@@ -87,7 +87,7 @@ ORDER BY ak.id`, userID, multiplier, service.StatusAPIKeyActive, balanceAfter)
 	if err != nil {
 		return nil, fmt.Errorf("query security deposit refund impact keys: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	result := make([]service.SecurityDepositRefundImpact, 0)
 	for rows.Next() {
 		var item service.SecurityDepositRefundImpact
@@ -728,7 +728,7 @@ FOR UPDATE`, userID)
 	if err != nil {
 		return fmt.Errorf("lock security deposit refund lots: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
 		if err := rows.Scan(&id); err != nil {

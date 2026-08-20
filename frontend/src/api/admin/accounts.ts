@@ -475,6 +475,7 @@ export async function bulkUpdate(
   failed: number
   success_ids?: number[]
   failed_ids?: number[]
+  long_context_inherited_count?: number
   results: Array<{ account_id: number; success: boolean; error?: string }>
   }> {
   const payload = Array.isArray(accountIdsOrPayload)
@@ -488,6 +489,7 @@ export async function bulkUpdate(
     failed: number
     success_ids?: number[]
     failed_ids?: number[]
+    long_context_inherited_count?: number
     results: Array<{ account_id: number; success: boolean; error?: string }>
   }>('/admin/accounts/bulk-update', payload)
   return data

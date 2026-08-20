@@ -154,14 +154,19 @@ func (s *OpenAIGatewayService) resolveCCFallbackTarget(ctx context.Context, acco
 	if err != nil {
 		return nil, "", "", err
 	}
-	apiKey = credentialAccount.GetOpenAIApiKey()
+	apiKey = strings.TrimSpace(credentialAccount.GetOpenAIProtocolAPIKey())
 	if apiKey == "" {
 		return nil, "", "", fmt.Errorf("account %d missing api_key", account.ID)
 	}
-	targetURL, err = s.openAIChatCompletionsTargetURL(credentialAccount)
-	if err != nil {
-		return nil, "", "", err
+	baseURL := credentialAccount.GetOpenAIFormatBaseURL()
+	if baseURL == "" {
+		baseURL = "https://api.openai.com"
 	}
+	validatedURL, validateErr := s.validateUpstreamBaseURL(baseURL)
+	if validateErr != nil {
+		return nil, "", "", fmt.Errorf("invalid base_url: %w", validateErr)
+	}
+	targetURL = buildOpenAIChatCompletionsURL(validatedURL)
 	return credentialAccount, apiKey, targetURL, nil
 }
 

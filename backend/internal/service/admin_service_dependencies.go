@@ -58,7 +58,8 @@ func NewAdminServiceWithDependencies(deps AdminServiceDependencies) AdminService
 		deps.CompositeResolver,
 		deps.ChannelCacheInvalidator,
 	)
-	impl := svc.(*adminServiceImpl)
-	impl.securityDepositGroupKeyReconciler = deps.SecurityDepositGroupKeyReconciler
+	if impl, ok := svc.(*adminServiceImpl); ok {
+		impl.securityDepositGroupKeyReconciler = deps.SecurityDepositGroupKeyReconciler
+	}
 	return svc
 }

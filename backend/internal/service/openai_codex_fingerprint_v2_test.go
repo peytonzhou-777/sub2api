@@ -25,6 +25,26 @@ type codexFingerprintSessionRepoStub struct {
 	boundScopeHash string
 }
 
+// configureCodexFingerprintV2TestState 为整链路测试装配本地专用指纹状态。
+func configureCodexFingerprintV2TestState(svc *OpenAIGatewayService, account *Account) {
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	state := CodexFingerprintState{
+		Seed:           testCodexFingerprintV2Seed(),
+		Version:        codexFingerprintAlgorithmV2,
+		Epoch:          3,
+		EpochStartedAt: startedAt,
+	}
+	account.CodexFingerprintSeed = state.Seed
+	account.CodexFingerprintVersion = state.Version
+	account.CodexFingerprintEpoch = state.Epoch
+	account.CodexFingerprintEpochStartedAt = &startedAt
+	if svc.cfg == nil {
+		svc.cfg = &config.Config{}
+	}
+	svc.cfg.Gateway.CodexFingerprintSecret = string(testCodexFingerprintV2Secret())
+	svc.accountRepo = &codexFingerprintSessionRepoStub{state: state}
+}
+
 func (r *codexFingerprintSessionRepoStub) ValidateCodexFingerprintSecret(_ context.Context, _ string, _ time.Time) error {
 	return nil
 }
@@ -687,9 +707,12 @@ func TestCodexFingerprintSubagentMapsClosedTopology(t *testing.T) {
 	require.Equal(t, root.ThreadID(), headers.Get("x-codex-parent-thread-id"))
 	require.Equal(t, "worker", headers.Get("x-openai-subagent"))
 	require.Equal(t, "kept", gjson.Get(headers.Get("x-codex-turn-metadata"), "custom").String())
-	metadata := body["client_metadata"].(map[string]any)
+	metadata, ok := body["client_metadata"].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, root.ThreadID(), metadata["parent_thread_id"])
-	require.Equal(t, "kept", gjson.Get(metadata["x-codex-turn-metadata"].(string), "custom").String())
+	turnMetadata, ok := metadata["x-codex-turn-metadata"].(string)
+	require.True(t, ok)
+	require.Equal(t, "kept", gjson.Get(turnMetadata, "custom").String())
 }
 
 func TestExtractCodexFingerprintOriginalIDsPrefersBodyTopology(t *testing.T) {

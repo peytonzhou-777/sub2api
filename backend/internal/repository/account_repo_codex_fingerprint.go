@@ -32,7 +32,7 @@ RETURNING secret_hash`, secretHash, now.UTC())
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
 			return err
@@ -80,7 +80,7 @@ RETURNING codex_fingerprint_seed, codex_fingerprint_version, codex_fingerprint_e
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
 			return nil, err
@@ -132,7 +132,7 @@ WHERE t.account_id = $1 AND t.source_hash = $2
 	if err != nil {
 		return nil, false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
 			return nil, false, err
@@ -264,7 +264,7 @@ func (r *accountRepository) ResolveCodexFingerprintSessionState(
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		if !rows.Next() {
 			if err := rows.Err(); err != nil {
 				return err

@@ -25,6 +25,25 @@ type OpenAIOAuth429FailoverState struct {
 	grokOAuth429FollowupPending bool
 }
 
+type openAI429AccountFailureDeferredContextKey struct{}
+
+// WithOpenAI429AccountFailureDeferred 延后本次安全重放链中的账号级 429 处分。
+// 调用方必须在同账号重试恢复成功时丢弃该失败，或在重试终止/换号前显式提交。
+func WithOpenAI429AccountFailureDeferred(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, openAI429AccountFailureDeferredContextKey{}, true)
+}
+
+func openAI429AccountFailureDeferred(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	deferred, _ := ctx.Value(openAI429AccountFailureDeferredContextKey{}).(bool)
+	return deferred
+}
+
 func openAIAccountStateContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	base := context.Background()
 	if ctx != nil {
@@ -55,6 +74,11 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 	if s != nil {
 		scheduleOllamaCloudUsageActivity(s.deferredService, account)
 	}
+	// Capacity shedding describes this request, not account health. Keep the
+	// account schedulable while the request-local retry budget handles recovery.
+	if account != nil && account.Platform == PlatformOpenAI && isOpenAIRequestScopedCapacityShed("", responseBody) {
+		return false
+	}
 	stateCtx, cancel := openAIAccountStateContext(ctx)
 	defer cancel()
 
@@ -71,6 +95,16 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 
 	if s == nil || account == nil {
 		return false
+	}
+	// WebSocket 安全重放会先锁定当前账号完成有界重试。此阶段若提前写入
+	// rate-limit/runtime block，下一轮精确同账号调度会被刚写入的状态拦截，
+	// 等价于绕过本地高粘性策略。最终失败由 handler 在换号前统一提交。
+	if statusCode == http.StatusTooManyRequests && openAI429AccountFailureDeferred(ctx) {
+		return false
+	}
+	// Team 联动熔断必须先于 model-not-found 与账户级临时不可调度规则的早退。
+	if s.rateLimitService != nil {
+		s.rateLimitService.maybeHandleOpenAITeamLinkedError(stateCtx, account, statusCode, responseBody)
 	}
 	stateCtx = withTempUnschedulableModel(stateCtx, canonicalModel)
 	if s.rateLimitService != nil && len(canonicalModel) > 0 && s.rateLimitService.HandleUpstreamModelNotFound(stateCtx, account, canonicalModel[0], statusCode, responseBody) {
@@ -117,6 +151,27 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		}
 	}
 	return shouldDisable
+}
+
+// FinalizeOpenAI429AccountFailure 在安全同账号重试终止后一次性提交账号级 429 状态。
+func (s *OpenAIGatewayService) FinalizeOpenAI429AccountFailure(
+	ctx context.Context,
+	account *Account,
+	failoverErr *UpstreamFailoverError,
+	canonicalModel string,
+) {
+	if s == nil || account == nil || account.Platform != PlatformOpenAI ||
+		failoverErr == nil || failoverErr.StatusCode != http.StatusTooManyRequests {
+		return
+	}
+	s.handleOpenAIAccountUpstreamError(
+		ctx,
+		account,
+		failoverErr.StatusCode,
+		failoverErr.ResponseHeaders,
+		failoverErr.ResponseBody,
+		canonicalModel,
+	)
 }
 
 func shouldCooldownOpenAITransientUpstreamError(statusCode int, responseBody []byte) bool {

@@ -24,7 +24,13 @@ func (s *OpenAIGatewayService) isolateOpenAITurnStateAttempt(
 		return func() {}
 	}
 	originalRequest := c.Request
-	attemptRequest := originalRequest.Clone(originalRequest.Context())
+	attemptCtx := ctx
+	if attemptCtx == nil {
+		attemptCtx = originalRequest.Context()
+	}
+	// 每次转发都使用本轮 ctx，确保账号级指纹、turn-state 与 429 延后处分
+	// 只作用于当前尝试，不泄漏到原始客户端请求或后续账号。
+	attemptRequest := originalRequest.Clone(attemptCtx)
 	attemptRequest.Header = originalRequest.Header.Clone()
 	c.Request = attemptRequest
 

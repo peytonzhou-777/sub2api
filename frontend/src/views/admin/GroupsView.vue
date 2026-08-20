@@ -146,7 +146,13 @@
                       ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
                       : value === 'grok'
                         ? 'bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100'
-                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                        : value === 'kimi'
+                          ? 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400'
+                          : value === 'zhipu'
+                            ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                            : value === 'deepseek'
+                              ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400'
+                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
               ]"
             >
               <PlatformIcon :platform="value" size="xs" />
@@ -1592,9 +1598,9 @@
             </div>
           </div>
         </div>
-        <!-- OpenAI Live 开关（仅 openai 平台） -->
+        <!-- Codex Live 开关（OpenAI 与 Composite 平台） -->
         <div
-          v-if="createForm.platform === 'openai'"
+          v-if="supportsLivePlatform(createForm.platform)"
           class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
@@ -3330,9 +3336,9 @@
             </div>
           </div>
         </div>
-        <!-- OpenAI Live 开关（仅 openai 平台） -->
+        <!-- Codex Live 开关（OpenAI 与 Composite 平台） -->
         <div
-          v-if="editForm.platform === 'openai'"
+          v-if="supportsLivePlatform(editForm.platform)"
           class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
@@ -4050,7 +4056,13 @@
                           ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
                           : group.platform === 'grok'
                             ? 'bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100'
-                            : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                            : group.platform === 'kimi'
+                              ? 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400'
+                              : group.platform === 'zhipu'
+                                ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                                : group.platform === 'deepseek'
+                                  ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400'
+                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
                   ]"
                 >
                   {{ t("admin.groups.platforms." + group.platform) }}
@@ -4496,6 +4508,10 @@ import type {
   SubscriptionType,
   UpdateGroupRequest,
 } from "@/types";
+import {
+  CONCRETE_PLATFORM_OPTIONS,
+  GROUP_PLATFORM_OPTIONS,
+} from "@/constants/platforms";
 import type { Column } from "@/components/common/types";
 import AppLayout from "@/components/layout/AppLayout.vue";
 import TablePageLayout from "@/components/layout/TablePageLayout.vue";
@@ -4515,6 +4531,7 @@ import PricingEntryCard from "@/components/admin/channel/PricingEntryCard.vue";
 import type { PricingFormEntry } from "@/components/admin/channel/types";
 import {
   apiIntervalsToForm,
+  createDefaultTimePricingForm,
   formIntervalsToAPI,
   mTokToPerToken,
   perTokenToMTok,
@@ -4574,6 +4591,9 @@ import {
   videoModelPriceFamilyRows,
 } from "./groupsVideoModelPricing";
 
+const supportsLivePlatform = (platform: string): boolean =>
+  platform === "openai" || platform === "composite";
+
 const emptyGroupPricing = (): PricingFormEntry => ({
   models: [],
   billing_mode: "token",
@@ -4585,6 +4605,7 @@ const emptyGroupPricing = (): PricingFormEntry => ({
   image_output_price: null,
   per_request_price: null,
   intervals: [],
+  time_pricing: createDefaultTimePricingForm(),
 });
 
 const addGroupPricing = (entries: PricingFormEntry[]) =>
@@ -4604,6 +4625,7 @@ const groupPricingFromAPI = (
     image_output_price: perTokenToMTok(entry.image_output_price),
     per_request_price: entry.per_request_price,
     intervals: apiIntervalsToForm(entry.intervals || []),
+    time_pricing: createDefaultTimePricingForm(),
   }));
 
 const groupPricingToAPI = (
@@ -4627,6 +4649,7 @@ const groupPricingToAPI = (
         entry.billing_mode === "token"
           ? []
           : formIntervalsToAPI(entry.intervals || []),
+      time_pricing: null,
     }));
 
 const { t } = useI18n();
@@ -4807,31 +4830,15 @@ const exclusiveOptions = computed(() => [
   { value: "false", label: t("admin.groups.nonExclusive") },
 ]);
 
-const platformOptions = computed(() => [
-  { value: "anthropic", label: "Anthropic" },
-  { value: "openai", label: "OpenAI" },
-  { value: "gemini", label: "Gemini" },
-  { value: "antigravity", label: "Antigravity" },
-  { value: "grok", label: "Grok" },
-  { value: "composite", label: "Composite" },
-]);
+const platformOptions = computed(() => [...GROUP_PLATFORM_OPTIONS]);
 
 const platformFilterOptions = computed(() => [
   { value: "", label: t("admin.groups.allPlatforms") },
-  { value: "anthropic", label: "Anthropic" },
-  { value: "openai", label: "OpenAI" },
-  { value: "gemini", label: "Gemini" },
-  { value: "antigravity", label: "Antigravity" },
-  { value: "grok", label: "Grok" },
-  { value: "composite", label: "Composite" },
+  ...GROUP_PLATFORM_OPTIONS,
 ]);
 
 const compositeRoutePlatformOptions = computed(() => [
-  { value: "anthropic", label: "Anthropic" },
-  { value: "openai", label: "OpenAI" },
-  { value: "gemini", label: "Gemini" },
-  { value: "antigravity", label: "Antigravity" },
-  { value: "grok", label: "Grok" },
+  ...CONCRETE_PLATFORM_OPTIONS,
 ]);
 
 const compositeRouteEndpointOptions = computed(() => [
@@ -6774,6 +6781,8 @@ watch(
     }
     if (newVal !== "openai") {
       resetMessagesDispatchFormState(createForm);
+    }
+    if (!supportsLivePlatform(newVal)) {
       createForm.allow_live = false;
     }
     if (!isProfitControlPlatform(newVal)) {
@@ -6822,6 +6831,8 @@ watch(
     }
     if (newVal !== "openai") {
       resetMessagesDispatchFormState(editForm);
+    }
+    if (!supportsLivePlatform(newVal)) {
       editForm.allow_live = false;
     }
     if (!isProfitControlPlatform(newVal)) {
@@ -6872,8 +6883,10 @@ watch(
     }
     if (newVal !== 'openai') {
       editForm.allow_messages_dispatch = false
-      editForm.allow_live = false
       editForm.default_mapped_model = ''
+    }
+    if (!supportsLivePlatform(newVal)) {
+      editForm.allow_live = false
     }
   }
 )

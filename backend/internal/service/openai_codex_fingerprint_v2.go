@@ -613,15 +613,6 @@ func uniqueCodexFingerprintHashes(values ...string) []string {
 	return result
 }
 
-func hashInCodexFingerprintSet(value string, candidates ...string) bool {
-	for _, candidate := range candidates {
-		if value != "" && value == candidate {
-			return true
-		}
-	}
-	return false
-}
-
 // codexFingerprintRotationThresholds 生成作用域独立的年龄、空闲和最长寿命门槛。
 func (s *OpenAIGatewayService) codexFingerprintRotationThresholds(accountID int64, scopeHash string, now time.Time) codexFingerprintRotationThresholds {
 	minAgeHours, maxAgeHours, idleMinutes, jitterHours := 72, 168, 120, 24
@@ -662,13 +653,6 @@ func (s *OpenAIGatewayService) codexFingerprintOldEpochGrace() time.Duration {
 		return 48 * time.Hour
 	}
 	return time.Duration(s.cfg.Gateway.CodexFingerprintOldEpochGraceHours) * time.Hour
-}
-
-func (s *OpenAIGatewayService) codexFingerprintIdleGate() time.Duration {
-	if s == nil || s.cfg == nil || s.cfg.Gateway.CodexFingerprintIdleGateMinutes <= 0 {
-		return 2 * time.Hour
-	}
-	return time.Duration(s.cfg.Gateway.CodexFingerprintIdleGateMinutes) * time.Minute
 }
 
 // codexFingerprintLogicalTurnSource 为同一逻辑请求生成一次 Turn 来源，跨账号重试复用。
@@ -713,6 +697,9 @@ func (s *OpenAIGatewayService) prepareCodexFingerprintForAttempt(
 			zap.Error(err),
 		)
 		return nil, err
+	}
+	if fpContext != nil {
+		fpContext.accountID = account.ID
 	}
 	fpIDs := codexFingerprintIDsFromContext(fpContext)
 	if fpIDs == nil {
@@ -875,40 +862,48 @@ func codexFingerprintIDsFromContext(fp *CodexFingerprintContext) *codexFingerpri
 	if fp == nil {
 		return nil
 	}
+	turnStartedAtUnixMs := fp.turnStartedAtUnixMs
+	if turnStartedAtUnixMs <= 0 {
+		turnStartedAtUnixMs = time.Now().UnixMilli()
+	}
 	return &codexFingerprintIDs{
-		mode:             fp.mode,
-		sessionScopeHash: fp.sessionScopeHash,
-		sessionEpoch:     fp.sessionEpoch,
-		installationID:   fp.installationID,
-		sessionID:        fp.sessionID,
-		threadID:         fp.threadID,
-		parentThreadID:   fp.parentThreadID,
-		forkedThreadID:   fp.forkedThreadID,
-		turnID:           fp.turnID,
-		windowID:         fp.windowID,
-		promptCacheKey:   fp.promptCacheKey,
-		requestID:        fp.requestID,
-		isSubagent:       fp.isSubagent,
+		accountID:           fp.accountID,
+		mode:                fp.mode,
+		sessionScopeHash:    fp.sessionScopeHash,
+		sessionEpoch:        fp.sessionEpoch,
+		installationID:      fp.installationID,
+		sessionID:           fp.sessionID,
+		threadID:            fp.threadID,
+		parentThreadID:      fp.parentThreadID,
+		forkedThreadID:      fp.forkedThreadID,
+		turnID:              fp.turnID,
+		windowID:            fp.windowID,
+		promptCacheKey:      fp.promptCacheKey,
+		requestID:           fp.requestID,
+		isSubagent:          fp.isSubagent,
+		turnStartedAtUnixMs: turnStartedAtUnixMs,
 	}
 }
 
 // CodexFingerprintContext 是最终账号选定后生成的不可变出站身份快照。
 // 字段保持私有，调用方只能读取，不能在 failover attempt 之间就地修改。
 type CodexFingerprintContext struct {
-	mode             codexFingerprintMode
-	algorithmVersion string
-	sessionEpoch     int64
-	sessionScopeHash string
-	installationID   string
-	sessionID        string
-	threadID         string
-	parentThreadID   string
-	forkedThreadID   string
-	turnID           string
-	windowID         string
-	promptCacheKey   string
-	requestID        string
-	isSubagent       bool
+	accountID           int64
+	mode                codexFingerprintMode
+	algorithmVersion    string
+	sessionEpoch        int64
+	sessionScopeHash    string
+	installationID      string
+	sessionID           string
+	threadID            string
+	parentThreadID      string
+	forkedThreadID      string
+	turnID              string
+	windowID            string
+	promptCacheKey      string
+	requestID           string
+	isSubagent          bool
+	turnStartedAtUnixMs int64
 }
 
 // Mode 返回本 attempt 使用的收敛模式。
@@ -1016,12 +1011,13 @@ func newCodexFingerprintContextV2(
 	}
 
 	ctx := &CodexFingerprintContext{
-		mode:             mode,
-		algorithmVersion: codexFingerprintAlgorithmV2,
-		sessionEpoch:     epoch,
-		sessionScopeHash: strings.TrimSpace(original.sessionScopeHash),
-		installationID:   strings.TrimSpace(configuredDeviceID),
-		isSubagent:       original.isSubagent,
+		mode:                mode,
+		algorithmVersion:    codexFingerprintAlgorithmV2,
+		sessionEpoch:        epoch,
+		sessionScopeHash:    strings.TrimSpace(original.sessionScopeHash),
+		installationID:      strings.TrimSpace(configuredDeviceID),
+		isSubagent:          original.isSubagent,
+		turnStartedAtUnixMs: time.Now().UnixMilli(),
 	}
 	if ctx.installationID == "" {
 		ctx.installationID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, 0, codexFingerprintKindInstallation, "account-device")

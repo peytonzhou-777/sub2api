@@ -41,7 +41,7 @@ func (s *OpenAIGatewayService) observeOpenAIUserAffinityShadow(ctx context.Conte
 
 // selectOpenAIUserAffinity 为高级调度在会话粘性前恢复用户归属。
 func (s *defaultOpenAIAccountScheduler) selectOpenAIUserAffinity(ctx context.Context, req OpenAIAccountScheduleRequest, decision *OpenAIAccountScheduleDecision) (*AccountSelectionResult, bool, error) {
-	if s == nil || s.service == nil || normalizeOpenAICompatiblePlatform(req.Platform) != PlatformOpenAI {
+	if s == nil || s.service == nil || NormalizeOpenAICompatiblePlatform(req.Platform) != PlatformOpenAI {
 		return nil, false, nil
 	}
 	selection, found, err := s.service.selectOpenAIUserAffinityPlacement(ctx, req.GroupID, req.RequestedModel, req.ExcludedIDs, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
@@ -56,7 +56,7 @@ func (s *defaultOpenAIAccountScheduler) selectOpenAIUserAffinity(ctx context.Con
 
 // reserveOpenAIUserAffinitySelection 为高级调度成功选中的新居民建立归属。
 func (s *defaultOpenAIAccountScheduler) reserveOpenAIUserAffinitySelection(ctx context.Context, req OpenAIAccountScheduleRequest, selection *AccountSelectionResult, selectionErr error) {
-	if s == nil || s.service == nil || selectionErr != nil || selection == nil || selection.Account == nil || normalizeOpenAICompatiblePlatform(req.Platform) != PlatformOpenAI {
+	if s == nil || s.service == nil || selectionErr != nil || selection == nil || selection.Account == nil || NormalizeOpenAICompatiblePlatform(req.Platform) != PlatformOpenAI {
 		return
 	}
 	scopeKey := openAIUserAffinityScopeKey(req.GroupID, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)

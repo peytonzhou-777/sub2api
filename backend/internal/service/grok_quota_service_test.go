@@ -742,9 +742,14 @@ func TestGrokQuotaServiceQueryQuotaFreeFallsBackToGrok45(t *testing.T) {
 	require.True(t, result.HeadersObserved)
 
 	requests, bodies := upstream.snapshot()
-	require.Len(t, requests, 3)
+	quotaRequestCalls := 0
 	responseCalls := 0
 	for i, req := range requests {
+		// 成功查询会异步同步 /v1/models；该独立后台请求不属于配额探测链路。
+		if req.URL.Path == "/v1/models" {
+			continue
+		}
+		quotaRequestCalls++
 		if req.URL.Path != "/v1/responses" {
 			continue
 		}
@@ -757,6 +762,7 @@ func TestGrokQuotaServiceQueryQuotaFreeFallsBackToGrok45(t *testing.T) {
 		require.False(t, gjson.GetBytes(bodies[i], "max_output_tokens").Exists())
 		require.False(t, gjson.GetBytes(bodies[i], "store").Exists())
 	}
+	require.Equal(t, 3, quotaRequestCalls)
 	require.Equal(t, 1, responseCalls)
 }
 

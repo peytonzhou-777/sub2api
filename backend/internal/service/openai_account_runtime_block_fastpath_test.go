@@ -27,6 +27,32 @@ func TestOpenAI429FastPath_MarksOAuthAccountCoolingDown(t *testing.T) {
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(apiKeyAccount))
 }
 
+func TestOpenAI429FastPath_DefersUntilSameAccountRetryFinishes(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	account := &Account{ID: 4201, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	failoverErr := &UpstreamFailoverError{
+		StatusCode:      http.StatusTooManyRequests,
+		ResponseHeaders: http.Header{"Retry-After": []string{"2"}},
+		ResponseBody:    []byte(`{"error":{"message":"rate limit"}}`),
+	}
+
+	deferredCtx := WithOpenAI429AccountFailureDeferred(context.Background())
+	shouldDisable := svc.handleOpenAIAccountUpstreamError(
+		deferredCtx,
+		account,
+		failoverErr.StatusCode,
+		failoverErr.ResponseHeaders,
+		failoverErr.ResponseBody,
+		"gpt-5.1",
+	)
+
+	require.False(t, shouldDisable)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account), "同账号重试阶段不得提前写入运行时封禁")
+
+	svc.FinalizeOpenAI429AccountFailure(context.Background(), account, failoverErr, "gpt-5.1")
+	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account), "重试终止后必须提交一次账号级 429 状态")
+}
+
 // TestOpenAI429FastPath_SkipsSparkShadow 外审第8轮 P1:spark 影子被选中后若 /responses 返回 429,
 // 不得按 global x-codex-* 信号写内存运行时熔断(否则 spark 被冷却到 global reset、单影子场景无可用账号)。
 func TestOpenAI429FastPath_SkipsSparkShadow(t *testing.T) {

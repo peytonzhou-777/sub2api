@@ -296,9 +296,12 @@ func TestMarshalSchedulerCacheAccountKeepsEncodingJSONWireFormat(t *testing.T) {
 
 func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
 	account := service.Account{
-		ID:       42,
-		Platform: service.PlatformOpenAI,
-		Type:     service.AccountTypeOAuth,
+		ID:                      42,
+		Platform:                service.PlatformOpenAI,
+		Type:                    service.AccountTypeOAuth,
+		CodexFingerprintSeed:    strings.Repeat("ab", 32),
+		CodexFingerprintVersion: "v2",
+		CodexFingerprintEpoch:   7,
 		Extra: map[string]any{
 			"openai_oauth_responses_websockets_v2_enabled": true,
 			"openai_oauth_responses_websockets_v2_mode":    service.OpenAIWSIngressModePassthrough,
@@ -312,6 +315,7 @@ func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
 			"base_rpm":                                     120,
 			"rpm_strategy":                                 "sticky_exempt",
 			"rpm_sticky_buffer":                            16,
+			"codex_fingerprint_seed":                       "legacy-extra-seed-must-drop",
 			"unused_large_field":                           "drop-me",
 		},
 	}
@@ -330,6 +334,10 @@ func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
 	require.Equal(t, 120, got.Extra["base_rpm"])
 	require.Equal(t, "sticky_exempt", got.Extra["rpm_strategy"])
 	require.Equal(t, 16, got.Extra["rpm_sticky_buffer"])
+	require.Nil(t, got.Extra["codex_fingerprint_seed"])
+	require.Empty(t, got.CodexFingerprintSeed)
+	require.Empty(t, got.CodexFingerprintVersion)
+	require.Zero(t, got.CodexFingerprintEpoch)
 	require.Nil(t, got.Extra["unused_large_field"])
 }
 

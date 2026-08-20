@@ -6,6 +6,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -244,15 +245,22 @@ func (s *OpenAIGatewayService) SelectAccountForModelWithExclusions(ctx context.C
 	return s.selectAccountForModelWithExclusions(s.withOpenAIQuotaAutoPauseContext(ctx), groupID, PlatformOpenAI, sessionHash, requestedModel, excludedIDs, false, 0, "", false)
 }
 
-// noAvailableOpenAISelectionError builds the standard "no account available" error
-// while preserving the legacy /responses/compact error when applicable.
-func normalizeOpenAICompatiblePlatform(platform string) string {
-	if platform == PlatformGrok {
-		return PlatformGrok
+// NormalizeOpenAICompatiblePlatform 保留 grok 与国产 OpenAI 兼容供应商（kimi/zhipu/
+// deepseek）的原值，其他值一律归一为 openai。调度器据此对账号与请求做精确平台匹配：
+// kimi 分组请求只命中 kimi 账号，语义与 openai/grok 一致。
+// （upstream 曾将本函数改为未导出 normalizeOpenAICompatiblePlatform，本分支的
+// handler 调度入口仍需导出，保持导出名。）
+func NormalizeOpenAICompatiblePlatform(platform string) string {
+	switch platform {
+	case PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepseek:
+		return platform
+	default:
+		return PlatformOpenAI
 	}
-	return PlatformOpenAI
 }
 
+// noAvailableOpenAISelectionError builds the standard "no account available" error
+// while preserving the legacy /responses/compact error when applicable.
 // details carries an optional machine-parseable exclusion summary (e.g.
 // "pool=2, filtered: quota_auto_pause_7d=1 runtime_blocked=1") appended in
 // parentheses. It is for server-side logs / ops diagnostics only: handlers
@@ -328,7 +336,7 @@ func isOpenAICompatibleAccountEligibleForRequest(ctx context.Context, account *A
 // ordinary scheduling gate. Legacy selection uses it before classifying the
 // profit veto so earlier failures retain their actual reason.
 func isOpenAICompatibleAccountEligibleForRequestBeforeProfit(ctx context.Context, account *Account, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) bool {
-	platform = normalizeOpenAICompatiblePlatform(platform)
+	platform = NormalizeOpenAICompatiblePlatform(platform)
 	if account == nil || account.Platform != platform || !account.IsOpenAICompatible() || !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
 		return false
 	}
@@ -663,16 +671,6 @@ func openAIQuotaWindowReset(extra map[string]any, window string, now time.Time) 
 	return !now.Before(resetAt)
 }
 
-func readOpenAIQuotaUsedPercent(extra map[string]any, window string) float64 {
-	if len(extra) == 0 {
-		return 0
-	}
-	if value, ok := resolveAccountExtraNumber(extra, "codex_"+window+"_used_percent"); ok {
-		return value
-	}
-	return 0
-}
-
 type openAIQuotaAutoPauseCtxKey struct{}
 
 func withOpenAIQuotaAutoPauseSettings(ctx context.Context, settings OpsOpenAIAccountQuotaAutoPauseSettings) context.Context {
@@ -766,7 +764,7 @@ func resolveOpenAIAccountUpstreamModelForRequest(account *Account, requestedMode
 }
 
 func (s *OpenAIGatewayService) selectAccountForModelWithExclusions(ctx context.Context, groupID *int64, platform string, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, stickyAccountID int64, requiredCapability OpenAIEndpointCapability, preferLowUpstreamRate bool) (*Account, error) {
-	platform = normalizeOpenAICompatiblePlatform(platform)
+	platform = NormalizeOpenAICompatiblePlatform(platform)
 	if s.checkChannelPricingRestriction(ctx, groupID, requestedModel) {
 		slog.Warn("channel pricing restriction blocked request",
 			"group_id", derefGroupID(groupID),
@@ -787,27 +785,37 @@ func (s *OpenAIGatewayService) selectAccountForModelWithExclusions(ctx context.C
 		return nil, fmt.Errorf("query accounts failed: %w", err)
 	}
 
-	// 3. 按优先级 + LRU 选择最佳账号
-	// Select by priority + LRU
-	selected, compactBlocked, filterStats := s.selectBestAccount(ctx, groupID, platform, accounts, requestedModel, excludedIDs, requireCompact, requiredCapability, preferLowUpstreamRate)
+	// 3. 按优先级 + LRU 选择最佳账号。列表读取与权威水合之间账号可能被删除；
+	// 此时只排除该竞态失效账号并继续本轮选择，不能退回使用列表快照中的凭证。
+	// Select by priority + LRU, skipping rows that disappear before hydration.
+	effectiveExcludedIDs := cloneExcludedAccountIDs(excludedIDs)
+	for {
+		selected, compactBlocked, filterStats := s.selectBestAccount(ctx, groupID, platform, accounts, requestedModel, effectiveExcludedIDs, requireCompact, requiredCapability, preferLowUpstreamRate)
+		if selected == nil {
+			return nil, noAvailableOpenAISelectionError(requestedModel, compactBlocked, filterStats.summary(""))
+		}
 
-	if selected == nil {
-		return nil, noAvailableOpenAISelectionError(requestedModel, compactBlocked, filterStats.summary(""))
+		hydrated, hydrateErr := s.hydrateSelectedAccount(ctx, selected)
+		if hydrateErr != nil {
+			if !errors.Is(hydrateErr, ErrAccountNotFound) {
+				return nil, hydrateErr
+			}
+			if effectiveExcludedIDs == nil {
+				effectiveExcludedIDs = make(map[int64]struct{})
+			}
+			effectiveExcludedIDs[selected.ID] = struct{}{}
+			continue
+		}
+
+		// 4. 设置粘性会话绑定（利润门下推迟到 handler 终检通过后再绑定，
+		// 终检否决的账号不得成为新的粘性目标；无门保持既有 eager 绑定与 TTL）
+		// Set sticky session binding (deferred until terminal admission under a profit gate)
+		if sessionHash != "" && !gatewayProfitControlGateActive(ctx) {
+			_ = s.setStickySessionAccountID(ctx, groupID, sessionHash, selected.ID, openaiStickySessionTTL)
+		}
+
+		return hydrated, nil
 	}
-
-	hydrated, err := s.hydrateSelectedAccount(ctx, selected)
-	if err != nil {
-		return nil, err
-	}
-
-	// 4. 设置粘性会话绑定（利润门下推迟到 handler 终检通过后再绑定，
-	// 终检否决的账号不得成为新的粘性目标；无门保持既有 eager 绑定与 TTL）
-	// Set sticky session binding (deferred until terminal admission under a profit gate)
-	if sessionHash != "" && !gatewayProfitControlGateActive(ctx) {
-		_ = s.setStickySessionAccountID(ctx, groupID, sessionHash, selected.ID, openaiStickySessionTTL)
-	}
-
-	return hydrated, nil
 }
 
 // tryStickySessionHit 尝试从粘性会话获取账号。
@@ -819,7 +827,7 @@ func (s *OpenAIGatewayService) tryStickySessionHit(ctx context.Context, groupID 
 	if sessionHash == "" {
 		return nil
 	}
-	platform = normalizeOpenAICompatiblePlatform(platform)
+	platform = NormalizeOpenAICompatiblePlatform(platform)
 
 	accountID := stickyAccountID
 	if accountID <= 0 {
@@ -886,7 +894,7 @@ func (s *OpenAIGatewayService) tryStickySessionHit(ctx context.Context, groupID 
 // true); the third contains deterministic
 // exclusion diagnostics for the evaluated snapshot.
 func (s *OpenAIGatewayService) selectBestAccount(ctx context.Context, groupID *int64, platform string, accounts []Account, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, requiredCapability OpenAIEndpointCapability, preferLowUpstreamRate bool) (*Account, bool, openAISelectionFilterStats) {
-	platform = normalizeOpenAICompatiblePlatform(platform)
+	platform = NormalizeOpenAICompatiblePlatform(platform)
 	compactBlocked := false
 	filterStats := openAISelectionFilterStats{pool: len(accounts)}
 	needsUpstreamCheck := s.needsUpstreamChannelRestrictionCheck(ctx, groupID)
@@ -998,7 +1006,7 @@ func (s *OpenAIGatewayService) SelectAccountWithLoadAwareness(ctx context.Contex
 }
 
 func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Context, groupID *int64, platform string, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, requiredCapability OpenAIEndpointCapability, useUpstreamTokenCost bool) (*AccountSelectionResult, error) {
-	platform = normalizeOpenAICompatiblePlatform(platform)
+	platform = NormalizeOpenAICompatiblePlatform(platform)
 	if s.checkChannelPricingRestriction(ctx, groupID, requestedModel) {
 		slog.Warn("channel pricing restriction blocked request",
 			"group_id", derefGroupID(groupID),
@@ -1344,7 +1352,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 }
 
 func (s *OpenAIGatewayService) listSchedulableAccounts(ctx context.Context, groupID *int64, platform string) ([]Account, error) {
-	platform = normalizeOpenAICompatiblePlatform(platform)
+	platform = NormalizeOpenAICompatiblePlatform(platform)
 	if s.schedulerSnapshot != nil {
 		accounts, _, err := s.schedulerSnapshot.ListSchedulableAccounts(ctx, groupID, platform, false)
 		if err != nil {
@@ -1383,6 +1391,65 @@ func (s *OpenAIGatewayService) tryAcquireAccountSlot(ctx context.Context, accoun
 	return s.concurrencyService.AcquireAccountSlot(ctx, accountID, maxConcurrency)
 }
 
+// SelectAccountForSameAccountRetry 固定账号选择，但继续执行统一调度的资格、
+// 分组、传输、能力、利润和并发校验。它只用于已确认可安全重放的同账号重试，
+// 不读取或改写会话粘性，也不会让调度器退化到其他账号。
+func (s *OpenAIGatewayService) SelectAccountForSameAccountRetry(
+	ctx context.Context,
+	accountID int64,
+	groupID *int64,
+	requestedModel string,
+	requiredTransport OpenAIUpstreamTransport,
+	requiredCapability OpenAIEndpointCapability,
+	requireCompact bool,
+	platform string,
+) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+	decision := OpenAIAccountScheduleDecision{
+		Layer:          openAIAccountScheduleLayerSameAccountRetry,
+		CandidateCount: 1,
+		TopK:           1,
+	}
+	if s == nil || accountID <= 0 || (s.schedulerSnapshot == nil && s.accountRepo == nil) {
+		return nil, decision, fmt.Errorf("%w: required same-account retry account %d unavailable", ErrNoAvailableAccounts, accountID)
+	}
+
+	ctx = s.withOpenAIQuotaAutoPauseContext(ctx)
+	ctx = s.withOpenAIProfitControlGate(ctx, groupID)
+	platform = NormalizeOpenAICompatiblePlatform(platform)
+	account, err := s.getSchedulableAccount(ctx, accountID)
+	if err != nil {
+		return nil, decision, fmt.Errorf("load same-account retry account %d: %w", accountID, err)
+	}
+	if account == nil || !s.openAIAccountMatchesSchedulingGroup(account, groupID) {
+		return nil, decision, fmt.Errorf("%w: required same-account retry account %d unavailable", ErrNoAvailableAccounts, accountID)
+	}
+	account = s.recheckSelectedOpenAIAccountFromDB(ctx, account, groupID, platform, requestedModel, requireCompact, requiredCapability)
+	if account == nil || !s.isOpenAIAccountTransportCompatible(account, requiredTransport) ||
+		!accountSupportsOpenAICapabilities(account, requiredCapability, "") {
+		return nil, decision, fmt.Errorf("%w: required same-account retry account %d is no longer eligible", ErrNoAvailableAccounts, accountID)
+	}
+
+	decision.SelectedAccountID = account.ID
+	decision.SelectedAccountType = account.Type
+	acquired, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
+	if acquireErr != nil {
+		return nil, decision, acquireErr
+	}
+	if acquired != nil && acquired.Acquired {
+		selection, selectionErr := s.newAcquiredSelectionResult(ctx, account, acquired.ReleaseFunc)
+		return selection, decision, selectionErr
+	}
+
+	cfg := s.schedulingConfig()
+	selection, selectionErr := s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
+		AccountID:      account.ID,
+		MaxConcurrency: account.Concurrency,
+		Timeout:        cfg.StickySessionWaitTimeout,
+		MaxWaiting:     cfg.StickySessionMaxWaiting,
+	})
+	return selection, decision, selectionErr
+}
+
 func (s *OpenAIGatewayService) resolveFreshSchedulableOpenAIAccount(ctx context.Context, account *Account, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) *Account {
 	fresh := s.resolveFreshSchedulableOpenAIAccountBeforeProfit(ctx, account, platform, requestedModel, requireCompact, requiredCapability)
 	if fresh == nil {
@@ -1398,7 +1465,7 @@ func (s *OpenAIGatewayService) resolveFreshSchedulableOpenAIAccountBeforeProfit(
 	if account == nil {
 		return nil
 	}
-	platform = normalizeOpenAICompatiblePlatform(platform)
+	platform = NormalizeOpenAICompatiblePlatform(platform)
 
 	fresh := account
 	if s.schedulerSnapshot != nil {
@@ -1456,7 +1523,7 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDBBeforeProfit(ct
 	if account == nil {
 		return nil
 	}
-	platform = normalizeOpenAICompatiblePlatform(platform)
+	platform = NormalizeOpenAICompatiblePlatform(platform)
 	if s.schedulerSnapshot == nil || s.accountRepo == nil {
 		if !isOpenAICompatibleAccountEligibleForRequestBeforeProfit(ctx, account, platform, requestedModel, requireCompact, requiredCapability) {
 			return nil
@@ -1570,7 +1637,7 @@ func (s *OpenAIGatewayService) hydrateSelectedAccount(ctx context.Context, accou
 		return nil, fmt.Errorf("load selected openai account %d from authoritative repository: %w", account.ID, err)
 	}
 	if hydrated == nil {
-		return nil, fmt.Errorf("selected openai account %d not found in authoritative repository", account.ID)
+		return nil, fmt.Errorf("%w: selected openai account %d not found in authoritative repository", ErrAccountNotFound, account.ID)
 	}
 	return hydrated, nil
 }
