@@ -181,6 +181,10 @@ type UsageLog struct {
 	// (e.g. the session_id / X-Session-Id headers). Nil when the client sent no
 	// valid session header. It is never derived from prompt_cache_key or content.
 	SessionID *string
+	// 以下字段仅保存安全哈希，用于账号短窗口诊断统计。
+	SessionScopeHash   *string
+	SessionSourceHash  *string
+	PromptCacheKeyHash *string
 
 	// Cache TTL Override 标记（管理员强制替换了缓存 TTL 计费）
 	CacheTTLOverridden bool

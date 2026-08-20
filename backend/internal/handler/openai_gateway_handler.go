@@ -355,6 +355,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
 		return
 	}
+	service.SetOpsOpenAIRequestMetadata(c, sessionHashBody)
 
 	// 使用 gjson 只读提取字段做校验，避免完整 Unmarshal
 	modelResult := gjson.GetBytes(body, "model")
@@ -619,13 +620,22 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			attemptBody = openAIForwardAttemptBodyForPreviousResponse(attemptBody, previousResponseID, scheduleDecision.StickyPreviousHit)
 			reqLog.Debug("openai.previous_response_id_stripped_for_account_switch", zap.Int64("account_id", account.ID))
 		}
+		service.SetOpsOpenAIForwardAttempt(c, account.ProxyID, openAITotalRetryCount(switchCount, sameAccountRetryCount))
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
 				if accountReleaseFunc != nil {
 					accountReleaseFunc()
 				}
 			}()
-			return h.gatewayService.Forward(c.Request.Context(), c, account, attemptBody)
+			forwardResult, forwardErr := h.gatewayService.Forward(c.Request.Context(), c, account, attemptBody)
+			if forwardErr != nil {
+				if current, snapshotErr := h.concurrencyHelper.SnapshotAccountConcurrency(
+					c.Request.Context(), account.ID, account.EffectiveLoadFactor(),
+				); snapshotErr == nil {
+					service.SetOpsAccountConcurrency(c, current)
+				}
+			}
+			return forwardResult, forwardErr
 		}()
 		cyberBlockKeyHTTP := ""
 		if service.GetOpsCyberPolicy(c) != nil {
@@ -655,6 +665,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account, res)
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 			sessionID := service.ExtractClientSessionID(c)
+			requestObservation := service.GetOpsRequestObservation(c, time.Now().UTC())
 			cyberBlocked := service.GetOpsCyberPolicy(c) != nil
 			h.submitOpenAIUsageRecordTask(c.Request.Context(), res, func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
@@ -671,6 +682,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					APIKeyService:      h.apiKeyService,
 					QuotaPlatform:      quotaPlatform,
 					SessionID:          sessionID,
+					SessionScopeHash:   requestObservation.SessionScopeHash,
+					SessionSourceHash:  requestObservation.SessionSourceHash,
+					PromptCacheKeyHash: requestObservation.PromptCacheKeyHash,
 					ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, reqModel, res.UpstreamModel),
 					PricingAt:          pricingAt,
 					CyberBlocked:       cyberBlocked,
@@ -786,8 +800,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				upstreamErrorAlreadyCommunicated := openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err)
 				wroteFallback := false
 				if !upstreamErrorAlreadyCommunicated {
-					wroteFallback = h.ensureForwardErrorResponse(c, streamStarted)
+					wroteFallback = h.ensureOpenAIStreamReadErrorResponse(c, err, streamStarted)
+					if !wroteFallback {
+						wroteFallback = h.ensureForwardErrorResponse(c, streamStarted)
+					}
 				}
+				service.MarkOpsOpenAIForwardFailure(c, err)
 				fields := []zap.Field{
 					zap.Int64("account_id", account.ID),
 					zap.Bool("fallback_error_response_written", wroteFallback),
@@ -824,6 +842,16 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		)
 		return
 	}
+}
+
+func openAITotalRetryCount(switchCount int, sameAccountRetryCount map[int64]int) int {
+	total := switchCount
+	for _, count := range sameAccountRetryCount {
+		if count > 0 {
+			total += count
+		}
+	}
+	return total
 }
 
 func openAIForwardAttemptBodyForPreviousResponse(body []byte, previousResponseID string, stickyPreviousHit bool) []byte {

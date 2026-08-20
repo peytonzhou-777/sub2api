@@ -738,6 +738,7 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 	responseBody []byte,
 ) error {
 	body := s.redactAgentIdentitySensitiveBody(ctx, account, responseBody)
+	CaptureOpsUpstreamResponse(c, resp.Header, body)
 
 	upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(body))
 	upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
@@ -785,6 +786,7 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 ) error {
 	MarkResponseCommitted(c)
 	body := s.redactAgentIdentitySensitiveBody(ctx, account, responseBody)
+	CaptureOpsUpstreamResponse(c, resp.Header, body)
 
 	// cyber_policy 仍按原始 body 打内部标记，供 handler 事后写风控/邮件；面向客户端的
 	// 错误体在下方统一重建。cyber 是上游网络安全策略拦截，不冷却账号，
@@ -1427,6 +1429,7 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 	if len(responseHeaders) > 0 && responseHeaders[0] != nil {
 		headers = responseHeaders[0].Clone()
 	}
+	CaptureOpsUpstreamResponse(c, headers, payload)
 	// 流内 failed 事件承载于 HTTP 200，响应头是正常配额快照而非限流信号，
 	// 不写账号级限流/封禁状态；重试与切号由 failover 引擎按
 	// StatusCode/RetryableOnSameAccount 决定。

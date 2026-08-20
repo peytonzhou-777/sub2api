@@ -884,6 +884,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		// Handle error response
 		if resp.StatusCode >= 400 {
 			respBody := s.readUpstreamErrorBody(resp)
+			CaptureOpsUpstreamResponse(c, resp.Header, respBody)
 			_ = resp.Body.Close()
 			resp.Body = io.NopCloser(bytes.NewReader(respBody))
 

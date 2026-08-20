@@ -88,11 +88,32 @@ type OpsErrorLogDetail struct {
 	UpstreamErrors       string `json:"upstream_errors,omitempty"` // JSON array (string) for display/parsing
 
 	// Timings (optional)
-	AuthLatencyMs      *int64 `json:"auth_latency_ms"`
-	RoutingLatencyMs   *int64 `json:"routing_latency_ms"`
-	UpstreamLatencyMs  *int64 `json:"upstream_latency_ms"`
-	ResponseLatencyMs  *int64 `json:"response_latency_ms"`
-	TimeToFirstTokenMs *int64 `json:"time_to_first_token_ms"`
+	AuthLatencyMs      *int64     `json:"auth_latency_ms"`
+	RoutingLatencyMs   *int64     `json:"routing_latency_ms"`
+	UpstreamLatencyMs  *int64     `json:"upstream_latency_ms"`
+	ResponseLatencyMs  *int64     `json:"response_latency_ms"`
+	TimeToFirstTokenMs *int64     `json:"time_to_first_token_ms"`
+	RequestStartedAt   *time.Time `json:"request_started_at"`
+	DurationMs         *int64     `json:"duration_ms"`
+
+	UpstreamErrorCode        string `json:"upstream_error_code,omitempty"`
+	UpstreamErrorType        string `json:"upstream_error_type,omitempty"`
+	UpstreamRequestID        string `json:"upstream_request_id,omitempty"`
+	RetryAfter               string `json:"retry_after,omitempty"`
+	UpstreamRateLimitHeaders string `json:"upstream_rate_limit_headers,omitempty"`
+
+	ServiceTier        string `json:"service_tier,omitempty"`
+	ProxyID            *int64 `json:"proxy_id,omitempty"`
+	EgressIdentifier   string `json:"egress_identifier,omitempty"`
+	RetryCount         int    `json:"retry_count"`
+	AccountConcurrency *int   `json:"account_concurrency,omitempty"`
+
+	ExplicitSessionIDPresent bool   `json:"explicit_session_id_present"`
+	ExplicitSessionIDHash    string `json:"explicit_session_id_hash,omitempty"`
+	SessionScopeHash         string `json:"session_scope_hash,omitempty"`
+	SessionSourceHash        string `json:"session_source_hash,omitempty"`
+	PromptCacheKeyPresent    bool   `json:"prompt_cache_key_present"`
+	PromptCacheKeyHash       string `json:"prompt_cache_key_hash,omitempty"`
 
 	// vNext metric semantics
 	IsBusinessLimited bool `json:"is_business_limited"`

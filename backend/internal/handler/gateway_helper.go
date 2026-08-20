@@ -237,6 +237,24 @@ func (h *ConcurrencyHelper) TryAcquireAccountSlot(ctx context.Context, accountID
 	return result.ReleaseFunc, true, nil
 }
 
+// SnapshotAccountConcurrency 在错误请求仍持有槽位时读取账号全局并发快照。
+func (h *ConcurrencyHelper) SnapshotAccountConcurrency(ctx context.Context, accountID int64, maxConcurrency int) (int, error) {
+	if h == nil || h.concurrencyService == nil || accountID <= 0 {
+		return 0, fmt.Errorf("concurrency service is unavailable")
+	}
+	loads, err := h.concurrencyService.GetAccountsLoadBatchFresh(ctx, []service.AccountWithConcurrency{{
+		ID:             accountID,
+		MaxConcurrency: maxConcurrency,
+	}})
+	if err != nil {
+		return 0, err
+	}
+	if load := loads[accountID]; load != nil && load.CurrentConcurrency >= 0 {
+		return load.CurrentConcurrency, nil
+	}
+	return 0, nil
+}
+
 // AcquireUserSlotWithWait acquires a user concurrency slot, waiting if necessary.
 // For streaming requests, sends ping events during the wait.
 // streamStarted is updated if streaming response has begun.

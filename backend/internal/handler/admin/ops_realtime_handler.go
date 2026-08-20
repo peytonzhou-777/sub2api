@@ -167,6 +167,36 @@ func (h *OpsHandler) GetAccountAvailability(c *gin.Context) {
 	response.Success(c, payload)
 }
 
+// GetAccountRequestWindowStats 返回账号 1/5/30 分钟请求密度、并发与错误率。
+// GET /api/v1/admin/ops/account-request-stats?account_id=123
+func (h *OpsHandler) GetAccountRequestWindowStats(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	var accountID *int64
+	if raw := strings.TrimSpace(c.Query("account_id")); raw != "" {
+		value, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || value <= 0 {
+			response.BadRequest(c, "Invalid account_id")
+			return
+		}
+		accountID = &value
+	}
+	stats, err := h.opsService.GetAccountRequestWindowStats(c.Request.Context(), accountID)
+	if err != nil {
+		if isOpsRealtimeRequestCanceled(c, err) {
+			return
+		}
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"stats":     stats,
+		"timestamp": time.Now().UTC(),
+	})
+}
+
 func isOpsRealtimeRequestCanceled(c *gin.Context, err error) bool {
 	if err == nil {
 		return false

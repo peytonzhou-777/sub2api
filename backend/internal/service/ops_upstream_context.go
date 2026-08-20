@@ -2,6 +2,8 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
+	"net/http"
 	"strings"
 	"time"
 
@@ -116,8 +118,7 @@ type OpsStreamError struct {
 }
 
 // MarkOpsStreamError 记录一次就地 SSE 错误，供 ops 日志采集。
-// 采用「首个标记生效」策略：同一请求若先后补发多帧（如上游透传错误后又追加通用兜底帧），
-// 保留最先记录的根因错误，而不是被后续的 "Upstream request failed" 覆盖。
+// 通常采用「首个标记生效」策略；若后续确认请求整体失败，则允许 SLA 终态升级原标记。
 func MarkOpsStreamError(c *gin.Context, errType, message string, intendedStatus int) {
 	markOpsStreamError(c, OpsStreamError{
 		ErrType:        errType,
@@ -139,12 +140,52 @@ func MarkOpsStreamFailure(c *gin.Context, errType, code, message string, intende
 	})
 }
 
+// MarkOpsOpenAIForwardFailure 确保 openai.forward_failed 在 HTTP 200 已提交后仍按语义失败落库。
+func MarkOpsOpenAIForwardFailure(c *gin.Context, err error) {
+	if c == nil || err == nil || c.Writer == nil || !c.Writer.Written() || c.Writer.Status() >= 400 {
+		return
+	}
+	status := http.StatusBadGateway
+	errType := "upstream_error"
+	code := ""
+	message := "Upstream request failed"
+
+	if streamCode, streamMessage, ok := OpenAIUpstreamStreamReadErrorDetails(err); ok {
+		code = streamCode
+		message = streamMessage
+	}
+	if failoverErr := new(UpstreamFailoverError); errors.As(err, &failoverErr) && failoverErr != nil {
+		if failoverErr.StatusCode > 0 {
+			status = failoverErr.StatusCode
+		}
+		CaptureOpsUpstreamResponse(c, failoverErr.ResponseHeaders, failoverErr.ResponseBody)
+	}
+	if value, ok := c.Get(OpsUpstreamErrorsKey); ok {
+		if events, typeOK := value.([]*OpsUpstreamErrorEvent); typeOK && len(events) > 0 {
+			if last := events[len(events)-1]; last != nil {
+				if last.UpstreamStatusCode > 0 {
+					status = last.UpstreamStatusCode
+				}
+				if strings.TrimSpace(last.Message) != "" {
+					message = strings.TrimSpace(last.Message)
+				}
+			}
+		}
+	}
+	if status == http.StatusTooManyRequests {
+		errType = "rate_limit_error"
+	}
+	MarkOpsStreamFailure(c, errType, code, message, status)
+}
+
 func markOpsStreamError(c *gin.Context, streamErr OpsStreamError) {
 	if c == nil {
 		return
 	}
-	if _, exists := c.Get(OpsStreamErrorKey); exists {
-		return
+	if existing, exists := GetOpsStreamError(c); exists {
+		if !streamErr.CountTowardsSLA || existing.CountTowardsSLA {
+			return
+		}
 	}
 	streamErr.ErrType = strings.TrimSpace(streamErr.ErrType)
 	streamErr.Code = strings.TrimSpace(streamErr.Code)

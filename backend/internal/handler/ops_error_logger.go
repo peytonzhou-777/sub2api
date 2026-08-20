@@ -405,7 +405,10 @@ func estimateOpsErrorLogJobBytes(entry *service.OpsInsertErrorLogInput) int64 {
 		len(entry.RequestedModel) + len(entry.UpstreamModel) + len(entry.UserAgent) +
 		len(entry.ErrorPhase) + len(entry.ErrorType) + len(entry.Severity) +
 		len(entry.ErrorMessage) + len(entry.ErrorBody) + len(entry.ErrorSource) +
-		len(entry.ErrorOwner) + len(entry.APIKeyPrefix)
+		len(entry.ErrorOwner) + len(entry.APIKeyPrefix) + len(entry.UpstreamErrorCode) +
+		len(entry.UpstreamErrorType) + len(entry.UpstreamRequestID) + len(entry.RetryAfter) +
+		len(entry.ServiceTier) + len(entry.EgressIdentifier) + len(entry.ExplicitSessionIDHash) +
+		len(entry.SessionScopeHash) + len(entry.SessionSourceHash) + len(entry.PromptCacheKeyHash)
 	if entry.UpstreamErrorMessage != nil {
 		size += len(*entry.UpstreamErrorMessage)
 	}
@@ -414,6 +417,9 @@ func estimateOpsErrorLogJobBytes(entry *service.OpsInsertErrorLogInput) int64 {
 	}
 	if entry.UpstreamErrorsJSON != nil {
 		size += len(*entry.UpstreamErrorsJSON)
+	}
+	if entry.UpstreamRateLimitHeadersJSON != nil {
+		size += len(*entry.UpstreamRateLimitHeadersJSON)
 	}
 	return int64(size)
 }
@@ -679,6 +685,7 @@ func (w *opsCaptureWriter) shouldCapture() bool {
 // - Streaming errors after the response has started (SSE) may still need explicit logging.
 func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		service.BeginOpsRequestObservation(c, time.Now().UTC())
 		originalWriter := c.Writer
 		w := acquireOpsCaptureWriter(originalWriter)
 		w.ctx = c
@@ -709,6 +716,12 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 		}
 
 		status := c.Writer.Status()
+		if streamErr, ok := service.GetOpsStreamError(c); ok && streamErr.CountTowardsSLA {
+			// 语义失败优先于“重试后恢复”分支；否则已固化的 HTTP 200 会把
+			// Overload/流读取中断错误错误地记成成功恢复事件。
+			logOpsStreamError(c, ops, status)
+			return
+		}
 		if status < 400 {
 			// Even when the client request succeeds, we still want to persist upstream error attempts
 			// (retries/failover) so ops can observe upstream instability that gets "covered" by retries.
@@ -935,6 +948,7 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 			}
 			applyOpsLatencyFieldsFromContext(c, entry)
 			applyOpsUpstreamFieldsFromContext(c, entry)
+			applyOpsRequestObservation(c, entry)
 
 			if apiKey != nil {
 				entry.APIKeyID = &apiKey.ID
@@ -1073,6 +1087,7 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 		}
 		applyOpsLatencyFieldsFromContext(c, entry)
 		applyOpsUpstreamFieldsFromContext(c, entry)
+		applyOpsRequestObservation(c, entry)
 
 		if apiKey != nil {
 			entry.APIKeyID = &apiKey.ID
@@ -1222,6 +1237,8 @@ func logOpsStreamError(c *gin.Context, ops *service.OpsService, wireStatus int) 
 		CreatedAt: time.Now(),
 	}
 	applyOpsLatencyFieldsFromContext(c, entry)
+	applyOpsUpstreamFieldsFromContext(c, entry)
+	applyOpsRequestObservation(c, entry)
 
 	if apiKey != nil {
 		entry.APIKeyID = &apiKey.ID
@@ -1265,6 +1282,36 @@ func applyOpsLatencyFieldsFromContext(c *gin.Context, entry *service.OpsInsertEr
 	entry.UpstreamLatencyMs = getContextLatencyMs(c, service.OpsUpstreamLatencyMsKey)
 	entry.ResponseLatencyMs = getContextLatencyMs(c, service.OpsResponseLatencyMsKey)
 	entry.TimeToFirstTokenMs = getContextLatencyMs(c, service.OpsTimeToFirstTokenMsKey)
+}
+
+// applyOpsRequestObservation 将请求级安全快照统一投影到错误日志，避免分支间字段漂移。
+func applyOpsRequestObservation(c *gin.Context, entry *service.OpsInsertErrorLogInput) {
+	if c == nil || entry == nil {
+		return
+	}
+	obs := service.GetOpsRequestObservation(c, time.Now().UTC())
+	if !obs.RequestStartedAt.IsZero() {
+		startedAt := obs.RequestStartedAt
+		entry.RequestStartedAt = &startedAt
+		durationMs := obs.DurationMs
+		entry.DurationMs = &durationMs
+	}
+	entry.UpstreamErrorCode = obs.UpstreamErrorCode
+	entry.UpstreamErrorType = obs.UpstreamErrorType
+	entry.UpstreamRequestID = obs.UpstreamRequestID
+	entry.RetryAfter = obs.RetryAfter
+	entry.UpstreamRateLimitHeadersJSON = obs.RateLimitHeadersJSON
+	entry.ServiceTier = obs.ServiceTier
+	entry.ProxyID = obs.ProxyID
+	entry.EgressIdentifier = obs.EgressIdentifier
+	entry.UpstreamRetryAttempts = obs.RetryCount
+	entry.AccountConcurrency = obs.AccountConcurrency
+	entry.ExplicitSessionIDPresent = obs.ExplicitSessionIDPresent
+	entry.ExplicitSessionIDHash = obs.ExplicitSessionIDHash
+	entry.SessionScopeHash = obs.SessionScopeHash
+	entry.SessionSourceHash = obs.SessionSourceHash
+	entry.PromptCacheKeyPresent = obs.PromptCacheKeyPresent
+	entry.PromptCacheKeyHash = obs.PromptCacheKeyHash
 }
 
 // applyOpsUpstreamFieldsFromContext captures attempt-level upstream context.

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"math/rand/v2"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -532,11 +533,69 @@ func (s *OpsService) prepareErrorLogInput(ctx context.Context, entry *OpsInsertE
 		}
 	}
 
+	entry.UpstreamErrorCode = truncateString(strings.TrimSpace(entry.UpstreamErrorCode), 128)
+	entry.UpstreamErrorType = truncateString(strings.TrimSpace(entry.UpstreamErrorType), 128)
+	entry.UpstreamRequestID = truncateString(strings.TrimSpace(entry.UpstreamRequestID), 255)
+	entry.RetryAfter = sanitizeOpsRetryAfter(entry.RetryAfter)
+	entry.ServiceTier = truncateString(strings.TrimSpace(entry.ServiceTier), 64)
+	entry.EgressIdentifier = truncateString(strings.TrimSpace(entry.EgressIdentifier), 64)
+	if entry.UpstreamRetryAttempts < 0 {
+		entry.UpstreamRetryAttempts = 0
+	}
+	if entry.AccountConcurrency != nil && *entry.AccountConcurrency < 0 {
+		entry.AccountConcurrency = nil
+	}
+	if entry.DurationMs != nil && *entry.DurationMs < 0 {
+		entry.DurationMs = nil
+	}
+	if entry.RequestStartedAt != nil {
+		startedAt := entry.RequestStartedAt.UTC()
+		entry.RequestStartedAt = &startedAt
+	}
+	entry.ExplicitSessionIDHash = sanitizeOpsObservationHash(entry.ExplicitSessionIDHash, 64)
+	entry.SessionScopeHash = sanitizeOpsObservationHash(entry.SessionScopeHash, 128)
+	entry.SessionSourceHash = sanitizeOpsObservationHash(entry.SessionSourceHash, 64)
+	entry.PromptCacheKeyHash = sanitizeOpsObservationHash(entry.PromptCacheKeyHash, 64)
+	entry.UpstreamRateLimitHeadersJSON = sanitizeOpsRateLimitHeadersJSON(entry.UpstreamRateLimitHeadersJSON)
+
 	if err := sanitizeOpsUpstreamErrors(entry); err != nil {
 		return nil, false, err
 	}
 
 	return entry, true, nil
+}
+
+func sanitizeOpsObservationHash(value string, maxBytes int) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" || len(value) > maxBytes {
+		return ""
+	}
+	for _, char := range value {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return ""
+		}
+	}
+	return value
+}
+
+func sanitizeOpsRateLimitHeadersJSON(raw *string) *string {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil
+	}
+	var headers map[string][]string
+	if err := json.Unmarshal([]byte(*raw), &headers); err != nil {
+		return nil
+	}
+	sanitized := sanitizeOpsRateLimitHeaders(http.Header(headers))
+	if len(sanitized) == 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(sanitized)
+	if err != nil {
+		return nil
+	}
+	value := string(encoded)
+	return &value
 }
 
 func sanitizeOpsUpstreamErrors(entry *OpsInsertErrorLogInput) error {

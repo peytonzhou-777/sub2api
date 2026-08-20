@@ -54,10 +54,28 @@ INSERT INTO ops_error_logs (
   upstream_latency_ms,
   response_latency_ms,
   time_to_first_token_ms,
+  request_started_at,
+  duration_ms,
+  upstream_error_code,
+  upstream_error_type,
+  upstream_request_id,
+  retry_after,
+  upstream_rate_limit_headers,
+  service_tier,
+  proxy_id,
+  egress_identifier,
+  upstream_retry_attempts,
+  account_concurrency,
+  explicit_session_id_present,
+  explicit_session_id_hash,
+  session_scope_hash,
+  session_source_hash,
+  prompt_cache_key_present,
+  prompt_cache_key_hash,
   created_at,
   api_key_prefix
 ) VALUES (
-  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38
+  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56
 )`
 
 func NewOpsRepository(db *sql.DB) service.OpsRepository {
@@ -165,6 +183,24 @@ func opsInsertErrorLogArgs(input *service.OpsInsertErrorLogInput) []any {
 		opsNullInt64(input.UpstreamLatencyMs),
 		opsNullInt64(input.ResponseLatencyMs),
 		opsNullInt64(input.TimeToFirstTokenMs),
+		opsNullTime(input.RequestStartedAt),
+		opsNullInt64(input.DurationMs),
+		opsNullString(input.UpstreamErrorCode),
+		opsNullString(input.UpstreamErrorType),
+		opsNullString(input.UpstreamRequestID),
+		opsNullString(input.RetryAfter),
+		opsNullString(input.UpstreamRateLimitHeadersJSON),
+		opsNullString(input.ServiceTier),
+		opsNullInt64(input.ProxyID),
+		opsNullString(input.EgressIdentifier),
+		input.UpstreamRetryAttempts,
+		opsNullInt(input.AccountConcurrency),
+		input.ExplicitSessionIDPresent,
+		opsNullString(input.ExplicitSessionIDHash),
+		opsNullString(input.SessionScopeHash),
+		opsNullString(input.SessionSourceHash),
+		input.PromptCacheKeyPresent,
+		opsNullString(input.PromptCacheKeyHash),
 		input.CreatedAt,
 		opsNullString(input.APIKeyPrefix),
 	}
@@ -447,6 +483,24 @@ SELECT
   e.upstream_latency_ms,
   e.response_latency_ms,
   e.time_to_first_token_ms,
+  e.request_started_at,
+  e.duration_ms,
+  COALESCE(e.upstream_error_code, ''),
+  COALESCE(e.upstream_error_type, ''),
+  COALESCE(e.upstream_request_id, ''),
+  COALESCE(e.retry_after, ''),
+  COALESCE(e.upstream_rate_limit_headers::text, ''),
+  COALESCE(e.service_tier, ''),
+  e.proxy_id,
+  COALESCE(e.egress_identifier, ''),
+  COALESCE(e.upstream_retry_attempts, 0),
+  e.account_concurrency,
+  COALESCE(e.explicit_session_id_present, false),
+  COALESCE(e.explicit_session_id_hash, ''),
+  COALESCE(e.session_scope_hash, ''),
+  COALESCE(e.session_source_hash, ''),
+  COALESCE(e.prompt_cache_key_present, false),
+  COALESCE(e.prompt_cache_key_hash, ''),
   COALESCE(e.api_key_prefix, ''),
   COALESCE(ak.name, ''),
   ak.deleted_at
@@ -473,6 +527,10 @@ LIMIT 1`
 	var upstreamLatency sql.NullInt64
 	var responseLatency sql.NullInt64
 	var ttft sql.NullInt64
+	var requestStartedAt sql.NullTime
+	var durationMs sql.NullInt64
+	var proxyID sql.NullInt64
+	var accountConcurrency sql.NullInt64
 	var requestType sql.NullInt64
 	var detailAPIKeyName string
 	var detailAPIKeyDeletedAt sql.NullTime
@@ -521,6 +579,24 @@ LIMIT 1`
 		&upstreamLatency,
 		&responseLatency,
 		&ttft,
+		&requestStartedAt,
+		&durationMs,
+		&out.UpstreamErrorCode,
+		&out.UpstreamErrorType,
+		&out.UpstreamRequestID,
+		&out.RetryAfter,
+		&out.UpstreamRateLimitHeaders,
+		&out.ServiceTier,
+		&proxyID,
+		&out.EgressIdentifier,
+		&out.RetryCount,
+		&accountConcurrency,
+		&out.ExplicitSessionIDPresent,
+		&out.ExplicitSessionIDHash,
+		&out.SessionScopeHash,
+		&out.SessionSourceHash,
+		&out.PromptCacheKeyPresent,
+		&out.PromptCacheKeyHash,
 		&out.APIKeyPrefix,
 		&detailAPIKeyName,
 		&detailAPIKeyDeletedAt,
@@ -581,6 +657,22 @@ LIMIT 1`
 	if ttft.Valid {
 		v := ttft.Int64
 		out.TimeToFirstTokenMs = &v
+	}
+	if requestStartedAt.Valid {
+		value := requestStartedAt.Time
+		out.RequestStartedAt = &value
+	}
+	if durationMs.Valid {
+		value := durationMs.Int64
+		out.DurationMs = &value
+	}
+	if proxyID.Valid {
+		value := proxyID.Int64
+		out.ProxyID = &value
+	}
+	if accountConcurrency.Valid {
+		value := int(accountConcurrency.Int64)
+		out.AccountConcurrency = &value
 	}
 	if requestType.Valid {
 		v := int16(requestType.Int64)

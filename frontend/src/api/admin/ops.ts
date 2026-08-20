@@ -945,12 +945,32 @@ export interface OpsErrorDetail extends OpsErrorLog {
   upstream_error_message?: string
   upstream_error_detail?: string
   upstream_errors?: string
+  upstream_error_code?: string
+  upstream_error_type?: string
+  upstream_request_id?: string
+  retry_after?: string
+  upstream_rate_limit_headers?: string
 
   auth_latency_ms?: number | null
   routing_latency_ms?: number | null
   upstream_latency_ms?: number | null
   response_latency_ms?: number | null
   time_to_first_token_ms?: number | null
+  request_started_at?: string | null
+  duration_ms?: number | null
+
+  service_tier?: string
+  proxy_id?: number | null
+  egress_identifier?: string
+  retry_count: number
+  account_concurrency?: number | null
+
+  explicit_session_id_present: boolean
+  explicit_session_id_hash?: string
+  session_scope_hash?: string
+  session_source_hash?: string
+  prompt_cache_key_present: boolean
+  prompt_cache_key_hash?: string
 
   is_business_limited: boolean
 
@@ -959,6 +979,28 @@ export interface OpsErrorDetail extends OpsErrorLog {
 }
 
 export type OpsErrorLogsResponse = PaginatedResponse<OpsErrorLog>
+
+export interface OpsAccountRequestWindowStats {
+  account_id: number
+  window: '1m' | '5m' | '30m' | string
+  window_minutes: number
+  request_count: number
+  peak_concurrency: number
+  distinct_session_scopes: number
+  distinct_session_sources: number
+  distinct_prompt_cache_keys: number
+  overload_count: number
+  http_429_count: number
+  http_5xx_count: number
+  overload_error_rate: number
+  http_429_error_rate: number
+  http_5xx_error_rate: number
+}
+
+export interface OpsAccountRequestStatsResponse {
+  stats: OpsAccountRequestWindowStats[]
+  timestamp: string
+}
 
 export async function getDashboardOverview(
   params: {
@@ -1120,6 +1162,13 @@ export async function listErrorLogs(params: OpsErrorListQueryParams): Promise<Op
 
 export async function getErrorLogDetail(id: number): Promise<OpsErrorDetail> {
   const { data } = await apiClient.get<OpsErrorDetail>(`/admin/ops/errors/${id}`)
+  return data
+}
+
+export async function getAccountRequestStats(accountId?: number): Promise<OpsAccountRequestStatsResponse> {
+  const { data } = await apiClient.get<OpsAccountRequestStatsResponse>('/admin/ops/account-request-stats', {
+    params: accountId ? { account_id: accountId } : undefined
+  })
   return data
 }
 

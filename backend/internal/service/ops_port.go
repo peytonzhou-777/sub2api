@@ -116,6 +116,27 @@ type OpsInsertErrorLogInput struct {
 	UpstreamLatencyMs  *int64
 	ResponseLatencyMs  *int64
 	TimeToFirstTokenMs *int64
+	RequestStartedAt   *time.Time
+	DurationMs         *int64
+
+	UpstreamErrorCode            string
+	UpstreamErrorType            string
+	UpstreamRequestID            string
+	RetryAfter                   string
+	UpstreamRateLimitHeadersJSON *string
+
+	ServiceTier           string
+	ProxyID               *int64
+	EgressIdentifier      string
+	UpstreamRetryAttempts int
+	AccountConcurrency    *int
+
+	ExplicitSessionIDPresent bool
+	ExplicitSessionIDHash    string
+	SessionScopeHash         string
+	SessionSourceHash        string
+	PromptCacheKeyPresent    bool
+	PromptCacheKeyHash       string
 
 	CreatedAt time.Time
 
@@ -310,4 +331,22 @@ type OpsWindowStats struct {
 	SuccessCount    int64 `json:"success_count"`
 	ErrorCountTotal int64 `json:"error_count_total"`
 	TokenConsumed   int64 `json:"token_consumed"`
+}
+
+// OpsAccountRequestWindowStats 是按账号和固定窗口聚合的上游请求诊断指标。
+type OpsAccountRequestWindowStats struct {
+	AccountID               int64   `json:"account_id"`
+	Window                  string  `json:"window"`
+	WindowMinutes           int     `json:"window_minutes"`
+	RequestCount            int64   `json:"request_count"`
+	PeakConcurrency         int64   `json:"peak_concurrency"`
+	DistinctSessionScopes   int64   `json:"distinct_session_scopes"`
+	DistinctSessionSources  int64   `json:"distinct_session_sources"`
+	DistinctPromptCacheKeys int64   `json:"distinct_prompt_cache_keys"`
+	OverloadCount           int64   `json:"overload_count"`
+	HTTP429Count            int64   `json:"http_429_count"`
+	HTTP5xxCount            int64   `json:"http_5xx_count"`
+	OverloadErrorRate       float64 `json:"overload_error_rate"`
+	HTTP429ErrorRate        float64 `json:"http_429_error_rate"`
+	HTTP5xxErrorRate        float64 `json:"http_5xx_error_rate"`
 }

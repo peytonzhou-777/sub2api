@@ -98,6 +98,9 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // billing_tier
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
+			sqlmock.AnyArg(), // session_scope_hash
+			sqlmock.AnyArg(), // session_source_hash
+			sqlmock.AnyArg(), // prompt_cache_key_hash
 			sqlmock.AnyArg(), // session_id
 			createdAt,
 		).
@@ -190,6 +193,9 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // billing_tier
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
+			sqlmock.AnyArg(), // session_scope_hash
+			sqlmock.AnyArg(), // session_source_hash
+			sqlmock.AnyArg(), // prompt_cache_key_hash
 			sqlmock.AnyArg(), // session_id
 			createdAt,
 		).
@@ -838,6 +844,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			sql.NullString{},
 			sql.NullFloat64{},
+			sql.NullString{}, // session_scope_hash
+			sql.NullString{}, // session_source_hash
+			sql.NullString{}, // prompt_cache_key_hash
 			sql.NullString{},
 			now,
 		}})
@@ -915,6 +924,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_tier
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
+			sql.NullString{},  // session_scope_hash
+			sql.NullString{},  // session_source_hash
+			sql.NullString{},  // prompt_cache_key_hash
 			sql.NullString{},  // session_id
 			now,
 		}})
@@ -975,6 +987,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_tier
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
+			sql.NullString{},  // session_scope_hash
+			sql.NullString{},  // session_source_hash
+			sql.NullString{},  // prompt_cache_key_hash
 			sql.NullString{},  // session_id
 			now,
 		}})
@@ -1035,6 +1050,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_tier
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
+			sql.NullString{},  // session_scope_hash
+			sql.NullString{},  // session_source_hash
+			sql.NullString{},  // prompt_cache_key_hash
 			sql.NullString{},  // session_id
 			now,
 		}})

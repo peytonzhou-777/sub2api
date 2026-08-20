@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -328,6 +329,13 @@ func TestLogOpsStreamError_UpstreamFailureCountsTowardsSLA(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 	c.Set(opsModelKey, "gpt-5.6-sol")
+	service.BeginOpsRequestObservation(c, time.Now().UTC().Add(-2*time.Second))
+	service.SetOpsOpenAIRequestMetadata(c, []byte(`{"service_tier":"priority","prompt_cache_key":"cache-secret"}`))
+	service.CaptureOpsUpstreamResponse(c, http.Header{
+		"X-Request-Id":                 []string{"upstream-request-id"},
+		"Retry-After":                  []string{"5"},
+		"X-Ratelimit-Remaining-Tokens": []string{"123"},
+	}, []byte(`{"error":{"type":"server_error","code":"overloaded"}}`))
 
 	service.MarkOpsStreamFailure(
 		c,
@@ -348,6 +356,46 @@ func TestLogOpsStreamError_UpstreamFailureCountsTowardsSLA(t *testing.T) {
 	require.Equal(t, "provider", job.entry.ErrorOwner)
 	require.False(t, job.entry.IsBusinessLimited)
 	require.Contains(t, job.entry.ErrorBody, service.OpenAIUpstreamHTTP2StreamErrorCode)
+	require.NotNil(t, job.entry.RequestStartedAt)
+	require.NotNil(t, job.entry.DurationMs)
+	require.GreaterOrEqual(t, *job.entry.DurationMs, int64(1900))
+	require.Equal(t, "overloaded", job.entry.UpstreamErrorCode)
+	require.Equal(t, "server_error", job.entry.UpstreamErrorType)
+	require.Equal(t, "upstream-request-id", job.entry.UpstreamRequestID)
+	require.Equal(t, "5", job.entry.RetryAfter)
+	require.NotNil(t, job.entry.UpstreamRateLimitHeadersJSON)
+	require.Equal(t, "priority", job.entry.ServiceTier)
+	require.True(t, job.entry.PromptCacheKeyPresent)
+	require.NotEmpty(t, job.entry.PromptCacheKeyHash)
+	require.NotContains(t, job.entry.PromptCacheKeyHash, "cache-secret")
+}
+
+func TestOpsErrorLoggerMiddleware_PrioritizesTerminalStreamFailure(t *testing.T) {
+	setupOpsErrorLogTestQueue(t, 4)
+	gin.SetMode(gin.TestMode)
+	ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := gin.New()
+	router.Use(OpsErrorLoggerMiddleware(ops))
+	router.POST("/v1/responses", func(c *gin.Context) {
+		c.Set(opsModelKey, "gpt-5.6-sol")
+		service.SetOpsUpstreamError(c, 529, "Upstream overloaded", "")
+		service.MarkOpsStreamFailure(c, "upstream_error", "overloaded", "Upstream overloaded", 529)
+		c.Status(http.StatusOK)
+		c.Writer.WriteHeaderNow()
+	})
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/responses", nil))
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	job := <-opsErrorLogQueue
+	require.NotNil(t, job.entry)
+	require.Equal(t, 529, job.entry.StatusCode)
+	require.Equal(t, 529, *job.entry.UpstreamStatusCode)
+	require.Equal(t, "upstream_error", job.entry.ErrorType)
+	require.Contains(t, job.entry.ErrorBody, "overloaded")
+	require.NotNil(t, job.entry.RequestStartedAt)
+	require.NotNil(t, job.entry.DurationMs)
 }
 
 // 未标记流内错误时 logOpsStreamError 必须是 no-op（不误记正常的 200 流）。
