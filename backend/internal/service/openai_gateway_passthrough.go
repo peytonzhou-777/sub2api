@@ -92,6 +92,11 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			return nil, fpErr
 		}
 		body = fingerprintedBody
+		releaseSubagentSlot, gateErr := s.acquireCodexSubagentSlot(ctx, account, stagedCodexFingerprintIDs(c))
+		if gateErr != nil {
+			return nil, gateErr
+		}
+		defer releaseSubagentSlot()
 	}
 
 	sanitizedBody, sanitized, err := sanitizeEmptyBase64InputImagesInOpenAIBody(body)
@@ -252,11 +257,12 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 
 	serviceTier := extractOpenAIServiceTierFromBody(body)
 
-	// x-codex-turn-state 溯源：下游回传由 writeOpenAIPassthroughResponseHeaders
-	// 在各 handler 的写头点强制放行，铸造账号在此统一记录，供出站守卫剥离
-	// failover 换号后的跨账号回带（openai_codex_turn_state.go）。
-	if extractOpenAICodexTurnState(resp.Header) != "" {
-		s.noteOpenAICodexTurnStateProvenance(c, account)
+	// 透传响应也必须按 state 哈希精确绑定来源；兄弟子代理共享根 Session 时
+	// 不会互相覆盖，下一轮回带仍可由 attempt 守卫验证账号归属。
+	if turnState := extractOpenAICodexTurnState(resp.Header); turnState != "" {
+		s.bindOpenAITurnStateProvenance(
+			ctx, c, account.ID, openAITurnStateSessionHash(c), turnState, s.openAIWSSessionStickyTTL(),
+		)
 	}
 
 	var usage *OpenAIUsage
@@ -395,10 +401,6 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			}
 		}
 	}
-
-	// 客户端回带的 x-codex-turn-state 若已知由其他账号铸造（failover 换号），
-	// 剥离后再出站（openai_codex_turn_state.go）。
-	s.guardOpenAICodexTurnStateEcho(c, account, req.Header)
 
 	// 覆盖入站鉴权残留，并注入上游认证
 	req.Header.Del("authorization")
@@ -1114,6 +1116,11 @@ func openAIStreamFailedEventRetryableOnSameAccount(account *Account, payload []b
 	if account == nil {
 		return false
 	}
+	semanticStatus := openAIStreamFailedEventSemanticStatus(payload, message)
+	rateClass := classifyOpenAIRateLimit(semanticStatus, payload, message)
+	if rateClass == OpenAIRateLimitClassUsageQuota || rateClass == OpenAIRateLimitClassAccountConcurrency {
+		return false
+	}
 	// 容量降载是请求级信号，不是账号级故障：上游只是让本次请求稍后再试。
 	// 换账号并不改变被降载的因素（客户端身份、模型容量都与账号无关），
 	// 只会让单个请求把整池账号逐个消耗掉，最终仍以同一个错误告终。
@@ -1124,7 +1131,6 @@ func openAIStreamFailedEventRetryableOnSameAccount(account *Account, payload []b
 	if !account.IsPoolMode() {
 		return false
 	}
-	semanticStatus := openAIStreamFailedEventSemanticStatus(payload, message)
 	return account.IsPoolModeRetryableStatus(semanticStatus) ||
 		isOpenAITransientProcessingError(http.StatusBadRequest, message, payload)
 }
@@ -1204,13 +1210,19 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 			"message": message,
 		},
 	})
-	return &UpstreamFailoverError{
+	failoverErr := &UpstreamFailoverError{
 		StatusCode:             statusCode,
 		ResponseBody:           body,
 		ResponseHeaders:        headers,
 		RetryableOnSameAccount: openAIStreamFailedEventRetryableOnSameAccount(account, payload, message),
 		RequestScopedTransient: isOpenAIUpstreamCapacityShedEvent(payload),
 	}
+	failoverErr.OpenAIRateLimitClass = classifyOpenAIRateLimit(statusCode, payload, message)
+	if failoverErr.OpenAIRateLimitClass == OpenAIRateLimitClassUsageQuota ||
+		failoverErr.OpenAIRateLimitClass == OpenAIRateLimitClassAccountConcurrency {
+		failoverErr.MaxNextAccountSwitches = 1
+	}
+	return failoverErr
 }
 
 func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(

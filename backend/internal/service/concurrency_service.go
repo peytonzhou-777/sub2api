@@ -70,10 +70,19 @@ type OpenAIWSIngressLeaseCache interface {
 	ReleaseOpenAIWSIngressLease(ctx context.Context, apiKeyID int64, leaseID string) error
 }
 
+// CodexSubagentConcurrencyCache 提供按账号、Session 作用域和 epoch 隔离的子代理槽位。
+type CodexSubagentConcurrencyCache interface {
+	AcquireCodexSubagentSlot(ctx context.Context, accountID int64, sessionScopeHash string, epoch int64, maxConcurrency int, requestID string) (bool, error)
+	RefreshCodexSubagentSlot(ctx context.Context, accountID int64, sessionScopeHash string, epoch int64, requestID string) (bool, error)
+	ReleaseCodexSubagentSlot(ctx context.Context, accountID int64, sessionScopeHash string, epoch int64, requestID string) error
+}
+
 const (
 	openAIWSIngressLeaseTTL             = 60 * time.Second
 	openAIWSIngressLeaseRefreshInterval = 20 * time.Second
 	openAIWSIngressLeaseOperationTO     = 2 * time.Second
+	codexSubagentSlotRefreshInterval    = 20 * time.Second
+	codexSubagentSlotOperationTO        = 2 * time.Second
 )
 
 var ErrOpenAIWSIngressLeaseLost = errors.New("openai websocket ingress lease lost")
@@ -291,6 +300,86 @@ func (s *ConcurrencyService) AcquireOpenAIWSIngressLease(ctx context.Context, ap
 	}
 	go lease.refreshLoop()
 	return lease, true, nil
+}
+
+// AcquireCodexSubagentSlot 尝试立即获取分布式子代理槽位，不进入账号等待队列。
+func (s *ConcurrencyService) AcquireCodexSubagentSlot(
+	ctx context.Context,
+	accountID int64,
+	sessionScopeHash string,
+	epoch int64,
+	maxConcurrency int,
+) (*AcquireResult, error) {
+	if maxConcurrency <= 0 {
+		return &AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
+	}
+	if s == nil || s.cache == nil || accountID <= 0 || sessionScopeHash == "" || epoch <= 0 {
+		return nil, errors.New("codex subagent concurrency cache is unavailable")
+	}
+	cache, ok := s.cache.(CodexSubagentConcurrencyCache)
+	if !ok {
+		return nil, errors.New("codex subagent concurrency cache is unsupported")
+	}
+	requestID := generateRequestID()
+	baseCtx := context.Background()
+	if ctx != nil {
+		baseCtx = context.WithoutCancel(ctx)
+	} else {
+		ctx = context.Background()
+	}
+	operationCtx, operationCancel := context.WithTimeout(baseCtx, codexSubagentSlotOperationTO)
+	acquired, err := cache.AcquireCodexSubagentSlot(operationCtx, accountID, sessionScopeHash, epoch, maxConcurrency, requestID)
+	operationCancel()
+	if err != nil || !acquired {
+		return &AcquireResult{Acquired: acquired}, err
+	}
+	stopCh := make(chan struct{})
+	refreshDone := make(chan struct{})
+	go func() {
+		defer close(refreshDone)
+		ticker := time.NewTicker(codexSubagentSlotRefreshInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-stopCh:
+				return
+			case <-ticker.C:
+				refreshCtx, refreshCancel := context.WithTimeout(context.Background(), codexSubagentSlotOperationTO)
+				owned, refreshErr := cache.RefreshCodexSubagentSlot(refreshCtx, accountID, sessionScopeHash, epoch, requestID)
+				refreshCancel()
+				if refreshErr != nil || !owned {
+					logger.L().Warn("codex subagent concurrency slot refresh failed",
+						zap.Int64("account_id", accountID),
+						zap.String("scope_hash", truncateCodexFingerprintHash(sessionScopeHash)),
+						zap.Int64("epoch", epoch),
+						zap.Error(refreshErr),
+					)
+				}
+			}
+		}
+	}()
+	var releaseOnce sync.Once
+	return &AcquireResult{
+		Acquired: true,
+		ReleaseFunc: func() {
+			releaseOnce.Do(func() {
+				close(stopCh)
+				<-refreshDone
+				releaseCtx, cancel := context.WithTimeout(context.Background(), codexSubagentSlotOperationTO)
+				defer cancel()
+				if releaseErr := cache.ReleaseCodexSubagentSlot(releaseCtx, accountID, sessionScopeHash, epoch, requestID); releaseErr != nil {
+					logger.L().Warn("codex subagent concurrency slot release failed",
+						zap.Int64("account_id", accountID),
+						zap.String("scope_hash", truncateCodexFingerprintHash(sessionScopeHash)),
+						zap.Int64("epoch", epoch),
+						zap.Error(releaseErr),
+					)
+				}
+			})
+		},
+	}, nil
 }
 
 // SetAccountLoadBatchCacheTTL 设置账号负载批量读取的极短 TTL 缓存；非正数表示禁用缓存。

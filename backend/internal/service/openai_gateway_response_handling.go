@@ -110,9 +110,6 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			c.Header(http.CanonicalHeaderKey(openAIWSTurnStateHeader), pendingTurnState)
 			s.bindOpenAITurnStateProvenance(ctx, c, account.ID, openAITurnStateSessionHash(c), pendingTurnState, s.openAIWSSessionStickyTTL())
 		}
-		// 暂存头此刻才真正写给客户端：turn-state 溯源在这里记录（见
-		// noteStagedOpenAICodexTurnStateCommitted 的 failover 说明）。
-		s.noteStagedOpenAICodexTurnStateCommitted(c, account, attemptResponseHeaders)
 		// These headers describe this gateway's SSE stream and are stable across
 		// account attempts. Keep them authoritative over upstream values.
 		c.Header("Content-Type", "text/event-stream")

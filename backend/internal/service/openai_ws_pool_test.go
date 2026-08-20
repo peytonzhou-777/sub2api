@@ -584,6 +584,24 @@ func TestOpenAIWSHandshakeCompatibilitySeparatesFingerprintSessions(t *testing.T
 	require.Equal(t, "responses_websockets=2026-02-06", baseKey.openAIBeta)
 }
 
+func TestOpenAIWSHandshakeCompatibilitySeparatesSubagentTopology(t *testing.T) {
+	root := http.Header{
+		"X-Codex-Installation-Id": []string{"installation"},
+		"Session-Id":              []string{"shared-session"},
+		"Thread-Id":               []string{"root-thread"},
+	}
+	child := root.Clone()
+	child.Set("thread-id", "child-thread")
+	child.Set("x-codex-parent-thread-id", "root-thread")
+	child.Set("x-openai-subagent", "worker")
+	sibling := child.Clone()
+	sibling.Set("thread-id", "sibling-thread")
+
+	require.NotEqual(t, normalizeOpenAIWSHandshakeCompatibility(root), normalizeOpenAIWSHandshakeCompatibility(child))
+	require.NotEqual(t, normalizeOpenAIWSHandshakeCompatibility(child), normalizeOpenAIWSHandshakeCompatibility(sibling))
+	require.Equal(t, normalizeOpenAIWSHandshakeCompatibility(child), normalizeOpenAIWSHandshakeCompatibility(child.Clone()))
+}
+
 func TestOpenAIWSConnPool_AcquireNeverReusesAcrossIdentityBoundary(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 8

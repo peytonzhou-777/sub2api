@@ -929,6 +929,33 @@
           </p>
           <Select v-model="codexFingerprintMode" data-testid="bulk-codex-fingerprint-mode-select" :options="codexFingerprintModeOptions" />
         </div>
+        <div
+          v-if="enableCodexFingerprintMode && (codexFingerprintMode === 'session' || codexFingerprintMode === 'full')"
+          class="mt-4"
+        >
+          <div class="mb-3 flex items-center justify-between">
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexSubagentConcurrency') }}</label>
+            <input
+              v-model="enableCodexSubagentConcurrency"
+              type="checkbox"
+              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+          </div>
+          <div :class="!enableCodexSubagentConcurrency && 'pointer-events-none opacity-50'">
+            <input
+              v-model.number="codexSubagentMaxInflight"
+              data-testid="bulk-codex-subagent-concurrency-input"
+              type="number"
+              min="0"
+              max="64"
+              step="1"
+              class="input"
+            />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexSubagentConcurrencyDesc') }}
+            </p>
+          </div>
+        </div>
       </div>
 
       <!-- Upstream billing auto probe (any API-key platform) -->
@@ -1536,6 +1563,8 @@ const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 const enableCodexFingerprintMode = ref(false)
 const codexFingerprintMode = ref<CodexFingerprintMode>('off')
+const enableCodexSubagentConcurrency = ref(false)
+const codexSubagentMaxInflight = ref(0)
 const codexFingerprintModeOptions = computed(() => [
   { value: 'off' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintOff') },
   { value: 'device' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintDevice') },
@@ -1829,11 +1858,24 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
 
   if (enableCodexFingerprintMode.value) {
     const extra = ensureExtra()
-    // off = 默认值，清键即可；device/session/full 是显式 opt-in，必须落键（#5610）。
+    // 批量更新使用 JSONB 顶层合并，off 必须显式写空值才能覆盖旧 opt-in。
     if (codexFingerprintMode.value !== 'off') {
       extra.codex_fingerprint_mode = codexFingerprintMode.value
     } else {
-      delete extra.codex_fingerprint_mode
+      extra.codex_fingerprint_mode = ''
+    }
+    if (
+      enableCodexSubagentConcurrency.value &&
+      (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full')
+    ) {
+      if (codexSubagentMaxInflight.value > 0) {
+        extra.codex_subagent_max_inflight_per_session = Math.min(64, Math.trunc(codexSubagentMaxInflight.value))
+      } else {
+        extra.codex_subagent_max_inflight_per_session = 0
+      }
+    } else if (codexFingerprintMode.value === 'off' || codexFingerprintMode.value === 'device') {
+      // 降低收敛程度时同步关闭旧阀门，避免以后重新切回 session 时意外复活。
+      extra.codex_subagent_max_inflight_per_session = 0
     }
   }
 
@@ -2084,6 +2126,8 @@ watch(
       enableCodexCLIOnlyAppServer.value = false
       enableCodexFingerprintMode.value = false
       codexFingerprintMode.value = 'off'
+      enableCodexSubagentConcurrency.value = false
+      codexSubagentMaxInflight.value = 0
       enableOpenAICompactMode.value = false
       enableOpenAICompactModelMapping.value = false
       enableRpmLimit.value = false

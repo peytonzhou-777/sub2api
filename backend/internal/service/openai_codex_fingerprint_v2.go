@@ -45,6 +45,7 @@ var (
 	errCodexFingerprintSeedInvalid   = errors.New("codex fingerprint seed must be 64 lowercase hex characters")
 	errCodexFingerprintEpochInvalid  = errors.New("codex fingerprint session epoch must be positive")
 	errCodexFingerprintThreadMissing = errors.New("codex fingerprint thread source is required")
+	errCodexFingerprintFullSubagent  = errors.New("codex fingerprint full mode does not support subagent topology")
 )
 
 // CodexFingerprintState 是受保护存储中的账号级 v2 状态。
@@ -94,6 +95,7 @@ type CodexFingerprintSessionRequest struct {
 	AccountID          int64
 	SessionScopeHash   string
 	ThreadSourceHashes []string
+	BindSourceHashes   []string
 	Now                time.Time
 	RotationAllowed    bool
 	MinAgeBefore       time.Time
@@ -117,10 +119,14 @@ type codexFingerprintOriginalIDs struct {
 	legacyUnscoped   bool
 	clientSessionID  string
 	threadID         string
+	parentThreadID   string
+	forkedThreadID   string
 	turnID           string
 	windowID         string
 	promptCacheKey   string
 	requestID        string
+	subagentMarker   string
+	isSubagent       bool
 }
 
 func (s CodexFingerprintState) valid() bool {
@@ -166,6 +172,14 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 	now := time.Now()
 	mode := account.GetCodexFingerprintMode()
 	original := extractCodexFingerprintOriginalIDs(headers, body)
+	// full 模式启用子代理阀门即表示账号需要父子拓扑；所有请求统一按 session
+	// 派生 Thread，避免根请求先被压成 account-thread 后子线程无法闭合引用。
+	if mode == codexFingerprintFull && account.GetCodexSubagentMaxInflightPerSession() > 0 {
+		mode = codexFingerprintSession
+	}
+	if mode == codexFingerprintFull && original.isSubagent {
+		return nil, errCodexFingerprintFullSubagent
+	}
 	if original.threadID == "" {
 		original.threadID = original.clientSessionID
 	}
@@ -241,19 +255,47 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 			[]byte(secret),
 			codexFingerprintScopedDerivationSource(original.threadScope, original.threadID),
 		)
+		parentThreadHash := codexFingerprintOptionalThreadSourceHash(
+			[]byte(secret),
+			original.threadScope, original.parentThreadID,
+		)
+		forkedThreadHash := codexFingerprintOptionalThreadSourceHash(
+			[]byte(secret),
+			original.threadScope, original.forkedThreadID,
+		)
 		legacyTransportAgnosticScope := resolveCodexFingerprintTransportAgnosticSessionScope(c, headers, identityHidden)
 		legacyTransportAgnosticThreadScope := resolveCodexFingerprintThreadScope(c, legacyTransportAgnosticScope)
 		legacyTransportAgnosticThreadHash := codexFingerprintThreadSourceHash(
 			[]byte(secret),
 			codexFingerprintScopedDerivationSource(legacyTransportAgnosticThreadScope, original.threadID),
 		)
+		legacyTransportAgnosticParentHash := codexFingerprintOptionalThreadSourceHash(
+			[]byte(secret),
+			legacyTransportAgnosticThreadScope, original.parentThreadID,
+		)
+		legacyTransportAgnosticForkHash := codexFingerprintOptionalThreadSourceHash(
+			[]byte(secret),
+			legacyTransportAgnosticThreadScope, original.forkedThreadID,
+		)
 		legacyClientScope := resolveCodexFingerprintLegacyClientScope(c, headers)
 		legacyThreadScope := resolveCodexFingerprintThreadScope(c, legacyClientScope)
+		legacyTransportAgnosticScopeHash := codexFingerprintSessionScopeHash([]byte(secret), legacyTransportAgnosticScope)
+		legacyClientScopeHash := codexFingerprintSessionScopeHash([]byte(secret), legacyClientScope)
 		legacyClientThreadHash := codexFingerprintThreadSourceHash(
 			[]byte(secret),
 			codexFingerprintScopedDerivationSource(legacyThreadScope, original.threadID),
 		)
+		legacyClientParentHash := codexFingerprintOptionalThreadSourceHash(
+			[]byte(secret),
+			legacyThreadScope, original.parentThreadID,
+		)
+		legacyClientForkHash := codexFingerprintOptionalThreadSourceHash(
+			[]byte(secret),
+			legacyThreadScope, original.forkedThreadID,
+		)
 		legacyAccountThreadHash := codexFingerprintThreadSourceHash([]byte(secret), original.threadID)
+		legacyAccountParentHash := codexFingerprintOptionalThreadSourceHash([]byte(secret), "", original.parentThreadID)
+		legacyAccountForkHash := codexFingerprintOptionalThreadSourceHash([]byte(secret), "", original.forkedThreadID)
 		thresholds := s.codexFingerprintRotationThresholds(account.ID, original.sessionScopeHash, now)
 		rotationAllowed := true
 		if s.openaiWSPool != nil {
@@ -266,10 +308,24 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 				SessionScopeHash: original.sessionScopeHash,
 				ThreadSourceHashes: uniqueCodexFingerprintHashes(
 					threadSourceHash,
+					parentThreadHash,
+					forkedThreadHash,
 					legacyTransportAgnosticThreadHash,
+					legacyTransportAgnosticParentHash,
+					legacyTransportAgnosticForkHash,
 					legacyClientThreadHash,
+					legacyClientParentHash,
+					legacyClientForkHash,
 					legacyAccountThreadHash,
+					legacyAccountParentHash,
+					legacyAccountForkHash,
 				),
+				BindSourceHashes: func() []string {
+					if !original.isSubagent {
+						return nil
+					}
+					return []string{threadSourceHash}
+				}(),
 				Now:             now,
 				RotationAllowed: rotationAllowed,
 				MinAgeBefore:    thresholds.MinAgeBefore,
@@ -301,10 +357,10 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 		}
 		state = resolved.State
 		attemptEpoch = resolved.BoundEpoch
-		switch resolved.MatchedThreadSourceHash {
-		case threadSourceHash:
+		switch {
+		case resolved.BoundSessionScopeHash == original.sessionScopeHash:
 			original.sessionScopeHash = resolved.BoundSessionScopeHash
-		case legacyTransportAgnosticThreadHash:
+		case resolved.BoundSessionScopeHash == legacyTransportAgnosticScopeHash:
 			// 改动前的 Thread 继续使用未区分 HTTP/WS 的 Session，避免续聊中途换身份。
 			original.clientScope = legacyTransportAgnosticScope
 			original.threadScope = legacyTransportAgnosticThreadScope
@@ -315,7 +371,7 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 				zap.Int64("epoch", resolved.BoundEpoch),
 				zap.String("legacy_scope", "transport_agnostic"),
 			)
-		case legacyAccountThreadHash:
+		case resolved.BoundSessionScopeHash == "":
 			original.clientScope = ""
 			original.threadScope = ""
 			original.sessionScopeHash = ""
@@ -325,7 +381,7 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 				zap.String("scope_hash", "legacy-unscoped"),
 				zap.Int64("epoch", resolved.BoundEpoch),
 			)
-		case legacyClientThreadHash:
+		case resolved.BoundSessionScopeHash == legacyClientScopeHash:
 			original.clientScope = legacyClientScope
 			original.threadScope = legacyThreadScope
 			original.sessionScopeHash = resolved.BoundSessionScopeHash
@@ -334,8 +390,22 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 				zap.String("scope_hash", truncateCodexFingerprintHash(resolved.BoundSessionScopeHash)),
 				zap.Int64("epoch", resolved.BoundEpoch),
 			)
+		case resolved.MatchedThreadSourceHash == threadSourceHash ||
+			resolved.MatchedThreadSourceHash == parentThreadHash ||
+			resolved.MatchedThreadSourceHash == forkedThreadHash:
+			// 未识别的 scope hash 仅兼容当前作用域，避免根据客户端可控标识猜测历史派生规则。
+			original.sessionScopeHash = resolved.BoundSessionScopeHash
 		default:
 			original.sessionScopeHash = resolved.BoundSessionScopeHash
+		}
+		if original.isSubagent {
+			logger.L().Debug("codex fingerprint subagent topology resolved",
+				zap.Int64("account_id", account.ID),
+				zap.Int64("epoch", resolved.BoundEpoch),
+				zap.String("thread_hash", truncateCodexFingerprintHash(threadSourceHash)),
+				zap.String("parent_hash", truncateCodexFingerprintHash(parentThreadHash)),
+				zap.Bool("has_fork", original.forkedThreadID != ""),
+			)
 		}
 		if resolved.Rotated && s.openaiWSPool != nil {
 			s.openaiWSPool.ClearSessionScope(account.ID, resolved.BoundSessionScopeHash)
@@ -512,6 +582,13 @@ func codexFingerprintThreadSourceHash(clusterSecret []byte, source string) strin
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
+func codexFingerprintOptionalThreadSourceHash(clusterSecret []byte, scope, source string) string {
+	if strings.TrimSpace(source) == "" {
+		return ""
+	}
+	return codexFingerprintThreadSourceHash(clusterSecret, codexFingerprintScopedDerivationSource(scope, source))
+}
+
 func codexFingerprintSessionScopeHash(clusterSecret []byte, scope string) string {
 	mac := hmac.New(sha256.New, clusterSecret)
 	writeCodexFingerprintHMACPart(mac, []byte("codex-fp-session-scope:v1"))
@@ -534,6 +611,15 @@ func uniqueCodexFingerprintHashes(values ...string) []string {
 		result = append(result, value)
 	}
 	return result
+}
+
+func hashInCodexFingerprintSet(value string, candidates ...string) bool {
+	for _, candidate := range candidates {
+		if value != "" && value == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 // codexFingerprintRotationThresholds 生成作用域独立的年龄、空闲和最长寿命门槛。
@@ -685,50 +771,95 @@ func derefTime(value *time.Time) time.Time {
 
 func extractCodexFingerprintOriginalIDs(headers http.Header, body []byte) codexFingerprintOriginalIDs {
 	original := codexFingerprintOriginalIDs{}
-	if headers != nil {
-		original.clientSessionID = extractClientSessionID(headers)
-		original.threadID = firstNonEmptyHeader(headers, "thread-id", "thread_id")
-		original.requestID = firstNonEmptyHeader(headers, "x-client-request-id")
-		original.windowID = firstNonEmptyHeader(headers, "x-codex-window-id")
-		if raw := strings.TrimSpace(headers.Get("x-codex-turn-metadata")); raw != "" {
-			metadata := gjson.Parse(raw)
-			original.turnID = strings.TrimSpace(metadata.Get("turn_id").String())
-			if original.threadID == "" {
-				original.threadID = strings.TrimSpace(metadata.Get("thread_id").String())
-			}
-			if original.windowID == "" {
-				original.windowID = strings.TrimSpace(metadata.Get("window_id").String())
-			}
-		}
-	}
+	// 官方客户端以 body 内嵌 turn metadata 为主载体；平铺字段和请求头仅作兼容回退。
 	if len(body) > 0 {
-		if original.clientSessionID == "" {
-			original.clientSessionID = strings.TrimSpace(gjson.GetBytes(body, "client_metadata.session_id").String())
-		}
-		if original.threadID == "" {
-			original.threadID = strings.TrimSpace(gjson.GetBytes(body, "client_metadata.thread_id").String())
-		}
-		if original.turnID == "" {
-			original.turnID = strings.TrimSpace(gjson.GetBytes(body, "client_metadata.turn_id").String())
-		}
-		if original.windowID == "" {
-			original.windowID = strings.TrimSpace(gjson.GetBytes(body, "client_metadata.x-codex-window-id").String())
-		}
 		if raw := strings.TrimSpace(gjson.GetBytes(body, "client_metadata.x-codex-turn-metadata").String()); raw != "" {
-			metadata := gjson.Parse(raw)
-			if original.threadID == "" {
-				original.threadID = strings.TrimSpace(metadata.Get("thread_id").String())
-			}
-			if original.turnID == "" {
-				original.turnID = strings.TrimSpace(metadata.Get("turn_id").String())
-			}
-			if original.windowID == "" {
-				original.windowID = strings.TrimSpace(metadata.Get("window_id").String())
-			}
+			applyCodexFingerprintOriginalMetadata(&original, gjson.Parse(raw), false)
 		}
+		original.clientSessionID = strings.TrimSpace(gjson.GetBytes(body, "client_metadata.session_id").String())
+		fillCodexFingerprintOriginalBodyFallbacks(&original, body)
 		original.promptCacheKey = strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
 	}
+	if headers != nil {
+		if original.clientSessionID == "" {
+			original.clientSessionID = extractClientSessionID(headers)
+		}
+		if original.threadID == "" {
+			original.threadID = firstNonEmptyHeader(headers, "thread-id", "thread_id")
+		}
+		if original.parentThreadID == "" {
+			original.parentThreadID = firstNonEmptyHeader(headers, "x-codex-parent-thread-id")
+		}
+		original.requestID = firstNonEmptyHeader(headers, "x-client-request-id")
+		if original.windowID == "" {
+			original.windowID = firstNonEmptyHeader(headers, "x-codex-window-id")
+		}
+		if original.subagentMarker == "" {
+			original.subagentMarker = strings.TrimSpace(headers.Get("x-openai-subagent"))
+		}
+		if raw := strings.TrimSpace(headers.Get("x-codex-turn-metadata")); raw != "" {
+			applyCodexFingerprintOriginalMetadata(&original, gjson.Parse(raw), true)
+		}
+	}
+	original.isSubagent = original.subagentMarker != "" || original.parentThreadID != "" || original.forkedThreadID != ""
 	return original
+}
+
+func fillCodexFingerprintOriginalBodyFallbacks(original *codexFingerprintOriginalIDs, body []byte) {
+	if original == nil {
+		return
+	}
+	fields := []struct {
+		target *string
+		path   string
+	}{
+		{&original.threadID, "client_metadata.thread_id"},
+		{&original.parentThreadID, "client_metadata.parent_thread_id"},
+		{&original.forkedThreadID, "client_metadata.forked_from_thread_id"},
+		{&original.turnID, "client_metadata.turn_id"},
+		{&original.windowID, "client_metadata.x-codex-window-id"},
+	}
+	for _, field := range fields {
+		if *field.target == "" {
+			*field.target = strings.TrimSpace(gjson.GetBytes(body, field.path).String())
+		}
+	}
+}
+
+func applyCodexFingerprintOriginalMetadata(original *codexFingerprintOriginalIDs, metadata gjson.Result, fallbackOnly bool) {
+	if original == nil {
+		return
+	}
+	fields := []struct {
+		target *string
+		path   string
+	}{
+		{&original.threadID, "thread_id"},
+		{&original.parentThreadID, "parent_thread_id"},
+		{&original.forkedThreadID, "forked_from_thread_id"},
+		{&original.turnID, "turn_id"},
+		{&original.windowID, "window_id"},
+	}
+	for _, field := range fields {
+		if !fallbackOnly || *field.target == "" {
+			*field.target = strings.TrimSpace(metadata.Get(field.path).String())
+		}
+	}
+	if !fallbackOnly || original.subagentMarker == "" {
+		original.subagentMarker = strings.TrimSpace(metadata.Get("subagent_kind").String())
+	}
+	if original.subagentMarker == "" {
+		requestKind := strings.ToLower(strings.TrimSpace(metadata.Get("request_kind").String()))
+		if strings.Contains(requestKind, "subagent") {
+			original.subagentMarker = requestKind
+		}
+	}
+	if original.subagentMarker == "" {
+		threadSource := strings.ToLower(strings.TrimSpace(metadata.Get("thread_source").String()))
+		if strings.Contains(threadSource, "subagent") {
+			original.subagentMarker = threadSource
+		}
+	}
 }
 
 func firstNonEmptyHeader(headers http.Header, names ...string) string {
@@ -747,13 +878,17 @@ func codexFingerprintIDsFromContext(fp *CodexFingerprintContext) *codexFingerpri
 	return &codexFingerprintIDs{
 		mode:             fp.mode,
 		sessionScopeHash: fp.sessionScopeHash,
+		sessionEpoch:     fp.sessionEpoch,
 		installationID:   fp.installationID,
 		sessionID:        fp.sessionID,
 		threadID:         fp.threadID,
+		parentThreadID:   fp.parentThreadID,
+		forkedThreadID:   fp.forkedThreadID,
 		turnID:           fp.turnID,
 		windowID:         fp.windowID,
 		promptCacheKey:   fp.promptCacheKey,
 		requestID:        fp.requestID,
+		isSubagent:       fp.isSubagent,
 	}
 }
 
@@ -767,10 +902,13 @@ type CodexFingerprintContext struct {
 	installationID   string
 	sessionID        string
 	threadID         string
+	parentThreadID   string
+	forkedThreadID   string
 	turnID           string
 	windowID         string
 	promptCacheKey   string
 	requestID        string
+	isSubagent       bool
 }
 
 // Mode 返回本 attempt 使用的收敛模式。
@@ -883,6 +1021,7 @@ func newCodexFingerprintContextV2(
 		sessionEpoch:     epoch,
 		sessionScopeHash: strings.TrimSpace(original.sessionScopeHash),
 		installationID:   strings.TrimSpace(configuredDeviceID),
+		isSubagent:       original.isSubagent,
 	}
 	if ctx.installationID == "" {
 		ctx.installationID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, 0, codexFingerprintKindInstallation, "account-device")
@@ -920,6 +1059,14 @@ func newCodexFingerprintContextV2(
 	}
 	ctx.threadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread,
 		codexFingerprintScopedDerivationSource(threadScope, threadSource))
+	if value := strings.TrimSpace(original.parentThreadID); value != "" {
+		ctx.parentThreadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread,
+			codexFingerprintScopedDerivationSource(threadScope, value))
+	}
+	if value := strings.TrimSpace(original.forkedThreadID); value != "" {
+		ctx.forkedThreadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread,
+			codexFingerprintScopedDerivationSource(threadScope, value))
+	}
 
 	if value := strings.TrimSpace(original.turnID); value != "" {
 		ctx.turnID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindTurn,
@@ -965,6 +1112,12 @@ func populateLegacyUnscopedCodexFingerprintContext(
 		return nil, errCodexFingerprintThreadMissing
 	}
 	ctx.threadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread, threadSource)
+	if value := strings.TrimSpace(original.parentThreadID); value != "" {
+		ctx.parentThreadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread, value)
+	}
+	if value := strings.TrimSpace(original.forkedThreadID); value != "" {
+		ctx.forkedThreadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread, value)
+	}
 	if value := strings.TrimSpace(original.turnID); value != "" {
 		ctx.turnID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindTurn, value)
 	}

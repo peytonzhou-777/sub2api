@@ -615,7 +615,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
-					if failoverErr.StatusCode == http.StatusTooManyRequests {
+					if failoverErr.StatusCode == http.StatusTooManyRequests && !failoverErr.LocalRequestFailure {
 						h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(c.Request.Context(), account.ID, "upstream_rpm_or_quota")
 					}
 					if failoverClientGone(c) {
@@ -636,6 +636,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 						h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(reqModel), false, nil)
 					}
 					if !failoverErr.ShouldRetryNextAccount() {
+						h.handleFailoverExhausted(c, failoverErr, streamStarted)
+						return
+					}
+					if !failoverErr.AllowsNextAccountSwitch(switchCount) {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
@@ -1177,7 +1181,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
-					if failoverErr.StatusCode == http.StatusTooManyRequests {
+					if failoverErr.StatusCode == http.StatusTooManyRequests && !failoverErr.LocalRequestFailure {
 						h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(c.Request.Context(), account.ID, "upstream_rpm_or_quota")
 					}
 					if failoverClientGone(c) {
@@ -1195,6 +1199,10 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 						h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(currentRoutingModel), false, nil)
 					}
 					if !failoverErr.ShouldRetryNextAccount() {
+						h.handleAnthropicFailoverExhausted(c, failoverErr, streamStarted)
+						return
+					}
+					if !failoverErr.AllowsNextAccountSwitch(switchCount) {
 						h.handleAnthropicFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
@@ -1363,6 +1371,18 @@ func (h *OpenAIGatewayHandler) handleAnthropicFailoverExhausted(c *gin.Context, 
 	if failoverErr != nil && failoverErr.IsCredentialFailure() {
 		status, message := credentialFailoverClientResponse(failoverErr)
 		h.anthropicStreamingAwareError(c, status, "api_error", message, streamStarted)
+		return
+	}
+	if failoverErr != nil && failoverErr.IsCodexSubagentConcurrencyFailure() {
+		status := failoverErr.ClientStatusCode
+		if status <= 0 {
+			status = http.StatusTooManyRequests
+		}
+		errType := "rate_limit_error"
+		if status >= http.StatusInternalServerError {
+			errType = "api_error"
+		}
+		h.anthropicStreamingAwareError(c, status, errType, failoverErr.ClientMessage, streamStarted)
 		return
 	}
 	status, errType, errMsg := h.mapUpstreamError(failoverErr.StatusCode)
@@ -1877,11 +1897,15 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		if failoverErr.ShouldReportAccountScheduleFailure() {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(reqModel), false, nil)
 		}
-		if failoverErr.StatusCode == http.StatusTooManyRequests {
+		if failoverErr.StatusCode == http.StatusTooManyRequests && !failoverErr.LocalRequestFailure {
 			h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID, "upstream_rpm_or_quota")
 		}
 		releaseAccountSlot()
 		if !failoverErr.ShouldRetryNextAccount() {
+			closeOpenAIWSFailoverExhausted(wsConn, failoverErr)
+			return false
+		}
+		if !failoverErr.AllowsNextAccountSwitch(switchCount) {
 			closeOpenAIWSFailoverExhausted(wsConn, failoverErr)
 			return false
 		}
@@ -2589,6 +2613,18 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 		h.handleStreamingAwareError(c, status, "upstream_error", message, streamStarted)
 		return
 	}
+	if failoverErr.IsCodexSubagentConcurrencyFailure() {
+		status := failoverErr.ClientStatusCode
+		if status <= 0 {
+			status = http.StatusTooManyRequests
+		}
+		errType := "rate_limit_error"
+		if status >= http.StatusInternalServerError {
+			errType = "server_error"
+		}
+		h.handleStreamingAwareError(c, status, errType, failoverErr.ClientMessage, streamStarted)
+		return
+	}
 	statusCode := failoverErr.StatusCode
 	responseBody := failoverErr.ResponseBody
 	if service.IsOpenAISilentRefusalErrorBody(responseBody) {
@@ -2962,6 +2998,10 @@ func closeOpenAIWSFailoverExhausted(conn *coderws.Conn, failoverErr *service.Ups
 	}
 	if failoverErr.Stage == service.GatewayFailureStageAccountAuth {
 		closeOpenAIClientWS(conn, coderws.StatusTryAgainLater, service.GrokCredentialUnavailableClientMessage)
+		return
+	}
+	if failoverErr.IsCodexSubagentConcurrencyFailure() {
+		closeOpenAIClientWS(conn, coderws.StatusTryAgainLater, failoverErr.ClientMessage)
 		return
 	}
 	switch failoverErr.StatusCode {

@@ -157,6 +157,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		imageSizeTier      string
 		imageInputSize     string
 		payloadBytes       int
+		fingerprintIDs     *codexFingerprintIDs
 	}
 	ingressSessionOriginalModel := ""
 
@@ -398,6 +399,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			)
 		}
 		normalized = policyApplied
+		var fingerprintIDs *codexFingerprintIDs
 		if account.IsOpenAIOAuth() && !isOpenAIResponsesCompactPath(c) {
 			// rawForHash 保留客户端原值，只有实际出站 payload 使用账号级身份。
 			fingerprinted, fpErr := s.applyCodexFingerprintRawForAttempt(ctx, c, account, normalized, true)
@@ -405,6 +407,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				return openAIWSClientPayload{}, fmt.Errorf("apply ingress codex fingerprint: %w", fpErr)
 			}
 			normalized = fingerprinted
+			fingerprintIDs = stagedCodexFingerprintIDs(c)
 			promptCacheKey = strings.TrimSpace(gjson.GetBytes(normalized, "prompt_cache_key").String())
 		}
 		ingressSessionOriginalModel = originalModel
@@ -419,6 +422,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			imageSizeTier:      imageSizeTier,
 			imageInputSize:     imageInputSize,
 			payloadBytes:       len(normalized),
+			fingerprintIDs:     fingerprintIDs,
 		}, nil
 	}
 
@@ -810,11 +814,16 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		return lease, nil
 	}
 
-	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string) (*OpenAIForwardResult, error) {
+	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string, fingerprintIDs *codexFingerprintIDs) (*OpenAIForwardResult, error) {
 		responseModelObserver := &upstreamResponseModelObserver{}
 		if lease == nil {
 			return nil, errors.New("upstream websocket lease is nil")
 		}
+		releaseSubagentSlot, gateErr := s.acquireCodexSubagentSlot(ctx, account, fingerprintIDs)
+		if gateErr != nil {
+			return nil, gateErr
+		}
+		defer releaseSubagentSlot()
 		turnStart := time.Now()
 		wroteDownstream := false
 		sawUpstreamEvent := false
@@ -848,7 +857,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		tokenEventCount := 0
 		terminalEventCount := 0
 		turnAccepted := false
-		replayCollector := &openAIWSToolCallReplayCollector{}
+		replayCollector := &openAIWSResponseReplayCollector{}
 		firstEventType := ""
 		lastEventType := ""
 		needModelReplace := false
@@ -1040,6 +1049,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					result.wsReplayInput = replayInput
 					result.wsReplayInputExists = true
 				}
+				result.wsReplayComplete, result.wsReplayReason = replayCollector.Replayable()
 				if imageCount > 0 {
 					result.ImageCount = imageCount
 					result.ImageSize = imageSizeTier
@@ -1053,6 +1063,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 
 	currentPayload := firstPayload.payloadRaw
+	currentFingerprintIDs := firstPayload.fingerprintIDs
 	currentOriginalModel := firstPayload.originalModel
 	currentImageBillingModel := firstPayload.imageBillingModel
 	currentImageSizeTier := firstPayload.imageSizeTier
@@ -1117,8 +1128,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	var lastTurnStrictState *openAIWSIngressPreviousTurnStrictState
 	lastTurnReplayInput := []json.RawMessage(nil)
 	lastTurnReplayInputExists := false
+	lastTurnReplayComplete := false
+	lastTurnReplayReason := "missing_parent_checkpoint"
 	currentTurnReplayInput := []json.RawMessage(nil)
 	currentTurnReplayInputExists := false
+	currentTurnReplayComplete := false
+	currentTurnReplayReason := ""
 	resetSessionLease := func(markBroken bool) {
 		if sessionLease == nil {
 			return
@@ -1208,9 +1223,44 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				)
 			}
 		}
+		parentReplayInput := lastTurnReplayInput
+		parentReplayInputExists := lastTurnReplayInputExists
+		parentReplayComplete := lastTurnReplayComplete
+		parentReplayReason := lastTurnReplayReason
+		previousResponseSourceConnID := ""
+		usesLastTurnCheckpoint := currentPreviousResponseID != "" && expectedPrev != "" && currentPreviousResponseID == expectedPrev
+		if currentPreviousResponseID != "" {
+			if stateStore != nil {
+				previousResponseSourceConnID, _ = getOpenAIWSResponseConn(stateStore, currentPreviousResponseID, connectionTarget)
+			}
+			if usesLastTurnCheckpoint {
+				if previousResponseSourceConnID == "" {
+					previousResponseSourceConnID = sessionConnID
+				}
+			} else {
+				parentReplayInput = nil
+				parentReplayInputExists = false
+				parentReplayComplete = false
+				parentReplayReason = "missing_parent_checkpoint"
+				if checkpoint, found := getOpenAIWSReplayCheckpoint(stateStore, groupID, currentPreviousResponseID, connectionTarget); found {
+					parentReplayInput = checkpoint.FullInput
+					parentReplayInputExists = checkpoint.FullInputExists
+					parentReplayComplete = checkpoint.Replayable
+					parentReplayReason = checkpoint.UnavailableReason
+					if previousResponseSourceConnID == "" {
+						previousResponseSourceConnID = checkpoint.SourceConnID
+					}
+				}
+			}
+		} else {
+			parentReplayInput = nil
+			parentReplayInputExists = false
+			parentReplayComplete = true
+			parentReplayReason = ""
+		}
 		nextReplayInput, nextReplayInputExists, replayInputErr := buildOpenAIWSReplayInputSequence(
-			lastTurnReplayInput,
-			lastTurnReplayInputExists,
+			parentReplayInput,
+			parentReplayInputExists,
 			currentPayload,
 			currentPreviousResponseID != "",
 		)
@@ -1224,9 +1274,13 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			)
 			currentTurnReplayInput = nil
 			currentTurnReplayInputExists = false
+			currentTurnReplayComplete = false
+			currentTurnReplayReason = "build_replay_input_error"
 		} else {
 			currentTurnReplayInput = nextReplayInput
 			currentTurnReplayInputExists = nextReplayInputExists
+			currentTurnReplayComplete = currentPreviousResponseID == "" || parentReplayComplete
+			currentTurnReplayReason = parentReplayReason
 		}
 		replayHasFunctionCallOutput := currentTurnReplayInputExists &&
 			openAIWSRawItemsHasFunctionCallOutput(currentTurnReplayInput)
@@ -1281,36 +1335,71 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 						hasFunctionCallOutput,
 					)
 				} else {
-					updatedWithInput, setInputErr := setOpenAIWSPayloadInputSequence(
-						updatedPayload,
-						currentTurnReplayInput,
-						currentTurnReplayInputExists,
-					)
-					if setInputErr != nil {
-						logOpenAIWSModeInfo(
-							"ingress_ws_prev_response_strict_eval account_id=%d turn=%d conn_id=%s action=keep_previous_response_id reason=%s drop_reason=set_full_input_error previous_response_id=%s expected_previous_response_id=%s cause=%s has_function_call_output=%v",
-							account.ID,
-							turn,
-							truncateOpenAIWSLogValue(sessionConnID, openAIWSIDValueMaxLen),
-							normalizeOpenAIWSLogValue(strictReason),
-							truncateOpenAIWSLogValue(currentPreviousResponseID, openAIWSIDValueMaxLen),
-							truncateOpenAIWSLogValue(expectedPrev, openAIWSIDValueMaxLen),
-							truncateOpenAIWSLogValue(setInputErr.Error(), openAIWSLogValueMaxLen),
-							hasFunctionCallOutput,
+					// 客户端续链 ID 与当前会话上一轮不一致时，严格降级已经决定
+					// 放弃该外部锚点；此时应从当前会话检查点重建完整输入。
+					fullInputReady := true
+					if expectedPrev != "" && currentPreviousResponseID != expectedPrev {
+						strictReplayInput, strictReplayInputExists, strictReplayErr := buildOpenAIWSReplayInputSequence(
+							lastTurnReplayInput,
+							lastTurnReplayInputExists,
+							currentPayload,
+							true,
 						)
-					} else {
-						currentPayload = updatedWithInput
-						logOpenAIWSModeInfo(
-							"ingress_ws_prev_response_strict_eval account_id=%d turn=%d conn_id=%s action=drop_previous_response_id_full_create reason=%s previous_response_id=%s expected_previous_response_id=%s has_function_call_output=%v",
-							account.ID,
-							turn,
-							truncateOpenAIWSLogValue(sessionConnID, openAIWSIDValueMaxLen),
-							normalizeOpenAIWSLogValue(strictReason),
-							truncateOpenAIWSLogValue(currentPreviousResponseID, openAIWSIDValueMaxLen),
-							truncateOpenAIWSLogValue(expectedPrev, openAIWSIDValueMaxLen),
-							hasFunctionCallOutput,
+						if strictReplayErr != nil {
+							logOpenAIWSModeInfo(
+								"ingress_ws_prev_response_strict_eval account_id=%d turn=%d conn_id=%s action=keep_previous_response_id reason=%s drop_reason=build_full_input_error previous_response_id=%s expected_previous_response_id=%s cause=%s has_function_call_output=%v",
+								account.ID,
+								turn,
+								truncateOpenAIWSLogValue(sessionConnID, openAIWSIDValueMaxLen),
+								normalizeOpenAIWSLogValue(strictReason),
+								truncateOpenAIWSLogValue(currentPreviousResponseID, openAIWSIDValueMaxLen),
+								truncateOpenAIWSLogValue(expectedPrev, openAIWSIDValueMaxLen),
+								truncateOpenAIWSLogValue(strictReplayErr.Error(), openAIWSLogValueMaxLen),
+								hasFunctionCallOutput,
+							)
+							fullInputReady = false
+						} else {
+							currentTurnReplayInput = strictReplayInput
+							currentTurnReplayInputExists = strictReplayInputExists
+							currentTurnReplayComplete = lastTurnReplayComplete
+							currentTurnReplayReason = lastTurnReplayReason
+						}
+					}
+					if fullInputReady {
+						updatedWithInput, setInputErr := setOpenAIWSPayloadInputSequence(
+							updatedPayload,
+							currentTurnReplayInput,
+							currentTurnReplayInputExists,
 						)
-						currentPreviousResponseID = ""
+						if setInputErr != nil {
+							logOpenAIWSModeInfo(
+								"ingress_ws_prev_response_strict_eval account_id=%d turn=%d conn_id=%s action=keep_previous_response_id reason=%s drop_reason=set_full_input_error previous_response_id=%s expected_previous_response_id=%s cause=%s has_function_call_output=%v",
+								account.ID,
+								turn,
+								truncateOpenAIWSLogValue(sessionConnID, openAIWSIDValueMaxLen),
+								normalizeOpenAIWSLogValue(strictReason),
+								truncateOpenAIWSLogValue(currentPreviousResponseID, openAIWSIDValueMaxLen),
+								truncateOpenAIWSLogValue(expectedPrev, openAIWSIDValueMaxLen),
+								truncateOpenAIWSLogValue(setInputErr.Error(), openAIWSLogValueMaxLen),
+								hasFunctionCallOutput,
+							)
+						} else {
+							currentPayload = updatedWithInput
+							logOpenAIWSModeInfo(
+								"ingress_ws_prev_response_strict_eval account_id=%d turn=%d conn_id=%s action=drop_previous_response_id_full_create reason=%s previous_response_id=%s expected_previous_response_id=%s has_function_call_output=%v",
+								account.ID,
+								turn,
+								truncateOpenAIWSLogValue(sessionConnID, openAIWSIDValueMaxLen),
+								normalizeOpenAIWSLogValue(strictReason),
+								truncateOpenAIWSLogValue(currentPreviousResponseID, openAIWSIDValueMaxLen),
+								truncateOpenAIWSLogValue(expectedPrev, openAIWSIDValueMaxLen),
+								hasFunctionCallOutput,
+							)
+							currentPreviousResponseID = ""
+							previousResponseSourceConnID = ""
+							currentTurnReplayComplete = true
+							currentTurnReplayReason = ""
+						}
 					}
 				}
 			}
@@ -1358,9 +1447,47 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			)
 		}
 
-		// turnPayload 是本轮首次实际出站的最终字节；传输恢复只能原样重发这份快照。
+		// 同连接续链保持原始负载；跨连接时必须先移除连接级 response_id 并补齐完整 input。
 		turnPayload := cloneOpenAIWSPayloadBytes(currentPayload)
-		result, relayErr := sendAndRelay(turn, sessionLease, turnPayload, len(turnPayload), currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize)
+		preparedPayload, payloadMode, prepareErr := prepareOpenAIWSCrossConnPayload(
+			turnPayload,
+			previousResponseSourceConnID,
+			connID,
+			currentTurnReplayInput,
+			currentTurnReplayInputExists,
+			currentTurnReplayComplete,
+			currentTurnReplayReason,
+		)
+		if prepareErr != nil {
+			s.recordOpenAIWSIngressCrossConnBlocked()
+			lastTurnClean = true
+			logOpenAIWSModeInfo(
+				"ingress_ws_cross_conn_replay_blocked account_id=%d turn=%d source_conn_id=%s actual_conn_id=%s previous_response_id=%s reason=%s",
+				account.ID,
+				turn,
+				truncateOpenAIWSLogValue(previousResponseSourceConnID, openAIWSIDValueMaxLen),
+				truncateOpenAIWSLogValue(connID, openAIWSIDValueMaxLen),
+				truncateOpenAIWSLogValue(currentPreviousResponseID, openAIWSIDValueMaxLen),
+				truncateOpenAIWSLogValue(prepareErr.Error(), openAIWSLogValueMaxLen),
+			)
+			return NewOpenAIWSClientCloseError(
+				coderws.StatusPolicyViolation,
+				"upstream continuation context is unavailable; please restart the conversation",
+				prepareErr,
+			)
+		}
+		turnPayload = preparedPayload
+		if payloadMode == openAIWSCrossConnPayloadRebuilt {
+			s.recordOpenAIWSIngressCrossConnRebuild()
+			logOpenAIWSModeInfo(
+				"ingress_ws_cross_conn_replay account_id=%d turn=%d source_conn_id=%s actual_conn_id=%s action=drop_previous_response_id_full_create",
+				account.ID,
+				turn,
+				truncateOpenAIWSLogValue(previousResponseSourceConnID, openAIWSIDValueMaxLen),
+				truncateOpenAIWSLogValue(connID, openAIWSIDValueMaxLen),
+			)
+		}
+		result, relayErr := sendAndRelay(turn, sessionLease, turnPayload, len(turnPayload), currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize, currentFingerprintIDs)
 		if relayErr != nil && isOpenAIWSIngressTurnRetryable(relayErr) {
 			recoveryStartedAt := time.Now()
 			s.recordOpenAIWSIngressRecoveryAttempt()
@@ -1375,6 +1502,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			lastTurnClean = false
 			resetSessionLease(true)
 
+			failedConnID := connID
 			recoveryLease, acquireErr := acquireTurnLease(turn, "", false, true)
 			if acquireErr != nil {
 				s.recordOpenAIWSIngressRecoveryFailure()
@@ -1386,7 +1514,36 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				if storeDisabled {
 					pinSessionConn(sessionConnID)
 				}
-				result, relayErr = sendAndRelay(turn, sessionLease, turnPayload, len(turnPayload), currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize)
+				recoveryPayload, recoveryMode, recoveryPrepareErr := prepareOpenAIWSCrossConnPayload(
+					turnPayload,
+					failedConnID,
+					connID,
+					currentTurnReplayInput,
+					currentTurnReplayInputExists,
+					currentTurnReplayComplete,
+					currentTurnReplayReason,
+				)
+				if recoveryPrepareErr != nil {
+					s.recordOpenAIWSIngressCrossConnBlocked()
+					relayErr = NewOpenAIWSClientCloseError(
+						coderws.StatusPolicyViolation,
+						"upstream continuation context is unavailable; please restart the conversation",
+						recoveryPrepareErr,
+					)
+				} else {
+					turnPayload = recoveryPayload
+					if recoveryMode == openAIWSCrossConnPayloadRebuilt {
+						s.recordOpenAIWSIngressCrossConnRebuild()
+						logOpenAIWSModeInfo(
+							"ingress_ws_transport_recovery_rebuild account_id=%d turn=%d source_conn_id=%s actual_conn_id=%s action=drop_previous_response_id_full_create",
+							account.ID,
+							turn,
+							truncateOpenAIWSLogValue(failedConnID, openAIWSIDValueMaxLen),
+							truncateOpenAIWSLogValue(connID, openAIWSIDValueMaxLen),
+						)
+					}
+					result, relayErr = sendAndRelay(turn, sessionLease, turnPayload, len(turnPayload), currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize, currentFingerprintIDs)
+				}
 				if relayErr == nil {
 					s.recordOpenAIWSIngressRecoverySuccess()
 				} else {
@@ -1400,7 +1557,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if relayErr != nil {
 			lastTurnClean = false
 			finalErr := relayErr
-			if unwrapped := errors.Unwrap(relayErr); unwrapped != nil {
+			if _, ok := relayErr.(*openAIWSIngressTurnError); ok {
+				unwrapped := errors.Unwrap(relayErr)
 				finalErr = unwrapped
 			}
 			if hooks != nil && hooks.AfterTurn != nil {
@@ -1419,6 +1577,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			return errors.New("websocket turn result is nil")
 		}
 		responseID := strings.TrimSpace(result.RequestID)
+		currentPayload = turnPayload
+		currentPreviousResponseID = openAIWSPayloadStringFromRaw(turnPayload, "previous_response_id")
 		lastTurnResponseID = responseID
 		lastTurnPayload = cloneOpenAIWSPayloadBytes(currentPayload)
 		lastTurnReplayInput = cloneOpenAIWSRawMessages(currentTurnReplayInput)
@@ -1426,6 +1586,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if result.wsReplayInputExists {
 			lastTurnReplayInput = append(lastTurnReplayInput, cloneOpenAIWSRawMessages(result.wsReplayInput)...)
 			lastTurnReplayInputExists = true
+		}
+		lastTurnReplayComplete = currentTurnReplayComplete && result.wsReplayComplete
+		lastTurnReplayReason = currentTurnReplayReason
+		if currentTurnReplayComplete && !result.wsReplayComplete {
+			lastTurnReplayReason = result.wsReplayReason
 		}
 		nextStrictState, strictStateErr := buildOpenAIWSIngressPreviousTurnStrictState(currentPayload)
 		if strictStateErr != nil {
@@ -1445,6 +1610,24 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			ttl := s.openAIWSResponseStickyTTL()
 			logOpenAIWSBindResponseAccountWarn(groupID, account.ID, responseID, stateStore.BindResponseAccount(ctx, groupID, responseID, account.ID, ttl))
 			bindOpenAIWSResponseConn(stateStore, responseID, connectionTarget, connID, ttl)
+			requestInput, requestInputSeen, requestInputErr := openAIWSExtractNormalizedInputSequence(turnPayload)
+			checkpointReplayable := lastTurnReplayComplete && requestInputErr == nil && result.SucceededForScheduling()
+			checkpointReason := lastTurnReplayReason
+			if requestInputErr != nil {
+				checkpointReason = "request_input_parse_error"
+			} else if !result.SucceededForScheduling() {
+				checkpointReason = "non_success_terminal_event"
+			}
+			bindOpenAIWSReplayCheckpoint(stateStore, groupID, responseID, openAIWSReplayCheckpoint{
+				SourceConnID:       connID,
+				Target:             connectionTarget,
+				PreviousResponseID: currentPreviousResponseID,
+				RequestInput:       requestInput,
+				RequestInputSeen:   requestInputSeen,
+				ResponseOutput:     result.wsReplayInput,
+				Replayable:         checkpointReplayable,
+				UnavailableReason:  checkpointReason,
+			}, ttl)
 		}
 		if stateStore != nil && storeDisabled && sessionHash != "" {
 			bindOpenAIWSSessionConn(stateStore, groupID, sessionHash, connectionTarget, connID, s.openAIWSSessionStickyTTL())
@@ -1532,6 +1715,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 		}
 		currentPayload = nextPayload.payloadRaw
+		currentFingerprintIDs = nextPayload.fingerprintIDs
 		currentOriginalModel = nextPayload.originalModel
 		currentImageBillingModel = nextPayload.imageBillingModel
 		currentImageSizeTier = nextPayload.imageSizeTier

@@ -240,6 +240,11 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		if err != nil {
 			return nil, fmt.Errorf("apply codex fingerprint: %w", err)
 		}
+		releaseSubagentSlot, gateErr := s.acquireCodexSubagentSlot(ctx, account, stagedCodexFingerprintIDs(c))
+		if gateErr != nil {
+			return nil, gateErr
+		}
+		defer releaseSubagentSlot()
 	}
 
 	// 4b. Apply OpenAI fast policy (may filter service_tier or block the request).

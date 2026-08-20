@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,7 +10,89 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
+
+func TestOpenAIWSReplayCheckpointMaterializesAcrossConnectionCleanup(t *testing.T) {
+	store := NewOpenAIWSStateStore(nil)
+	replayStore, ok := store.(openAIWSReplayCheckpointStateStore)
+	require.True(t, ok)
+
+	account := &Account{ID: 101, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+	target := newOpenAIWSConnectionTarget(
+		account,
+		OpenAIUpstreamTransportResponsesWebsocketV2,
+		"wss://api.openai.com/v1/responses",
+		http.Header{"User-Agent": []string{"unit-test/1.0"}},
+	)
+	groupID := int64(7)
+	ttl := time.Minute
+
+	replayStore.BindReplayCheckpoint(groupID, "resp_root", openAIWSReplayCheckpoint{
+		SourceConnID:     "conn-old",
+		Target:           target,
+		RequestInput:     []json.RawMessage{json.RawMessage(`{"type":"message","role":"user","content":"hello"}`)},
+		RequestInputSeen: true,
+		ResponseOutput:   []json.RawMessage{json.RawMessage(`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"}]}`)},
+		Replayable:       true,
+	}, ttl)
+	replayStore.BindReplayCheckpoint(groupID, "resp_child", openAIWSReplayCheckpoint{
+		SourceConnID:       "conn-old",
+		Target:             target,
+		PreviousResponseID: "resp_root",
+		RequestInput:       []json.RawMessage{json.RawMessage(`{"type":"message","role":"user","content":"continue"}`)},
+		RequestInputSeen:   true,
+		ResponseOutput:     []json.RawMessage{json.RawMessage(`{"type":"function_call","id":"fc_1","call_id":"call_1","name":"shell","arguments":"{}"}`)},
+		Replayable:         true,
+	}, ttl)
+
+	store.BindResponseConn("resp_root", "conn-old", ttl)
+	store.BindResponseConn("resp_child", "conn-old", ttl)
+	require.Equal(t, 2, deleteOpenAIWSConnBindings(store, "conn-old"))
+
+	checkpoint, found := replayStore.GetReplayCheckpoint(groupID, "resp_child", target)
+	require.True(t, found)
+	require.True(t, checkpoint.Replayable)
+	require.True(t, checkpoint.FullInputExists)
+	require.Len(t, checkpoint.FullInput, 4)
+	require.Equal(t, "user", gjson.GetBytes(checkpoint.FullInput[0], "role").String())
+	require.Equal(t, "assistant", gjson.GetBytes(checkpoint.FullInput[1], "role").String())
+	require.Equal(t, "continue", gjson.GetBytes(checkpoint.FullInput[2], "content").String())
+	require.Equal(t, "call_1", gjson.GetBytes(checkpoint.FullInput[3], "call_id").String())
+	require.Equal(t, "conn-old", checkpoint.SourceConnID)
+
+	mismatchedTarget := target
+	mismatchedTarget.wsURL = "wss://example.invalid/v1/responses"
+	mismatch, found := replayStore.GetReplayCheckpoint(groupID, "resp_child", mismatchedTarget)
+	require.True(t, found, "已知 checkpoint 目标不匹配时必须保留已知来源信号")
+	require.False(t, mismatch.Replayable)
+	require.Equal(t, "target_mismatch", mismatch.UnavailableReason)
+}
+
+func TestOpenAIWSReplayCheckpointMissingParentStaysKnownButBlocked(t *testing.T) {
+	store := NewOpenAIWSStateStore(nil)
+	replayStore := store.(openAIWSReplayCheckpointStateStore)
+	target := newOpenAIWSConnectionTarget(
+		&Account{ID: 102, Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
+		OpenAIUpstreamTransportResponsesWebsocketV2,
+		"wss://api.openai.com/v1/responses",
+		http.Header{"User-Agent": []string{"unit-test/1.0"}},
+	)
+	replayStore.BindReplayCheckpoint(8, "resp_child", openAIWSReplayCheckpoint{
+		SourceConnID:       "conn-old",
+		Target:             target,
+		PreviousResponseID: "resp_missing",
+		RequestInput:       []json.RawMessage{json.RawMessage(`{"type":"message","role":"user","content":"continue"}`)},
+		RequestInputSeen:   true,
+		Replayable:         true,
+	}, time.Minute)
+
+	checkpoint, found := replayStore.GetReplayCheckpoint(8, "resp_child", target)
+	require.True(t, found)
+	require.False(t, checkpoint.Replayable)
+	require.Equal(t, "missing_parent_checkpoint", checkpoint.UnavailableReason)
+	require.Equal(t, "conn-old", checkpoint.SourceConnID)
+}
 
 func TestOpenAIWSStateStore_BindGetDeleteResponseAccount(t *testing.T) {
 	cache := &stubGatewayCache{}

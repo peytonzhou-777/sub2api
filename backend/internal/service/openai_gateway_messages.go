@@ -254,6 +254,11 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		if err != nil {
 			return nil, fmt.Errorf("apply codex fingerprint: %w", err)
 		}
+		releaseSubagentSlot, gateErr := s.acquireCodexSubagentSlot(ctx, account, stagedCodexFingerprintIDs(c))
+		if gateErr != nil {
+			return nil, gateErr
+		}
+		defer releaseSubagentSlot()
 	}
 	if account.Platform == PlatformOpenAI {
 		if policyBody, changed := ApplyOpenAIReasoningEffortPolicyFromContext(ctx, responsesBody); changed {

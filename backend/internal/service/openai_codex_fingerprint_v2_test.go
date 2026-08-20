@@ -244,6 +244,16 @@ func TestResolveCodexFingerprintContextPreservesTransportAgnosticThreadBinding(t
 	require.Equal(t, legacyScopeHash, fp.sessionScopeHash)
 	require.Equal(t, legacyFP.SessionID(), fp.SessionID(), "旧 Thread 必须继续使用旧 Session 派生输入")
 	require.Equal(t, legacyFP.ThreadID(), fp.ThreadID(), "旧 Thread 不得因新增传输维度改变")
+
+	// 子线程别名写入后会先命中新哈希，仍必须服从持久化的历史 scope。
+	repo.matchedHash = repo.lastRequest.ThreadSourceHashes[0]
+	continued, err := svc.resolveCodexFingerprintContextForAttempt(
+		context.Background(), c, account, c.Request.Header, []byte(`{"input":"continued"}`),
+	)
+	require.NoError(t, err)
+	require.Equal(t, legacyScopeHash, continued.sessionScopeHash)
+	require.Equal(t, legacyFP.SessionID(), continued.SessionID())
+	require.Equal(t, legacyFP.ThreadID(), continued.ThreadID())
 }
 
 func TestResolveCodexFingerprintLegacyClientScopePreservesCompactFallback(t *testing.T) {
@@ -627,4 +637,165 @@ func TestAccountCodexFingerprintStateIsExcludedFromJSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(payload), "CodexFingerprint")
 	assert.NotContains(t, string(payload), testCodexFingerprintV2Seed())
+}
+
+func TestCodexFingerprintSubagentMapsClosedTopology(t *testing.T) {
+	original := codexFingerprintOriginalIDs{
+		clientScope:      "client:codex:transport:http",
+		threadScope:      "api-key:101:client:codex:transport:http",
+		clientSessionID:  "root-session",
+		threadID:         "child-thread",
+		parentThreadID:   "root-thread",
+		forkedThreadID:   "root-thread",
+		turnID:           "child-turn",
+		windowID:         "child-window",
+		subagentMarker:   "worker",
+		isSubagent:       true,
+		sessionScopeHash: strings.Repeat("cd", 32),
+	}
+	child, err := newCodexFingerprintContextV2(
+		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+		codexFingerprintSession, "", original,
+	)
+	require.NoError(t, err)
+	rootInput := original
+	rootInput.threadID = original.parentThreadID
+	rootInput.parentThreadID = ""
+	rootInput.forkedThreadID = ""
+	rootInput.isSubagent = false
+	root, err := newCodexFingerprintContextV2(
+		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+		codexFingerprintSession, "", rootInput,
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, root.SessionID(), child.SessionID())
+	require.Equal(t, root.ThreadID(), child.parentThreadID)
+	require.Equal(t, root.ThreadID(), child.forkedThreadID)
+	require.NotEqual(t, root.ThreadID(), child.ThreadID())
+
+	ids := codexFingerprintIDsFromContext(child)
+	headers := http.Header{
+		"X-Openai-Subagent":     []string{"worker"},
+		"X-Codex-Turn-Metadata": []string{`{"request_kind":"subagent","custom":"kept"}`},
+	}
+	body := map[string]any{"client_metadata": map[string]any{
+		"x-codex-turn-metadata": `{"request_kind":"subagent","custom":"kept"}`,
+	}}
+	applyCodexFingerprintHeaders(headers, ids)
+	require.True(t, applyCodexFingerprintClientMetadata(body, ids))
+	require.Equal(t, root.ThreadID(), headers.Get("x-codex-parent-thread-id"))
+	require.Equal(t, "worker", headers.Get("x-openai-subagent"))
+	require.Equal(t, "kept", gjson.Get(headers.Get("x-codex-turn-metadata"), "custom").String())
+	metadata := body["client_metadata"].(map[string]any)
+	require.Equal(t, root.ThreadID(), metadata["parent_thread_id"])
+	require.Equal(t, "kept", gjson.Get(metadata["x-codex-turn-metadata"].(string), "custom").String())
+}
+
+func TestExtractCodexFingerprintOriginalIDsPrefersBodyTopology(t *testing.T) {
+	headers := http.Header{
+		"Thread-Id":                []string{"header-child"},
+		"X-Codex-Parent-Thread-Id": []string{"header-parent"},
+		"X-Openai-Subagent":        []string{"true"},
+		"X-Codex-Turn-Metadata":    []string{`{"thread_id":"header-metadata-child","parent_thread_id":"header-metadata-parent"}`},
+	}
+	body := []byte(`{"client_metadata":{"thread_id":"flat-child","parent_thread_id":"flat-parent","x-codex-turn-metadata":"{\"thread_id\":\"body-child\",\"parent_thread_id\":\"body-parent\",\"forked_from_thread_id\":\"body-fork\",\"subagent_kind\":\"worker\"}"}}`)
+
+	original := extractCodexFingerprintOriginalIDs(headers, body)
+	require.Equal(t, "body-child", original.threadID)
+	require.Equal(t, "body-parent", original.parentThreadID)
+	require.Equal(t, "body-fork", original.forkedThreadID)
+	require.Equal(t, "worker", original.subagentMarker)
+	require.True(t, original.isSubagent)
+}
+
+func TestExtractCodexFingerprintOriginalIDsDetectsMetadataOnlySubagent(t *testing.T) {
+	body := []byte(`{"client_metadata":{"x-codex-turn-metadata":"{\"thread_id\":\"child\",\"request_kind\":\"subagent_task\"}"}}`)
+	original := extractCodexFingerprintOriginalIDs(nil, body)
+	require.True(t, original.isSubagent)
+	require.Equal(t, "subagent_task", original.subagentMarker)
+}
+
+func TestCodexFingerprintFullModeRejectsSubagent(t *testing.T) {
+	startedAt := time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC)
+	account := &Account{
+		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra:                          map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintFull)},
+		CodexFingerprintSeed:           testCodexFingerprintV2Seed(),
+		CodexFingerprintVersion:        codexFingerprintAlgorithmV2,
+		CodexFingerprintEpoch:          3,
+		CodexFingerprintEpochStartedAt: &startedAt,
+	}
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV2Secret())}},
+		accountRepo: &codexFingerprintSessionRepoStub{state: CodexFingerprintState{
+			Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2,
+			Epoch: 3, EpochStartedAt: startedAt,
+		}},
+	}
+	c, _ := gin.CreateTestContext(nil)
+	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Set("api_key", &APIKey{ID: 101})
+	SetOpenAIClientTransport(c, OpenAIClientTransportHTTP)
+	body := []byte(`{"client_metadata":{"session_id":"root-session","x-codex-turn-metadata":"{\"thread_id\":\"child\",\"parent_thread_id\":\"parent\",\"subagent_kind\":\"worker\"}"}}`)
+
+	_, err := svc.resolveCodexFingerprintContextForAttempt(context.Background(), c, account, c.Request.Header, body)
+	require.ErrorIs(t, err, errCodexFingerprintFullSubagent)
+}
+
+func TestCodexFingerprintFullModeWithGatePreservesSubagentTopology(t *testing.T) {
+	startedAt := time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC)
+	account := &Account{
+		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra: map[string]any{
+			codexFingerprintModeExtraKey:     string(codexFingerprintFull),
+			codexSubagentMaxInflightExtraKey: 4,
+		},
+		CodexFingerprintSeed:           testCodexFingerprintV2Seed(),
+		CodexFingerprintVersion:        codexFingerprintAlgorithmV2,
+		CodexFingerprintEpoch:          3,
+		CodexFingerprintEpochStartedAt: &startedAt,
+	}
+	repo := &codexFingerprintSessionRepoStub{state: CodexFingerprintState{
+		Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2,
+		Epoch: 3, EpochStartedAt: startedAt,
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV2Secret())}},
+		accountRepo: repo,
+	}
+	resolve := func(body []byte) *CodexFingerprintContext {
+		c, _ := gin.CreateTestContext(nil)
+		c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
+		c.Set("api_key", &APIKey{ID: 101})
+		SetOpenAIClientTransport(c, OpenAIClientTransportHTTP)
+		fp, err := svc.resolveCodexFingerprintContextForAttempt(context.Background(), c, account, c.Request.Header, body)
+		require.NoError(t, err)
+		return fp
+	}
+
+	root := resolve([]byte(`{"client_metadata":{"session_id":"root-session","x-codex-turn-metadata":"{\"thread_id\":\"root-thread\",\"turn_id\":\"root-turn\"}"}}`))
+	child := resolve([]byte(`{"client_metadata":{"session_id":"root-session","x-codex-turn-metadata":"{\"thread_id\":\"child-thread\",\"parent_thread_id\":\"root-thread\",\"subagent_kind\":\"worker\"}"}}`))
+
+	require.Equal(t, string(codexFingerprintSession), root.Mode())
+	require.Equal(t, root.SessionID(), child.SessionID())
+	require.Equal(t, root.ThreadID(), child.parentThreadID)
+	require.NotEqual(t, root.ThreadID(), child.ThreadID())
+}
+
+func TestAccountCodexSubagentConcurrencyGateRequiresSessionMode(t *testing.T) {
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			codexFingerprintModeExtraKey:     string(codexFingerprintSession),
+			codexSubagentMaxInflightExtraKey: float64(4),
+		},
+	}
+	require.Equal(t, 4, account.GetCodexSubagentMaxInflightPerSession())
+	account.Extra[codexFingerprintModeExtraKey] = string(codexFingerprintDevice)
+	require.Zero(t, account.GetCodexSubagentMaxInflightPerSession())
+	account.Extra[codexFingerprintModeExtraKey] = string(codexFingerprintFull)
+	account.Extra[codexSubagentMaxInflightExtraKey] = 65
+	require.Zero(t, account.GetCodexSubagentMaxInflightPerSession())
 }

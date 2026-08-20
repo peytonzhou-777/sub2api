@@ -299,6 +299,7 @@ type openAIWSPassthroughFirstOutputDeadlineState struct {
 type openAIWSPassthroughTurnLifecycle struct {
 	mu       sync.Mutex
 	inFlight bool
+	release  func()
 }
 
 func newOpenAIWSPassthroughTurnLifecycle(inFlight bool) *openAIWSPassthroughTurnLifecycle {
@@ -327,7 +328,25 @@ func (l *openAIWSPassthroughTurnLifecycle) cancelResponseCreate() {
 	}
 	l.mu.Lock()
 	l.inFlight = false
+	release := l.release
+	l.release = nil
 	l.mu.Unlock()
+	if release != nil {
+		release()
+	}
+}
+
+func (l *openAIWSPassthroughTurnLifecycle) setRelease(release func()) bool {
+	if l == nil || release == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if !l.inFlight || l.release != nil {
+		return false
+	}
+	l.release = release
+	return true
 }
 
 func (l *openAIWSPassthroughTurnLifecycle) beginTerminalWrite() {
@@ -346,7 +365,15 @@ func (l *openAIWSPassthroughTurnLifecycle) finishTerminalWrite(succeeded bool, o
 		}
 		l.inFlight = false
 	}
+	var release func()
+	if succeeded {
+		release = l.release
+		l.release = nil
+	}
 	l.mu.Unlock()
+	if release != nil {
+		release()
+	}
 }
 
 type openAIWSPassthroughFirstOutputFrameConn struct {
@@ -729,6 +756,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	if capturedSessionModel != "" && capturedSessionModel != strings.TrimSpace(gjson.GetBytes(firstClientMessage, "model").String()) {
 		firstClientMessage = s.ReplaceModelInBody(firstClientMessage, capturedSessionModel)
 	}
+	turnLifecycle := newOpenAIWSPassthroughTurnLifecycle(true)
+	defer turnLifecycle.cancelResponseCreate()
 	usageMeta := newOpenAIWSPassthroughUsageMeta(initialRequestModel, firstClientMessage)
 	updatedFirst, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, capturedSessionModel, firstClientMessage)
 	if policyErr != nil {
@@ -758,6 +787,14 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			return fmt.Errorf("apply first passthrough codex fingerprint: %w", fpErr)
 		}
 		firstClientMessage = fingerprinted
+		releaseSubagentSlot, gateErr := s.acquireCodexSubagentSlot(ctx, account, stagedCodexFingerprintIDs(c))
+		if gateErr != nil {
+			return gateErr
+		}
+		if !turnLifecycle.setRelease(releaseSubagentSlot) {
+			releaseSubagentSlot()
+			return errors.New("failed to attach initial subagent concurrency slot")
+		}
 	}
 
 	// 在 policy filter 之后再提取 service_tier / reasoning_effort 用于
@@ -932,7 +969,6 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 
 	completedTurns := atomic.Int32{}
 	acceptedTurns := atomic.Int32{}
-	turnLifecycle := newOpenAIWSPassthroughTurnLifecycle(true)
 	clientFrameConn := &openAIWSClientFrameConn{
 		conn:                 clientConn,
 		controlCtx:           ctx,
@@ -1043,6 +1079,14 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					return payload, nil, fmt.Errorf("apply passthrough codex fingerprint: %w", fpErr)
 				}
 				out = fingerprinted
+				releaseSubagentSlot, gateErr := s.acquireCodexSubagentSlot(ctx, account, stagedCodexFingerprintIDs(c))
+				if gateErr != nil {
+					return payload, nil, gateErr
+				}
+				if !turnLifecycle.setRelease(releaseSubagentSlot) {
+					releaseSubagentSlot()
+					return payload, nil, errors.New("failed to attach subagent concurrency slot")
+				}
 			}
 			// 多轮 passthrough usage：仅在成功（non-block / non-err）
 			// 的 response.create 帧上更新 usageMeta，使用

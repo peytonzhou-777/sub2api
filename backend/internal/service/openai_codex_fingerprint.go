@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,7 +70,11 @@ const (
 	codexFingerprintFull codexFingerprintMode = "full"
 )
 
-const codexFingerprintModeExtraKey = "codex_fingerprint_mode"
+const (
+	codexFingerprintModeExtraKey          = "codex_fingerprint_mode"
+	codexSubagentMaxInflightExtraKey      = "codex_subagent_max_inflight_per_session"
+	codexSubagentMaxInflightUpperBoundary = 64
+)
 
 // GetCodexFingerprintMode 从账号 extra JSON 读取指纹收敛模式。
 //
@@ -93,6 +98,45 @@ func (a *Account) GetCodexFingerprintMode() codexFingerprintMode {
 	default:
 		return codexFingerprintOff
 	}
+}
+
+// GetCodexSubagentMaxInflightPerSession 返回账号单个收敛 Session 允许的子代理并发数。
+// 0 表示关闭；仅 session/full 模式生效，避免配置误伤未收敛或仅设备收敛的账号。
+func (a *Account) GetCodexSubagentMaxInflightPerSession() int {
+	if a == nil || !a.IsOpenAIOAuth() {
+		return 0
+	}
+	mode := a.GetCodexFingerprintMode()
+	if mode != codexFingerprintSession && mode != codexFingerprintFull {
+		return 0
+	}
+	raw, ok := a.Extra[codexSubagentMaxInflightExtraKey]
+	if !ok || raw == nil {
+		return 0
+	}
+	value := 0
+	switch typed := raw.(type) {
+	case int:
+		value = typed
+	case int64:
+		value = int(typed)
+	case float64:
+		if typed == float64(int(typed)) {
+			value = int(typed)
+		}
+	case json.Number:
+		if parsed, err := typed.Int64(); err == nil {
+			value = int(parsed)
+		}
+	case string:
+		if parsed, err := strconv.Atoi(strings.TrimSpace(typed)); err == nil {
+			value = parsed
+		}
+	}
+	if value < 1 || value > codexSubagentMaxInflightUpperBoundary {
+		return 0
+	}
+	return value
 }
 
 // deriveStableUUIDv4 从种子确定性派生一个 UUIDv4 格式的字符串。
@@ -146,28 +190,40 @@ func resolveConvergedThreadID(account *Account, clientSessionID string) string {
 type codexFingerprintIDs struct {
 	mode             codexFingerprintMode
 	sessionScopeHash string
+	sessionEpoch     int64
 	installationID   string
 	sessionID        string
 	threadID         string
+	parentThreadID   string
+	forkedThreadID   string
 	turnID           string
 	windowID         string
 	promptCacheKey   string
 	requestID        string
+	isSubagent       bool
 }
 
 func stagedCodexFingerprintSessionScopeHash(c *gin.Context) string {
-	if c == nil {
-		return ""
-	}
-	value, ok := c.Get(codexFingerprintIDsContextKey)
-	if !ok {
-		return ""
-	}
-	ids, ok := value.(*codexFingerprintIDs)
-	if !ok || ids == nil {
+	ids := stagedCodexFingerprintIDs(c)
+	if ids == nil {
 		return ""
 	}
 	return strings.TrimSpace(ids.sessionScopeHash)
+}
+
+func stagedCodexFingerprintIDs(c *gin.Context) *codexFingerprintIDs {
+	if c == nil {
+		return nil
+	}
+	value, ok := c.Get(codexFingerprintIDsContextKey)
+	if !ok {
+		return nil
+	}
+	ids, ok := value.(*codexFingerprintIDs)
+	if !ok || ids == nil {
+		return nil
+	}
+	return ids
 }
 
 // stagedCodexFingerprintControlsSession 表示本 attempt 已由指纹层接管 Session。
@@ -282,15 +338,25 @@ func applyCodexFingerprintHeaders(h http.Header, ids *codexFingerprintIDs) {
 	h.Set("session-id", ids.sessionID)
 	h.Set("session_id", ids.sessionID)
 	h.Set("thread-id", ids.threadID)
+	if ids.parentThreadID != "" {
+		h.Set("x-codex-parent-thread-id", ids.parentThreadID)
+	}
 
-	rewriteCodexTurnMetadataFields(h, map[string]any{
+	turnMetadataFields := map[string]any{
 		"installation_id":         ids.installationID,
 		"session_id":              ids.sessionID,
 		"thread_id":               ids.threadID,
 		"turn_id":                 ids.turnID,
 		"window_id":               ids.windowID,
 		"turn_started_at_unix_ms": time.Now().UnixMilli(),
-	})
+	}
+	if ids.parentThreadID != "" {
+		turnMetadataFields["parent_thread_id"] = ids.parentThreadID
+	}
+	if ids.forkedThreadID != "" {
+		turnMetadataFields["forked_from_thread_id"] = ids.forkedThreadID
+	}
+	rewriteCodexTurnMetadataFields(h, turnMetadataFields)
 }
 
 // rewriteCodexTurnMetadataFields 解析 x-codex-turn-metadata 头中的 JSON，
@@ -363,17 +429,30 @@ func applyCodexFingerprintToClientMetadataMap(existing map[string]any, ids *code
 	// session / full 模式
 	existing["session_id"] = ids.sessionID
 	existing["thread_id"] = ids.threadID
+	if ids.parentThreadID != "" {
+		existing["parent_thread_id"] = ids.parentThreadID
+	}
+	if ids.forkedThreadID != "" {
+		existing["forked_from_thread_id"] = ids.forkedThreadID
+	}
 	existing["turn_id"] = ids.turnID
 	existing["x-codex-window-id"] = ids.windowID
 
-	rewriteClientMetadataEmbeddedTurnMetadata(existing, map[string]any{
+	turnMetadataFields := map[string]any{
 		"installation_id":         ids.installationID,
 		"session_id":              ids.sessionID,
 		"thread_id":               ids.threadID,
 		"turn_id":                 ids.turnID,
 		"window_id":               ids.windowID,
 		"turn_started_at_unix_ms": time.Now().UnixMilli(),
-	})
+	}
+	if ids.parentThreadID != "" {
+		turnMetadataFields["parent_thread_id"] = ids.parentThreadID
+	}
+	if ids.forkedThreadID != "" {
+		turnMetadataFields["forked_from_thread_id"] = ids.forkedThreadID
+	}
+	rewriteClientMetadataEmbeddedTurnMetadata(existing, turnMetadataFields)
 	return true
 }
 

@@ -60,6 +60,42 @@ type ingressLeaseCacheForTest struct {
 	releaseIngressCalls  int
 }
 
+type codexSubagentConcurrencyCacheForTest struct {
+	stubConcurrencyCacheForTest
+	acquired       bool
+	acquireErr     error
+	refreshOwned   bool
+	refreshErr     error
+	releaseErr     error
+	accountID      int64
+	scopeHash      string
+	epoch          int64
+	maxConcurrency int
+	requestID      string
+	releaseCalls   int
+}
+
+func (c *codexSubagentConcurrencyCacheForTest) AcquireCodexSubagentSlot(_ context.Context, accountID int64, scopeHash string, epoch int64, maxConcurrency int, requestID string) (bool, error) {
+	c.accountID = accountID
+	c.scopeHash = scopeHash
+	c.epoch = epoch
+	c.maxConcurrency = maxConcurrency
+	c.requestID = requestID
+	return c.acquired, c.acquireErr
+}
+
+func (c *codexSubagentConcurrencyCacheForTest) RefreshCodexSubagentSlot(_ context.Context, _ int64, _ string, _ int64, _ string) (bool, error) {
+	return c.refreshOwned, c.refreshErr
+}
+
+func (c *codexSubagentConcurrencyCacheForTest) ReleaseCodexSubagentSlot(_ context.Context, accountID int64, scopeHash string, epoch int64, requestID string) error {
+	c.releaseCalls++
+	if accountID != c.accountID || scopeHash != c.scopeHash || epoch != c.epoch || requestID != c.requestID {
+		return errors.New("released codex subagent slot does not match acquired slot")
+	}
+	return c.releaseErr
+}
+
 func (c *ingressLeaseCacheForTest) AcquireOpenAIWSIngressLease(ctx context.Context, apiKeyID int64, maxConnections int, leaseID string) (bool, error) {
 	c.acquireIngressCalls++
 	if c.acquireIngressFn != nil {
@@ -86,6 +122,7 @@ func (c *ingressLeaseCacheForTest) ReleaseOpenAIWSIngressLease(ctx context.Conte
 
 var _ ConcurrencyCache = (*stubConcurrencyCacheForTest)(nil)
 var _ OpenAIWSIngressLeaseCache = (*ingressLeaseCacheForTest)(nil)
+var _ CodexSubagentConcurrencyCache = (*codexSubagentConcurrencyCacheForTest)(nil)
 
 func (c *stubConcurrencyCacheForTest) AcquireAccountSlot(_ context.Context, _ int64, _ int, _ string) (bool, error) {
 	return c.acquireResult, c.acquireErr
@@ -615,4 +652,47 @@ func TestIncrementAccountWaitCount_NilCache(t *testing.T) {
 	allowed, err := svc.IncrementAccountWaitCount(context.Background(), 1, 10)
 	require.NoError(t, err)
 	require.True(t, allowed)
+}
+
+func TestAcquireCodexSubagentSlotUsesIndependentLeaseAndReleasesOnce(t *testing.T) {
+	cache := &codexSubagentConcurrencyCacheForTest{acquired: true, refreshOwned: true}
+	svc := NewConcurrencyService(cache)
+	scopeHash := strings.Repeat("ab", 32)
+
+	result, err := svc.AcquireCodexSubagentSlot(context.Background(), 27, scopeHash, 3, 4)
+	require.NoError(t, err)
+	require.True(t, result.Acquired)
+	require.Equal(t, int64(27), cache.accountID)
+	require.Equal(t, scopeHash, cache.scopeHash)
+	require.Equal(t, int64(3), cache.epoch)
+	require.Equal(t, 4, cache.maxConcurrency)
+	require.NotEmpty(t, cache.requestID)
+
+	result.ReleaseFunc()
+	result.ReleaseFunc()
+	require.Equal(t, 1, cache.releaseCalls)
+}
+
+func TestAcquireCodexSubagentSlotLimitReturnsLocalNonSchedulingFailure(t *testing.T) {
+	cache := &codexSubagentConcurrencyCacheForTest{acquired: false}
+	svc := &OpenAIGatewayService{concurrencyService: NewConcurrencyService(cache)}
+	account := &Account{
+		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra: map[string]any{
+			codexFingerprintModeExtraKey:     string(codexFingerprintSession),
+			codexSubagentMaxInflightExtraKey: 1,
+		},
+	}
+	ids := &codexFingerprintIDs{
+		isSubagent: true, sessionScopeHash: strings.Repeat("cd", 32), sessionEpoch: 3,
+	}
+
+	release, err := svc.acquireCodexSubagentSlot(context.Background(), account, ids)
+	require.Nil(t, release)
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.True(t, failoverErr.IsCodexSubagentConcurrencyFailure())
+	require.True(t, failoverErr.LocalRequestFailure)
+	require.False(t, failoverErr.ShouldRetryNextAccount())
+	require.False(t, failoverErr.ShouldReportAccountScheduleFailure())
 }

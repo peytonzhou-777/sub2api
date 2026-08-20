@@ -3019,6 +3019,21 @@
             <Select v-model="codexFingerprintMode" data-testid="create-codex-fingerprint-mode-select" :options="codexFingerprintModeOptions" />
           </div>
         </div>
+        <div v-if="codexFingerprintMode === 'session' || codexFingerprintMode === 'full'" class="mt-4">
+          <label class="input-label">{{ t('admin.accounts.openai.codexSubagentConcurrency') }}</label>
+          <input
+            v-model.number="codexSubagentMaxInflight"
+            data-testid="create-codex-subagent-concurrency-input"
+            type="number"
+            min="0"
+            max="64"
+            step="1"
+            class="input"
+          />
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.openai.codexSubagentConcurrencyDesc') }}
+          </p>
+        </div>
       </div>
 
       <!-- OpenAI Compact 能力配置 -->
@@ -3856,6 +3871,7 @@ const codexCLIOnlyEnabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 const codexFingerprintMode = ref<CodexFingerprintMode>('off')
+const codexSubagentMaxInflight = ref(0)
 const codexFingerprintModeOptions = computed(() => [
   { value: 'off' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintOff') },
   { value: 'device' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintDevice') },
@@ -4742,6 +4758,7 @@ const resetForm = () => {
   codexCLIOnlyEnabled.value = false
   codexCLIOnlyAppServerEnabled.value = false
   codexFingerprintMode.value = 'off'
+  codexSubagentMaxInflight.value = 0
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
   webSearchEmulationMode.value = 'default'
@@ -4846,6 +4863,14 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
     extra.codex_fingerprint_mode = codexFingerprintMode.value
   } else {
     delete extra.codex_fingerprint_mode
+  }
+  if (
+    (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') &&
+    codexSubagentMaxInflight.value > 0
+  ) {
+    extra.codex_subagent_max_inflight_per_session = Math.min(64, Math.trunc(codexSubagentMaxInflight.value))
+  } else {
+    delete extra.codex_subagent_max_inflight_per_session
   }
   if (openAICompactMode.value !== 'auto') {
     extra.openai_compact_mode = openAICompactMode.value

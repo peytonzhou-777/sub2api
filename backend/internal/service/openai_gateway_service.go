@@ -72,37 +72,41 @@ const (
 
 // OpenAI allowed headers whitelist (for non-passthrough).
 var openaiAllowedHeaders = map[string]bool{
-	"accept-language":         true,
-	"content-type":            true,
-	"conversation_id":         true,
-	"user-agent":              true,
-	"originator":              true,
-	"session_id":              true,
-	"x-codex-beta-features":   true,
-	"x-codex-installation-id": true,
-	"x-codex-turn-state":      true,
-	"x-codex-turn-metadata":   true,
-	"x-codex-window-id":       true,
-	responsesLiteHeaderKey:    true,
+	"accept-language":          true,
+	"content-type":             true,
+	"conversation_id":          true,
+	"user-agent":               true,
+	"originator":               true,
+	"session_id":               true,
+	"x-codex-beta-features":    true,
+	"x-codex-installation-id":  true,
+	"x-codex-parent-thread-id": true,
+	"x-codex-turn-state":       true,
+	"x-codex-turn-metadata":    true,
+	"x-codex-window-id":        true,
+	"x-openai-subagent":        true,
+	responsesLiteHeaderKey:     true,
 }
 
 // OpenAI passthrough allowed headers whitelist.
 // 透传模式下仅放行这些低风险请求头，避免将非标准/环境噪声头传给上游触发风控。
 var openaiPassthroughAllowedHeaders = map[string]bool{
-	"accept":                  true,
-	"accept-language":         true,
-	"content-type":            true,
-	"conversation_id":         true,
-	"openai-beta":             true,
-	"user-agent":              true,
-	"originator":              true,
-	"session_id":              true,
-	"x-codex-beta-features":   true,
-	"x-codex-installation-id": true,
-	"x-codex-turn-state":      true,
-	"x-codex-turn-metadata":   true,
-	"x-codex-window-id":       true,
-	responsesLiteHeaderKey:    true,
+	"accept":                   true,
+	"accept-language":          true,
+	"content-type":             true,
+	"conversation_id":          true,
+	"openai-beta":              true,
+	"user-agent":               true,
+	"originator":               true,
+	"session_id":               true,
+	"x-codex-beta-features":    true,
+	"x-codex-installation-id":  true,
+	"x-codex-parent-thread-id": true,
+	"x-codex-turn-state":       true,
+	"x-codex-turn-metadata":    true,
+	"x-codex-window-id":        true,
+	"x-openai-subagent":        true,
+	responsesLiteHeaderKey:     true,
 }
 
 // codex_cli_only 拒绝时记录的请求头白名单（仅用于诊断日志，不参与上游透传）
@@ -266,6 +270,8 @@ type OpenAIForwardResult struct {
 
 	wsReplayInput       []json.RawMessage
 	wsReplayInputExists bool
+	wsReplayComplete    bool
+	wsReplayReason      string
 }
 
 // SucceededForScheduling reports whether this result is an upstream success
@@ -322,6 +328,9 @@ type OpenAIWSRetryMetricsSnapshot struct {
 	IngressTransportRecoverySuppressedTotal int64 `json:"ingress_transport_recovery_suppressed_total"`
 	IngressTransportRecoveryMsTotal         int64 `json:"ingress_transport_recovery_ms_total"`
 	IngressStaleBindingCleanupTotal         int64 `json:"ingress_stale_binding_cleanup_total"`
+	IngressCrossConnDetectedTotal           int64 `json:"ingress_cross_conn_detected_total"`
+	IngressCrossConnRebuildTotal            int64 `json:"ingress_cross_conn_rebuild_total"`
+	IngressCrossConnBlockedTotal            int64 `json:"ingress_cross_conn_blocked_total"`
 }
 
 type OpenAICompatibilityFallbackMetricsSnapshot struct {
@@ -352,6 +361,9 @@ type openAIWSRetryMetrics struct {
 	ingressRecoverySuppressed  atomic.Int64
 	ingressRecoveryMs          atomic.Int64
 	ingressStaleBindingCleanup atomic.Int64
+	ingressCrossConnDetected   atomic.Int64
+	ingressCrossConnRebuild    atomic.Int64
+	ingressCrossConnBlocked    atomic.Int64
 }
 
 type accountWriteThrottle struct {
@@ -459,13 +471,8 @@ type OpenAIGatewayService struct {
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
 	openaiAffinity                      openAIUserAffinityState
-	// openaiCodexTurnStateOrigins: 下游会话 seed → openAICodexTurnStateOrigin，
-	// 记录最近一次向该会话下发 x-codex-turn-state 的铸造账号，供出站守卫
-	// 剥离跨账号回带（openai_codex_turn_state.go）。
-	openaiCodexTurnStateOrigins sync.Map
-	openaiCodexTurnStateWrites  atomic.Uint64
-	codexFingerprintStates      sync.Map // key: accountID, value: codexFingerprintStateCacheEntry
-	codexFingerprintSecretIDs   sync.Map // key: secret SHA-256, value: struct{}
+	codexFingerprintStates              sync.Map // key: accountID, value: codexFingerprintStateCacheEntry
+	codexFingerprintSecretIDs           sync.Map // key: secret SHA-256, value: struct{}
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
@@ -1033,6 +1040,20 @@ func (s *OpenAIGatewayService) recordOpenAIWSIngressStaleBindingCleanup(deleted 
 	}
 }
 
+func (s *OpenAIGatewayService) recordOpenAIWSIngressCrossConnRebuild() {
+	if s != nil {
+		s.openaiWSRetryMetrics.ingressCrossConnDetected.Add(1)
+		s.openaiWSRetryMetrics.ingressCrossConnRebuild.Add(1)
+	}
+}
+
+func (s *OpenAIGatewayService) recordOpenAIWSIngressCrossConnBlocked() {
+	if s != nil {
+		s.openaiWSRetryMetrics.ingressCrossConnDetected.Add(1)
+		s.openaiWSRetryMetrics.ingressCrossConnBlocked.Add(1)
+	}
+}
+
 func (s *OpenAIGatewayService) SnapshotOpenAIWSRetryMetrics() OpenAIWSRetryMetricsSnapshot {
 	if s == nil {
 		return OpenAIWSRetryMetricsSnapshot{}
@@ -1050,6 +1071,9 @@ func (s *OpenAIGatewayService) SnapshotOpenAIWSRetryMetrics() OpenAIWSRetryMetri
 		IngressTransportRecoverySuppressedTotal: s.openaiWSRetryMetrics.ingressRecoverySuppressed.Load(),
 		IngressTransportRecoveryMsTotal:         s.openaiWSRetryMetrics.ingressRecoveryMs.Load(),
 		IngressStaleBindingCleanupTotal:         s.openaiWSRetryMetrics.ingressStaleBindingCleanup.Load(),
+		IngressCrossConnDetectedTotal:           s.openaiWSRetryMetrics.ingressCrossConnDetected.Load(),
+		IngressCrossConnRebuildTotal:            s.openaiWSRetryMetrics.ingressCrossConnRebuild.Load(),
+		IngressCrossConnBlockedTotal:            s.openaiWSRetryMetrics.ingressCrossConnBlocked.Load(),
 	}
 }
 

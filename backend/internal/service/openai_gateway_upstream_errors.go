@@ -254,6 +254,12 @@ func newOpenAIUpstreamFailoverError(
 		ResponseHeaders:        responseHeaders.Clone(),
 		RetryableOnSameAccount: retryableOnSameAccount,
 	}
+	failoverErr.OpenAIRateLimitClass = classifyOpenAIRateLimit(statusCode, responseBody, upstreamMsg)
+	if failoverErr.OpenAIRateLimitClass == OpenAIRateLimitClassUsageQuota ||
+		failoverErr.OpenAIRateLimitClass == OpenAIRateLimitClassAccountConcurrency {
+		failoverErr.RetryableOnSameAccount = false
+		failoverErr.MaxNextAccountSwitches = 1
+	}
 	if isOpenAIRequestBodyTooLargeError(statusCode, upstreamMsg, responseBody) {
 		failoverErr.RetryableOnSameAccount = false
 		failoverErr.Scope = GatewayFailureScopeAccount
@@ -263,6 +269,28 @@ func newOpenAIUpstreamFailoverError(
 		failoverErr.ClientMessage = OpenAIRequestBodyTooLargeClientMessage
 	}
 	return failoverErr
+}
+
+// classifyOpenAIRateLimit 只把明确错误归入额度/并发；其余 429 作为 RPM 保持旧策略。
+func classifyOpenAIRateLimit(statusCode int, payload []byte, message string) OpenAIRateLimitClass {
+	combined := strings.ToLower(strings.TrimSpace(message + " " + string(payload)))
+	if strings.Contains(combined, "server_is_overloaded") || strings.Contains(combined, "slow_down") {
+		return OpenAIRateLimitClassCapacityShed
+	}
+	if statusCode != http.StatusTooManyRequests {
+		return OpenAIRateLimitClassNone
+	}
+	for _, marker := range []string{"usage_limit_reached", "insufficient_quota", "usage quota", "quota exceeded"} {
+		if strings.Contains(combined, marker) {
+			return OpenAIRateLimitClassUsageQuota
+		}
+	}
+	for _, marker := range []string{"concurrency limit exceeded for account", "account_concurrency_limit", "account concurrency limit"} {
+		if strings.Contains(combined, marker) {
+			return OpenAIRateLimitClassAccountConcurrency
+		}
+	}
+	return OpenAIRateLimitClassRPM
 }
 
 // IsOpenAIRequestBodyTooLarge reports whether another account may accept the

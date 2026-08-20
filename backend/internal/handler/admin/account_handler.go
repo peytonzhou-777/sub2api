@@ -861,6 +861,10 @@ func (h *AccountHandler) Create(c *gin.Context) {
 	}
 	// base_rpm 输入校验：负值归零，超过 10000 截断
 	sanitizeExtraBaseRPM(req.Extra)
+	if err := sanitizeCodexSubagentConcurrencyExtra(req.Extra); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 
 	// 确定是否跳过混合渠道检查
 	skipCheck := req.ConfirmMixedChannelRisk != nil && *req.ConfirmMixedChannelRisk
@@ -994,6 +998,10 @@ func (h *AccountHandler) Update(c *gin.Context) {
 	}
 	// base_rpm 输入校验：负值归零，超过 10000 截断
 	sanitizeExtraBaseRPM(req.Extra)
+	if err := sanitizeCodexSubagentConcurrencyExtra(req.Extra); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 
 	// 确定是否跳过混合渠道检查
 	skipCheck := req.ConfirmMixedChannelRisk != nil && *req.ConfirmMixedChannelRisk
@@ -2114,6 +2122,10 @@ func (h *AccountHandler) BulkUpdate(c *gin.Context) {
 	}
 	// base_rpm 输入校验：负值归零，超过 10000 截断
 	sanitizeExtraBaseRPM(req.Extra)
+	if err := sanitizeCodexSubagentConcurrencyExtra(req.Extra); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 
 	// 确定是否跳过混合渠道检查
 	skipCheck := req.ConfirmMixedChannelRisk != nil && *req.ConfirmMixedChannelRisk
@@ -2187,6 +2199,43 @@ func toServiceBulkUpdateAccountFilters(filters *BulkUpdateAccountFilters) *servi
 		Search:      filters.Search,
 		PrivacyMode: filters.PrivacyMode,
 	}
+}
+
+// sanitizeCodexSubagentConcurrencyExtra 将管理员输入规范为 0..64 的整数；保留 0 以支持 JSONB 批量覆盖关闭。
+func sanitizeCodexSubagentConcurrencyExtra(extra map[string]any) error {
+	const key = "codex_subagent_max_inflight_per_session"
+	if extra == nil {
+		return nil
+	}
+	raw, ok := extra[key]
+	if !ok || raw == nil {
+		return nil
+	}
+	var value int
+	switch typed := raw.(type) {
+	case float64:
+		if typed != float64(int(typed)) {
+			return fmt.Errorf("%s must be an integer between 0 and 64", key)
+		}
+		value = int(typed)
+	case int:
+		value = typed
+	case int64:
+		value = int(typed)
+	case json.Number:
+		parsed, err := strconv.Atoi(typed.String())
+		if err != nil {
+			return fmt.Errorf("%s must be an integer between 0 and 64", key)
+		}
+		value = parsed
+	default:
+		return fmt.Errorf("%s must be an integer between 0 and 64", key)
+	}
+	if value < 0 || value > 64 {
+		return fmt.Errorf("%s must be an integer between 0 and 64", key)
+	}
+	extra[key] = value
+	return nil
 }
 
 // ========== OAuth Handlers ==========

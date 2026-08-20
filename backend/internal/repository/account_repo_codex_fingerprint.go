@@ -203,7 +203,8 @@ func validateCodexFingerprintSessionRequest(request service.CodexFingerprintSess
 	if _, err := hex.DecodeString(request.SessionScopeHash); err != nil {
 		return service.ErrAccountNotFound
 	}
-	for _, hash := range request.ThreadSourceHashes {
+	allHashes := append(append([]string{}, request.ThreadSourceHashes...), request.BindSourceHashes...)
+	for _, hash := range allHashes {
 		if len(hash) != 64 || hash != strings.ToLower(hash) {
 			return service.ErrAccountNotFound
 		}
@@ -239,7 +240,10 @@ func (r *accountRepository) ResolveCodexFingerprintSessionState(
 		if resolved, ok, err := r.getExistingCodexFingerprintSessionState(ctx, r.sql, request.AccountID, threadSourceHash, request.Now); err != nil {
 			return nil, err
 		} else if ok {
-			return resolved, nil
+			if len(request.BindSourceHashes) == 0 || hashInStringSlice(request.BindSourceHashes, threadSourceHash) {
+				return resolved, nil
+			}
+			break
 		}
 	}
 	beginner, ok := r.sql.(interface {
@@ -274,6 +278,11 @@ func (r *accountRepository) ResolveCodexFingerprintSessionState(
 		if resolved, ok, err := r.getExistingCodexFingerprintSessionState(ctx, exec, request.AccountID, threadSourceHash, request.Now); err != nil {
 			return nil, err
 		} else if ok {
+			created, bindErr := r.bindCodexFingerprintThreadAliases(ctx, exec, request, resolved)
+			if bindErr != nil {
+				return nil, bindErr
+			}
+			resolved.Created = resolved.Created || created
 			if err := ownedTx.Commit(); err != nil {
 				return nil, err
 			}
@@ -391,4 +400,82 @@ WHERE account_id = $1 AND session_scope_hash IS NULL AND last_seen_at < $2`,
 		Rotated:                 rotated,
 		Created:                 true,
 	}, nil
+}
+
+func hashInStringSlice(values []string, candidate string) bool {
+	for _, value := range values {
+		if value == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+// bindCodexFingerprintThreadAliases 将首次出现的子线程绑定到父线程已选定的 epoch。
+// 若并发请求已先完成绑定，则以数据库中的实际 scope 与 epoch 为准。
+func (r *accountRepository) bindCodexFingerprintThreadAliases(
+	ctx context.Context,
+	exec sqlExecutor,
+	request service.CodexFingerprintSessionRequest,
+	resolved *service.CodexFingerprintSessionResolution,
+) (bool, error) {
+	if resolved == nil || resolved.BoundEpoch <= 0 || len(request.BindSourceHashes) == 0 {
+		return false, nil
+	}
+	created := false
+	for _, sourceHash := range request.BindSourceHashes {
+		if sourceHash == "" || sourceHash == resolved.MatchedThreadSourceHash {
+			continue
+		}
+		rows, err := exec.QueryContext(ctx, `
+INSERT INTO codex_fingerprint_thread_epochs
+  (account_id, source_hash, session_epoch, created_at, last_seen_at, session_scope_hash)
+VALUES ($1, $2, $3, $4, $4, $5)
+ON CONFLICT (account_id, source_hash)
+	DO NOTHING
+RETURNING session_epoch, COALESCE(session_scope_hash::text, '')`,
+			request.AccountID, sourceHash, resolved.BoundEpoch, request.Now.UTC(), nullableCodexFingerprintScope(resolved.BoundSessionScopeHash))
+		if err != nil {
+			return false, err
+		}
+		if rows.Next() {
+			if err := rows.Scan(&resolved.BoundEpoch, &resolved.BoundSessionScopeHash); err != nil {
+				_ = rows.Close()
+				return false, err
+			}
+			if err := rows.Close(); err != nil {
+				return false, err
+			}
+			resolved.MatchedThreadSourceHash = sourceHash
+			created = true
+			continue
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return false, err
+		}
+		if err := rows.Close(); err != nil {
+			return false, err
+		}
+
+		// INSERT 等待并发事务后发生冲突时，重新读取赢家，避免返回父线程的旧绑定。
+		actual, ok, err := r.getExistingCodexFingerprintSessionState(
+			ctx, exec, request.AccountID, sourceHash, request.Now,
+		)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, errors.New("codex fingerprint thread alias conflict without persisted binding")
+		}
+		*resolved = *actual
+	}
+	return created, nil
+}
+
+func nullableCodexFingerprintScope(value string) any {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return value
 }

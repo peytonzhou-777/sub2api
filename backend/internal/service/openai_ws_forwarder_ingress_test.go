@@ -803,6 +803,87 @@ func TestBuildOpenAIWSReplayInputSequence(t *testing.T) {
 	})
 }
 
+func TestPrepareOpenAIWSCrossConnPayload(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte(`{"type":"response.create","model":"gpt-5.1","previous_response_id":"resp_old","input":[{"type":"message","role":"user","content":"continue"}]}`)
+	fullInput := []json.RawMessage{
+		json.RawMessage(`{"type":"message","role":"user","content":"hello"}`),
+		json.RawMessage(`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"}]}`),
+		json.RawMessage(`{"type":"message","role":"user","content":"continue"}`),
+	}
+
+	t.Run("same_connection_keeps_original_payload", func(t *testing.T) {
+		prepared, mode, err := prepareOpenAIWSCrossConnPayload(payload, "conn-old", "conn-old", fullInput, true, true, "")
+		require.NoError(t, err)
+		require.Equal(t, openAIWSCrossConnPayloadUnchanged, mode)
+		require.Equal(t, payload, prepared)
+	})
+
+	t.Run("different_connection_rebuilds_self_contained_input", func(t *testing.T) {
+		prepared, mode, err := prepareOpenAIWSCrossConnPayload(payload, "conn-old", "conn-new", fullInput, true, true, "")
+		require.NoError(t, err)
+		require.Equal(t, openAIWSCrossConnPayloadRebuilt, mode)
+		require.False(t, gjson.GetBytes(prepared, "previous_response_id").Exists())
+		require.Len(t, gjson.GetBytes(prepared, "input").Array(), 3)
+		require.Equal(t, "assistant", gjson.GetBytes(prepared, "input.1.role").String())
+	})
+
+	t.Run("incomplete_checkpoint_fails_before_upstream_write", func(t *testing.T) {
+		prepared, mode, err := prepareOpenAIWSCrossConnPayload(payload, "conn-old", "conn-new", nil, false, false, "missing_parent_checkpoint")
+		require.ErrorIs(t, err, errOpenAIWSCrossConnReplayUnavailable)
+		require.Nil(t, prepared)
+		require.Equal(t, openAIWSCrossConnPayloadBlocked, mode)
+	})
+
+	t.Run("tool_output_without_call_context_is_blocked", func(t *testing.T) {
+		toolPayload := []byte(`{"type":"response.create","model":"gpt-5.1","previous_response_id":"resp_tool","input":[{"type":"function_call_output","call_id":"call_1","output":"ok"}]}`)
+		toolReplay := []json.RawMessage{
+			json.RawMessage(`{"type":"message","role":"user","content":"run tool"}`),
+			json.RawMessage(`{"type":"function_call_output","call_id":"call_1","output":"ok"}`),
+		}
+		prepared, mode, err := prepareOpenAIWSCrossConnPayload(toolPayload, "conn-old", "conn-new", toolReplay, true, true, "")
+		require.ErrorIs(t, err, errOpenAIWSCrossConnReplayUnavailable)
+		require.Nil(t, prepared)
+		require.Equal(t, openAIWSCrossConnPayloadBlocked, mode)
+	})
+}
+
+func TestOpenAIWSResponseReplayCollector(t *testing.T) {
+	t.Parallel()
+
+	t.Run("collects_ordered_replayable_output", func(t *testing.T) {
+		collector := &openAIWSResponseReplayCollector{}
+		collector.AddEvent("response.output_item.done", []byte(`{"item":{"type":"reasoning","id":"rs_1","encrypted_content":"ENC"}}`))
+		collector.AddEvent("response.completed", []byte(`{"response":{"output":[{"type":"reasoning","id":"rs_1","encrypted_content":"ENC"},{"type":"message","id":"msg_1","role":"assistant","content":[{"type":"output_text","text":"done"}]},{"type":"function_call","id":"fc_1","call_id":"call_1","name":"shell","arguments":"{}"}]}}`))
+
+		items := collector.Items()
+		require.Len(t, items, 3)
+		require.Equal(t, "reasoning", gjson.GetBytes(items[0], "type").String())
+		require.Equal(t, "message", gjson.GetBytes(items[1], "type").String())
+		require.Equal(t, "function_call", gjson.GetBytes(items[2], "type").String())
+		replayable, reason := collector.Replayable()
+		require.True(t, replayable)
+		require.Empty(t, reason)
+	})
+
+	t.Run("unsupported_output_marks_checkpoint_incomplete", func(t *testing.T) {
+		collector := &openAIWSResponseReplayCollector{}
+		collector.AddEvent("response.output_item.done", []byte(`{"item":{"type":"image_generation_call","id":"ig_1","result":"base64"}}`))
+		replayable, reason := collector.Replayable()
+		require.False(t, replayable)
+		require.Equal(t, "unsupported_output_item:image_generation_call", reason)
+	})
+
+	t.Run("reasoning_without_encrypted_content_is_not_portable", func(t *testing.T) {
+		collector := &openAIWSResponseReplayCollector{}
+		collector.AddEvent("response.completed", []byte(`{"response":{"output":[{"type":"reasoning","id":"rs_1","summary":[]}]}}`))
+		replayable, reason := collector.Replayable()
+		require.False(t, replayable)
+		require.Equal(t, "unsupported_output_item:reasoning", reason)
+	})
+}
+
 func TestOpenAIWSRawPayloadHasToolCallOutput(t *testing.T) {
 	t.Parallel()
 

@@ -647,6 +647,8 @@ export default {
         codexCLIOnlyAppServerDesc: '仅在上方开关开启时生效。开启后本账号额外放行内嵌 Codex 引擎、经 app-server 协议接入的第三方客户端（如 Claude Code 的 codex 插件），仍需通过全局引擎指纹门；与全局 app-server 开关取 OR（任一开即放行）。',
         codexFingerprintMode: 'Codex 指纹收敛',
         codexFingerprintModeDesc: '多人共享同一 OAuth 账号时，设备标识按账号稳定，Session 使用长周期 epoch，并只在达到最短寿命且账号空闲后为新 Thread 轮换。默认关闭（原样透传），请按账号灰度；部分账号开启后出现过额度缩水，请以实测为准。',
+        codexSubagentConcurrency: '子代理并发阀门',
+        codexSubagentConcurrencyDesc: '限制同一收敛 Session 内同时活动的子代理数。0 表示关闭；仅会话及完全收敛模式生效。完全收敛启用后会保留独立父子 Thread。',
         codexFingerprintOff: '关闭（透传，默认）',
         codexFingerprintDevice: '仅设备',
         codexFingerprintSession: '设备+会话',

@@ -93,7 +93,12 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 				headers.Add("x-codex-beta-features", value)
 			}
 		}
-		for _, name := range [...]string{"x-codex-window-id", "x-codex-installation-id"} {
+		for _, name := range [...]string{
+			"x-codex-window-id",
+			"x-codex-installation-id",
+			"x-codex-parent-thread-id",
+			"x-openai-subagent",
+		} {
 			if value := c.Request.Header.Get(name); strings.TrimSpace(value) != "" {
 				headers.Set(name, value)
 			}
@@ -667,6 +672,60 @@ func setOpenAIWSPayloadInputSequence(
 		return nil, marshalErr
 	}
 	return sjson.SetRawBytes(payload, "input", inputRaw)
+}
+
+type openAIWSCrossConnPayloadMode string
+
+const (
+	openAIWSCrossConnPayloadUnchanged openAIWSCrossConnPayloadMode = "unchanged"
+	openAIWSCrossConnPayloadRebuilt   openAIWSCrossConnPayloadMode = "rebuilt"
+	openAIWSCrossConnPayloadBlocked   openAIWSCrossConnPayloadMode = "blocked"
+)
+
+var errOpenAIWSCrossConnReplayUnavailable = errors.New("openai websocket cross-connection replay unavailable")
+
+// prepareOpenAIWSCrossConnPayload 保证连接级 response_id 不会被发送到另一条上游连接。
+func prepareOpenAIWSCrossConnPayload(
+	payload []byte,
+	sourceConnID string,
+	actualConnID string,
+	fullInput []json.RawMessage,
+	fullInputExists bool,
+	replayable bool,
+	unavailableReason string,
+) ([]byte, openAIWSCrossConnPayloadMode, error) {
+	sourceConnID = strings.TrimSpace(sourceConnID)
+	actualConnID = strings.TrimSpace(actualConnID)
+	if sourceConnID == "" || actualConnID == "" || sourceConnID == actualConnID {
+		return payload, openAIWSCrossConnPayloadUnchanged, nil
+	}
+	previousResponseID := openAIWSPayloadStringFromRaw(payload, "previous_response_id")
+	if previousResponseID == "" {
+		return payload, openAIWSCrossConnPayloadUnchanged, nil
+	}
+	if !replayable {
+		reason := strings.TrimSpace(unavailableReason)
+		if reason == "" {
+			reason = "checkpoint_incomplete"
+		}
+		return nil, openAIWSCrossConnPayloadBlocked, fmt.Errorf("%w: %s", errOpenAIWSCrossConnReplayUnavailable, reason)
+	}
+	if openAIWSRawItemsHasFunctionCallOutput(fullInput) && !openAIWSRawItemsHaveToolCallContextForOutputs(fullInput) {
+		return nil, openAIWSCrossConnPayloadBlocked, fmt.Errorf("%w: function_call_output_missing_call_context", errOpenAIWSCrossConnReplayUnavailable)
+	}
+
+	withoutPrevious, removed, err := dropPreviousResponseIDFromRawPayload(payload)
+	if err != nil {
+		return nil, openAIWSCrossConnPayloadBlocked, fmt.Errorf("%w: drop previous_response_id: %v", errOpenAIWSCrossConnReplayUnavailable, err)
+	}
+	if !removed {
+		return nil, openAIWSCrossConnPayloadBlocked, fmt.Errorf("%w: previous_response_id_not_removed", errOpenAIWSCrossConnReplayUnavailable)
+	}
+	rebuilt, err := setOpenAIWSPayloadInputSequence(withoutPrevious, fullInput, fullInputExists)
+	if err != nil {
+		return nil, openAIWSCrossConnPayloadBlocked, fmt.Errorf("%w: set full input: %v", errOpenAIWSCrossConnReplayUnavailable, err)
+	}
+	return rebuilt, openAIWSCrossConnPayloadRebuilt, nil
 }
 
 func shouldKeepIngressPreviousResponseID(

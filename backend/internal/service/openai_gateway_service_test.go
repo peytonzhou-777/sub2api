@@ -1727,6 +1727,31 @@ func TestOpenAIStreamingResponseFailedBeforeOutputCapacityErrorReturnsFailover(t
 	require.Empty(t, rec.Body.String())
 }
 
+func TestOpenAIRateLimitClassificationKeepsRPMRetryPolicy(t *testing.T) {
+	rpm := newOpenAIUpstreamFailoverError(
+		http.StatusTooManyRequests,
+		http.Header{"Retry-After": []string{"2"}},
+		[]byte(`{"error":{"type":"rate_limit_error","code":"rate_limit_exceeded","message":"requests per minute exceeded"}}`),
+		"requests per minute exceeded",
+		true,
+	)
+	require.Equal(t, OpenAIRateLimitClassRPM, rpm.OpenAIRateLimitClass)
+	require.True(t, rpm.RetryableOnSameAccount, "普通 RPM 必须保持池模式同账号重试")
+	require.Zero(t, rpm.MaxNextAccountSwitches, "普通 RPM 必须保持既有切号上限")
+	require.True(t, rpm.AllowsNextAccountSwitch(99))
+
+	usage := newOpenAIUpstreamFailoverError(
+		http.StatusTooManyRequests,
+		http.Header{},
+		[]byte(`{"error":{"code":"usage_limit_reached","message":"usage limit reached"}}`),
+		"usage limit reached",
+		true,
+	)
+	require.Equal(t, OpenAIRateLimitClassUsageQuota, usage.OpenAIRateLimitClass)
+	require.False(t, usage.RetryableOnSameAccount)
+	require.Equal(t, 1, usage.MaxNextAccountSwitches)
+}
+
 func TestOpenAIStreamingResponseFailedBeforeOutputServerOverloadedCodeReturnsFailover(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{
@@ -1816,7 +1841,11 @@ func TestOpenAIStreamingResponseFailedBeforeOutputRateLimitUsesPoolRetryPolicy(t
 	var failoverErr *UpstreamFailoverError
 	require.ErrorAs(t, err, &failoverErr)
 	require.Equal(t, http.StatusTooManyRequests, failoverErr.StatusCode)
-	require.True(t, failoverErr.RetryableOnSameAccount)
+	require.False(t, failoverErr.RetryableOnSameAccount)
+	require.Equal(t, OpenAIRateLimitClassAccountConcurrency, failoverErr.OpenAIRateLimitClass)
+	require.Equal(t, 1, failoverErr.MaxNextAccountSwitches)
+	require.True(t, failoverErr.AllowsNextAccountSwitch(0))
+	require.False(t, failoverErr.AllowsNextAccountSwitch(1))
 	require.Equal(t, "1", failoverErr.ResponseHeaders.Get("Retry-After"))
 	require.Equal(t, "rate_limit_error", gjson.GetBytes(failoverErr.ResponseBody, "error.type").String())
 	require.Contains(t, string(failoverErr.ResponseBody), "Concurrency limit exceeded")

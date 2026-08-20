@@ -86,6 +86,21 @@ func normalizeOpenAIWSFingerprintScope(headers http.Header) string {
 	return hex.EncodeToString(sum[:16])
 }
 
+// normalizeOpenAIWSTopologyScope 防止根线程、子线程和兄弟线程复用同一条有状态连接。
+func normalizeOpenAIWSTopologyScope(headers http.Header) string {
+	if headers == nil || strings.TrimSpace(headers.Get("x-codex-installation-id")) == "" {
+		return ""
+	}
+	threadID := firstNonEmptyHeader(headers, "thread-id", "thread_id")
+	parentThreadID := strings.TrimSpace(headers.Get("x-codex-parent-thread-id"))
+	subagent := strings.TrimSpace(headers.Get("x-openai-subagent"))
+	if threadID == "" && parentThreadID == "" && subagent == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte("openai-ws-topology-scope:v1\n" + threadID + "\n" + parentThreadID + "\n" + subagent))
+	return hex.EncodeToString(sum[:16])
+}
+
 func (t openAIWSConnectionTarget) valid() bool {
 	return t.accountID > 0 && t.transport != "" && t.wsURL != ""
 }
@@ -131,7 +146,8 @@ type openAIWSConnBindingCleanupStore interface {
 }
 
 type defaultOpenAIWSStateStore struct {
-	cache GatewayCache
+	cache             GatewayCache
+	replayCheckpoints *openAIWSReplayCheckpointCache
 
 	responseToAccountMu  sync.RWMutex
 	responseToAccount    map[string]openAIWSAccountBinding
@@ -149,6 +165,7 @@ type defaultOpenAIWSStateStore struct {
 func NewOpenAIWSStateStore(cache GatewayCache) OpenAIWSStateStore {
 	store := &defaultOpenAIWSStateStore{
 		cache:              cache,
+		replayCheckpoints:  newOpenAIWSReplayCheckpointCache(),
 		responseToAccount:  make(map[string]openAIWSAccountBinding, 256),
 		responseToConn:     make(map[string]openAIWSConnBinding, 256),
 		turnStateToAccount: make(map[string]openAIWSTurnStateBinding, 256),
@@ -513,6 +530,10 @@ func (s *defaultOpenAIWSStateStore) maybeCleanup() {
 	s.sessionToConnMu.Lock()
 	cleanupExpiredSessionConnBindings(s.sessionToConn, now, openAIWSStateStoreCleanupMaxPerMap)
 	s.sessionToConnMu.Unlock()
+
+	if s.replayCheckpoints != nil {
+		s.replayCheckpoints.cleanupExpired(now, openAIWSStateStoreCleanupMaxPerMap)
+	}
 }
 
 func cleanupExpiredAccountBindings(bindings map[string]openAIWSAccountBinding, now time.Time, maxScan int) {

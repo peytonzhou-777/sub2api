@@ -36,6 +36,7 @@ const (
 	// API-key-scoped client WebSocket ingress leases use a shorter TTL than
 	// ordinary request slots, because idle ingress sessions do not hold a turn slot.
 	openAIWSIngressLeaseKeyPrefix  = "concurrency:openai_ws_ingress:api_key:"
+	codexSubagentSlotKeyPrefix     = "concurrency:codex_subagent:account:"
 	openAIWSIngressLeaseTTLSeconds = 60
 	liveLeaseTTLSeconds            = 60
 	// 等待队列计数器格式: concurrency:wait:{userID}
@@ -404,6 +405,10 @@ func liveAPIKeySlotKey(apiKeyID int64) string {
 
 func openAIWSIngressLeaseKey(apiKeyID int64) string {
 	return fmt.Sprintf("%s%d", openAIWSIngressLeaseKeyPrefix, apiKeyID)
+}
+
+func codexSubagentSlotKey(accountID int64, sessionScopeHash string, epoch int64) string {
+	return fmt.Sprintf("%s%d:scope:%s:epoch:%d", codexSubagentSlotKeyPrefix, accountID, sessionScopeHash, epoch)
 }
 
 func waitQueueKey(userID int64) string {
@@ -790,6 +795,70 @@ func (c *concurrencyCache) ReleaseOpenAIWSIngressLease(ctx context.Context, apiK
 		return nil
 	}
 	return c.rdb.ZRem(ctx, openAIWSIngressLeaseKey(apiKeyID), leaseID).Err()
+}
+
+// AcquireCodexSubagentSlot 使用独立 ZSET 统计活动子代理，不计入账号或用户调度负载。
+func (c *concurrencyCache) AcquireCodexSubagentSlot(
+	ctx context.Context,
+	accountID int64,
+	sessionScopeHash string,
+	epoch int64,
+	maxConcurrency int,
+	requestID string,
+) (bool, error) {
+	if c == nil || c.rdb == nil || accountID <= 0 || len(sessionScopeHash) != 64 || epoch <= 0 || maxConcurrency <= 0 || requestID == "" {
+		return false, nil
+	}
+	result, err := acquireOpenAIWSIngressLeaseScript.Run(
+		ctx,
+		c.rdb,
+		[]string{codexSubagentSlotKey(accountID, sessionScopeHash, epoch)},
+		maxConcurrency,
+		c.slotTTLSeconds,
+		requestID,
+	).Int()
+	if err != nil {
+		return false, err
+	}
+	return result == 1, nil
+}
+
+// RefreshCodexSubagentSlot 只续租仍由当前请求持有的槽位，不重建已丢失的成员。
+func (c *concurrencyCache) RefreshCodexSubagentSlot(
+	ctx context.Context,
+	accountID int64,
+	sessionScopeHash string,
+	epoch int64,
+	requestID string,
+) (bool, error) {
+	if c == nil || c.rdb == nil || accountID <= 0 || len(sessionScopeHash) != 64 || epoch <= 0 || requestID == "" {
+		return false, nil
+	}
+	result, err := refreshOpenAIWSIngressLeaseScript.Run(
+		ctx,
+		c.rdb,
+		[]string{codexSubagentSlotKey(accountID, sessionScopeHash, epoch)},
+		c.slotTTLSeconds,
+		requestID,
+	).Int()
+	if err != nil {
+		return false, err
+	}
+	return result == 1, nil
+}
+
+// ReleaseCodexSubagentSlot 释放当前请求持有的独立子代理槽位。
+func (c *concurrencyCache) ReleaseCodexSubagentSlot(
+	ctx context.Context,
+	accountID int64,
+	sessionScopeHash string,
+	epoch int64,
+	requestID string,
+) error {
+	if c == nil || c.rdb == nil || accountID <= 0 || sessionScopeHash == "" || epoch <= 0 || requestID == "" {
+		return nil
+	}
+	return c.rdb.ZRem(ctx, codexSubagentSlotKey(accountID, sessionScopeHash, epoch), requestID).Err()
 }
 
 func (c *concurrencyCache) AcquireLiveLease(

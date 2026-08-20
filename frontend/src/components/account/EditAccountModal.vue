@@ -2017,6 +2017,21 @@
             <Select v-model="codexFingerprintMode" data-testid="edit-codex-fingerprint-mode-select" :options="codexFingerprintModeOptions" />
           </div>
         </div>
+        <div v-if="codexFingerprintMode === 'session' || codexFingerprintMode === 'full'" class="mt-4">
+          <label class="input-label">{{ t('admin.accounts.openai.codexSubagentConcurrency') }}</label>
+          <input
+            v-model.number="codexSubagentMaxInflight"
+            data-testid="edit-codex-subagent-concurrency-input"
+            type="number"
+            min="0"
+            max="64"
+            step="1"
+            class="input"
+          />
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.openai.codexSubagentConcurrencyDesc') }}
+          </p>
+        </div>
       </div>
 
       <!-- OpenAI 订阅档位手动覆盖（Plus/Pro/Free），仅 OAuth 非影子账号 -->
@@ -2981,6 +2996,7 @@ const codexCLIOnlyEnabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 const codexFingerprintMode = ref<CodexFingerprintMode>('off')
+const codexSubagentMaxInflight = ref(0)
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
 const codexImageToolMode = ref<CodexImageToolMode>('inherit')
 type AnthropicAPIKeyAuthScheme = 'x_api_key' | 'authorization_bearer'
@@ -3441,6 +3457,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   codexCLIOnlyEnabled.value = false
   codexCLIOnlyAppServerEnabled.value = false
   codexFingerprintMode.value = 'off'
+  codexSubagentMaxInflight.value = 0
   codexImageToolMode.value = 'inherit'
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
@@ -3498,6 +3515,10 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       codexFingerprintMode.value = (['off', 'device', 'session', 'full'].includes(fpMode || '')
         ? fpMode as CodexFingerprintMode
         : 'off')
+      const subagentLimit = Number(extra?.codex_subagent_max_inflight_per_session ?? 0)
+      codexSubagentMaxInflight.value = Number.isInteger(subagentLimit) && subagentLimit >= 0 && subagentLimit <= 64
+        ? subagentLimit
+        : 0
     }
     const credentials = newAccount.credentials as Record<string, unknown> | undefined
     const compactMappings = credentials?.compact_model_mapping as Record<string, string> | undefined
@@ -4851,6 +4872,14 @@ const handleSubmit = async () => {
           newExtra.codex_fingerprint_mode = codexFingerprintMode.value
         } else {
           delete newExtra.codex_fingerprint_mode
+        }
+        if (
+          (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') &&
+          codexSubagentMaxInflight.value > 0
+        ) {
+          newExtra.codex_subagent_max_inflight_per_session = Math.min(64, Math.trunc(codexSubagentMaxInflight.value))
+        } else {
+          delete newExtra.codex_subagent_max_inflight_per_session
         }
       }
 

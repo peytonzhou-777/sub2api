@@ -83,6 +83,7 @@ type openAIWSHandshakeCompatibilityKey struct {
 	betaFeatures     string
 	openAIBeta       string
 	fingerprintScope string
+	topologyScope    string
 	userAgent        string
 	originator       string
 }
@@ -1964,6 +1965,7 @@ func normalizeOpenAIWSHandshakeCompatibility(headers http.Header) openAIWSHandsh
 		betaFeatures:     normalizeOpenAIWSBetaFeatures(headers),
 		openAIBeta:       normalizeOpenAIWSOpenAIBeta(headers),
 		fingerprintScope: normalizeOpenAIWSFingerprintScope(headers),
+		topologyScope:    normalizeOpenAIWSTopologyScope(headers),
 		userAgent:        strings.TrimSpace(headers.Get("User-Agent")),
 		originator:       strings.TrimSpace(headers.Get("originator")),
 	}

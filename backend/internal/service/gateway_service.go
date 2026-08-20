@@ -649,6 +649,17 @@ const (
 
 type GatewayFailureReason string
 
+// OpenAIRateLimitClass 区分账号额度、账号并发与普通 RPM，避免使用同一重试策略。
+type OpenAIRateLimitClass string
+
+const (
+	OpenAIRateLimitClassNone               OpenAIRateLimitClass = ""
+	OpenAIRateLimitClassUsageQuota         OpenAIRateLimitClass = "usage_quota"
+	OpenAIRateLimitClassAccountConcurrency OpenAIRateLimitClass = "account_concurrency"
+	OpenAIRateLimitClassRPM                OpenAIRateLimitClass = "rpm"
+	OpenAIRateLimitClassCapacityShed       OpenAIRateLimitClass = "capacity_shed"
+)
+
 // UpstreamFailoverError indicates an upstream or credential error that may
 // trigger account failover. Additive metadata keeps existing composite literals
 // source-compatible and preserves their legacy retry-next-account behavior.
@@ -666,6 +677,9 @@ type UpstreamFailoverError struct {
 	NextAccountAction        NextAccountAction
 	ClientStatusCode         int
 	ClientMessage            string
+	OpenAIRateLimitClass     OpenAIRateLimitClass
+	MaxNextAccountSwitches   int // 0 保持旧行为；正数限制本错误链最多切换次数
+	LocalRequestFailure      bool
 }
 
 func (e *UpstreamFailoverError) Error() string {
@@ -679,6 +693,11 @@ func (e *UpstreamFailoverError) ShouldRetryNextAccount() bool {
 	return e != nil && e.NextAccountAction != NextAccountStop
 }
 
+// AllowsNextAccountSwitch 在切号前检查本类错误的额外预算；0 表示沿用全局上限。
+func (e *UpstreamFailoverError) AllowsNextAccountSwitch(completedSwitches int) bool {
+	return e != nil && (e.MaxNextAccountSwitches <= 0 || completedSwitches < e.MaxNextAccountSwitches)
+}
+
 func (e *UpstreamFailoverError) IsCredentialFailure() bool {
 	return e != nil && e.Stage == GatewayFailureStageAccountAuth
 }
@@ -688,6 +707,9 @@ func (e *UpstreamFailoverError) IsCredentialFailure() bool {
 // and inference failures retain their existing scheduler-health behavior.
 func (e *UpstreamFailoverError) ShouldReportAccountScheduleFailure() bool {
 	if e == nil {
+		return false
+	}
+	if e.LocalRequestFailure {
 		return false
 	}
 	return !e.IsCredentialFailure() || e.Scope == GatewayFailureScopeAccount

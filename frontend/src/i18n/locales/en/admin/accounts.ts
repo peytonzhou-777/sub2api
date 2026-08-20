@@ -577,6 +577,8 @@ export default {
           "Effective only when the switch above is on. When enabled, this account also allows third-party clients that embed the Codex engine over the app-server protocol (e.g. Claude Code's codex plugin); they still pass the global engine-fingerprint gate. OR-combined with the global app-server toggle.",
         codexFingerprintMode: 'Codex fingerprint convergence',
         codexFingerprintModeDesc: 'When multiple users share one OAuth account, keep one stable account device and use long-lived Session epochs. A new Thread can rotate the Session only after both the minimum age and account-idle gates are met. Off by default; roll out per account. Some accounts reported quota shrinkage, so rely on measured results.',
+        codexSubagentConcurrency: 'Subagent concurrency gate',
+        codexSubagentConcurrencyDesc: 'Limits active subagents within one converged Session. Set 0 to disable; applies only to session and full modes. Enabling it in full mode preserves distinct parent and child Threads.',
         codexFingerprintOff: 'Off (passthrough, default)',
         codexFingerprintDevice: 'Device only',
         codexFingerprintSession: 'Device + Session',
