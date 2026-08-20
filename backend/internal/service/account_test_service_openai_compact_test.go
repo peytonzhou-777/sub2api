@@ -40,6 +40,7 @@ func (r *compactFingerprintAccountRepo) ResolveCodexFingerprintSessionState(_ co
 	return &CodexFingerprintSessionResolution{
 		State:                   r.state,
 		BoundEpoch:              r.state.Epoch,
+		BoundEpochStartedAt:     r.state.EpochStartedAt,
 		MatchedThreadSourceHash: request.ThreadSourceHashes[0],
 		BoundSessionScopeHash:   request.SessionScopeHash,
 		Created:                 true,

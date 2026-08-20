@@ -1078,7 +1078,7 @@ func TestOpenAIGatewayService_Forward_WSv2_CodexFingerprintHandshakeBodyParityAn
 	account.Schedulable = true
 	account.Concurrency = 1
 	account.Credentials = map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"}
-	configureCodexFingerprintV2TestState(svc, account)
+	configureCodexFingerprintV3TestState(svc, account)
 
 	body := []byte(`{"model":"gpt-5.2","stream":true,"prompt_cache_key":"body-session","client_metadata":{"session_id":"body-session","x-codex-turn-metadata":"{\"installation_id\":\"body-install\",\"session_id\":\"body-session\",\"thread_id\":\"body-thread\",\"turn_id\":\"body-turn\",\"window_id\":\"body-window\",\"sandbox\":\"seatbelt\"}"},"input":[{"type":"input_text","text":"hi"}]}`)
 	result, err := svc.Forward(context.Background(), c, account, body)
@@ -1095,6 +1095,7 @@ func TestOpenAIGatewayService_Forward_WSv2_CodexFingerprintHandshakeBodyParityAn
 	wantRequest := fingerprintIDs.requestID
 	wantWindow := fingerprintIDs.windowID
 	wantPromptCache := fingerprintIDs.promptCacheKey
+	require.Equal(t, wantSession, wantPromptCache)
 	payloadJSON := requestToJSONString(captureConn.lastWrite)
 
 	require.Equal(t, wantInstall, captureDialer.lastHeaders.Get("x-codex-installation-id"))

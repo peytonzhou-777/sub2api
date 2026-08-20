@@ -440,7 +440,7 @@ func rewriteCodexTurnMetadataFields(h http.Header, fields map[string]any) {
 }
 
 // applyCodexFingerprintClientMetadata 按预计算的收敛 ID 改写请求体中的 client_metadata。
-// 使用与头改写相同的 ids 实例，确保 turn_id 等随机字段一致。
+// v2 提供权威缓存标识时直接覆盖或补齐；旧路径仅改写与原 Session 相同的默认值。
 func applyCodexFingerprintClientMetadata(reqBody map[string]any, ids *codexFingerprintIDs) bool {
 	if reqBody == nil || ids == nil {
 		return false
@@ -576,8 +576,8 @@ func applyCodexFingerprintPromptCacheKey(reqBody map[string]any, ids *codexFinge
 // 供透传路径使用——透传是热路径，禁止对可能高达数十 MB 的 body 做全量
 // Unmarshal（见 forwardOpenAIPassthrough 的轻量提取注释）。实现为：gjson 提取
 // client_metadata 小对象单独解码，经共享核心改写后 sjson 一次性拼回，body
-// 其余字节原样保留；root prompt_cache_key 仅在可证明是 body session 默认值时
-// 做标量改写。语义与 applyCodexFingerprintClientMetadata 逐点一致（含
+// 其余字节原样保留；v2 的权威 prompt_cache_key 会覆盖或补齐，旧路径仍仅在
+// 可证明是 body session 默认值时改写。语义与 map 版逐点一致（含
 // "非对象值整体替换为收敛集合"的行为）。
 func applyCodexFingerprintClientMetadataRaw(body []byte, ids *codexFingerprintIDs) ([]byte, bool, error) {
 	if len(body) == 0 || ids == nil {

@@ -1977,7 +1977,7 @@ func TestOpenAIGatewayService_CodexFingerprintHTTPTransformedHeaderBodyParityAnd
 	account.Schedulable = true
 	account.Concurrency = 1
 	account.Credentials = map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"}
-	configureCodexFingerprintV2TestState(svc, account)
+	configureCodexFingerprintV3TestState(svc, account)
 
 	_, err := svc.Forward(context.Background(), c, account, body)
 	require.NoError(t, err)
@@ -1991,6 +1991,7 @@ func TestOpenAIGatewayService_CodexFingerprintHTTPTransformedHeaderBodyParityAnd
 	wantRequest := fingerprintIDs.requestID
 	wantWindow := fingerprintIDs.windowID
 	wantPromptCache := fingerprintIDs.promptCacheKey
+	require.Equal(t, wantSession, wantPromptCache)
 
 	require.Equal(t, wantInstall, upstream.lastReq.Header.Get("x-codex-installation-id"))
 	require.Equal(t, wantSession, upstream.lastReq.Header.Get("session-id"))
@@ -2043,7 +2044,7 @@ func TestOpenAIGatewayService_CodexFingerprintHTTPRawPassthroughHeaderBodyParity
 	account.Schedulable = true
 	account.Concurrency = 1
 	account.Credentials = map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"}
-	configureCodexFingerprintV2TestState(svc, account)
+	configureCodexFingerprintV3TestState(svc, account)
 
 	_, err := svc.Forward(context.Background(), c, account, body)
 	require.NoError(t, err)
@@ -2057,6 +2058,7 @@ func TestOpenAIGatewayService_CodexFingerprintHTTPRawPassthroughHeaderBodyParity
 	wantRequest := fingerprintIDs.requestID
 	wantWindow := fingerprintIDs.windowID
 	wantPromptCache := fingerprintIDs.promptCacheKey
+	require.Equal(t, wantSession, wantPromptCache)
 
 	require.Equal(t, wantInstall, upstream.lastReq.Header.Get("x-codex-installation-id"))
 	require.Equal(t, wantSession, upstream.lastReq.Header.Get("session-id"))
@@ -2105,7 +2107,7 @@ func TestOpenAIGatewayService_CodexFingerprintCompactDoesNotRewriteBodyButStages
 	account.Schedulable = true
 	account.Concurrency = 1
 	account.Credentials = map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"}
-	configureCodexFingerprintV2TestState(svc, account)
+	configureCodexFingerprintV3TestState(svc, account)
 	staleIDs := resolveCodexFingerprintIDs(account, "stale-session", codexFingerprintSession)
 	require.NotNil(t, staleIDs)
 	stageCodexFingerprintIDs(c, staleIDs)
@@ -2150,7 +2152,7 @@ func TestOpenAIGatewayService_CodexFingerprintMessagesBridgeUsesFingerprintPromp
 	account.Schedulable = true
 	account.Concurrency = 1
 	account.Credentials = map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"}
-	configureCodexFingerprintV2TestState(svc, account)
+	configureCodexFingerprintV3TestState(svc, account)
 
 	_, err := svc.Forward(context.Background(), c, account, body)
 	require.NoError(t, err)
@@ -2159,6 +2161,7 @@ func TestOpenAIGatewayService_CodexFingerprintMessagesBridgeUsesFingerprintPromp
 	fingerprintIDs := stagedCodexFingerprintIDsForAccount(c, account)
 	require.NotNil(t, fingerprintIDs)
 	wantSession := fingerprintIDs.sessionID
+	require.Equal(t, wantSession, fingerprintIDs.promptCacheKey)
 	require.Equal(t, fingerprintIDs.promptCacheKey, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
 	require.Equal(t, wantSession, gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").String())
 	require.Equal(t, wantSession, upstream.lastReq.Header.Get("session_id"))

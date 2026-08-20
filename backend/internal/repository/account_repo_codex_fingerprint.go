@@ -49,7 +49,8 @@ RETURNING secret_hash`, secretHash, now.UTC())
 	return nil
 }
 
-// GetOrInitializeCodexFingerprintState 使用单条 SQL 原子初始化 v2 seed 与首个 epoch。
+// GetOrInitializeCodexFingerprintState 使用单条 SQL 原子初始化 seed 与首个 v2 epoch。
+// 新账号先落 v2，待所有实例完成滚动升级后再通过管理员轮换显式进入 v3。
 func (r *accountRepository) GetOrInitializeCodexFingerprintState(ctx context.Context, accountID int64, now time.Time) (*service.CodexFingerprintState, error) {
 	if accountID <= 0 {
 		return nil, service.ErrAccountNotFound
@@ -73,7 +74,7 @@ WHERE id = $1
   AND (
     (codex_fingerprint_seed IS NULL AND codex_fingerprint_version = '' AND codex_fingerprint_epoch = 0 AND codex_fingerprint_epoch_started_at IS NULL)
     OR
-    (codex_fingerprint_seed IS NOT NULL AND codex_fingerprint_version = 'v2' AND codex_fingerprint_epoch > 0 AND codex_fingerprint_epoch_started_at IS NOT NULL)
+    (codex_fingerprint_seed IS NOT NULL AND codex_fingerprint_version IN ('v2', 'v3') AND codex_fingerprint_epoch > 0 AND codex_fingerprint_epoch_started_at IS NOT NULL)
   )
 RETURNING codex_fingerprint_seed, codex_fingerprint_version, codex_fingerprint_epoch, codex_fingerprint_epoch_started_at`
 	rows, err := r.sql.QueryContext(ctx, query, accountID, seedHex, now.UTC())
@@ -97,7 +98,7 @@ RETURNING codex_fingerprint_seed, codex_fingerprint_version, codex_fingerprint_e
 		return nil, err
 	}
 	decodedSeed, decodeErr := hex.DecodeString(state.Seed)
-	if state.Version != "v2" || state.Epoch <= 0 || state.EpochStartedAt.IsZero() ||
+	if !validCodexFingerprintAlgorithmVersion(state.Version) || state.Epoch <= 0 || state.EpochStartedAt.IsZero() ||
 		state.Seed != strings.ToLower(state.Seed) || decodeErr != nil || len(decodedSeed) != 32 {
 		return nil, errors.New("invalid codex fingerprint state")
 	}
@@ -117,7 +118,8 @@ func (r *accountRepository) getExistingCodexFingerprintSessionState(
 SELECT a.codex_fingerprint_seed, a.codex_fingerprint_version,
        COALESCE(s.session_epoch, a.codex_fingerprint_epoch),
        COALESCE(s.epoch_started_at, a.codex_fingerprint_epoch_started_at),
-       t.session_epoch, t.last_seen_at, COALESCE(t.session_scope_hash::text, '')
+       t.session_epoch, COALESCE(t.session_epoch_started_at, t.created_at),
+       t.last_seen_at, COALESCE(t.session_scope_hash::text, '')
 FROM codex_fingerprint_thread_epochs t
 JOIN accounts a ON a.id = t.account_id
 LEFT JOIN codex_fingerprint_session_scopes s
@@ -125,7 +127,7 @@ LEFT JOIN codex_fingerprint_session_scopes s
 WHERE t.account_id = $1 AND t.source_hash = $2
   AND a.deleted_at IS NULL AND a.platform = 'openai' AND a.type = 'oauth'
   AND a.codex_fingerprint_seed IS NOT NULL
-  AND a.codex_fingerprint_version = 'v2'
+  AND a.codex_fingerprint_version IN ('v2', 'v3')
   AND a.codex_fingerprint_epoch > 0
   AND a.codex_fingerprint_epoch_started_at IS NOT NULL`
 	rows, err := exec.QueryContext(ctx, query, accountID, threadSourceHash)
@@ -141,6 +143,7 @@ WHERE t.account_id = $1 AND t.source_hash = $2
 	}
 	var state service.CodexFingerprintState
 	var boundEpoch int64
+	var boundEpochStartedAt time.Time
 	var lastSeenAt time.Time
 	var boundScopeHash string
 	if err := rows.Scan(
@@ -149,6 +152,7 @@ WHERE t.account_id = $1 AND t.source_hash = $2
 		&state.Epoch,
 		&state.EpochStartedAt,
 		&boundEpoch,
+		&boundEpochStartedAt,
 		&lastSeenAt,
 		&boundScopeHash,
 	); err != nil {
@@ -158,7 +162,8 @@ WHERE t.account_id = $1 AND t.source_hash = $2
 		return nil, false, err
 	}
 	decodedSeed, decodeErr := hex.DecodeString(state.Seed)
-	if state.Version != "v2" || state.Epoch <= 0 || state.EpochStartedAt.IsZero() || boundEpoch <= 0 ||
+	if !validCodexFingerprintAlgorithmVersion(state.Version) || state.Epoch <= 0 || state.EpochStartedAt.IsZero() ||
+		boundEpoch <= 0 || boundEpochStartedAt.IsZero() ||
 		state.Seed != strings.ToLower(state.Seed) || decodeErr != nil || len(decodedSeed) != 32 {
 		return nil, false, errors.New("invalid codex fingerprint session state")
 	}
@@ -190,6 +195,7 @@ WHERE account_id = $1 AND scope_hash = $2 AND last_active_at < $4`,
 	return &service.CodexFingerprintSessionResolution{
 		State:                   state,
 		BoundEpoch:              boundEpoch,
+		BoundEpochStartedAt:     boundEpochStartedAt,
 		MatchedThreadSourceHash: threadSourceHash,
 		BoundSessionScopeHash:   boundScopeHash,
 	}, true, nil
@@ -297,7 +303,7 @@ SELECT codex_fingerprint_seed, codex_fingerprint_version,
 FROM accounts
 WHERE id = $1 AND deleted_at IS NULL AND platform = 'openai' AND type = 'oauth'
   AND codex_fingerprint_seed IS NOT NULL
-  AND codex_fingerprint_version = 'v2'
+  AND codex_fingerprint_version IN ('v2', 'v3')
   AND codex_fingerprint_epoch > 0
   AND codex_fingerprint_epoch_started_at IS NOT NULL`, []any{request.AccountID}, func(rows *sql.Rows) error {
 		return rows.Scan(&accountState.Seed, &accountState.Version, &accountState.Epoch, &accountState.EpochStartedAt)
@@ -351,15 +357,18 @@ RETURNING session_epoch, epoch_started_at`, []any{request.AccountID, request.Ses
 	}
 
 	boundEpoch := int64(0)
+	boundEpochStartedAt := time.Time{}
 	primaryThreadHash := request.ThreadSourceHashes[0]
 	err = queryOne(`
 INSERT INTO codex_fingerprint_thread_epochs
-  (account_id, source_hash, session_epoch, created_at, last_seen_at, session_scope_hash)
-VALUES ($1, $2, $3, $4, $4, $5)
+  (account_id, source_hash, session_epoch, session_epoch_started_at, created_at, last_seen_at, session_scope_hash)
+VALUES ($1, $2, $3, $4, $5, $5, $6)
 ON CONFLICT (account_id, source_hash)
 DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at
-RETURNING session_epoch`, []any{request.AccountID, primaryThreadHash, state.Epoch, request.Now.UTC(), request.SessionScopeHash}, func(rows *sql.Rows) error {
-		return rows.Scan(&boundEpoch)
+RETURNING session_epoch, COALESCE(session_epoch_started_at, created_at)`, []any{
+		request.AccountID, primaryThreadHash, state.Epoch, state.EpochStartedAt.UTC(), request.Now.UTC(), request.SessionScopeHash,
+	}, func(rows *sql.Rows) error {
+		return rows.Scan(&boundEpoch, &boundEpochStartedAt)
 	})
 	if err != nil {
 		return nil, err
@@ -385,8 +394,8 @@ WHERE account_id = $1 AND session_scope_hash IS NULL AND last_seen_at < $2`,
 		return nil, err
 	}
 	decodedSeed, decodeErr := hex.DecodeString(state.Seed)
-	if state.Version != "v2" || state.Epoch <= 0 || state.EpochStartedAt.IsZero() ||
-		boundEpoch <= 0 || state.Seed != strings.ToLower(state.Seed) || decodeErr != nil || len(decodedSeed) != 32 {
+	if !validCodexFingerprintAlgorithmVersion(state.Version) || state.Epoch <= 0 || state.EpochStartedAt.IsZero() ||
+		boundEpoch <= 0 || boundEpochStartedAt.IsZero() || state.Seed != strings.ToLower(state.Seed) || decodeErr != nil || len(decodedSeed) != 32 {
 		return nil, errors.New("invalid codex fingerprint session state")
 	}
 	if err := ownedTx.Commit(); err != nil {
@@ -395,6 +404,7 @@ WHERE account_id = $1 AND session_scope_hash IS NULL AND last_seen_at < $2`,
 	return &service.CodexFingerprintSessionResolution{
 		State:                   state,
 		BoundEpoch:              boundEpoch,
+		BoundEpochStartedAt:     boundEpochStartedAt,
 		MatchedThreadSourceHash: primaryThreadHash,
 		BoundSessionScopeHash:   request.SessionScopeHash,
 		Rotated:                 rotated,
@@ -419,7 +429,7 @@ func (r *accountRepository) bindCodexFingerprintThreadAliases(
 	request service.CodexFingerprintSessionRequest,
 	resolved *service.CodexFingerprintSessionResolution,
 ) (bool, error) {
-	if resolved == nil || resolved.BoundEpoch <= 0 || len(request.BindSourceHashes) == 0 {
+	if resolved == nil || resolved.BoundEpoch <= 0 || resolved.BoundEpochStartedAt.IsZero() || len(request.BindSourceHashes) == 0 {
 		return false, nil
 	}
 	created := false
@@ -429,17 +439,17 @@ func (r *accountRepository) bindCodexFingerprintThreadAliases(
 		}
 		rows, err := exec.QueryContext(ctx, `
 INSERT INTO codex_fingerprint_thread_epochs
-  (account_id, source_hash, session_epoch, created_at, last_seen_at, session_scope_hash)
-VALUES ($1, $2, $3, $4, $4, $5)
+  (account_id, source_hash, session_epoch, session_epoch_started_at, created_at, last_seen_at, session_scope_hash)
+VALUES ($1, $2, $3, $4, $5, $5, $6)
 ON CONFLICT (account_id, source_hash)
 	DO NOTHING
-RETURNING session_epoch, COALESCE(session_scope_hash::text, '')`,
-			request.AccountID, sourceHash, resolved.BoundEpoch, request.Now.UTC(), nullableCodexFingerprintScope(resolved.BoundSessionScopeHash))
+RETURNING session_epoch, COALESCE(session_epoch_started_at, created_at), COALESCE(session_scope_hash::text, '')`,
+			request.AccountID, sourceHash, resolved.BoundEpoch, resolved.BoundEpochStartedAt.UTC(), request.Now.UTC(), nullableCodexFingerprintScope(resolved.BoundSessionScopeHash))
 		if err != nil {
 			return false, err
 		}
 		if rows.Next() {
-			if err := rows.Scan(&resolved.BoundEpoch, &resolved.BoundSessionScopeHash); err != nil {
+			if err := rows.Scan(&resolved.BoundEpoch, &resolved.BoundEpochStartedAt, &resolved.BoundSessionScopeHash); err != nil {
 				_ = rows.Close()
 				return false, err
 			}
@@ -478,4 +488,8 @@ func nullableCodexFingerprintScope(value string) any {
 		return nil
 	}
 	return value
+}
+
+func validCodexFingerprintAlgorithmVersion(version string) bool {
+	return version == "v2" || version == "v3"
 }

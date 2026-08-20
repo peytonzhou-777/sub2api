@@ -61,7 +61,7 @@ func (s *adminServiceImpl) GetCodexFingerprintStatus(ctx context.Context, accoun
 	return repo.GetCodexFingerprintAdminStatus(ctx, accountID)
 }
 
-// RotateCodexFingerprint 只推进指纹 epoch，不接触账号调度或用户粘性 placement。
+// RotateCodexFingerprint 推进指纹 epoch，并在需要时把账号升级到 v3；不接触账号调度或用户粘性 placement。
 func (s *adminServiceImpl) RotateCodexFingerprint(ctx context.Context, accountID int64) (*CodexFingerprintAdminStatus, error) {
 	repo, err := s.codexFingerprintAdminRepository()
 	if err != nil {

@@ -20,18 +20,20 @@ import (
 
 type codexFingerprintSessionRepoStub struct {
 	AccountRepository
-	state          CodexFingerprintState
-	lastRequest    CodexFingerprintSessionRequest
-	matchedHash    string
-	boundScopeHash string
+	state               CodexFingerprintState
+	boundEpoch          int64
+	boundEpochStartedAt time.Time
+	lastRequest         CodexFingerprintSessionRequest
+	matchedHash         string
+	boundScopeHash      string
 }
 
-// configureCodexFingerprintV2TestState 为整链路测试装配本地专用指纹状态。
-func configureCodexFingerprintV2TestState(svc *OpenAIGatewayService, account *Account) {
+// configureCodexFingerprintV3TestState 为整链路测试装配 UUIDv7 指纹状态。
+func configureCodexFingerprintV3TestState(svc *OpenAIGatewayService, account *Account) {
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	state := CodexFingerprintState{
 		Seed:           testCodexFingerprintV2Seed(),
-		Version:        codexFingerprintAlgorithmV2,
+		Version:        codexFingerprintAlgorithmV3,
 		Epoch:          3,
 		EpochStartedAt: startedAt,
 	}
@@ -64,9 +66,18 @@ func (r *codexFingerprintSessionRepoStub) ResolveCodexFingerprintSessionState(
 	if boundScopeHash == "" {
 		boundScopeHash = request.SessionScopeHash
 	}
+	boundEpoch := r.boundEpoch
+	if boundEpoch <= 0 {
+		boundEpoch = state.Epoch
+	}
+	boundEpochStartedAt := r.boundEpochStartedAt
+	if boundEpochStartedAt.IsZero() {
+		boundEpochStartedAt = state.EpochStartedAt
+	}
 	return &CodexFingerprintSessionResolution{
 		State:                   state,
-		BoundEpoch:              state.Epoch,
+		BoundEpoch:              boundEpoch,
+		BoundEpochStartedAt:     boundEpochStartedAt,
 		MatchedThreadSourceHash: matchedHash,
 		BoundSessionScopeHash:   boundScopeHash,
 	}, nil
@@ -296,7 +307,6 @@ func TestCodexFingerprintV2RewritesRequestAndPromptCacheIDs(t *testing.T) {
 		codexFingerprintSession, "", codexFingerprintOriginalIDs{
 			clientSessionID: "client-session",
 			turnID:          "turn-1",
-			promptCacheKey:  "prompt-1",
 			requestID:       "request-1",
 		},
 	)
@@ -310,6 +320,7 @@ func TestCodexFingerprintV2RewritesRequestAndPromptCacheIDs(t *testing.T) {
 
 	assert.Equal(t, fp.RequestID(), headers.Get("x-client-request-id"))
 	assert.Equal(t, fp.PromptCacheKey(), body["prompt_cache_key"])
+	assert.Equal(t, fp.SessionID(), body["prompt_cache_key"])
 	metadata, ok := body["client_metadata"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, fp.ThreadID(), metadata["thread_id"])
@@ -402,7 +413,6 @@ func TestCodexFingerprintV2ContextSeparatesClientScopes(t *testing.T) {
 		clientSessionID: "shared-client-session",
 		turnID:          "shared-turn",
 		windowID:        "shared-window",
-		promptCacheKey:  "shared-cache",
 		requestID:       "shared-request",
 	}
 	openClawInput := codexInput
@@ -439,7 +449,6 @@ func TestCodexFingerprintV2ContextSharesClientSessionButSeparatesAPIKeyThreads(t
 		clientSessionID: "shared-client-session",
 		turnID:          "shared-turn",
 		windowID:        "shared-window",
-		promptCacheKey:  "shared-cache",
 		requestID:       "shared-request",
 	}
 	secondInput := firstInput
@@ -457,11 +466,12 @@ func TestCodexFingerprintV2ContextSharesClientSessionButSeparatesAPIKeyThreads(t
 
 	require.Equal(t, first.InstallationID(), second.InstallationID())
 	require.Equal(t, first.SessionID(), second.SessionID())
+	require.Equal(t, first.PromptCacheKey(), second.PromptCacheKey())
+	require.Equal(t, first.SessionID(), first.PromptCacheKey())
 	for _, pair := range [][2]string{
 		{first.ThreadID(), second.ThreadID()},
 		{first.TurnID(), second.TurnID()},
 		{first.WindowID(), second.WindowID()},
-		{first.PromptCacheKey(), second.PromptCacheKey()},
 		{first.RequestID(), second.RequestID()},
 	} {
 		require.NotEqual(t, pair[0], pair[1])
@@ -500,12 +510,11 @@ func TestCodexFingerprintV2ContextSeparatesAccountsClustersEpochsAndKinds(t *tes
 	assert.NotEqual(t, base.ThreadID(), base.TurnID(), "kind 必须形成独立输入域")
 }
 
-func TestCodexFingerprintV2ContextReusesLogicalTurnAndKeepsNonCacheIDsUUIDv4(t *testing.T) {
+func TestCodexFingerprintV2ContextReusesLogicalTurnAndKeepsConvergedIDsUUIDv4(t *testing.T) {
 	input := codexFingerprintOriginalIDs{
 		clientSessionID: "client-session",
 		turnID:          "logical-turn-123",
 		windowID:        "window-1",
-		promptCacheKey:  "prompt-1",
 		requestID:       "request-1",
 	}
 	first, err := newCodexFingerprintContextV2(
@@ -520,134 +529,188 @@ func TestCodexFingerprintV2ContextReusesLogicalTurnAndKeepsNonCacheIDsUUIDv4(t *
 	require.NoError(t, err)
 
 	assert.Equal(t, first.TurnID(), second.TurnID(), "同一逻辑 turn 的重试必须复用映射值")
+	assert.Equal(t, first.SessionID(), first.PromptCacheKey())
 	for _, value := range []string{
 		first.InstallationID(), first.SessionID(), first.ThreadID(), first.TurnID(),
-		first.WindowID(), first.RequestID(),
+		first.WindowID(), first.PromptCacheKey(), first.RequestID(),
 	} {
 		parsed, parseErr := uuid.Parse(value)
 		require.NoError(t, parseErr)
 		assert.Equal(t, uuid.Version(4), parsed.Version())
 		assert.Equal(t, uuid.RFC4122, parsed.Variant())
 	}
-	promptCacheKey, parseErr := uuid.Parse(first.PromptCacheKey())
-	require.NoError(t, parseErr)
-	assert.Equal(t, uuid.Version(7), promptCacheKey.Version())
-	assert.Equal(t, uuid.RFC4122, promptCacheKey.Variant())
 }
 
-func TestCodexPromptCacheUUIDv7IsStableAndSeparatesRequiredScopes(t *testing.T) {
-	const originalPromptCacheKey = "018f0c7a-b740-7cc0-98c7-4f4a3f975e52"
-	baseInput := codexFingerprintOriginalIDs{
-		clientScope:      "client:codex:transport:http",
-		threadScope:      "api-key:101:client:codex:transport:http",
-		promptCacheScope: "user:42:client:codex",
-		clientSessionID:  originalPromptCacheKey,
-		threadID:         "root-thread",
-		turnID:           "turn-1",
-		windowID:         "window-1",
-		promptCacheKey:   originalPromptCacheKey,
-		requestID:        "request-1",
+func TestCodexFingerprintV3SessionAndPromptUseSameStableUUIDv7(t *testing.T) {
+	startedAt := time.Date(2026, 8, 20, 12, 34, 56, 789*int(time.Millisecond), time.UTC)
+	input := codexFingerprintOriginalIDs{
+		clientScope:     "client:codex:transport:http",
+		threadScope:     "api-key:101:client:codex:transport:http",
+		clientSessionID: "client-session",
+		threadID:        "root-thread",
+		turnID:          "logical-turn-123",
 	}
-	derive := func(secret []byte, seed string, epoch int64, input codexFingerprintOriginalIDs) string {
-		fp, err := newCodexFingerprintContextV2(secret, seed, epoch, codexFingerprintSession, "", input)
+	derive := func(scope string, epoch int64, epochStartedAt time.Time) *CodexFingerprintContext {
+		candidate := input
+		candidate.clientScope = scope
+		fp, err := newCodexFingerprintContextV3(
+			testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), epoch, epochStartedAt,
+			codexFingerprintSession, "", candidate,
+		)
 		require.NoError(t, err)
-		return fp.PromptCacheKey()
+		require.Equal(t, fp.SessionID(), fp.PromptCacheKey())
+		return fp
 	}
 
-	base := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, baseInput)
-	require.Equal(t, base, derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, baseInput))
-	parsed, err := uuid.Parse(base)
+	first := derive(input.clientScope, 9, startedAt)
+	second := derive(input.clientScope, 9, startedAt)
+	require.Equal(t, first.SessionID(), second.SessionID())
+	require.Equal(t, codexFingerprintAlgorithmV3, first.AlgorithmVersion())
+	parsed, err := uuid.Parse(first.SessionID())
 	require.NoError(t, err)
 	require.Equal(t, uuid.Version(7), parsed.Version())
 	require.Equal(t, uuid.RFC4122, parsed.Variant())
-	original, err := uuid.Parse(originalPromptCacheKey)
-	require.NoError(t, err)
-	require.Equal(t, original[:6], parsed[:6], "合法 UUIDv7 原始 key 应保留其时间戳部分")
+	require.Equal(t, startedAt.UnixMilli(), codexFingerprintUUIDV7UnixMilli(parsed))
 
+	otherScope := derive("client:openclaw:transport:http", 9, startedAt)
+	otherEpoch := derive(input.clientScope, 10, startedAt.Add(time.Hour))
+	require.NotEqual(t, first.SessionID(), otherScope.SessionID())
+	require.NotEqual(t, first.SessionID(), otherEpoch.SessionID())
+	require.Equal(t, startedAt.Add(time.Hour).UnixMilli(), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(otherEpoch.SessionID())))
+
+	_, err = newCodexFingerprintContextV3(
+		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 9, time.Time{},
+		codexFingerprintSession, "", input,
+	)
+	require.ErrorIs(t, err, errCodexFingerprintEpochTimeInvalid)
+}
+
+func TestResolveCodexFingerprintV3UsesBoundThreadEpochTime(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	currentStartedAt := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+	boundStartedAt := time.Date(2026, 8, 10, 8, 30, 0, 0, time.UTC)
+	state := CodexFingerprintState{
+		Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV3,
+		Epoch: 11, EpochStartedAt: currentStartedAt,
+	}
+	account := &Account{
+		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra:                          map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
+		CodexFingerprintSeed:           state.Seed,
+		CodexFingerprintVersion:        state.Version,
+		CodexFingerprintEpoch:          state.Epoch,
+		CodexFingerprintEpochStartedAt: &currentStartedAt,
+	}
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{Gateway: config.GatewayConfig{
+			CodexFingerprintSecret: string(testCodexFingerprintV2Secret()),
+		}},
+		accountRepo: &codexFingerprintSessionRepoStub{
+			state: state, boundEpoch: 7, boundEpochStartedAt: boundStartedAt,
+		},
+	}
+	c, _ := gin.CreateTestContext(nil)
+	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Request.Header.Set("session-id", "existing-thread-session")
+	SetOpenAIClientTransport(c, OpenAIClientTransportHTTP)
+
+	fingerprint, err := svc.resolveCodexFingerprintContextForAttempt(
+		context.Background(), c, account, c.Request.Header,
+		[]byte(`{"client_metadata":{"thread_id":"existing-thread"},"input":"hello"}`),
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(7), fingerprint.SessionEpoch())
+	require.Equal(t, boundStartedAt.UnixMilli(), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(fingerprint.SessionID())))
+	require.NotEqual(t, currentStartedAt.UnixMilli(), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(fingerprint.SessionID())))
+}
+
+func codexFingerprintUUIDV7UnixMilli(value uuid.UUID) int64 {
+	return int64(value[0])<<40 |
+		int64(value[1])<<32 |
+		int64(value[2])<<24 |
+		int64(value[3])<<16 |
+		int64(value[4])<<8 |
+		int64(value[5])
+}
+
+func TestCodexPromptCacheKeyFollowsConvergedSessionScopes(t *testing.T) {
+	startedAt := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+	baseInput := codexFingerprintOriginalIDs{
+		clientScope:     "client:codex:transport:http",
+		threadScope:     "api-key:101:client:codex:transport:http",
+		clientSessionID: "root-session",
+		threadID:        "root-thread",
+		turnID:          "turn-1",
+		windowID:        "window-1",
+		requestID:       "request-1",
+	}
+	derive := func(secret []byte, seed string, epoch int64, input codexFingerprintOriginalIDs) *CodexFingerprintContext {
+		fp, err := newCodexFingerprintContextV3(secret, seed, epoch, startedAt, codexFingerprintSession, "", input)
+		require.NoError(t, err)
+		require.Equal(t, fp.SessionID(), fp.PromptCacheKey())
+		return fp
+	}
+
+	base := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, baseInput)
+	repeated := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, baseInput)
+	require.Equal(t, base.SessionID(), repeated.SessionID())
+
+	otherDownstream := baseInput
+	otherDownstream.threadScope = "api-key:202:client:codex:transport:http"
+	otherDownstream.clientSessionID = "other-client-session"
+	otherDownstream.threadID = "other-thread"
+	otherDownstream.turnID = "other-turn"
+	otherDownstream.windowID = "other-window"
+	otherDownstream.requestID = "other-request"
+	downstreamFP := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, otherDownstream)
+	require.Equal(t, base.SessionID(), downstreamFP.SessionID(), "下游用户和逻辑会话不得拆分账号级缓存身份")
+
+	otherClientInput := baseInput
+	otherClientInput.clientScope = "client:openclaw:transport:http"
+	otherClient := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, otherClientInput)
 	otherCluster := derive([]byte("abcdef0123456789abcdef0123456789"), testCodexFingerprintV2Seed(), 7, baseInput)
 	otherAccount := derive(testCodexFingerprintV2Secret(), strings.Repeat("cd", codexFingerprintSeedBytes), 7, baseInput)
 	otherEpoch := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 8, baseInput)
-	otherUserInput := baseInput
-	otherUserInput.promptCacheScope = "user:43:client:codex"
-	otherUser := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, otherUserInput)
-	otherClientInput := baseInput
-	otherClientInput.promptCacheScope = "user:42:client:openclaw"
-	otherClient := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, otherClientInput)
-	otherOriginalInput := baseInput
-	otherOriginalInput.promptCacheKey = "018f0c7a-b741-744d-9293-4d7a17f53c87"
-	otherOriginal := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, otherOriginalInput)
-
-	for _, value := range []string{otherCluster, otherAccount, otherEpoch, otherUser, otherClient, otherOriginal} {
-		require.NotEqual(t, base, value)
+	for _, fp := range []*CodexFingerprintContext{otherClient, otherCluster, otherAccount, otherEpoch} {
+		require.NotEqual(t, base.SessionID(), fp.SessionID())
+		require.NotEqual(t, base.PromptCacheKey(), fp.PromptCacheKey())
 	}
 }
 
-func TestCodexPromptCacheUUIDv7IgnoresRequestAndTransportState(t *testing.T) {
-	baseInput := codexFingerprintOriginalIDs{
-		clientScope:      "client:codex:transport:http",
-		threadScope:      "api-key:101:client:codex:transport:http",
-		promptCacheScope: "user:42:client:codex",
-		clientSessionID:  "root-session",
-		threadID:         "root-thread",
-		turnID:           "root-turn",
-		windowID:         "root-window",
-		promptCacheKey:   "root-cache-lineage",
-		requestID:        "request-1",
-	}
-	derive := func(input codexFingerprintOriginalIDs) string {
-		fp, err := newCodexFingerprintContextV2(
-			testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
-			codexFingerprintSession, "", input,
-		)
-		require.NoError(t, err)
-		return fp.PromptCacheKey()
-	}
-
-	base := derive(baseInput)
-	changedVolatile := baseInput
-	changedVolatile.clientScope = "client:codex:transport:ws"
-	changedVolatile.threadScope = "api-key:101:client:codex:transport:ws"
-	changedVolatile.clientSessionID = "reconnected-client-session"
-	changedVolatile.threadID = "temporary-child-thread"
-	changedVolatile.parentThreadID = "root-thread"
-	changedVolatile.turnID = "child-turn"
-	changedVolatile.windowID = "child-window"
-	changedVolatile.requestID = "request-2"
-	changedVolatile.subagentMarker = "worker"
-	changedVolatile.isSubagent = true
-	require.Equal(t, base, derive(changedVolatile), "连接、传输和子代理临时标识不得进入缓存 key 派生")
-
-	nonV7Again := derive(baseInput)
-	require.Equal(t, base, nonV7Again, "非 UUIDv7 原始 key 的时间戳回退也必须稳定")
-	parsed, err := uuid.Parse(base)
-	require.NoError(t, err)
-	require.Equal(t, uuid.Version(7), parsed.Version())
-}
-
-func TestCodexPromptCacheKeyCoversDeviceAndFullModesWithoutForcingSessionID(t *testing.T) {
+func TestCodexPromptCacheKeyRespectsModeBoundary(t *testing.T) {
+	startedAt := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
 	input := codexFingerprintOriginalIDs{
-		clientScope:      "client:codex",
-		threadScope:      "api-key:101:client:codex",
-		promptCacheScope: "user:42:client:codex",
-		clientSessionID:  "client-session",
-		threadID:         "root-thread",
-		turnID:           "root-turn",
-		promptCacheKey:   "sensitive-original-cache-key",
+		clientScope:     "client:codex",
+		threadScope:     "api-key:101:client:codex",
+		clientSessionID: "client-session",
+		threadID:        "root-thread",
+		turnID:          "root-turn",
 	}
-	for _, mode := range []codexFingerprintMode{codexFingerprintDevice, codexFingerprintSession, codexFingerprintFull} {
+	device, err := newCodexFingerprintContextV3(
+		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, startedAt, codexFingerprintDevice, "", input,
+	)
+	require.NoError(t, err)
+	require.Empty(t, device.SessionID())
+	require.Empty(t, device.PromptCacheKey(), "device 模式不得在未收敛 Session 时强制账号级缓存身份")
+
+	for _, mode := range []codexFingerprintMode{codexFingerprintSession, codexFingerprintFull} {
 		t.Run(string(mode), func(t *testing.T) {
-			fp, err := newCodexFingerprintContextV2(
-				testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, mode, "", input,
+			fp, err := newCodexFingerprintContextV3(
+				testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, startedAt, mode, "", input,
 			)
 			require.NoError(t, err)
 			require.NotEmpty(t, fp.PromptCacheKey())
-			require.NotEqual(t, input.promptCacheKey, fp.PromptCacheKey())
-			require.NotEqual(t, fp.SessionID(), fp.PromptCacheKey())
-			parsed, parseErr := uuid.Parse(fp.PromptCacheKey())
-			require.NoError(t, parseErr)
-			require.Equal(t, uuid.Version(7), parsed.Version())
+			require.Equal(t, fp.SessionID(), fp.PromptCacheKey())
 		})
 	}
+
+	legacyInput := input
+	legacyInput.legacyUnscoped = true
+	legacy, err := newCodexFingerprintContextV3(
+		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, startedAt, codexFingerprintSession, "", legacyInput,
+	)
+	require.NoError(t, err)
+	require.Equal(t, legacy.SessionID(), legacy.PromptCacheKey())
 }
 
 func TestCodexFingerprintV2ContextHonorsConfiguredDeviceAndDeviceMode(t *testing.T) {
@@ -736,7 +799,7 @@ func TestApplyCodexFingerprintForAttemptSharesChatSessionAcrossAPIKeys(t *testin
 	require.NotEqual(t, chatThread, messagesThread)
 }
 
-func TestApplyCodexFingerprintForAttemptKeepsPromptCacheAcrossHTTPWSAndAPIKeysForOneUser(t *testing.T) {
+func TestApplyCodexFingerprintForAttemptMakesPromptCacheFollowSession(t *testing.T) {
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	state := CodexFingerprintState{Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2, Epoch: 3, EpochStartedAt: startedAt}
 	account := &Account{
@@ -751,7 +814,7 @@ func TestApplyCodexFingerprintForAttemptKeepsPromptCacheAcrossHTTPWSAndAPIKeysFo
 	}
 	const originalPromptCacheKey = "018f0c7a-b740-7cc0-98c7-4f4a3f975e52"
 	body := []byte(`{"prompt_cache_key":"` + originalPromptCacheKey + `","client_metadata":{"session_id":"` + originalPromptCacheKey + `","thread_id":"root-thread"},"input":"hello"}`)
-	apply := func(transport OpenAIClientTransport, userID, apiKeyID int64) (sessionID, promptCacheKey string, headers http.Header, outgoing []byte) {
+	apply := func(transport OpenAIClientTransport, userID, apiKeyID int64, requestBody []byte) (sessionID, promptCacheKey string, headers http.Header, outgoing []byte) {
 		c, _ := gin.CreateTestContext(nil)
 		c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
 		c.Request.Header.Set("User-Agent", "codex_cli_rs/0.141.0")
@@ -761,7 +824,7 @@ func TestApplyCodexFingerprintForAttemptKeepsPromptCacheAcrossHTTPWSAndAPIKeysFo
 		if userID > 0 {
 			requestContext = context.WithValue(requestContext, ctxkey.UserID, userID)
 		}
-		updated, err := svc.applyCodexFingerprintForAttempt(requestContext, c, account, body, false, true)
+		updated, err := svc.applyCodexFingerprintForAttempt(requestContext, c, account, requestBody, false, true)
 		require.NoError(t, err)
 		outgoingHeaders := make(http.Header)
 		applyStagedCodexFingerprintHeaders(c, account, outgoingHeaders)
@@ -769,20 +832,28 @@ func TestApplyCodexFingerprintForAttemptKeepsPromptCacheAcrossHTTPWSAndAPIKeysFo
 			gjson.GetBytes(updated, "prompt_cache_key").String(), outgoingHeaders, updated
 	}
 
-	httpSession, httpCache, httpHeaders, httpBody := apply(OpenAIClientTransportHTTP, 42, 101)
-	wsSession, wsCache, _, _ := apply(OpenAIClientTransportWS, 42, 202)
+	httpSession, httpCache, httpHeaders, httpBody := apply(OpenAIClientTransportHTTP, 42, 101, body)
+	wsSession, wsCache, _, _ := apply(OpenAIClientTransportWS, 42, 202, body)
+	require.Equal(t, httpSession, httpCache)
+	require.Equal(t, wsSession, wsCache)
 	require.NotEqual(t, httpSession, wsSession, "现有 Session 仍按入站传输分别收敛")
-	require.Equal(t, httpCache, wsCache, "缓存谱系不应随 HTTP/WS 或同用户 API Key 改变")
+	require.NotEqual(t, httpCache, wsCache, "缓存身份必须跟随现有 HTTP/WS Session 作用域")
 	require.NotContains(t, string(httpBody), originalPromptCacheKey)
 	for name, values := range httpHeaders {
 		require.NotContains(t, strings.Join(values, ","), originalPromptCacheKey, name)
 	}
 
-	_, otherUserCache, _, _ := apply(OpenAIClientTransportHTTP, 43, 101)
-	require.NotEqual(t, httpCache, otherUserCache)
-	_, fallbackAPIKeyCache, _, _ := apply(OpenAIClientTransportHTTP, 0, 101)
-	_, otherFallbackAPIKeyCache, _, _ := apply(OpenAIClientTransportHTTP, 0, 202)
-	require.NotEqual(t, fallbackAPIKeyCache, otherFallbackAPIKeyCache, "缺少 User ID 时必须回退 API Key ID")
+	otherBody := []byte(`{"prompt_cache_key":"other-explicit-cache","client_metadata":{"session_id":"other-client-session","thread_id":"other-thread"},"input":"hello"}`)
+	otherSession, otherCache, _, otherOutgoing := apply(OpenAIClientTransportHTTP, 43, 202, otherBody)
+	require.Equal(t, httpSession, otherSession)
+	require.Equal(t, httpCache, otherCache, "下游用户、API Key 和原始 cache key 不得拆分账号级缓存身份")
+	require.NotContains(t, string(otherOutgoing), "other-explicit-cache")
+
+	missingPromptBody := []byte(`{"client_metadata":{"session_id":"third-client-session","thread_id":"third-thread"},"input":"hello"}`)
+	missingSession, missingCache, _, missingOutgoing := apply(OpenAIClientTransportHTTP, 0, 303, missingPromptBody)
+	require.Equal(t, httpSession, missingSession)
+	require.Equal(t, missingSession, missingCache, "session 模式必须补齐缺省 prompt_cache_key")
+	require.True(t, gjson.GetBytes(missingOutgoing, "prompt_cache_key").Exists())
 }
 
 func TestApplyCodexFingerprintRawForAttemptKeepsPromptCacheAfterWSReconnect(t *testing.T) {
@@ -793,10 +864,10 @@ func TestApplyCodexFingerprintRawForAttemptKeepsPromptCacheAfterWSReconnect(t *t
 		Extra:    map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
 	}
 	svc := &OpenAIGatewayService{}
-	configureCodexFingerprintV2TestState(svc, account)
+	configureCodexFingerprintV3TestState(svc, account)
 	requestContext := context.WithValue(context.Background(), ctxkey.UserID, int64(42))
 	body := []byte(`{"prompt_cache_key":"root-cache-lineage","client_metadata":{"session_id":"client-session","thread_id":"root-thread"},"input":"hello"}`)
-	applyOnConnection := func() string {
+	applyOnConnection := func() (string, string) {
 		c, _ := gin.CreateTestContext(nil)
 		c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
 		c.Request.Header.Set("User-Agent", "codex_cli_rs/0.141.0")
@@ -804,16 +875,19 @@ func TestApplyCodexFingerprintRawForAttemptKeepsPromptCacheAfterWSReconnect(t *t
 		SetOpenAIClientTransport(c, OpenAIClientTransportWS)
 		updated, err := svc.applyCodexFingerprintRawForAttempt(requestContext, c, account, body, true)
 		require.NoError(t, err)
-		return gjson.GetBytes(updated, "prompt_cache_key").String()
+		return gjson.GetBytes(updated, "client_metadata.session_id").String(),
+			gjson.GetBytes(updated, "prompt_cache_key").String()
 	}
 
-	firstConnection := applyOnConnection()
-	secondConnection := applyOnConnection()
-	require.NotEmpty(t, firstConnection)
-	require.Equal(t, firstConnection, secondConnection)
+	firstSession, firstCache := applyOnConnection()
+	secondSession, secondCache := applyOnConnection()
+	require.Equal(t, firstSession, firstCache)
+	require.Equal(t, secondSession, secondCache)
+	require.Equal(t, firstCache, secondCache)
+	require.Equal(t, uuid.Version(7), uuid.MustParse(firstSession).Version())
 }
 
-func TestApplyCodexFingerprintForAttemptDoesNotCreatePromptCacheKeyWhenMissing(t *testing.T) {
+func TestApplyCodexFingerprintForAttemptInjectsPromptCacheKeyWhenMissing(t *testing.T) {
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	state := CodexFingerprintState{Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2, Epoch: 3, EpochStartedAt: startedAt}
 	account := &Account{
@@ -836,7 +910,40 @@ func TestApplyCodexFingerprintForAttemptDoesNotCreatePromptCacheKeyWhenMissing(t
 		[]byte(`{"client_metadata":{"session_id":"client-session"},"input":"hello"}`), false, true,
 	)
 	require.NoError(t, err)
-	require.False(t, gjson.GetBytes(updated, "prompt_cache_key").Exists())
+	require.Equal(t,
+		gjson.GetBytes(updated, "client_metadata.session_id").String(),
+		gjson.GetBytes(updated, "prompt_cache_key").String(),
+	)
+}
+
+func TestApplyCodexFingerprintForAttemptKeepsPromptCacheInDeviceAndOffModes(t *testing.T) {
+	for _, mode := range []codexFingerprintMode{codexFingerprintDevice, codexFingerprintOff} {
+		t.Run(string(mode), func(t *testing.T) {
+			account := &Account{
+				ID:       27,
+				Platform: PlatformOpenAI,
+				Type:     AccountTypeOAuth,
+				Extra:    map[string]any{codexFingerprintModeExtraKey: string(mode)},
+			}
+			svc := &OpenAIGatewayService{}
+			if mode == codexFingerprintDevice {
+				configureCodexFingerprintV3TestState(svc, account)
+			}
+			apply := func(body []byte) []byte {
+				c, _ := gin.CreateTestContext(nil)
+				c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
+				SetOpenAIClientTransport(c, OpenAIClientTransportHTTP)
+				updated, err := svc.applyCodexFingerprintForAttempt(context.Background(), c, account, body, false, true)
+				require.NoError(t, err)
+				return updated
+			}
+
+			explicit := apply([]byte(`{"prompt_cache_key":"client-cache","input":"hello"}`))
+			require.Equal(t, "client-cache", gjson.GetBytes(explicit, "prompt_cache_key").String())
+			missing := apply([]byte(`{"input":"hello"}`))
+			require.False(t, gjson.GetBytes(missing, "prompt_cache_key").Exists())
+		})
+	}
 }
 
 func TestApplyCodexFingerprintForAttemptCompactOnlyStagesHeaders(t *testing.T) {
@@ -892,8 +999,6 @@ func TestCodexFingerprintSubagentMapsClosedTopology(t *testing.T) {
 		forkedThreadID:   "root-thread",
 		turnID:           "child-turn",
 		windowID:         "child-window",
-		promptCacheScope: "user:42:client:codex",
-		promptCacheKey:   "root-cache-lineage",
 		subagentMarker:   "worker",
 		isSubagent:       true,
 		sessionScopeHash: strings.Repeat("cd", 32),

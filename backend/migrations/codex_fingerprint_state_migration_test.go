@@ -45,3 +45,14 @@ func TestMigration232AddsScopedSessionRotation(t *testing.T) {
 	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS session_scope_hash CHAR(64)")
 	require.Contains(t, sql, "CHECK (session_epoch > 0)")
 }
+
+func TestMigration233AddsUUIDv7EpochTimestamps(t *testing.T) {
+	content, err := FS.ReadFile("233_openai_codex_fingerprint_uuidv7.sql")
+	require.NoError(t, err)
+
+	sql := strings.Join(strings.Fields(string(content)), " ")
+	require.Contains(t, sql, "CHECK (codex_fingerprint_version IN ('', 'v2', 'v3'))")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS session_epoch_started_at TIMESTAMPTZ")
+	require.Contains(t, sql, "MIN(created_at) AS epoch_started_at")
+	require.Contains(t, sql, "session_scope_hash IS NOT DISTINCT FROM e.session_scope_hash")
+}
