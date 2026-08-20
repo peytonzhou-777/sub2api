@@ -44,6 +44,12 @@ func openAIUserAffinityScopeKey(groupID *int64, requireCompact bool, endpointCap
 // SelectOpenAIUserAffinityCandidate 按额度主窗口选择剩余容量更充足的新居民账号。
 // 主窗口接近时优先选择触达用户较少者，再用辅助窗口和账号 ID 保证结果确定。
 func SelectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates []OpenAIUserAffinityCandidate, demand5H, demand7D float64, now time.Time) (*OpenAIUserAffinityCandidate, bool) {
+	return selectOpenAIUserAffinityCandidate(cfg, candidates, demand5H, demand7D, now, true)
+}
+
+// selectOpenAIUserAffinityCandidate 可按场景关闭既有触达和跨 scope 居住账号的前置优先，
+// 使管理员重置后的用户从完整候选集合直接按 Best Fit 重新装箱。
+func selectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates []OpenAIUserAffinityCandidate, demand5H, demand7D float64, now time.Time, preferExistingAffinity bool) (*OpenAIUserAffinityCandidate, bool) {
 	if len(candidates) == 0 {
 		return nil, false
 	}
@@ -73,15 +79,17 @@ func SelectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates 
 		primary, secondary = secondary, primary
 	}
 
-	// 跨 scope 已居住账号仍优先，避免同一用户扩散到更多账号。
-	residentPool := make([]OpenAIUserAffinityCandidate, 0, len(valid))
-	for _, candidate := range valid {
-		if candidate.UserAlreadyActive || candidate.UserAlreadyResident {
-			residentPool = append(residentPool, candidate)
+	if preferExistingAffinity {
+		// 跨 scope 已居住账号仍优先，避免同一用户扩散到更多账号。
+		residentPool := make([]OpenAIUserAffinityCandidate, 0, len(valid))
+		for _, candidate := range valid {
+			if candidate.UserAlreadyActive || candidate.UserAlreadyResident {
+				residentPool = append(residentPool, candidate)
+			}
 		}
-	}
-	if len(residentPool) > 0 {
-		valid = residentPool
+		if len(residentPool) > 0 {
+			valid = residentPool
+		}
 	}
 
 	// 先以主窗口最大剩余量为基准形成容差集合，避免近似比较破坏排序传递性。

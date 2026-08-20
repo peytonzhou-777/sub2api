@@ -50,5 +50,5 @@ export const openAIUserAffinitySettings = {
   reentryOvercommit: 'Allow resident reentry overcommit',
   reentryOvercommitHint: 'Allow returning residents to temporarily exceed the contact limit; block new residents while overcommitted.',
   resetExcludeSource: 'Exclude source account after reset',
-  resetExcludeSourceHint: 'After an admin resets a residence, do not immediately choose the previous account during the next residence assignment.'
+  resetExcludeSourceHint: 'After an admin resets a residence, exclude the previous account and remove 7-day contact or other-residence priority; all remaining candidates enter new-resident Best Fit directly.'
 }

@@ -168,11 +168,29 @@ func TestOpenAIGatewayService_UserAffinityUnknownQuotaFallsBackForSnapshotHealin
 	selection, handled, err := svc.selectOpenAIUserAffinityNewResident(
 		ctx, nil, "gpt-5.1", nil, false, "", "", OpenAIUpstreamTransportHTTPSSE,
 		openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE),
-		DefaultOpenAIUserAffinityConfig(), time.Now().UTC(),
+		DefaultOpenAIUserAffinityConfig(), time.Now().UTC(), true,
 	)
 	require.NoError(t, err)
 	require.False(t, handled)
 	require.Nil(t, selection)
+}
+
+func TestResolveOpenAIUserAffinityNewResidentPolicyDisablesAffinityReuseAfterExcludedReset(t *testing.T) {
+	sourceAccountID := int64(36141)
+	excludeSource := true
+	originalExcluded := map[int64]struct{}{36140: {}}
+	placement := &OpenAIUserPlacement{
+		Status:                    "reset",
+		ResetExcludeSourceAccount: &excludeSource,
+		ResetSourceAccountID:      &sourceAccountID,
+	}
+
+	excluded, preferExistingAffinity := resolveOpenAIUserAffinityNewResidentPolicy(placement, originalExcluded)
+
+	require.False(t, preferExistingAffinity)
+	require.Contains(t, excluded, int64(36140))
+	require.Contains(t, excluded, sourceAccountID)
+	require.NotContains(t, originalExcluded, sourceAccountID, "不得修改调用方传入的排除集合")
 }
 
 func TestOpenAIUserAffinityPreviousResponseAttemptRefreshesMatchingPlacement(t *testing.T) {

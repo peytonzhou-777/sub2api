@@ -41,20 +41,13 @@ func (s *OpenAIGatewayService) evaluateOpenAIUserAffinityShadow(ctx context.Cont
 			return account.ID
 		}
 	}
-	excluded := cloneExcludedAccountIDs(req.ExcludedIDs)
-	if placement != nil && placement.Status == "reset" && placement.ResetExcludeSourceAccount != nil &&
-		*placement.ResetExcludeSourceAccount && placement.ResetSourceAccountID != nil {
-		if excluded == nil {
-			excluded = make(map[int64]struct{})
-		}
-		excluded[*placement.ResetSourceAccountID] = struct{}{}
-	}
+	excluded, preferExistingAffinity := resolveOpenAIUserAffinityNewResidentPolicy(placement, req.ExcludedIDs)
 	_, candidates, err := s.openAIUserAffinityCandidates(ctx, userID, req.GroupID, req.RequestedModel, excluded, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
 	if err != nil {
 		return 0
 	}
 	demand := s.predictOpenAIUserAffinityDemand(ctx, userID, config)
-	candidate, found := SelectOpenAIUserAffinityCandidate(config, candidates, demand.Demand5H, demand.Demand7D, now)
+	candidate, found := selectOpenAIUserAffinityCandidate(config, candidates, demand.Demand5H, demand.Demand7D, now, preferExistingAffinity)
 	if !found {
 		return 0
 	}

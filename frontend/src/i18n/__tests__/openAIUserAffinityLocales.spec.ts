@@ -18,7 +18,7 @@ describe('OpenAI 用户粘性调度翻译', () => {
       maxContactUsersHint: expect.any(String),
       failureThresholdHint: expect.any(String),
       reserve7dHint: expect.any(String),
-      resetExcludeSourceHint: expect.any(String)
+      resetExcludeSourceHint: expect.stringContaining('直接参与新居民 Best Fit')
     })
     expect(zh.admin).not.toHaveProperty('openAIUserAffinity')
   })
@@ -37,7 +37,7 @@ describe('OpenAI 用户粘性调度翻译', () => {
       maxContactUsersHint: expect.any(String),
       failureThresholdHint: expect.any(String),
       reserve7dHint: expect.any(String),
-      resetExcludeSourceHint: expect.any(String)
+      resetExcludeSourceHint: expect.stringContaining('enter new-resident Best Fit directly')
     })
     expect(en.admin).not.toHaveProperty('openAIUserAffinity')
   })

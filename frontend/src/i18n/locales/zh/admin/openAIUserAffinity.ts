@@ -50,5 +50,5 @@ export const openAIUserAffinitySettings = {
   reentryOvercommit: '居民回流允许短暂超配',
   reentryOvercommitHint: '已有居民重新触达时可短暂超过账号触达上限；超配期间禁止新居民进入。',
   resetExcludeSource: '手动重置后排除原账号',
-  resetExcludeSourceHint: '管理员重置用户归属后，重新选择居住账号时不立即选回重置前的账号。'
+  resetExcludeSourceHint: '管理员重置用户归属后，排除原账号，并取消七日触达及其他居住账号的优先访问；其余候选直接参与新居民 Best Fit。'
 }

@@ -168,6 +168,40 @@ func TestSelectOpenAIUserAffinityCandidatePrefersResidentAcrossScopesAndBypasses
 	require.Equal(t, int64(12), selected.AccountID)
 }
 
+func TestSelectOpenAIUserAffinityCandidateManualResetUsesStrictNewResidentBestFit(t *testing.T) {
+	cfg := DefaultOpenAIUserAffinityConfig()
+	now := time.Now().UTC()
+	candidates := []OpenAIUserAffinityCandidate{
+		{AccountID: 11, Quota5HKnown: true, Quota7DKnown: true, Available5HRatio: 0.5, Available7DRatio: 0.5, UserAlreadyActive: true},
+		{AccountID: 12, Quota5HKnown: true, Quota7DKnown: true, Available5HRatio: 0.9, Available7DRatio: 0.9},
+	}
+
+	residentPreferred, ok := SelectOpenAIUserAffinityCandidate(cfg, candidates, 0.05, 0.05, now)
+	require.True(t, ok)
+	require.Equal(t, int64(11), residentPreferred.AccountID)
+
+	bestFit, ok := selectOpenAIUserAffinityCandidate(cfg, candidates, 0.05, 0.05, now, false)
+	require.True(t, ok)
+	require.Equal(t, int64(12), bestFit.AccountID)
+}
+
+func TestSelectOpenAIUserAffinityCandidateManualResetKeepsAlreadyCountedCapacitySemantics(t *testing.T) {
+	cfg := DefaultOpenAIUserAffinityConfig()
+	now := time.Now().UTC()
+	cooldown := now.Add(time.Minute)
+	candidates := []OpenAIUserAffinityCandidate{
+		{
+			AccountID: 11, Quota5HKnown: true, Quota7DKnown: true, Available5HRatio: 0.95, Available7DRatio: 0.95,
+			ActiveContactUsers: cfg.DefaultMaxContactUsers, UserAlreadyActive: true, CooldownUntil: &cooldown,
+		},
+		{AccountID: 12, Quota5HKnown: true, Quota7DKnown: true, Available5HRatio: 0.8, Available7DRatio: 0.8},
+	}
+
+	selected, ok := selectOpenAIUserAffinityCandidate(cfg, candidates, 0.05, 0.05, now, false)
+	require.True(t, ok)
+	require.Equal(t, int64(11), selected.AccountID)
+}
+
 func TestSelectOpenAIUserAffinityCandidateRejectsUnknownQuotaWindow(t *testing.T) {
 	cfg := DefaultOpenAIUserAffinityConfig()
 	selected, ok := SelectOpenAIUserAffinityCandidate(cfg, []OpenAIUserAffinityCandidate{

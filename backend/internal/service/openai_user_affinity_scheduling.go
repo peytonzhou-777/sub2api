@@ -205,16 +205,25 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Con
 		return result, true, resultErr
 	}
 
-	newResidentExcluded := excludedIDs
-	if placement != nil && placement.Status == "reset" && placement.ResetExcludeSourceAccount != nil &&
-		*placement.ResetExcludeSourceAccount && placement.ResetSourceAccountID != nil {
-		newResidentExcluded = cloneExcludedAccountIDs(excludedIDs)
-		if newResidentExcluded == nil {
-			newResidentExcluded = make(map[int64]struct{})
-		}
-		newResidentExcluded[*placement.ResetSourceAccountID] = struct{}{}
+	newResidentExcluded, preferExistingAffinity := resolveOpenAIUserAffinityNewResidentPolicy(placement, excludedIDs)
+	return s.selectOpenAIUserAffinityNewResident(ctx, groupID, requestedModel, newResidentExcluded, requireCompact, requiredCapability, requiredImageCapability, requiredTransport, scopeKey, config, now, preferExistingAffinity)
+}
+
+// resolveOpenAIUserAffinityNewResidentPolicy 将手动重置排除语义统一为严格的新居民重选：
+// 原账号不可再次入选，七日触达和跨 scope 居住记录也不再提供前置优先。
+func resolveOpenAIUserAffinityNewResidentPolicy(placement *OpenAIUserPlacement, excludedIDs map[int64]struct{}) (map[int64]struct{}, bool) {
+	if placement == nil || placement.Status != "reset" || placement.ResetExcludeSourceAccount == nil || !*placement.ResetExcludeSourceAccount {
+		return excludedIDs, true
 	}
-	return s.selectOpenAIUserAffinityNewResident(ctx, groupID, requestedModel, newResidentExcluded, requireCompact, requiredCapability, requiredImageCapability, requiredTransport, scopeKey, config, now)
+	if placement.ResetSourceAccountID == nil || *placement.ResetSourceAccountID <= 0 {
+		return excludedIDs, false
+	}
+	resetExcluded := cloneExcludedAccountIDs(excludedIDs)
+	if resetExcluded == nil {
+		resetExcluded = make(map[int64]struct{})
+	}
+	resetExcluded[*placement.ResetSourceAccountID] = struct{}{}
+	return resetExcluded, false
 }
 
 func openAIUserAffinityMigrationStable(config OpenAIUserAffinityConfig, authorizedAt *time.Time, now time.Time) bool {
@@ -274,7 +283,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityMigrationTarget(ctx conte
 }
 
 // selectOpenAIUserAffinityNewResident 按 7d/5h 剩余容量和当前触达用户数为新居民选择账号。
-func (s *OpenAIGatewayService) selectOpenAIUserAffinityNewResident(ctx context.Context, groupID *int64, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, requiredCapability OpenAIEndpointCapability, requiredImageCapability OpenAIImagesCapability, requiredTransport OpenAIUpstreamTransport, scopeKey string, config OpenAIUserAffinityConfig, now time.Time) (*AccountSelectionResult, bool, error) {
+func (s *OpenAIGatewayService) selectOpenAIUserAffinityNewResident(ctx context.Context, groupID *int64, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, requiredCapability OpenAIEndpointCapability, requiredImageCapability OpenAIImagesCapability, requiredTransport OpenAIUpstreamTransport, scopeKey string, config OpenAIUserAffinityConfig, now time.Time, preferExistingAffinity bool) (*AccountSelectionResult, bool, error) {
 	userID, _ := ctx.Value(ctxkey.UserID).(int64)
 	demand := s.predictOpenAIUserAffinityDemand(ctx, userID, config)
 	accountByID, candidates, err := s.openAIUserAffinityCandidates(ctx, userID, groupID, requestedModel, excludedIDs, requireCompact, requiredCapability, requiredImageCapability, requiredTransport)
@@ -292,7 +301,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityNewResident(ctx context.C
 	}
 
 	for len(candidates) > 0 {
-		candidate, found := SelectOpenAIUserAffinityCandidate(config, candidates, demand.Demand5H, demand.Demand7D, now)
+		candidate, found := selectOpenAIUserAffinityCandidate(config, candidates, demand.Demand5H, demand.Demand7D, now, preferExistingAffinity)
 		if !found {
 			break
 		}
