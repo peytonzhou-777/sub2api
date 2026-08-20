@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	openaiidentity "github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/gin-gonic/gin"
@@ -115,6 +116,7 @@ type codexFingerprintRotationThresholds struct {
 type codexFingerprintOriginalIDs struct {
 	clientScope      string
 	threadScope      string
+	promptCacheScope string
 	sessionScopeHash string
 	legacyUnscoped   bool
 	clientSessionID  string
@@ -198,6 +200,8 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 	}
 	original.clientScope = resolveCodexFingerprintSessionScope(c, headers, identityHidden)
 	original.threadScope = resolveCodexFingerprintThreadScope(c, original.clientScope)
+	promptClientScope := resolveCodexFingerprintTransportAgnosticSessionScope(c, headers, identityHidden)
+	original.promptCacheScope = resolveCodexFingerprintPromptCacheScope(ctx, c, promptClientScope)
 	original.sessionScopeHash = codexFingerprintSessionScopeHash([]byte(secret), original.clientScope)
 	if mode != codexFingerprintDevice && original.threadID == "" {
 		return nil, errCodexFingerprintThreadMissing
@@ -527,6 +531,22 @@ func resolveCodexFingerprintLegacyUnknownClientFamily(c *gin.Context) string {
 
 // resolveCodexFingerprintThreadScope 在客户端会话槽位内继续按下游 API Key 隔离 Thread。
 func resolveCodexFingerprintThreadScope(c *gin.Context, clientScope string) string {
+	return fmt.Sprintf("api-key:%d:%s", getAPIKeyIDFromContext(c), strings.TrimSpace(clientScope))
+}
+
+// resolveCodexFingerprintPromptCacheScope 优先按本站用户隔离缓存谱系，缺少用户身份时回退 API Key。
+// 客户端作用域必须去除 HTTP/WS 传输维度，避免同一逻辑会话切换传输后缓存 key 漂移。
+func resolveCodexFingerprintPromptCacheScope(ctx context.Context, c *gin.Context, clientScope string) string {
+	userID := int64(0)
+	if ctx != nil {
+		userID, _ = ctx.Value(ctxkey.UserID).(int64)
+	}
+	if userID <= 0 && c != nil && c.Request != nil {
+		userID, _ = c.Request.Context().Value(ctxkey.UserID).(int64)
+	}
+	if userID > 0 {
+		return fmt.Sprintf("user:%d:%s", userID, strings.TrimSpace(clientScope))
+	}
 	return fmt.Sprintf("api-key:%d:%s", getAPIKeyIDFromContext(c), strings.TrimSpace(clientScope))
 }
 
@@ -1022,6 +1042,20 @@ func newCodexFingerprintContextV2(
 	if ctx.installationID == "" {
 		ctx.installationID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, 0, codexFingerprintKindInstallation, "account-device")
 	}
+	threadScope := strings.TrimSpace(original.threadScope)
+	if threadScope == "" {
+		threadScope = original.clientScope
+	}
+	promptCacheScope := strings.TrimSpace(original.promptCacheScope)
+	if promptCacheScope == "" {
+		// 仅供直接构造上下文的旧测试/内部调用兼容；正常请求始终显式提供用户作用域。
+		promptCacheScope = threadScope
+	}
+	if value := strings.TrimSpace(original.promptCacheKey); value != "" {
+		ctx.promptCacheKey = deriveCodexPromptCacheUUIDV7(
+			clusterSecret, seed, epoch, promptCacheScope, value,
+		)
+	}
 	if mode == codexFingerprintDevice {
 		return ctx, nil
 	}
@@ -1033,10 +1067,6 @@ func newCodexFingerprintContextV2(
 		clusterSecret, seed, epoch, codexFingerprintKindSession,
 		codexFingerprintScopedDerivationSource(original.clientScope, "account-session"),
 	)
-	threadScope := strings.TrimSpace(original.threadScope)
-	if threadScope == "" {
-		threadScope = original.clientScope
-	}
 	if mode == codexFingerprintFull {
 		ctx.threadID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindThread,
 			codexFingerprintScopedDerivationSource(threadScope, "account-thread"))
@@ -1074,10 +1104,6 @@ func newCodexFingerprintContextV2(
 	}
 	ctx.windowID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindWindow,
 		codexFingerprintScopedDerivationSource(threadScope, windowSource))
-	if value := strings.TrimSpace(original.promptCacheKey); value != "" {
-		ctx.promptCacheKey = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindPromptCache,
-			codexFingerprintScopedDerivationSource(threadScope, value))
-	}
 	if value := strings.TrimSpace(original.requestID); value != "" {
 		ctx.requestID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindRequest,
 			codexFingerprintScopedDerivationSource(threadScope, value))
@@ -1122,9 +1148,6 @@ func populateLegacyUnscopedCodexFingerprintContext(
 		windowSource = threadSource + ":0"
 	}
 	ctx.windowID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindWindow, windowSource)
-	if value := strings.TrimSpace(original.promptCacheKey); value != "" {
-		ctx.promptCacheKey = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindPromptCache, value)
-	}
 	if value := strings.TrimSpace(original.requestID); value != "" {
 		ctx.requestID = deriveCodexFingerprintUUIDV2(clusterSecret, seed, epoch, codexFingerprintKindRequest, value)
 	}
@@ -1151,6 +1174,57 @@ func deriveCodexFingerprintUUIDV2(
 	kind codexFingerprintKind,
 	originalValue string,
 ) string {
+	value := deriveCodexFingerprintHMACV2(clusterSecret, seed, epoch, kind, originalValue)[:16]
+	value[6] = (value[6] & 0x0f) | 0x40
+	value[8] = (value[8] & 0x3f) | 0x80
+	return formatCodexFingerprintUUID(value)
+}
+
+// deriveCodexPromptCacheUUIDV7 将客户端缓存谱系无状态假名化为稳定 UUIDv7。
+// 原始值若已是 UUIDv7，则保留其 48 位时间戳；否则只从相同 HMAC 输入派生稳定伪时间。
+func deriveCodexPromptCacheUUIDV7(
+	clusterSecret, seed []byte,
+	epoch int64,
+	promptCacheScope, originalValue string,
+) string {
+	source := codexFingerprintScopedDerivationSource(promptCacheScope, strings.TrimSpace(originalValue))
+	digest := deriveCodexFingerprintHMACV2(clusterSecret, seed, epoch, codexFingerprintKindPromptCache, source)
+	value := digest[:16]
+
+	timestamp, ok := codexFingerprintUUIDV7Timestamp(originalValue)
+	if !ok {
+		// 固定映射到 2024-01-01 至 2025-12-31，保持常规 UUIDv7 时间形态且不依赖当前时间。
+		const syntheticBaseUnixMilli uint64 = 1704067200000
+		const syntheticSpanMillis uint64 = (366 + 365) * 24 * 60 * 60 * 1000
+		timestampValue := syntheticBaseUnixMilli + binary.BigEndian.Uint64(digest[16:24])%syntheticSpanMillis
+		timestamp = [6]byte{
+			byte(timestampValue >> 40), byte(timestampValue >> 32), byte(timestampValue >> 24),
+			byte(timestampValue >> 16), byte(timestampValue >> 8), byte(timestampValue),
+		}
+	}
+	copy(value[:6], timestamp[:])
+	value[6] = (value[6] & 0x0f) | 0x70
+	value[8] = (value[8] & 0x3f) | 0x80
+	return formatCodexFingerprintUUID(value)
+}
+
+func codexFingerprintUUIDV7Timestamp(value string) ([6]byte, bool) {
+	parsed, err := uuid.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.Version() != uuid.Version(7) || parsed.Variant() != uuid.RFC4122 {
+		return [6]byte{}, false
+	}
+	var timestamp [6]byte
+	copy(timestamp[:], parsed[:6])
+	return timestamp, true
+}
+
+func deriveCodexFingerprintHMACV2(
+	clusterSecret []byte,
+	seed []byte,
+	epoch int64,
+	kind codexFingerprintKind,
+	originalValue string,
+) []byte {
 	mac := hmac.New(sha256.New, clusterSecret)
 	writeCodexFingerprintHMACPart(mac, []byte("codex-fp:"+codexFingerprintAlgorithmV2))
 	writeCodexFingerprintHMACPart(mac, seed)
@@ -1159,10 +1233,10 @@ func deriveCodexFingerprintUUIDV2(
 	writeCodexFingerprintHMACPart(mac, epochBytes)
 	writeCodexFingerprintHMACPart(mac, []byte(kind))
 	writeCodexFingerprintHMACPart(mac, []byte(originalValue))
+	return mac.Sum(nil)
+}
 
-	value := mac.Sum(nil)[:16]
-	value[6] = (value[6] & 0x0f) | 0x40
-	value[8] = (value[8] & 0x3f) | 0x80
+func formatCodexFingerprintUUID(value []byte) string {
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
 		binary.BigEndian.Uint32(value[0:4]),
 		binary.BigEndian.Uint16(value[4:6]),
