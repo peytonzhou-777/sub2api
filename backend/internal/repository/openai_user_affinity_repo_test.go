@@ -257,7 +257,7 @@ func TestRecordOpenAIUserAffinityCapacityFailureExtendsAuthorizedWindow(t *testi
 		WillReturnRows(sqlmock.NewRows([]string{"id", "failure_count", "migration_authorized_at"}).AddRow(91, 1, nil))
 	mock.ExpectQuery(`(?s)INSERT INTO user_account_capacity_failures.*RETURNING id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(101))
-	mock.ExpectExec(`(?s)UPDATE user_account_capacity_incidents SET failure_count.*GREATEST\(window_expires_at, \$7\)`).
+	mock.ExpectExec(`(?s)UPDATE user_account_capacity_incidents SET failure_count.*migration_authorized_at = \$5::timestamptz.*CASE WHEN \$5::timestamptz IS NOT NULL.*GREATEST\(window_expires_at, \$7\)`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 

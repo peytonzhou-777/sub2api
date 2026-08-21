@@ -554,8 +554,8 @@ func (r *accountRepository) RecordOpenAIUserAffinityCapacityFailure(ctx context.
 		if _, err := exec.ExecContext(ctx, `
 			UPDATE user_account_capacity_incidents SET failure_count = $2,
 				last_failure_reason = $3, last_failure_at = $4,
-				migration_authorized_at = $5, status = $6,
-				window_expires_at = CASE WHEN $5 IS NOT NULL THEN GREATEST(window_expires_at, $7) ELSE window_expires_at END,
+				migration_authorized_at = $5::timestamptz, status = $6,
+				window_expires_at = CASE WHEN $5::timestamptz IS NOT NULL THEN GREATEST(window_expires_at, $7) ELSE window_expires_at END,
 				updated_at = $4
 			WHERE id = $1`, incidentID, failureCount, reason, now, authorizedAt, status, stableWindowExpiresAt); err != nil {
 			return nil, err
