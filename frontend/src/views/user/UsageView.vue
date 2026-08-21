@@ -380,6 +380,7 @@ const requestTypeOptions = computed<SelectOption[]>(() => [
   { value: 'live', label: t('usage.live') },
   { value: 'stream', label: t('usage.stream') },
   { value: 'sync', label: t('usage.sync') },
+  { value: 'admission_rejected', label: t('usage.admissionRejected') },
 ])
 const billingTypeOptions = computed<SelectOption[]>(() => [
   { value: null, label: t('admin.usage.allBillingTypes') },
@@ -597,6 +598,7 @@ const handleIpGeoBatchFailed = () => {
 const getRequestTypeExportText = (log: UsageLog): string => {
   const requestType = resolveUsageRequestType(log)
   if (requestType === 'cyber') return 'Cyber'
+  if (requestType === 'admission_rejected') return 'Account admission rejected'
   if (requestType === 'live') return 'Live'
   if (requestType === 'ws_v2') return 'WS'
   if (requestType === 'stream') return 'Stream'

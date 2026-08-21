@@ -1636,7 +1636,7 @@ export interface CodexSessionImportResult {
 // ==================== Usage & Redeem Types ====================
 
 export type RedeemCodeType = 'balance' | 'concurrency' | 'subscription' | 'invitation' | 'limited_credit'
-export type UsageRequestType = 'unknown' | 'sync' | 'stream' | 'ws_v2' | 'cyber' | 'live'
+export type UsageRequestType = 'unknown' | 'sync' | 'stream' | 'ws_v2' | 'cyber' | 'live' | 'admission_rejected'
 export type ImageSizeSource = 'output' | 'input' | 'default' | 'legacy'
 export type ImageSizeBreakdown = Record<string, number>
 
@@ -1714,6 +1714,7 @@ export interface UsageLogAccountSummary {
 }
 
 export interface AdminUsageLog extends UsageLog {
+  account_queue_wait_ms?: number | null
   upstream_model?: string | null
   upstream_response_model?: string | null
   upstream_model_mismatch?: boolean | null

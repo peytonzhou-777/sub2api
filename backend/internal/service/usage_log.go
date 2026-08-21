@@ -14,17 +14,18 @@ const (
 type RequestType int16
 
 const (
-	RequestTypeUnknown      RequestType = 0
-	RequestTypeSync         RequestType = 1
-	RequestTypeStream       RequestType = 2
-	RequestTypeWSV2         RequestType = 3
-	RequestTypeCyberBlocked RequestType = 4 // cyber_policy 命中（透传但被上游安全策略拒绝）
-	RequestTypeLive         RequestType = 5
+	RequestTypeUnknown           RequestType = 0
+	RequestTypeSync              RequestType = 1
+	RequestTypeStream            RequestType = 2
+	RequestTypeWSV2              RequestType = 3
+	RequestTypeCyberBlocked      RequestType = 4 // cyber_policy 命中（透传但被上游安全策略拒绝）
+	RequestTypeLive              RequestType = 5
+	RequestTypeAdmissionRejected RequestType = 6 // 账号准入队列拒绝或超时，零成本占位记录
 )
 
 func (t RequestType) IsValid() bool {
 	switch t {
-	case RequestTypeUnknown, RequestTypeSync, RequestTypeStream, RequestTypeWSV2, RequestTypeCyberBlocked, RequestTypeLive:
+	case RequestTypeUnknown, RequestTypeSync, RequestTypeStream, RequestTypeWSV2, RequestTypeCyberBlocked, RequestTypeLive, RequestTypeAdmissionRejected:
 		return true
 	default:
 		return false
@@ -50,6 +51,8 @@ func (t RequestType) String() string {
 		return "cyber"
 	case RequestTypeLive:
 		return "live"
+	case RequestTypeAdmissionRejected:
+		return "admission_rejected"
 	default:
 		return "unknown"
 	}
@@ -73,8 +76,10 @@ func ParseUsageRequestType(value string) (RequestType, error) {
 		return RequestTypeCyberBlocked, nil
 	case "live":
 		return RequestTypeLive, nil
+	case "admission_rejected":
+		return RequestTypeAdmissionRejected, nil
 	default:
-		return RequestTypeUnknown, fmt.Errorf("invalid request_type, allowed values: unknown, sync, stream, ws_v2, cyber, live")
+		return RequestTypeUnknown, fmt.Errorf("invalid request_type, allowed values: unknown, sync, stream, ws_v2, cyber, live, admission_rejected")
 	}
 }
 
@@ -169,14 +174,15 @@ type UsageLog struct {
 	// AccountStatsCost 账号统计定价预计算费用（nil = 使用默认公式 total_cost × account_rate_multiplier）
 	AccountStatsCost *float64
 
-	BillingType  int8
-	RequestType  RequestType
-	Stream       bool
-	OpenAIWSMode bool
-	DurationMs   *int
-	FirstTokenMs *int
-	UserAgent    *string
-	IPAddress    *string
+	BillingType        int8
+	RequestType        RequestType
+	Stream             bool
+	OpenAIWSMode       bool
+	DurationMs         *int
+	FirstTokenMs       *int
+	AccountQueueWaitMs *int
+	UserAgent          *string
+	IPAddress          *string
 	// SessionID is the explicit client-provided request correlation identifier
 	// (e.g. the session_id / X-Session-Id headers). Nil when the client sent no
 	// valid session header. It is never derived from prompt_cache_key or content.

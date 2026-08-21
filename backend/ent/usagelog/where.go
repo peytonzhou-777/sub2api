@@ -225,6 +225,11 @@ func FirstTokenMs(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldFirstTokenMs, v))
 }
 
+// AccountQueueWaitMs applies equality check predicate on the "account_queue_wait_ms" field. It's identical to AccountQueueWaitMsEQ.
+func AccountQueueWaitMs(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldAccountQueueWaitMs, v))
+}
+
 // UserAgent applies equality check predicate on the "user_agent" field. It's identical to UserAgentEQ.
 func UserAgent(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldUserAgent, v))
@@ -1783,6 +1788,56 @@ func FirstTokenMsIsNil() predicate.UsageLog {
 // FirstTokenMsNotNil applies the NotNil predicate on the "first_token_ms" field.
 func FirstTokenMsNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldFirstTokenMs))
+}
+
+// AccountQueueWaitMsEQ applies the EQ predicate on the "account_queue_wait_ms" field.
+func AccountQueueWaitMsEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldAccountQueueWaitMs, v))
+}
+
+// AccountQueueWaitMsNEQ applies the NEQ predicate on the "account_queue_wait_ms" field.
+func AccountQueueWaitMsNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldAccountQueueWaitMs, v))
+}
+
+// AccountQueueWaitMsIn applies the In predicate on the "account_queue_wait_ms" field.
+func AccountQueueWaitMsIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldAccountQueueWaitMs, vs...))
+}
+
+// AccountQueueWaitMsNotIn applies the NotIn predicate on the "account_queue_wait_ms" field.
+func AccountQueueWaitMsNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldAccountQueueWaitMs, vs...))
+}
+
+// AccountQueueWaitMsGT applies the GT predicate on the "account_queue_wait_ms" field.
+func AccountQueueWaitMsGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldAccountQueueWaitMs, v))
+}
+
+// AccountQueueWaitMsGTE applies the GTE predicate on the "account_queue_wait_ms" field.
+func AccountQueueWaitMsGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldAccountQueueWaitMs, v))
+}
+
+// AccountQueueWaitMsLT applies the LT predicate on the "account_queue_wait_ms" field.
+func AccountQueueWaitMsLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldAccountQueueWaitMs, v))
+}
+
+// AccountQueueWaitMsLTE applies the LTE predicate on the "account_queue_wait_ms" field.
+func AccountQueueWaitMsLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldAccountQueueWaitMs, v))
+}
+
+// AccountQueueWaitMsIsNil applies the IsNil predicate on the "account_queue_wait_ms" field.
+func AccountQueueWaitMsIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldAccountQueueWaitMs))
+}
+
+// AccountQueueWaitMsNotNil applies the NotNil predicate on the "account_queue_wait_ms" field.
+func AccountQueueWaitMsNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldAccountQueueWaitMs))
 }
 
 // UserAgentEQ applies the EQ predicate on the "user_agent" field.

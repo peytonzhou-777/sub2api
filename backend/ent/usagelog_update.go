@@ -712,6 +712,33 @@ func (_u *UsageLogUpdate) ClearFirstTokenMs() *UsageLogUpdate {
 	return _u
 }
 
+// SetAccountQueueWaitMs sets the "account_queue_wait_ms" field.
+func (_u *UsageLogUpdate) SetAccountQueueWaitMs(v int) *UsageLogUpdate {
+	_u.mutation.ResetAccountQueueWaitMs()
+	_u.mutation.SetAccountQueueWaitMs(v)
+	return _u
+}
+
+// SetNillableAccountQueueWaitMs sets the "account_queue_wait_ms" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableAccountQueueWaitMs(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetAccountQueueWaitMs(*v)
+	}
+	return _u
+}
+
+// AddAccountQueueWaitMs adds value to the "account_queue_wait_ms" field.
+func (_u *UsageLogUpdate) AddAccountQueueWaitMs(v int) *UsageLogUpdate {
+	_u.mutation.AddAccountQueueWaitMs(v)
+	return _u
+}
+
+// ClearAccountQueueWaitMs clears the value of the "account_queue_wait_ms" field.
+func (_u *UsageLogUpdate) ClearAccountQueueWaitMs() *UsageLogUpdate {
+	_u.mutation.ClearAccountQueueWaitMs()
+	return _u
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_u *UsageLogUpdate) SetUserAgent(v string) *UsageLogUpdate {
 	_u.mutation.SetUserAgent(v)
@@ -1308,6 +1335,15 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.AccountQueueWaitMs(); ok {
+		_spec.SetField(usagelog.FieldAccountQueueWaitMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedAccountQueueWaitMs(); ok {
+		_spec.AddField(usagelog.FieldAccountQueueWaitMs, field.TypeInt, value)
+	}
+	if _u.mutation.AccountQueueWaitMsCleared() {
+		_spec.ClearField(usagelog.FieldAccountQueueWaitMs, field.TypeInt)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -2226,6 +2262,33 @@ func (_u *UsageLogUpdateOne) ClearFirstTokenMs() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetAccountQueueWaitMs sets the "account_queue_wait_ms" field.
+func (_u *UsageLogUpdateOne) SetAccountQueueWaitMs(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetAccountQueueWaitMs()
+	_u.mutation.SetAccountQueueWaitMs(v)
+	return _u
+}
+
+// SetNillableAccountQueueWaitMs sets the "account_queue_wait_ms" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableAccountQueueWaitMs(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetAccountQueueWaitMs(*v)
+	}
+	return _u
+}
+
+// AddAccountQueueWaitMs adds value to the "account_queue_wait_ms" field.
+func (_u *UsageLogUpdateOne) AddAccountQueueWaitMs(v int) *UsageLogUpdateOne {
+	_u.mutation.AddAccountQueueWaitMs(v)
+	return _u
+}
+
+// ClearAccountQueueWaitMs clears the value of the "account_queue_wait_ms" field.
+func (_u *UsageLogUpdateOne) ClearAccountQueueWaitMs() *UsageLogUpdateOne {
+	_u.mutation.ClearAccountQueueWaitMs()
+	return _u
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_u *UsageLogUpdateOne) SetUserAgent(v string) *UsageLogUpdateOne {
 	_u.mutation.SetUserAgent(v)
@@ -2852,6 +2915,15 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.AccountQueueWaitMs(); ok {
+		_spec.SetField(usagelog.FieldAccountQueueWaitMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedAccountQueueWaitMs(); ok {
+		_spec.AddField(usagelog.FieldAccountQueueWaitMs, field.TypeInt, value)
+	}
+	if _u.mutation.AccountQueueWaitMsCleared() {
+		_spec.ClearField(usagelog.FieldAccountQueueWaitMs, field.TypeInt)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)

@@ -271,7 +271,8 @@ const requestTypeOptions = ref<SelectOption[]>([
   { value: 'live', label: t('usage.live') },
   { value: 'stream', label: t('usage.stream') },
   { value: 'sync', label: t('usage.sync') },
-  { value: 'cyber', label: t('usage.cyber') }
+  { value: 'cyber', label: t('usage.cyber') },
+  { value: 'admission_rejected', label: t('usage.admissionRejected') }
 ])
 
 const billingTypeOptions = ref<SelectOption[]>([

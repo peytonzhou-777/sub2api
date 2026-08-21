@@ -45,6 +45,55 @@ type OpenAIRecordUsageInput struct {
 	ChannelUsageFields
 }
 
+// OpenAIAdmissionRejectedUsageInput 记录未发往上游的账号准入失败，不参与扣费。
+type OpenAIAdmissionRejectedUsageInput struct {
+	APIKey          *APIKey
+	Account         *Account
+	Subscription    *UserSubscription
+	Model           string
+	Stream          bool
+	InboundEndpoint string
+	UserAgent       string
+	IPAddress       string
+	QueueWaitMS     int64
+}
+
+// RecordOpenAIAdmissionRejectedUsage 写入零 Token、零成本管理员可见占位记录。
+func (s *OpenAIGatewayService) RecordOpenAIAdmissionRejectedUsage(ctx context.Context, input OpenAIAdmissionRejectedUsageInput) error {
+	if s == nil || s.usageLogRepo == nil || input.APIKey == nil || input.Account == nil {
+		return nil
+	}
+	userID := input.APIKey.UserID
+	if input.APIKey.User != nil {
+		userID = input.APIKey.User.ID
+	}
+	waitMS := int(openAIAdmissionMaxInt64(input.QueueWaitMS, 0))
+	durationMS := waitMS
+	accountRateMultiplier := input.Account.BillingRateMultiplier()
+	usageLog := &UsageLog{
+		UserID: userID, APIKeyID: input.APIKey.ID, AccountID: input.Account.ID,
+		RequestID: resolveUsageBillingRequestID(ctx, ""), Model: input.Model, RequestedModel: input.Model,
+		BillingType: BillingTypeBalance, RequestType: RequestTypeAdmissionRejected,
+		Stream: input.Stream, DurationMs: &durationMS,
+		RateMultiplier: 1, AccountRateMultiplier: &accountRateMultiplier,
+		InboundEndpoint: optionalTrimmedStringPtr(input.InboundEndpoint), CreatedAt: time.Now(),
+	}
+	if waitMS > 0 {
+		usageLog.AccountQueueWaitMs = &waitMS
+	}
+	if input.APIKey.GroupID != nil {
+		usageLog.GroupID = input.APIKey.GroupID
+	}
+	if input.Subscription != nil {
+		usageLog.SubscriptionID = &input.Subscription.ID
+		usageLog.BillingType = BillingTypeSubscription
+	}
+	usageLog.UserAgent = optionalTrimmedStringPtr(input.UserAgent)
+	usageLog.IPAddress = optionalTrimmedStringPtr(input.IPAddress)
+	writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.openai_gateway.admission")
+	return nil
+}
+
 // CyberPolicyUsageInput 是 cyber 拒绝、未走正常 RecordUsage 的请求记录用量的入参。
 // 用量按上游真实 token 计费，与 WS cyber 及正常请求口径一致（InputTokens/OutputTokens
 // 取自上游 response.failed 报告的 usage，即 mark.UpstreamInTok/OutTok）。
@@ -383,6 +432,10 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	usageLog.OpenAIWSMode = result.OpenAIWSMode
 	usageLog.DurationMs = &durationMs
 	usageLog.FirstTokenMs = result.FirstTokenMs
+	if queueWaitMS := OpenAIAccountQueueWaitMSFromContext(ctx); queueWaitMS > 0 {
+		value := int(queueWaitMS)
+		usageLog.AccountQueueWaitMs = &value
+	}
 	usageLog.CreatedAt = time.Now()
 	// 设置渠道信息
 	usageLog.ChannelID = optionalInt64Ptr(input.ChannelID)

@@ -66,6 +66,9 @@ const messages: Record<string, string> = {
 	'usage.upstreamResponseModel': 'Upstream response',
 	'usage.modelVariant': 'Possible version variant',
 	'usage.modelMismatch': 'Different model',
+	'usage.latencyFirstToken': 'First',
+	'usage.latencyDuration': 'Total',
+	'usage.latencyAccountQueue': 'Account queue',
 }
 
 vi.mock('vue-i18n', async () => {
@@ -120,6 +123,40 @@ const baseImageRow = {
   image_size_source: null,
   image_size_breakdown: null,
 }
+
+describe('admin UsageTable account admission latency', () => {
+  it('renders the account queue wait separately from upstream latency', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{
+          ...baseImageRow,
+          request_id: 'req-account-queue-wait',
+          account_queue_wait_ms: 1234,
+          first_token_ms: 250,
+          duration_ms: 2600,
+        }],
+        loading: false,
+        columns: [{ key: 'latency', label: 'Latency' }],
+      },
+      global: {
+        stubs: {
+          DataTable: {
+            props: ['data'],
+            template: '<div><div v-for="row in data" :key="row.request_id"><slot name="cell-latency" :row="row" /></div></div>',
+          },
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('Account queue')
+    expect(wrapper.text()).toContain('1.23s')
+    expect(wrapper.text()).toContain('250ms')
+    expect(wrapper.text()).toContain('2.60s')
+  })
+})
 
 describe('admin UsageTable tooltip', () => {
   beforeEach(() => {

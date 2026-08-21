@@ -179,6 +179,7 @@
 
         <!-- Tab: Gateway -->
         <div v-show="activeTab === 'gateway'" class="space-y-6">
+          <OpenAIAccountAdmissionSettings />
           <OpenAIUserAffinitySettings />
           <!-- Overload Cooldown (529) Settings -->
           <div class="card">
@@ -9146,6 +9147,7 @@ import BackupSettings from "@/views/admin/BackupView.vue";
 import EmailTemplateEditor from "@/views/admin/settings/EmailTemplateEditor.vue";
 import OpenAIFastPolicyUserSelector from "@/views/admin/settings/OpenAIFastPolicyUserSelector.vue";
 import OpenAIUserAffinitySettings from "@/views/admin/settings/OpenAIUserAffinitySettings.vue";
+import OpenAIAccountAdmissionSettings from "@/views/admin/settings/OpenAIAccountAdmissionSettings.vue";
 import { useClipboard } from "@/composables/useClipboard";
 import {
   useStepUp,

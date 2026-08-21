@@ -18,4 +18,6 @@ func registerOpenAIUserAffinityAccountRoutes(accounts *gin.RouterGroup, h *handl
 func registerOpenAIUserAffinitySettingRoutes(settings *gin.RouterGroup, h *handler.Handlers) {
 	settings.GET("/openai-user-affinity-scheduling", h.Admin.Setting.GetOpenAIUserAffinityScheduling)
 	settings.PUT("/openai-user-affinity-scheduling", h.Admin.Setting.UpdateOpenAIUserAffinityScheduling)
+	settings.GET("/openai-account-admission", h.Admin.Setting.GetOpenAIAccountAdmission)
+	settings.PUT("/openai-account-admission", h.Admin.Setting.UpdateOpenAIAccountAdmission)
 }

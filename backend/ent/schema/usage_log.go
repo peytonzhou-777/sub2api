@@ -132,6 +132,10 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int("first_token_ms").
 			Optional().
 			Nillable(),
+		field.Int("account_queue_wait_ms").
+			Optional().
+			Nillable().
+			Comment("账号选定后在网关准入队列中的累计等待毫秒数"),
 		field.String("user_agent").
 			MaxLen(512).
 			Optional().

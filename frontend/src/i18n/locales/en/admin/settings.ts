@@ -1,4 +1,5 @@
 import { openAIUserAffinitySettings } from './openAIUserAffinity'
+import { openAIAccountAdmissionSettings } from './openAIAccountAdmission'
 
 export default {
     settings: {
@@ -1278,7 +1279,8 @@ export default {
       failedToSave: 'Failed to save settings',
       failedToTestSmtp: 'SMTP connection test failed',
       failedToSendTestEmail: 'Failed to send test email',
-      openAIUserAffinity: openAIUserAffinitySettings
+      openAIUserAffinity: openAIUserAffinitySettings,
+      openAIAccountAdmission: openAIAccountAdmissionSettings
     },
 
     // Error Passthrough Rules

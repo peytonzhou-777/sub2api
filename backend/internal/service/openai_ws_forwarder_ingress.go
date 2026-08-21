@@ -25,6 +25,14 @@ func (s *OpenAIGatewayService) openAIWSIngressInterTurnIdleTimeout() time.Durati
 	return time.Duration(s.cfg.Gateway.OpenAIWS.IngressInterTurnIdleTimeoutSeconds) * time.Second
 }
 
+// UsesOpenAIResponsesWebSocketPassthrough 判断账号是否走不触发 BeforeTurn 的 WS 直通链路。
+func (s *OpenAIGatewayService) UsesOpenAIResponsesWebSocketPassthrough(account *Account) bool {
+	if s == nil || s.cfg == nil || account == nil || !s.cfg.Gateway.OpenAIWS.ModeRouterV2Enabled {
+		return false
+	}
+	return account.ResolveOpenAIResponsesWebSocketV2Mode(s.cfg.Gateway.OpenAIWS.IngressModeDefault) == OpenAIWSIngressModePassthrough
+}
+
 // newOpenAIWSDownstreamWriteContext binds writes directly to the client
 // lifecycle while excluding the separate ingress-lease cancellation signal.
 // This lets a lease-loss path finish its current client write before

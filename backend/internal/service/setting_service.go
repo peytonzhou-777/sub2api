@@ -153,7 +153,8 @@ type SettingService struct {
 	channelMonitorRuntimeListenersMu sync.Mutex
 	channelMonitorRuntimeListeners   []func()
 
-	openAIUserAffinityConfig openAIUserAffinityConfigState
+	openAIUserAffinityConfig     openAIUserAffinityConfigState
+	openAIAccountAdmissionConfig openAIAccountAdmissionConfigState
 }
 
 // DefaultPlatformQuotaSetting 单 platform 三档限额（nil = 沿用上层；0 = 显式禁用；>0 = 上限）

@@ -239,6 +239,10 @@
               <span v-else class="text-gray-400 dark:text-gray-500">-</span>
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
               <span class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[durationSeverity(row.duration_ms ?? 0)]">{{ formatDuration(row.duration_ms) }}</span>
+              <template v-if="row.account_queue_wait_ms != null">
+                <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyAccountQueue') }}</span>
+                <span class="font-medium tabular-nums text-amber-600 dark:text-amber-400">{{ formatDuration(row.account_queue_wait_ms) }}</span>
+              </template>
             </div>
           </div>
         </template>
@@ -667,6 +671,7 @@ const tokenTooltipData = ref<AdminUsageLog | null>(null)
 const getRequestTypeLabel = (row: AdminUsageLog): string => {
   const requestType = resolveUsageRequestType(row)
   if (requestType === 'cyber') return t('usage.cyber')
+  if (requestType === 'admission_rejected') return t('usage.admissionRejected')
   if (requestType === 'live') return t('usage.live')
   if (requestType === 'ws_v2') return t('usage.ws')
   if (requestType === 'stream') return t('usage.stream')
@@ -677,6 +682,7 @@ const getRequestTypeLabel = (row: AdminUsageLog): string => {
 const getRequestTypeBadgeClass = (row: AdminUsageLog): string => {
   const requestType = resolveUsageRequestType(row)
   if (requestType === 'cyber') return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+  if (requestType === 'admission_rejected') return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
   if (requestType === 'live') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
   if (requestType === 'ws_v2') return 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200'
   if (requestType === 'stream') return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'

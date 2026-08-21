@@ -28,6 +28,24 @@ func TestUsageLogFromService_IncludesOpenAIWSMode(t *testing.T) {
 	require.False(t, UsageLogFromServiceAdmin(httpLog).OpenAIWSMode)
 }
 
+func TestUsageLogFromService_ExposesAccountQueueWaitToAdminOnly(t *testing.T) {
+	t.Parallel()
+
+	waitMS := 1234
+	log := &service.UsageLog{
+		RequestID:          "req_queue_wait",
+		Model:              "gpt-5.3-codex",
+		AccountQueueWaitMs: &waitMS,
+	}
+	userJSON, err := json.Marshal(UsageLogFromService(log))
+	require.NoError(t, err)
+	adminJSON, err := json.Marshal(UsageLogFromServiceAdmin(log))
+	require.NoError(t, err)
+
+	require.NotContains(t, string(userJSON), "account_queue_wait_ms")
+	require.Contains(t, string(adminJSON), `"account_queue_wait_ms":1234`)
+}
+
 func TestUsageLogFromService_PrefersRequestTypeForLegacyFields(t *testing.T) {
 	t.Parallel()
 

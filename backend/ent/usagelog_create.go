@@ -463,6 +463,20 @@ func (_c *UsageLogCreate) SetNillableFirstTokenMs(v *int) *UsageLogCreate {
 	return _c
 }
 
+// SetAccountQueueWaitMs sets the "account_queue_wait_ms" field.
+func (_c *UsageLogCreate) SetAccountQueueWaitMs(v int) *UsageLogCreate {
+	_c.mutation.SetAccountQueueWaitMs(v)
+	return _c
+}
+
+// SetNillableAccountQueueWaitMs sets the "account_queue_wait_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableAccountQueueWaitMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetAccountQueueWaitMs(*v)
+	}
+	return _c
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_c *UsageLogCreate) SetUserAgent(v string) *UsageLogCreate {
 	_c.mutation.SetUserAgent(v)
@@ -1082,6 +1096,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
 		_node.FirstTokenMs = &value
+	}
+	if value, ok := _c.mutation.AccountQueueWaitMs(); ok {
+		_spec.SetField(usagelog.FieldAccountQueueWaitMs, field.TypeInt, value)
+		_node.AccountQueueWaitMs = &value
 	}
 	if value, ok := _c.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -1863,6 +1881,30 @@ func (u *UsageLogUpsert) AddFirstTokenMs(v int) *UsageLogUpsert {
 // ClearFirstTokenMs clears the value of the "first_token_ms" field.
 func (u *UsageLogUpsert) ClearFirstTokenMs() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldFirstTokenMs)
+	return u
+}
+
+// SetAccountQueueWaitMs sets the "account_queue_wait_ms" field.
+func (u *UsageLogUpsert) SetAccountQueueWaitMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldAccountQueueWaitMs, v)
+	return u
+}
+
+// UpdateAccountQueueWaitMs sets the "account_queue_wait_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateAccountQueueWaitMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldAccountQueueWaitMs)
+	return u
+}
+
+// AddAccountQueueWaitMs adds v to the "account_queue_wait_ms" field.
+func (u *UsageLogUpsert) AddAccountQueueWaitMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldAccountQueueWaitMs, v)
+	return u
+}
+
+// ClearAccountQueueWaitMs clears the value of the "account_queue_wait_ms" field.
+func (u *UsageLogUpsert) ClearAccountQueueWaitMs() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldAccountQueueWaitMs)
 	return u
 }
 
@@ -2817,6 +2859,34 @@ func (u *UsageLogUpsertOne) UpdateFirstTokenMs() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearFirstTokenMs() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetAccountQueueWaitMs sets the "account_queue_wait_ms" field.
+func (u *UsageLogUpsertOne) SetAccountQueueWaitMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetAccountQueueWaitMs(v)
+	})
+}
+
+// AddAccountQueueWaitMs adds v to the "account_queue_wait_ms" field.
+func (u *UsageLogUpsertOne) AddAccountQueueWaitMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddAccountQueueWaitMs(v)
+	})
+}
+
+// UpdateAccountQueueWaitMs sets the "account_queue_wait_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateAccountQueueWaitMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateAccountQueueWaitMs()
+	})
+}
+
+// ClearAccountQueueWaitMs clears the value of the "account_queue_wait_ms" field.
+func (u *UsageLogUpsertOne) ClearAccountQueueWaitMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearAccountQueueWaitMs()
 	})
 }
 
@@ -3973,6 +4043,34 @@ func (u *UsageLogUpsertBulk) UpdateFirstTokenMs() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearFirstTokenMs() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetAccountQueueWaitMs sets the "account_queue_wait_ms" field.
+func (u *UsageLogUpsertBulk) SetAccountQueueWaitMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetAccountQueueWaitMs(v)
+	})
+}
+
+// AddAccountQueueWaitMs adds v to the "account_queue_wait_ms" field.
+func (u *UsageLogUpsertBulk) AddAccountQueueWaitMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddAccountQueueWaitMs(v)
+	})
+}
+
+// UpdateAccountQueueWaitMs sets the "account_queue_wait_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateAccountQueueWaitMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateAccountQueueWaitMs()
+	})
+}
+
+// ClearAccountQueueWaitMs clears the value of the "account_queue_wait_ms" field.
+func (u *UsageLogUpsertBulk) ClearAccountQueueWaitMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearAccountQueueWaitMs()
 	})
 }
 

@@ -17,6 +17,7 @@ const messages: Record<string, string> = {
   'usage.type': 'Type',
   'admin.usage.allTypes': 'All Types',
   'usage.ws': 'WS',
+  'usage.admissionRejected': 'Account admission rejected',
   'usage.stream': 'Stream',
   'usage.sync': 'Sync',
   'admin.usage.billingType': 'Billing Type',
