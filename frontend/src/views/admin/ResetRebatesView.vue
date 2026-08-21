@@ -330,6 +330,8 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorCode } from '@/utils/apiError'
 
 type EditableDraft = ResetRebateAccountDraft & Pick<ResetRebateWindowDefault, 'auto_stat_ratio' | 'window_source' | 'risk'>
+type RatioFormValue = number | ''
+type AccountEditorDraft = Omit<EditableDraft, 'manual_ratio'> & { manual_ratio: RatioFormValue }
 
 const appStore = useAppStore()
 const viewMode = ref<'create' | 'history'>('create')
@@ -342,7 +344,7 @@ const accountFilters = reactive({ search: '', platform: '', type: '', status: ''
 const accountPage = ref(1)
 const accountPageSize = 20
 const forceRatioEnabled = ref(false)
-const forceRatio = ref('100')
+const forceRatio = ref<RatioFormValue>(100)
 const creating = ref(false)
 const activeBatch = ref<ResetRebateBatch | null>(null)
 const batchAccounts = ref<ResetRebateAccount[]>([])
@@ -368,7 +370,7 @@ const historyPageSize = 20
 const historyFilters = reactive({ account: '', status: '', admin_id: '', executed_admin_id: '', created_start: '', created_end: '' })
 const historyStatuses = ['running', 'executing', 'ready', 'not_eligible', 'partial', 'failed', 'executed', 'incomplete', 'expired']
 const editingAccount = ref<Account | null>(null)
-const editDraft = ref<EditableDraft | null>(null)
+const editDraft = ref<AccountEditorDraft | null>(null)
 const showBulkWindowEditor = ref(false)
 const bulkWindowDraft = reactive({ period_start: '', period_end: '' })
 const showCreateConfirm = ref(false)
@@ -409,6 +411,14 @@ const bulkWindowDuration = computed(() => bulkWindowDraft.period_start && bulkWi
 function errorMessage(error: unknown): string {
   if (typeof error === 'object' && error && 'message' in error) return String((error as { message?: unknown }).message || '操作失败')
   return '操作失败'
+}
+
+function isValidRatio(value: RatioFormValue): value is number {
+  return value !== '' && Number.isFinite(value) && value >= 0 && value <= 100
+}
+
+function serializeRatio(value: number): string {
+  return String(value)
 }
 
 async function loadAccounts(preserveState = false) {
@@ -534,7 +544,7 @@ function riskText(risk?: string) {
   return risk ? labels[risk] || risk : ''
 }
 function effectiveRatioText(id: number) {
-  if (forceRatioEnabled.value) return forceRatio.value
+  if (forceRatioEnabled.value) return forceRatio.value === '' ? '0' : serializeRatio(forceRatio.value)
   const draft = drafts.get(id)
   return draft?.ratio_mode === 'manual' ? draft.manual_ratio || '0' : draft?.auto_stat_ratio || '0'
 }
@@ -590,7 +600,13 @@ function openAccountEditor(account: Account) {
   const draft = drafts.get(account.id)
   if (!draft) return
   editingAccount.value = account
-  editDraft.value = { ...draft, period_start: localInput(draft.period_start), period_end: localInput(draft.period_end) }
+  const manualRatio = draft.manual_ratio === undefined ? '' : Number(draft.manual_ratio)
+  editDraft.value = {
+    ...draft,
+    period_start: localInput(draft.period_start),
+    period_end: localInput(draft.period_end),
+    manual_ratio: Number.isFinite(manualRatio) ? manualRatio : ''
+  }
 }
 function saveAccountEditor() {
   if (!editingAccount.value || !editDraft.value) return
@@ -600,13 +616,17 @@ function saveAccountEditor() {
     appStore.showError('结束时间必须晚于开始时间')
     return
   }
-  const manual = Number(editDraft.value.manual_ratio || 0)
-  if (editDraft.value.ratio_mode === 'manual' && (!Number.isFinite(manual) || manual < 0 || manual > 100)) {
-    appStore.showError('统计比例必须在 0% 到 100% 之间')
-    return
-  }
   const previous = drafts.get(editingAccount.value.id)
   if (!previous) return
+  const manual = editDraft.value.manual_ratio
+  let savedManualRatio = previous.manual_ratio
+  if (editDraft.value.ratio_mode === 'manual') {
+    if (!isValidRatio(manual)) {
+      appStore.showError('统计比例必须在 0% 到 100% 之间')
+      return
+    }
+    savedManualRatio = serializeRatio(manual)
+  }
   const startChanged = !previous || editDraft.value.period_start !== localInput(previous.period_start)
   const endChanged = !previous || editDraft.value.period_end !== localInput(previous.period_end)
   const periodStart = startChanged ? inputToISO(editDraft.value.period_start) : previous.period_start
@@ -614,14 +634,13 @@ function saveAccountEditor() {
   drafts.set(editingAccount.value.id, {
     ...applyWindowToDraft(previous, periodStart, periodEnd),
     ratio_mode: editDraft.value.ratio_mode,
-    manual_ratio: editDraft.value.manual_ratio
+    manual_ratio: savedManualRatio
   })
   editingAccount.value = null
 }
 
 function requestCreate() {
-  const ratio = Number(forceRatio.value)
-  if (forceRatioEnabled.value && (!Number.isFinite(ratio) || ratio < 0 || ratio > 100)) {
+  if (forceRatioEnabled.value && !isValidRatio(forceRatio.value)) {
     appStore.showError('强制统计比例必须在 0% 到 100% 之间')
     return
   }
@@ -646,17 +665,19 @@ function continueCreate() { showCreateConfirm.value = false; void submitCreate()
 async function submitCreate() {
   creating.value = true
   try {
+    // API 使用十进制字符串，避免数字输入框的运行时 number 泄漏到后端 DTO。
+    const serializedForceRatio = forceRatioEnabled.value && isValidRatio(forceRatio.value) ? serializeRatio(forceRatio.value) : '100'
     const batch = await resetRebatesAPI.create({
       mechanism_version: 2,
       force_stat_ratio_enabled: forceRatioEnabled.value,
-      force_stat_ratio: forceRatio.value,
+      force_stat_ratio: serializedForceRatio,
       acknowledged_error_account_ids: selectedErrorAccounts.value.map((item) => item.id),
       accounts: [...selectedIds.value].map((id) => {
         const draft = drafts.get(id)!
         return {
           account_id: id, period_start: draft.period_start, period_end: draft.period_end, ratio_mode: draft.ratio_mode,
           default_window_version: draft.default_window_version, window_modified: draft.window_modified,
-          ...(draft.ratio_mode === 'manual' ? { manual_ratio: draft.manual_ratio } : {})
+          ...(draft.ratio_mode === 'manual' ? { manual_ratio: String(draft.manual_ratio) } : {})
         }
       })
     })
