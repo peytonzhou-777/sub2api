@@ -2108,7 +2108,7 @@ func TestOpenAIGatewayService_CodexFingerprintCompactDoesNotRewriteBodyButStages
 	account.Concurrency = 1
 	account.Credentials = map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"}
 	configureCodexFingerprintV3TestState(svc, account)
-	staleIDs := resolveCodexFingerprintIDs(account, "stale-session", codexFingerprintSession)
+	staleIDs := newTestCodexFingerprintIDs(account, "stale-session", codexFingerprintSession)
 	require.NotNil(t, staleIDs)
 	stageCodexFingerprintIDs(c, staleIDs)
 

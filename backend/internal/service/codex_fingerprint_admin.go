@@ -27,7 +27,6 @@ type CodexFingerprintAdminStatus struct {
 	EpochStartedAt    *time.Time `json:"epoch_started_at,omitempty"`
 	SessionScopeCount int64      `json:"session_scope_count"`
 	ThreadCount       int64      `json:"thread_count"`
-	LegacyThreadCount int64      `json:"legacy_thread_count"`
 	RotationCount     int64      `json:"rotation_count"`
 	SecretID          string     `json:"secret_id,omitempty"`
 }
@@ -61,7 +60,7 @@ func (s *adminServiceImpl) GetCodexFingerprintStatus(ctx context.Context, accoun
 	return repo.GetCodexFingerprintAdminStatus(ctx, accountID)
 }
 
-// RotateCodexFingerprint 推进指纹 epoch，并在需要时把账号升级到 v3；不接触账号调度或用户粘性 placement。
+// RotateCodexFingerprint 推进 v3 指纹 epoch；不接触账号调度或用户粘性 placement。
 func (s *adminServiceImpl) RotateCodexFingerprint(ctx context.Context, accountID int64) (*CodexFingerprintAdminStatus, error) {
 	repo, err := s.codexFingerprintAdminRepository()
 	if err != nil {

@@ -32,7 +32,7 @@ type codexFingerprintSessionRepoStub struct {
 func configureCodexFingerprintV3TestState(svc *OpenAIGatewayService, account *Account) {
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	state := CodexFingerprintState{
-		Seed:           testCodexFingerprintV2Seed(),
+		Seed:           testCodexFingerprintV3Seed(),
 		Version:        codexFingerprintAlgorithmV3,
 		Epoch:          3,
 		EpochStartedAt: startedAt,
@@ -44,8 +44,20 @@ func configureCodexFingerprintV3TestState(svc *OpenAIGatewayService, account *Ac
 	if svc.cfg == nil {
 		svc.cfg = &config.Config{}
 	}
-	svc.cfg.Gateway.CodexFingerprintSecret = string(testCodexFingerprintV2Secret())
+	svc.cfg.Gateway.CodexFingerprintSecret = string(testCodexFingerprintV3Secret())
 	svc.accountRepo = &codexFingerprintSessionRepoStub{state: state}
+}
+
+func TestCodexFingerprintStateAcceptsOnlyV3(t *testing.T) {
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	state := CodexFingerprintState{
+		Seed: testCodexFingerprintV3Seed(), Epoch: 1, EpochStartedAt: startedAt,
+	}
+	state.Version = codexFingerprintAlgorithmV3
+	require.True(t, state.valid())
+
+	state.Version = "v2"
+	require.False(t, state.valid())
 }
 
 func (r *codexFingerprintSessionRepoStub) ValidateCodexFingerprintSecret(_ context.Context, _ string, _ time.Time) error {
@@ -95,17 +107,17 @@ func TestResolveCodexFingerprintContextForAttemptUsesStableFallbacks(t *testing.
 		Platform:                       PlatformOpenAI,
 		Type:                           AccountTypeOAuth,
 		Extra:                          map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
-		CodexFingerprintSeed:           testCodexFingerprintV2Seed(),
-		CodexFingerprintVersion:        codexFingerprintAlgorithmV2,
+		CodexFingerprintSeed:           testCodexFingerprintV3Seed(),
+		CodexFingerprintVersion:        codexFingerprintAlgorithmV3,
 		CodexFingerprintEpoch:          3,
 		CodexFingerprintEpochStartedAt: &startedAt,
 	}
 	svc := &OpenAIGatewayService{
 		cfg: &config.Config{Gateway: config.GatewayConfig{
-			CodexFingerprintSecret: string(testCodexFingerprintV2Secret()),
+			CodexFingerprintSecret: string(testCodexFingerprintV3Secret()),
 		}},
 		accountRepo: &codexFingerprintSessionRepoStub{state: CodexFingerprintState{
-			Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2,
+			Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3,
 			Epoch: 3, EpochStartedAt: startedAt,
 		}},
 	}
@@ -125,6 +137,42 @@ func TestResolveCodexFingerprintContextForAttemptUsesStableFallbacks(t *testing.
 	require.NotEmpty(t, source)
 }
 
+func TestResolveCodexFingerprintContextForAttemptRejectsOldSessionScope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(nil)
+	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Request.Header.Set("session-id", "current-client-session")
+
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	state := CodexFingerprintState{
+		Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3,
+		Epoch: 3, EpochStartedAt: startedAt,
+	}
+	account := &Account{
+		ID:                             27,
+		Platform:                       PlatformOpenAI,
+		Type:                           AccountTypeOAuth,
+		Extra:                          map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
+		CodexFingerprintSeed:           state.Seed,
+		CodexFingerprintVersion:        state.Version,
+		CodexFingerprintEpoch:          state.Epoch,
+		CodexFingerprintEpochStartedAt: &startedAt,
+	}
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{Gateway: config.GatewayConfig{
+			CodexFingerprintSecret: string(testCodexFingerprintV3Secret()),
+		}},
+		accountRepo: &codexFingerprintSessionRepoStub{
+			state: state, boundScopeHash: strings.Repeat("ef", 32),
+		},
+	}
+
+	_, err := svc.resolveCodexFingerprintContextForAttempt(
+		context.Background(), c, account, c.Request.Header, []byte(`{"input":"hello"}`),
+	)
+	require.ErrorContains(t, err, "another session scope")
+}
+
 func TestResolveCodexFingerprintContextScopesThreadsAndDerivesRequestID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
@@ -133,18 +181,18 @@ func TestResolveCodexFingerprintContextScopesThreadsAndDerivesRequestID(t *testi
 		Platform:                       PlatformOpenAI,
 		Type:                           AccountTypeOAuth,
 		Extra:                          map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
-		CodexFingerprintSeed:           testCodexFingerprintV2Seed(),
-		CodexFingerprintVersion:        codexFingerprintAlgorithmV2,
+		CodexFingerprintSeed:           testCodexFingerprintV3Seed(),
+		CodexFingerprintVersion:        codexFingerprintAlgorithmV3,
 		CodexFingerprintEpoch:          3,
 		CodexFingerprintEpochStartedAt: &startedAt,
 	}
 	repo := &codexFingerprintSessionRepoStub{state: CodexFingerprintState{
-		Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2,
+		Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3,
 		Epoch: 3, EpochStartedAt: startedAt,
 	}}
 	svc := &OpenAIGatewayService{
 		cfg: &config.Config{Gateway: config.GatewayConfig{
-			CodexFingerprintSecret: string(testCodexFingerprintV2Secret()),
+			CodexFingerprintSecret: string(testCodexFingerprintV3Secret()),
 		}},
 		accountRepo: repo,
 	}
@@ -215,95 +263,9 @@ func TestResolveCodexFingerprintSessionScopeUsesUpstreamVisibility(t *testing.T)
 	)
 }
 
-func TestResolveCodexFingerprintContextPreservesTransportAgnosticThreadBinding(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	state := CodexFingerprintState{
-		Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2,
-		Epoch: 3, EpochStartedAt: startedAt,
-	}
-	account := &Account{
-		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-		Credentials:          map[string]any{"user_agent": "codex_cli_rs/0.101.0"},
-		Extra:                map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
-		CodexFingerprintSeed: state.Seed, CodexFingerprintVersion: state.Version,
-		CodexFingerprintEpoch: state.Epoch, CodexFingerprintEpochStartedAt: &startedAt,
-	}
-	c, _ := gin.CreateTestContext(nil)
-	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
-	c.Request.Header.Set("session-id", "legacy-client-session")
-	c.Set("api_key", &APIKey{ID: 101})
-	SetOpenAIClientTransport(c, OpenAIClientTransportWS)
-
-	secret := testCodexFingerprintV2Secret()
-	legacyScope := resolveCodexFingerprintTransportAgnosticSessionScope(c, c.Request.Header, true)
-	legacyThreadScope := resolveCodexFingerprintThreadScope(c, legacyScope)
-	legacyThreadHash := codexFingerprintThreadSourceHash(
-		secret,
-		codexFingerprintScopedDerivationSource(legacyThreadScope, "legacy-client-session"),
-	)
-	legacyScopeHash := codexFingerprintSessionScopeHash(secret, legacyScope)
-	repo := &codexFingerprintSessionRepoStub{
-		state: state, matchedHash: legacyThreadHash, boundScopeHash: legacyScopeHash,
-	}
-	svc := &OpenAIGatewayService{
-		cfg: &config.Config{Gateway: config.GatewayConfig{
-			CodexFingerprintSecret: string(secret),
-		}},
-		accountRepo: repo,
-	}
-
-	fp, err := svc.resolveCodexFingerprintContextForAttempt(
-		context.Background(), c, account, c.Request.Header, []byte(`{"input":"hello"}`),
-	)
-	require.NoError(t, err)
-	legacyFP, err := newCodexFingerprintContextV2(
-		secret,
-		state.Seed,
-		state.Epoch,
-		codexFingerprintSession,
-		"",
-		codexFingerprintOriginalIDs{
-			clientScope:     legacyScope,
-			threadScope:     legacyThreadScope,
-			clientSessionID: "legacy-client-session",
-			threadID:        "legacy-client-session",
-		},
-	)
-	require.NoError(t, err)
-	require.NotEqual(t, legacyScopeHash, repo.lastRequest.SessionScopeHash, "新 WS 作用域必须区别于旧无传输作用域")
-	require.Contains(t, repo.lastRequest.ThreadSourceHashes, legacyThreadHash)
-	require.Equal(t, legacyScopeHash, fp.sessionScopeHash)
-	require.Equal(t, legacyFP.SessionID(), fp.SessionID(), "旧 Thread 必须继续使用旧 Session 派生输入")
-	require.Equal(t, legacyFP.ThreadID(), fp.ThreadID(), "旧 Thread 不得因新增传输维度改变")
-
-	// 子线程别名写入后会先命中新哈希，仍必须服从持久化的历史 scope。
-	repo.matchedHash = repo.lastRequest.ThreadSourceHashes[0]
-	continued, err := svc.resolveCodexFingerprintContextForAttempt(
-		context.Background(), c, account, c.Request.Header, []byte(`{"input":"continued"}`),
-	)
-	require.NoError(t, err)
-	require.Equal(t, legacyScopeHash, continued.sessionScopeHash)
-	require.Equal(t, legacyFP.SessionID(), continued.SessionID())
-	require.Equal(t, legacyFP.ThreadID(), continued.ThreadID())
-}
-
-func TestResolveCodexFingerprintLegacyClientScopePreservesCompactFallback(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	resolve := func(path string) string {
-		c, _ := gin.CreateTestContext(nil)
-		c.Request, _ = http.NewRequest(http.MethodPost, path, nil)
-		return resolveCodexFingerprintLegacyClientScope(c, c.Request.Header)
-	}
-
-	require.Equal(t, "client:unknown-responses", resolve("/v1/responses/compact"))
-	require.Equal(t, "client:unknown-chat", resolve("/v1/chat/completions"))
-	require.Equal(t, "client:unknown", resolve("/v1/messages"))
-}
-
-func TestCodexFingerprintV2RewritesRequestAndPromptCacheIDs(t *testing.T) {
-	fp, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 4,
+func TestCodexFingerprintV3RewritesRequestAndPromptCacheIDs(t *testing.T) {
+	fp, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 4,
 		codexFingerprintSession, "", codexFingerprintOriginalIDs{
 			clientSessionID: "client-session",
 			turnID:          "turn-1",
@@ -326,19 +288,19 @@ func TestCodexFingerprintV2RewritesRequestAndPromptCacheIDs(t *testing.T) {
 	assert.Equal(t, fp.ThreadID(), metadata["thread_id"])
 }
 
-func TestCodexFingerprintV2FullModeUsesOneAccountThread(t *testing.T) {
-	first, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 5,
+func TestCodexFingerprintV3FullModeUsesOneAccountThread(t *testing.T) {
+	first, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 5,
 		codexFingerprintFull, "", codexFingerprintOriginalIDs{clientScope: "client:codex", threadScope: "api-key:101:client:codex", clientSessionID: "client-a", turnID: "turn-a"},
 	)
 	require.NoError(t, err)
-	second, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 5,
+	second, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 5,
 		codexFingerprintFull, "", codexFingerprintOriginalIDs{clientScope: "client:codex", threadScope: "api-key:101:client:codex", clientSessionID: "client-b", turnID: "turn-b"},
 	)
 	require.NoError(t, err)
-	otherClient, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 5,
+	otherClient, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 5,
 		codexFingerprintFull, "", codexFingerprintOriginalIDs{clientScope: "client:openclaw", threadScope: "api-key:101:client:openclaw", clientSessionID: "client-a", turnID: "turn-a"},
 	)
 	require.NoError(t, err)
@@ -365,8 +327,8 @@ func TestCodexFingerprintSessionRotationThresholdsUseScopeAge(t *testing.T) {
 
 func TestCodexFingerprintThreadSourceHashDoesNotExposeSource(t *testing.T) {
 	source := "client-session-sensitive-value"
-	first := codexFingerprintThreadSourceHash(testCodexFingerprintV2Secret(), source)
-	second := codexFingerprintThreadSourceHash(testCodexFingerprintV2Secret(), source)
+	first := codexFingerprintThreadSourceHash(testCodexFingerprintV3Secret(), source)
+	second := codexFingerprintThreadSourceHash(testCodexFingerprintV3Secret(), source)
 	otherCluster := codexFingerprintThreadSourceHash([]byte("abcdef0123456789abcdef0123456789"), source)
 
 	require.Len(t, first, 64)
@@ -375,26 +337,40 @@ func TestCodexFingerprintThreadSourceHashDoesNotExposeSource(t *testing.T) {
 	require.NotEqual(t, first, otherCluster)
 }
 
-func testCodexFingerprintV2Secret() []byte {
+func testCodexFingerprintV3Secret() []byte {
 	return []byte("0123456789abcdef0123456789abcdef")
 }
 
-func testCodexFingerprintV2Seed() string {
+func testCodexFingerprintV3Seed() string {
 	return strings.Repeat("ab", codexFingerprintSeedBytes)
 }
 
-func TestCodexFingerprintV2ContextKeepsOneSessionWithMultipleThreads(t *testing.T) {
+func newTestCodexFingerprintContextV3(
+	clusterSecret []byte,
+	seedHex string,
+	epoch int64,
+	mode codexFingerprintMode,
+	configuredDeviceID string,
+	original codexFingerprintOriginalIDs,
+) (*CodexFingerprintContext, error) {
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC).Add(time.Duration(epoch) * time.Hour)
+	return newCodexFingerprintContextV3(
+		clusterSecret, seedHex, epoch, startedAt, mode, configuredDeviceID, original,
+	)
+}
+
+func TestCodexFingerprintV3ContextKeepsOneSessionWithMultipleThreads(t *testing.T) {
 	base := codexFingerprintOriginalIDs{clientScope: "client:codex", threadScope: "api-key:101:client:codex", clientSessionID: "client-session-a", turnID: "turn-a"}
-	first, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+	first, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7,
 		codexFingerprintSession, "", base,
 	)
 	require.NoError(t, err)
 
 	secondInput := base
 	secondInput.clientSessionID = "client-session-b"
-	second, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+	second, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7,
 		codexFingerprintSession, "", secondInput,
 	)
 	require.NoError(t, err)
@@ -403,10 +379,10 @@ func TestCodexFingerprintV2ContextKeepsOneSessionWithMultipleThreads(t *testing.
 	assert.Equal(t, first.SessionID(), second.SessionID())
 	assert.NotEqual(t, first.ThreadID(), second.ThreadID())
 	assert.Equal(t, int64(7), first.SessionEpoch())
-	assert.Equal(t, codexFingerprintAlgorithmV2, first.AlgorithmVersion())
+	assert.Equal(t, codexFingerprintAlgorithmV3, first.AlgorithmVersion())
 }
 
-func TestCodexFingerprintV2ContextSeparatesClientScopes(t *testing.T) {
+func TestCodexFingerprintV3ContextSeparatesClientScopes(t *testing.T) {
 	codexInput := codexFingerprintOriginalIDs{
 		clientScope:     "client:codex",
 		threadScope:     "api-key:101:client:codex",
@@ -418,13 +394,13 @@ func TestCodexFingerprintV2ContextSeparatesClientScopes(t *testing.T) {
 	openClawInput := codexInput
 	openClawInput.clientScope = "client:openclaw"
 	openClawInput.threadScope = "api-key:101:client:openclaw"
-	codex, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+	codex, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7,
 		codexFingerprintSession, "", codexInput,
 	)
 	require.NoError(t, err)
-	openClaw, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+	openClaw, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7,
 		codexFingerprintSession, "", openClawInput,
 	)
 	require.NoError(t, err)
@@ -442,7 +418,7 @@ func TestCodexFingerprintV2ContextSeparatesClientScopes(t *testing.T) {
 	}
 }
 
-func TestCodexFingerprintV2ContextSharesClientSessionButSeparatesAPIKeyThreads(t *testing.T) {
+func TestCodexFingerprintV3ContextSharesClientSessionButSeparatesAPIKeyThreads(t *testing.T) {
 	firstInput := codexFingerprintOriginalIDs{
 		clientScope:     "client:codex",
 		threadScope:     "api-key:101:client:codex",
@@ -453,13 +429,13 @@ func TestCodexFingerprintV2ContextSharesClientSessionButSeparatesAPIKeyThreads(t
 	}
 	secondInput := firstInput
 	secondInput.threadScope = "api-key:202:client:codex"
-	first, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+	first, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7,
 		codexFingerprintSession, "", firstInput,
 	)
 	require.NoError(t, err)
-	second, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+	second, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7,
 		codexFingerprintSession, "", secondInput,
 	)
 	require.NoError(t, err)
@@ -478,26 +454,26 @@ func TestCodexFingerprintV2ContextSharesClientSessionButSeparatesAPIKeyThreads(t
 	}
 }
 
-func TestCodexFingerprintV2ContextSeparatesAccountsClustersEpochsAndKinds(t *testing.T) {
+func TestCodexFingerprintV3ContextSeparatesAccountsClustersEpochsAndKinds(t *testing.T) {
 	input := codexFingerprintOriginalIDs{clientSessionID: "client-session", turnID: "same-source"}
-	base, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 3,
+	base, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 3,
 		codexFingerprintSession, "", input,
 	)
 	require.NoError(t, err)
 
-	otherSeed, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), strings.Repeat("cd", codexFingerprintSeedBytes), 3,
+	otherSeed, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), strings.Repeat("cd", codexFingerprintSeedBytes), 3,
 		codexFingerprintSession, "", input,
 	)
 	require.NoError(t, err)
-	otherCluster, err := newCodexFingerprintContextV2(
-		[]byte("abcdef0123456789abcdef0123456789"), testCodexFingerprintV2Seed(), 3,
+	otherCluster, err := newTestCodexFingerprintContextV3(
+		[]byte("abcdef0123456789abcdef0123456789"), testCodexFingerprintV3Seed(), 3,
 		codexFingerprintSession, "", input,
 	)
 	require.NoError(t, err)
-	nextEpoch, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 4,
+	nextEpoch, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 4,
 		codexFingerprintSession, "", input,
 	)
 	require.NoError(t, err)
@@ -510,20 +486,20 @@ func TestCodexFingerprintV2ContextSeparatesAccountsClustersEpochsAndKinds(t *tes
 	assert.NotEqual(t, base.ThreadID(), base.TurnID(), "kind 必须形成独立输入域")
 }
 
-func TestCodexFingerprintV2ContextReusesLogicalTurnAndKeepsConvergedIDsUUIDv4(t *testing.T) {
+func TestCodexFingerprintV3ContextReusesLogicalTurnWithExpectedUUIDShapes(t *testing.T) {
 	input := codexFingerprintOriginalIDs{
 		clientSessionID: "client-session",
 		turnID:          "logical-turn-123",
 		windowID:        "window-1",
 		requestID:       "request-1",
 	}
-	first, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 9,
+	first, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 9,
 		codexFingerprintSession, "", input,
 	)
 	require.NoError(t, err)
-	second, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 9,
+	second, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 9,
 		codexFingerprintSession, "", input,
 	)
 	require.NoError(t, err)
@@ -531,12 +507,17 @@ func TestCodexFingerprintV2ContextReusesLogicalTurnAndKeepsConvergedIDsUUIDv4(t 
 	assert.Equal(t, first.TurnID(), second.TurnID(), "同一逻辑 turn 的重试必须复用映射值")
 	assert.Equal(t, first.SessionID(), first.PromptCacheKey())
 	for _, value := range []string{
-		first.InstallationID(), first.SessionID(), first.ThreadID(), first.TurnID(),
-		first.WindowID(), first.PromptCacheKey(), first.RequestID(),
+		first.InstallationID(), first.ThreadID(), first.TurnID(), first.WindowID(), first.RequestID(),
 	} {
 		parsed, parseErr := uuid.Parse(value)
 		require.NoError(t, parseErr)
 		assert.Equal(t, uuid.Version(4), parsed.Version())
+		assert.Equal(t, uuid.RFC4122, parsed.Variant())
+	}
+	for _, value := range []string{first.SessionID(), first.PromptCacheKey()} {
+		parsed, parseErr := uuid.Parse(value)
+		require.NoError(t, parseErr)
+		assert.Equal(t, uuid.Version(7), parsed.Version())
 		assert.Equal(t, uuid.RFC4122, parsed.Variant())
 	}
 }
@@ -554,7 +535,7 @@ func TestCodexFingerprintV3SessionAndPromptUseSameStableUUIDv7(t *testing.T) {
 		candidate := input
 		candidate.clientScope = scope
 		fp, err := newCodexFingerprintContextV3(
-			testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), epoch, epochStartedAt,
+			testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), epoch, epochStartedAt,
 			codexFingerprintSession, "", candidate,
 		)
 		require.NoError(t, err)
@@ -579,7 +560,7 @@ func TestCodexFingerprintV3SessionAndPromptUseSameStableUUIDv7(t *testing.T) {
 	require.Equal(t, startedAt.Add(time.Hour).UnixMilli(), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(otherEpoch.SessionID())))
 
 	_, err = newCodexFingerprintContextV3(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 9, time.Time{},
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 9, time.Time{},
 		codexFingerprintSession, "", input,
 	)
 	require.ErrorIs(t, err, errCodexFingerprintEpochTimeInvalid)
@@ -590,7 +571,7 @@ func TestResolveCodexFingerprintV3UsesBoundThreadEpochTime(t *testing.T) {
 	currentStartedAt := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
 	boundStartedAt := time.Date(2026, 8, 10, 8, 30, 0, 0, time.UTC)
 	state := CodexFingerprintState{
-		Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV3,
+		Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3,
 		Epoch: 11, EpochStartedAt: currentStartedAt,
 	}
 	account := &Account{
@@ -603,7 +584,7 @@ func TestResolveCodexFingerprintV3UsesBoundThreadEpochTime(t *testing.T) {
 	}
 	svc := &OpenAIGatewayService{
 		cfg: &config.Config{Gateway: config.GatewayConfig{
-			CodexFingerprintSecret: string(testCodexFingerprintV2Secret()),
+			CodexFingerprintSecret: string(testCodexFingerprintV3Secret()),
 		}},
 		accountRepo: &codexFingerprintSessionRepoStub{
 			state: state, boundEpoch: 7, boundEpochStartedAt: boundStartedAt,
@@ -651,8 +632,8 @@ func TestCodexPromptCacheKeyFollowsConvergedSessionScopes(t *testing.T) {
 		return fp
 	}
 
-	base := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, baseInput)
-	repeated := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, baseInput)
+	base := derive(testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7, baseInput)
+	repeated := derive(testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7, baseInput)
 	require.Equal(t, base.SessionID(), repeated.SessionID())
 
 	otherDownstream := baseInput
@@ -662,15 +643,15 @@ func TestCodexPromptCacheKeyFollowsConvergedSessionScopes(t *testing.T) {
 	otherDownstream.turnID = "other-turn"
 	otherDownstream.windowID = "other-window"
 	otherDownstream.requestID = "other-request"
-	downstreamFP := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, otherDownstream)
+	downstreamFP := derive(testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7, otherDownstream)
 	require.Equal(t, base.SessionID(), downstreamFP.SessionID(), "下游用户和逻辑会话不得拆分账号级缓存身份")
 
 	otherClientInput := baseInput
 	otherClientInput.clientScope = "client:openclaw:transport:http"
-	otherClient := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, otherClientInput)
-	otherCluster := derive([]byte("abcdef0123456789abcdef0123456789"), testCodexFingerprintV2Seed(), 7, baseInput)
-	otherAccount := derive(testCodexFingerprintV2Secret(), strings.Repeat("cd", codexFingerprintSeedBytes), 7, baseInput)
-	otherEpoch := derive(testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 8, baseInput)
+	otherClient := derive(testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7, otherClientInput)
+	otherCluster := derive([]byte("abcdef0123456789abcdef0123456789"), testCodexFingerprintV3Seed(), 7, baseInput)
+	otherAccount := derive(testCodexFingerprintV3Secret(), strings.Repeat("cd", codexFingerprintSeedBytes), 7, baseInput)
+	otherEpoch := derive(testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 8, baseInput)
 	for _, fp := range []*CodexFingerprintContext{otherClient, otherCluster, otherAccount, otherEpoch} {
 		require.NotEqual(t, base.SessionID(), fp.SessionID())
 		require.NotEqual(t, base.PromptCacheKey(), fp.PromptCacheKey())
@@ -687,7 +668,7 @@ func TestCodexPromptCacheKeyRespectsModeBoundary(t *testing.T) {
 		turnID:          "root-turn",
 	}
 	device, err := newCodexFingerprintContextV3(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, startedAt, codexFingerprintDevice, "", input,
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7, startedAt, codexFingerprintDevice, "", input,
 	)
 	require.NoError(t, err)
 	require.Empty(t, device.SessionID())
@@ -696,7 +677,7 @@ func TestCodexPromptCacheKeyRespectsModeBoundary(t *testing.T) {
 	for _, mode := range []codexFingerprintMode{codexFingerprintSession, codexFingerprintFull} {
 		t.Run(string(mode), func(t *testing.T) {
 			fp, err := newCodexFingerprintContextV3(
-				testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, startedAt, mode, "", input,
+				testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7, startedAt, mode, "", input,
 			)
 			require.NoError(t, err)
 			require.NotEmpty(t, fp.PromptCacheKey())
@@ -704,18 +685,11 @@ func TestCodexPromptCacheKeyRespectsModeBoundary(t *testing.T) {
 		})
 	}
 
-	legacyInput := input
-	legacyInput.legacyUnscoped = true
-	legacy, err := newCodexFingerprintContextV3(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7, startedAt, codexFingerprintSession, "", legacyInput,
-	)
-	require.NoError(t, err)
-	require.Equal(t, legacy.SessionID(), legacy.PromptCacheKey())
 }
 
-func TestCodexFingerprintV2ContextHonorsConfiguredDeviceAndDeviceMode(t *testing.T) {
-	ctx, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 1,
+func TestCodexFingerprintV3ContextHonorsConfiguredDeviceAndDeviceMode(t *testing.T) {
+	ctx, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 1,
 		codexFingerprintDevice, "configured-device-id", codexFingerprintOriginalIDs{},
 	)
 	require.NoError(t, err)
@@ -724,7 +698,7 @@ func TestCodexFingerprintV2ContextHonorsConfiguredDeviceAndDeviceMode(t *testing
 	assert.Empty(t, ctx.ThreadID())
 }
 
-func TestCodexFingerprintV2ContextRejectsUnsafeState(t *testing.T) {
+func TestCodexFingerprintV3ContextRejectsUnsafeState(t *testing.T) {
 	tests := []struct {
 		name   string
 		secret []byte
@@ -733,14 +707,14 @@ func TestCodexFingerprintV2ContextRejectsUnsafeState(t *testing.T) {
 		input  codexFingerprintOriginalIDs
 		want   error
 	}{
-		{"短集群密钥", []byte("short"), testCodexFingerprintV2Seed(), 1, codexFingerprintOriginalIDs{clientSessionID: "s"}, errCodexFingerprintSecretInvalid},
-		{"非法种子", testCodexFingerprintV2Secret(), strings.Repeat("zz", codexFingerprintSeedBytes), 1, codexFingerprintOriginalIDs{clientSessionID: "s"}, errCodexFingerprintSeedInvalid},
-		{"epoch 未初始化", testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 0, codexFingerprintOriginalIDs{clientSessionID: "s"}, errCodexFingerprintEpochInvalid},
-		{"缺少 Thread 来源", testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 1, codexFingerprintOriginalIDs{}, errCodexFingerprintThreadMissing},
+		{"短集群密钥", []byte("short"), testCodexFingerprintV3Seed(), 1, codexFingerprintOriginalIDs{clientSessionID: "s"}, errCodexFingerprintSecretInvalid},
+		{"非法种子", testCodexFingerprintV3Secret(), strings.Repeat("zz", codexFingerprintSeedBytes), 1, codexFingerprintOriginalIDs{clientSessionID: "s"}, errCodexFingerprintSeedInvalid},
+		{"epoch 未初始化", testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 0, codexFingerprintOriginalIDs{clientSessionID: "s"}, errCodexFingerprintEpochInvalid},
+		{"缺少 Thread 来源", testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 1, codexFingerprintOriginalIDs{}, errCodexFingerprintThreadMissing},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, err := newCodexFingerprintContextV2(tt.secret, tt.seed, tt.epoch, codexFingerprintSession, "", tt.input)
+			ctx, err := newTestCodexFingerprintContextV3(tt.secret, tt.seed, tt.epoch, codexFingerprintSession, "", tt.input)
 			assert.Nil(t, ctx)
 			assert.True(t, errors.Is(err, tt.want), "got %v, want %v", err, tt.want)
 		})
@@ -754,8 +728,8 @@ func TestResolveCodexFingerprintContextRequiresConfiguredSecret(t *testing.T) {
 		Platform:                       PlatformOpenAI,
 		Type:                           AccountTypeOAuth,
 		Extra:                          map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
-		CodexFingerprintSeed:           testCodexFingerprintV2Seed(),
-		CodexFingerprintVersion:        codexFingerprintAlgorithmV2,
+		CodexFingerprintSeed:           testCodexFingerprintV3Seed(),
+		CodexFingerprintVersion:        codexFingerprintAlgorithmV3,
 		CodexFingerprintEpoch:          1,
 		CodexFingerprintEpochStartedAt: &startedAt,
 	}
@@ -770,7 +744,7 @@ func TestResolveCodexFingerprintContextRequiresConfiguredSecret(t *testing.T) {
 
 func TestApplyCodexFingerprintForAttemptSharesChatSessionAcrossAPIKeys(t *testing.T) {
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	state := CodexFingerprintState{Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2, Epoch: 3, EpochStartedAt: startedAt}
+	state := CodexFingerprintState{Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3, Epoch: 3, EpochStartedAt: startedAt}
 	account := &Account{
 		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Extra:                map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
@@ -778,7 +752,7 @@ func TestApplyCodexFingerprintForAttemptSharesChatSessionAcrossAPIKeys(t *testin
 		CodexFingerprintEpoch: state.Epoch, CodexFingerprintEpochStartedAt: &startedAt,
 	}
 	svc := &OpenAIGatewayService{
-		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV2Secret())}},
+		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV3Secret())}},
 		accountRepo: &codexFingerprintSessionRepoStub{state: state},
 	}
 	apply := func(path string, apiKeyID int64) (string, string) {
@@ -801,7 +775,7 @@ func TestApplyCodexFingerprintForAttemptSharesChatSessionAcrossAPIKeys(t *testin
 
 func TestApplyCodexFingerprintForAttemptMakesPromptCacheFollowSession(t *testing.T) {
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	state := CodexFingerprintState{Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2, Epoch: 3, EpochStartedAt: startedAt}
+	state := CodexFingerprintState{Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3, Epoch: 3, EpochStartedAt: startedAt}
 	account := &Account{
 		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Extra:                map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
@@ -809,7 +783,7 @@ func TestApplyCodexFingerprintForAttemptMakesPromptCacheFollowSession(t *testing
 		CodexFingerprintEpoch: state.Epoch, CodexFingerprintEpochStartedAt: &startedAt,
 	}
 	svc := &OpenAIGatewayService{
-		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV2Secret())}},
+		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV3Secret())}},
 		accountRepo: &codexFingerprintSessionRepoStub{state: state},
 	}
 	const originalPromptCacheKey = "018f0c7a-b740-7cc0-98c7-4f4a3f975e52"
@@ -889,7 +863,7 @@ func TestApplyCodexFingerprintRawForAttemptKeepsPromptCacheAfterWSReconnect(t *t
 
 func TestApplyCodexFingerprintForAttemptInjectsPromptCacheKeyWhenMissing(t *testing.T) {
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	state := CodexFingerprintState{Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2, Epoch: 3, EpochStartedAt: startedAt}
+	state := CodexFingerprintState{Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3, Epoch: 3, EpochStartedAt: startedAt}
 	account := &Account{
 		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Extra:                map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
@@ -897,7 +871,7 @@ func TestApplyCodexFingerprintForAttemptInjectsPromptCacheKeyWhenMissing(t *test
 		CodexFingerprintEpoch: state.Epoch, CodexFingerprintEpochStartedAt: &startedAt,
 	}
 	svc := &OpenAIGatewayService{
-		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV2Secret())}},
+		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV3Secret())}},
 		accountRepo: &codexFingerprintSessionRepoStub{state: state},
 	}
 	c, _ := gin.CreateTestContext(nil)
@@ -948,7 +922,7 @@ func TestApplyCodexFingerprintForAttemptKeepsPromptCacheInDeviceAndOffModes(t *t
 
 func TestApplyCodexFingerprintForAttemptCompactOnlyStagesHeaders(t *testing.T) {
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	state := CodexFingerprintState{Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2, Epoch: 3, EpochStartedAt: startedAt}
+	state := CodexFingerprintState{Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3, Epoch: 3, EpochStartedAt: startedAt}
 	account := &Account{
 		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Extra:                map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
@@ -956,7 +930,7 @@ func TestApplyCodexFingerprintForAttemptCompactOnlyStagesHeaders(t *testing.T) {
 		CodexFingerprintEpoch: state.Epoch, CodexFingerprintEpochStartedAt: &startedAt,
 	}
 	svc := &OpenAIGatewayService{
-		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV2Secret())}},
+		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV3Secret())}},
 		accountRepo: &codexFingerprintSessionRepoStub{state: state},
 	}
 	c, _ := gin.CreateTestContext(nil)
@@ -977,8 +951,8 @@ func TestApplyCodexFingerprintForAttemptCompactOnlyStagesHeaders(t *testing.T) {
 func TestAccountCodexFingerprintStateIsExcludedFromJSON(t *testing.T) {
 	account := Account{
 		ID:                             42,
-		CodexFingerprintSeed:           testCodexFingerprintV2Seed(),
-		CodexFingerprintVersion:        codexFingerprintAlgorithmV2,
+		CodexFingerprintSeed:           testCodexFingerprintV3Seed(),
+		CodexFingerprintVersion:        codexFingerprintAlgorithmV3,
 		CodexFingerprintEpoch:          3,
 		CodexFingerprintEpochStartedAt: nil,
 	}
@@ -986,7 +960,7 @@ func TestAccountCodexFingerprintStateIsExcludedFromJSON(t *testing.T) {
 	payload, err := json.Marshal(account)
 	require.NoError(t, err)
 	assert.NotContains(t, string(payload), "CodexFingerprint")
-	assert.NotContains(t, string(payload), testCodexFingerprintV2Seed())
+	assert.NotContains(t, string(payload), testCodexFingerprintV3Seed())
 }
 
 func TestCodexFingerprintSubagentMapsClosedTopology(t *testing.T) {
@@ -1003,8 +977,8 @@ func TestCodexFingerprintSubagentMapsClosedTopology(t *testing.T) {
 		isSubagent:       true,
 		sessionScopeHash: strings.Repeat("cd", 32),
 	}
-	child, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+	child, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7,
 		codexFingerprintSession, "", original,
 	)
 	require.NoError(t, err)
@@ -1013,8 +987,8 @@ func TestCodexFingerprintSubagentMapsClosedTopology(t *testing.T) {
 	rootInput.parentThreadID = ""
 	rootInput.forkedThreadID = ""
 	rootInput.isSubagent = false
-	root, err := newCodexFingerprintContextV2(
-		testCodexFingerprintV2Secret(), testCodexFingerprintV2Seed(), 7,
+	root, err := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7,
 		codexFingerprintSession, "", rootInput,
 	)
 	require.NoError(t, err)
@@ -1075,15 +1049,15 @@ func TestCodexFingerprintFullModeRejectsSubagent(t *testing.T) {
 	account := &Account{
 		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Extra:                          map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintFull)},
-		CodexFingerprintSeed:           testCodexFingerprintV2Seed(),
-		CodexFingerprintVersion:        codexFingerprintAlgorithmV2,
+		CodexFingerprintSeed:           testCodexFingerprintV3Seed(),
+		CodexFingerprintVersion:        codexFingerprintAlgorithmV3,
 		CodexFingerprintEpoch:          3,
 		CodexFingerprintEpochStartedAt: &startedAt,
 	}
 	svc := &OpenAIGatewayService{
-		cfg: &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV2Secret())}},
+		cfg: &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV3Secret())}},
 		accountRepo: &codexFingerprintSessionRepoStub{state: CodexFingerprintState{
-			Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2,
+			Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3,
 			Epoch: 3, EpochStartedAt: startedAt,
 		}},
 	}
@@ -1105,17 +1079,17 @@ func TestCodexFingerprintFullModeWithGatePreservesSubagentTopology(t *testing.T)
 			codexFingerprintModeExtraKey:     string(codexFingerprintFull),
 			codexSubagentMaxInflightExtraKey: 4,
 		},
-		CodexFingerprintSeed:           testCodexFingerprintV2Seed(),
-		CodexFingerprintVersion:        codexFingerprintAlgorithmV2,
+		CodexFingerprintSeed:           testCodexFingerprintV3Seed(),
+		CodexFingerprintVersion:        codexFingerprintAlgorithmV3,
 		CodexFingerprintEpoch:          3,
 		CodexFingerprintEpochStartedAt: &startedAt,
 	}
 	repo := &codexFingerprintSessionRepoStub{state: CodexFingerprintState{
-		Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2,
+		Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3,
 		Epoch: 3, EpochStartedAt: startedAt,
 	}}
 	svc := &OpenAIGatewayService{
-		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV2Secret())}},
+		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV3Secret())}},
 		accountRepo: repo,
 	}
 	resolve := func(body []byte) *CodexFingerprintContext {

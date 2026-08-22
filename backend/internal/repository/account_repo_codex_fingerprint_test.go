@@ -26,14 +26,14 @@ func TestGetOrInitializeCodexFingerprintStateAtomically(t *testing.T) {
 			"codex_fingerprint_version",
 			"codex_fingerprint_epoch",
 			"codex_fingerprint_epoch_started_at",
-		}).AddRow(seed, "v2", int64(1), now))
+		}).AddRow(seed, "v3", int64(1), now))
 
 	repo := newAccountRepositoryWithSQL(nil, db, nil)
 	state, err := repo.GetOrInitializeCodexFingerprintState(context.Background(), 27, now)
 
 	require.NoError(t, err)
 	require.Equal(t, seed, state.Seed)
-	require.Equal(t, "v2", state.Version)
+	require.Equal(t, "v3", state.Version)
 	require.Equal(t, int64(1), state.Epoch)
 	require.Equal(t, now, state.EpochStartedAt)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -60,6 +60,30 @@ func TestGetOrInitializeCodexFingerprintStateAcceptsV3(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "v3", state.Version)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetOrInitializeCodexFingerprintStateRejectsV2(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	now := time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)
+	seed := strings.Repeat("ab", 32)
+	mock.ExpectQuery(regexp.QuoteMeta("UPDATE accounts")).
+		WithArgs(int64(27), sqlmock.AnyArg(), now).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"codex_fingerprint_seed",
+			"codex_fingerprint_version",
+			"codex_fingerprint_epoch",
+			"codex_fingerprint_epoch_started_at",
+		}).AddRow(seed, "v2", int64(4), now))
+
+	repo := newAccountRepositoryWithSQL(nil, db, nil)
+	state, err := repo.GetOrInitializeCodexFingerprintState(context.Background(), 27, now)
+
+	require.Nil(t, state)
+	require.ErrorContains(t, err, "invalid codex fingerprint state")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -90,9 +114,6 @@ func TestRotateCodexFingerprintSessionsOnlyUpdatesFingerprintState(t *testing.T)
 
 	now := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
 	mock.ExpectBegin()
-	mock.ExpectExec(`(?s)UPDATE codex_fingerprint_thread_epochs AS t.*session_epoch_started_at`).
-		WithArgs(int64(27)).
-		WillReturnResult(sqlmock.NewResult(0, 2))
 	mock.ExpectQuery(`(?s)UPDATE accounts.*codex_fingerprint_version = 'v3'`).
 		WithArgs(int64(27), now).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(27)))
@@ -174,7 +195,7 @@ func TestResolveCodexFingerprintSessionStateReturnsBoundEpoch(t *testing.T) {
 			"codex_fingerprint_version",
 			"codex_fingerprint_epoch",
 			"codex_fingerprint_epoch_started_at",
-		}).AddRow(seed, "v2", int64(3), startedAt))
+		}).AddRow(seed, "v3", int64(3), startedAt))
 	mock.ExpectExec(`(?s)INSERT INTO codex_fingerprint_session_scopes`).
 		WithArgs(int64(27), scopeHash, int64(3), now).
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -192,9 +213,6 @@ func TestResolveCodexFingerprintSessionStateReturnsBoundEpoch(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`(?s)DELETE FROM codex_fingerprint_thread_epochs`).
 		WithArgs(int64(27), scopeHash, int64(4), cutoff).
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec(`(?s)DELETE FROM codex_fingerprint_thread_epochs`).
-		WithArgs(int64(27), cutoff).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
@@ -280,7 +298,7 @@ func TestResolveCodexFingerprintSessionStateBindsChildToParentEpoch(t *testing.T
 			"codex_fingerprint_epoch_started_at", "session_epoch", "session_epoch_started_at", "last_seen_at", "session_scope_hash",
 		})
 		if withRow {
-			rows.AddRow(seed, "v2", int64(5), startedAt, int64(3), boundStartedAt, lastSeenAt, scopeHash)
+			rows.AddRow(seed, "v3", int64(5), startedAt, int64(3), boundStartedAt, lastSeenAt, scopeHash)
 		}
 		return rows
 	}
@@ -345,7 +363,7 @@ func TestResolveCodexFingerprintSessionStateUsesConcurrentChildBinding(t *testin
 			"codex_fingerprint_epoch_started_at", "session_epoch", "session_epoch_started_at", "last_seen_at", "session_scope_hash",
 		})
 		if epoch > 0 {
-			rows.AddRow(seed, "v2", int64(9), startedAt, epoch, boundStartedAt, lastSeenAt, scopeHash)
+			rows.AddRow(seed, "v3", int64(9), startedAt, epoch, boundStartedAt, lastSeenAt, scopeHash)
 		}
 		return rows
 	}

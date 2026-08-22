@@ -56,3 +56,17 @@ func TestMigration233AddsUUIDv7EpochTimestamps(t *testing.T) {
 	require.Contains(t, sql, "MIN(created_at) AS epoch_started_at")
 	require.Contains(t, sql, "session_scope_hash IS NOT DISTINCT FROM e.session_scope_hash")
 }
+
+func TestMigration237RemovesLegacyCodexFingerprintVersions(t *testing.T) {
+	content, err := FS.ReadFile("237_openai_codex_fingerprint_v3_only.sql")
+	require.NoError(t, err)
+
+	sql := strings.Join(strings.Fields(string(content)), " ")
+	require.Contains(t, sql, "SET codex_fingerprint_version = 'v3' WHERE codex_fingerprint_version = 'v2'")
+	require.Contains(t, sql, "CHECK (codex_fingerprint_version IN ('', 'v3'))")
+	require.Contains(t, sql, "DELETE FROM codex_fingerprint_thread_epochs WHERE session_scope_hash IS NULL")
+	require.Contains(t, sql, "WHERE NOT EXISTS ( SELECT 1 FROM codex_fingerprint_session_scopes AS s")
+	require.Contains(t, sql, "ALTER COLUMN session_epoch_started_at SET NOT NULL")
+	require.Contains(t, sql, "ALTER COLUMN session_scope_hash SET NOT NULL")
+	require.Contains(t, sql, "FOREIGN KEY (account_id, session_scope_hash) REFERENCES codex_fingerprint_session_scopes (account_id, scope_hash) ON DELETE CASCADE")
+}

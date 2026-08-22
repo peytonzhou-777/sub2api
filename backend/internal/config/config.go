@@ -984,8 +984,8 @@ type GatewayConfig struct {
 	// CodexImageGenerationBridgeEnabled: 是否为 Codex `/v1/responses` 自动注入 image_generation 工具和桥接指令。
 	// 默认关闭，避免纯文本 Codex 请求被意外改写；显式携带 image_generation 工具的请求仍按分组能力转发。
 	CodexImageGenerationBridgeEnabled bool `mapstructure:"codex_image_generation_bridge_enabled"`
-	// CodexFingerprintSecret: v2 指纹 HMAC 集群密钥，HA 副本必须一致。
-	// 空值保持兼容：尚未初始化的账号继续旧算法；已初始化 v2 的账号失败关闭。
+	// CodexFingerprintSecret: v3 指纹 HMAC 集群密钥，HA 副本必须一致。
+	// 空值仅允许所有账号关闭收敛；启用收敛的请求会失败关闭。
 	CodexFingerprintSecret string `mapstructure:"codex_fingerprint_secret"`
 	// CodexFingerprintMinSessionAgeHours: Session 最短寿命，达到后才允许在空闲门上轮换。
 	CodexFingerprintMinSessionAgeHours int `mapstructure:"codex_fingerprint_min_session_age_hours"`

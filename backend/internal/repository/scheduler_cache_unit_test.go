@@ -300,7 +300,7 @@ func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
 		Platform:                service.PlatformOpenAI,
 		Type:                    service.AccountTypeOAuth,
 		CodexFingerprintSeed:    strings.Repeat("ab", 32),
-		CodexFingerprintVersion: "v2",
+		CodexFingerprintVersion: "v3",
 		CodexFingerprintEpoch:   7,
 		Extra: map[string]any{
 			"openai_oauth_responses_websockets_v2_enabled": true,

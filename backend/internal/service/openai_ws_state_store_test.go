@@ -119,11 +119,11 @@ func TestOpenAIWSStateStoreConnectionTargetIsolation(t *testing.T) {
 	proxyBID := int64(2)
 	accountA := &Account{ID: 101, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Extra:                   map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
-		CodexFingerprintVersion: "v2", CodexFingerprintEpoch: 3,
+		CodexFingerprintVersion: "v3", CodexFingerprintEpoch: 3,
 		ProxyID: &proxyAID, Proxy: &Proxy{ID: proxyAID, Protocol: "http", Host: "proxy-a.example", Port: 8080}}
 	accountB := &Account{ID: 102, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Extra:                   map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
-		CodexFingerprintVersion: "v2", CodexFingerprintEpoch: 3}
+		CodexFingerprintVersion: "v3", CodexFingerprintEpoch: 3}
 	accountNextProxy := *accountA
 	accountNextProxy.ProxyID = &proxyBID
 	accountNextProxy.Proxy = &Proxy{ID: proxyBID, Protocol: "http", Host: "proxy-b.example", Port: 8080}

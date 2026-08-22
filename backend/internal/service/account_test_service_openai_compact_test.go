@@ -299,7 +299,7 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeIdentityMatc
 
 	updateCalls := make(chan map[string]any, 1)
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	state := CodexFingerprintState{Seed: testCodexFingerprintV2Seed(), Version: codexFingerprintAlgorithmV2, Epoch: 3, EpochStartedAt: startedAt}
+	state := CodexFingerprintState{Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3, Epoch: 3, EpochStartedAt: startedAt}
 	account := Account{
 		ID:          6,
 		Name:        "openai-oauth-identity",
@@ -327,7 +327,7 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeIdentityMatc
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
 		Body:       io.NopCloser(strings.NewReader(compactProbeSSESuccessBody)),
 	}}
-	secret := string(testCodexFingerprintV2Secret())
+	secret := string(testCodexFingerprintV3Secret())
 	svc := &AccountTestService{
 		accountRepo: repo, httpUpstream: upstream,
 		cfg: &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: secret}},
@@ -339,14 +339,16 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeIdentityMatc
 
 	require.NoError(t, svc.TestAccountConnection(c, account.ID, "gpt-5.4", "", AccountTestModeCompact))
 
-	// 显式 session 收敛模式：探测使用与真实 Responses 流量相同的 v2 作用域。
-	converged := deriveCodexFingerprintUUIDV2(
+	// 显式 session 收敛模式：探测使用与真实 Responses 流量相同的 v3 作用域。
+	converged, err := deriveCodexFingerprintSessionUUIDV7(
 		[]byte(secret), mustDecodeCodexFingerprintSeedForTest(t, state.Seed), state.Epoch,
-		codexFingerprintKindSession, codexFingerprintScopedDerivationSource("protocol:responses:transport:http", "account-session"),
+		state.EpochStartedAt,
+		codexFingerprintScopedDerivationSource("protocol:responses:transport:http", "account-session"),
 	)
+	require.NoError(t, err)
 	require.Equal(t, converged, upstream.lastReq.Header.Get("session-id"))
 	require.Equal(t, converged, upstream.lastReq.Header.Get("session_id"))
-	expectedInstallation := deriveCodexFingerprintUUIDV2(
+	expectedInstallation := deriveCodexFingerprintStableUUID(
 		[]byte(secret), mustDecodeCodexFingerprintSeedForTest(t, state.Seed), 0,
 		codexFingerprintKindInstallation, "account-device",
 	)

@@ -31,7 +31,6 @@ SELECT
   (SELECT COUNT(*) FROM codex_fingerprint_session_scopes WHERE account_id = $1),
   (SELECT COALESCE(SUM(rotation_count), 0) FROM codex_fingerprint_session_scopes WHERE account_id = $1),
   (SELECT COUNT(*) FROM codex_fingerprint_thread_epochs WHERE account_id = $1),
-  (SELECT COUNT(*) FROM codex_fingerprint_thread_epochs WHERE account_id = $1 AND session_scope_hash IS NULL),
   COALESCE((SELECT secret_hash::text FROM codex_fingerprint_cluster_secrets WHERE singleton_id = TRUE), '')`, accountID)
 	if err != nil {
 		return nil, err
@@ -48,7 +47,6 @@ SELECT
 		&status.SessionScopeCount,
 		&status.RotationCount,
 		&status.ThreadCount,
-		&status.LegacyThreadCount,
 		&secretID,
 	); err != nil {
 		return nil, err
@@ -61,7 +59,7 @@ SELECT
 	return status, nil
 }
 
-// RotateCodexFingerprintSessions 原子升级 v3 并推进账号基准和所有现有作用域，不写调度表。
+// RotateCodexFingerprintSessions 原子推进 v3 账号基准和所有现有作用域，不写调度表。
 func (r *accountRepository) RotateCodexFingerprintSessions(ctx context.Context, accountID int64, now time.Time) error {
 	if accountID <= 0 {
 		return service.ErrAccountNotFound
@@ -77,31 +75,13 @@ func (r *accountRepository) RotateCodexFingerprintSessions(ctx context.Context, 
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	// 兼容迁移期间仍由旧节点写入的 NULL；同一 scope/epoch 统一取最早已知时间。
-	if _, err := tx.ExecContext(ctx, `
-WITH epoch_starts AS (
-  SELECT account_id, session_scope_hash, session_epoch,
-         MIN(COALESCE(session_epoch_started_at, created_at)) AS epoch_started_at
-  FROM codex_fingerprint_thread_epochs
-  WHERE account_id = $1
-  GROUP BY account_id, session_scope_hash, session_epoch
-)
-UPDATE codex_fingerprint_thread_epochs AS t
-SET session_epoch_started_at = e.epoch_started_at
-FROM epoch_starts AS e
-WHERE t.account_id = e.account_id
-  AND t.session_scope_hash IS NOT DISTINCT FROM e.session_scope_hash
-  AND t.session_epoch = e.session_epoch
-  AND t.session_epoch_started_at IS NULL`, accountID); err != nil {
-		return err
-	}
 	rows, err := tx.QueryContext(ctx, `
 UPDATE accounts
 SET codex_fingerprint_version = 'v3',
     codex_fingerprint_epoch = codex_fingerprint_epoch + 1,
     codex_fingerprint_epoch_started_at = $2
 WHERE id = $1 AND deleted_at IS NULL AND platform = 'openai' AND type = 'oauth'
-  AND codex_fingerprint_seed IS NOT NULL AND codex_fingerprint_version IN ('v2', 'v3')
+  AND codex_fingerprint_seed IS NOT NULL AND codex_fingerprint_version = 'v3'
   AND codex_fingerprint_epoch > 0 AND codex_fingerprint_epoch_started_at IS NOT NULL
 RETURNING id`, accountID, now.UTC())
 	if err != nil {

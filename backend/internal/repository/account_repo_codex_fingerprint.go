@@ -49,8 +49,7 @@ RETURNING secret_hash`, secretHash, now.UTC())
 	return nil
 }
 
-// GetOrInitializeCodexFingerprintState 使用单条 SQL 原子初始化 seed 与首个 v2 epoch。
-// 新账号先落 v2，待所有实例完成滚动升级后再通过管理员轮换显式进入 v3。
+// GetOrInitializeCodexFingerprintState 使用单条 SQL 原子初始化 v3 seed 与首个 epoch。
 func (r *accountRepository) GetOrInitializeCodexFingerprintState(ctx context.Context, accountID int64, now time.Time) (*service.CodexFingerprintState, error) {
 	if accountID <= 0 {
 		return nil, service.ErrAccountNotFound
@@ -64,7 +63,7 @@ func (r *accountRepository) GetOrInitializeCodexFingerprintState(ctx context.Con
 	const query = `
 UPDATE accounts
 SET codex_fingerprint_seed = COALESCE(codex_fingerprint_seed, $2),
-    codex_fingerprint_version = CASE WHEN codex_fingerprint_version = '' THEN 'v2' ELSE codex_fingerprint_version END,
+    codex_fingerprint_version = CASE WHEN codex_fingerprint_version = '' THEN 'v3' ELSE codex_fingerprint_version END,
     codex_fingerprint_epoch = CASE WHEN codex_fingerprint_epoch = 0 THEN 1 ELSE codex_fingerprint_epoch END,
     codex_fingerprint_epoch_started_at = COALESCE(codex_fingerprint_epoch_started_at, $3)
 WHERE id = $1
@@ -74,7 +73,7 @@ WHERE id = $1
   AND (
     (codex_fingerprint_seed IS NULL AND codex_fingerprint_version = '' AND codex_fingerprint_epoch = 0 AND codex_fingerprint_epoch_started_at IS NULL)
     OR
-    (codex_fingerprint_seed IS NOT NULL AND codex_fingerprint_version IN ('v2', 'v3') AND codex_fingerprint_epoch > 0 AND codex_fingerprint_epoch_started_at IS NOT NULL)
+    (codex_fingerprint_seed IS NOT NULL AND codex_fingerprint_version = 'v3' AND codex_fingerprint_epoch > 0 AND codex_fingerprint_epoch_started_at IS NOT NULL)
   )
 RETURNING codex_fingerprint_seed, codex_fingerprint_version, codex_fingerprint_epoch, codex_fingerprint_epoch_started_at`
 	rows, err := r.sql.QueryContext(ctx, query, accountID, seedHex, now.UTC())
@@ -106,7 +105,6 @@ RETURNING codex_fingerprint_seed, codex_fingerprint_version, codex_fingerprint_e
 }
 
 // getExistingCodexFingerprintSessionState 为已绑定 Thread 提供无账号锁快速路径。
-// 存量 NULL scope 继续读取账号 epoch；新绑定读取各自作用域 epoch。
 func (r *accountRepository) getExistingCodexFingerprintSessionState(
 	ctx context.Context,
 	exec sqlExecutor,
@@ -116,20 +114,20 @@ func (r *accountRepository) getExistingCodexFingerprintSessionState(
 ) (*service.CodexFingerprintSessionResolution, bool, error) {
 	const query = `
 SELECT a.codex_fingerprint_seed, a.codex_fingerprint_version,
-       COALESCE(s.session_epoch, a.codex_fingerprint_epoch),
-       COALESCE(s.epoch_started_at, a.codex_fingerprint_epoch_started_at),
-       t.session_epoch, COALESCE(t.session_epoch_started_at, t.created_at),
-       t.last_seen_at, COALESCE(t.session_scope_hash::text, '')
+       s.session_epoch, s.epoch_started_at,
+       t.session_epoch, t.session_epoch_started_at,
+       t.last_seen_at, t.session_scope_hash::text
 FROM codex_fingerprint_thread_epochs t
 JOIN accounts a ON a.id = t.account_id
-LEFT JOIN codex_fingerprint_session_scopes s
+JOIN codex_fingerprint_session_scopes s
   ON s.account_id = t.account_id AND s.scope_hash = t.session_scope_hash
 WHERE t.account_id = $1 AND t.source_hash = $2
   AND a.deleted_at IS NULL AND a.platform = 'openai' AND a.type = 'oauth'
   AND a.codex_fingerprint_seed IS NOT NULL
-  AND a.codex_fingerprint_version IN ('v2', 'v3')
+  AND a.codex_fingerprint_version = 'v3'
   AND a.codex_fingerprint_epoch > 0
-  AND a.codex_fingerprint_epoch_started_at IS NOT NULL`
+  AND a.codex_fingerprint_epoch_started_at IS NOT NULL
+  AND t.session_epoch_started_at IS NOT NULL`
 	rows, err := exec.QueryContext(ctx, query, accountID, threadSourceHash)
 	if err != nil {
 		return nil, false, err
@@ -303,7 +301,7 @@ SELECT codex_fingerprint_seed, codex_fingerprint_version,
 FROM accounts
 WHERE id = $1 AND deleted_at IS NULL AND platform = 'openai' AND type = 'oauth'
   AND codex_fingerprint_seed IS NOT NULL
-  AND codex_fingerprint_version IN ('v2', 'v3')
+  AND codex_fingerprint_version = 'v3'
   AND codex_fingerprint_epoch > 0
   AND codex_fingerprint_epoch_started_at IS NOT NULL`, []any{request.AccountID}, func(rows *sql.Rows) error {
 		return rows.Scan(&accountState.Seed, &accountState.Version, &accountState.Epoch, &accountState.EpochStartedAt)
@@ -365,7 +363,7 @@ INSERT INTO codex_fingerprint_thread_epochs
 VALUES ($1, $2, $3, $4, $5, $5, $6)
 ON CONFLICT (account_id, source_hash)
 DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at
-RETURNING session_epoch, COALESCE(session_epoch_started_at, created_at)`, []any{
+RETURNING session_epoch, session_epoch_started_at`, []any{
 		request.AccountID, primaryThreadHash, state.Epoch, state.EpochStartedAt.UTC(), request.Now.UTC(), request.SessionScopeHash,
 	}, func(rows *sql.Rows) error {
 		return rows.Scan(&boundEpoch, &boundEpochStartedAt)
@@ -385,12 +383,6 @@ DELETE FROM codex_fingerprint_thread_epochs
 WHERE account_id = $1 AND session_scope_hash = $2
   AND session_epoch < $3 - 2 AND last_seen_at < $4`,
 		request.AccountID, request.SessionScopeHash, state.Epoch, request.OldEpochCutoff.UTC()); err != nil {
-		return nil, err
-	}
-	if _, err := exec.ExecContext(ctx, `
-DELETE FROM codex_fingerprint_thread_epochs
-WHERE account_id = $1 AND session_scope_hash IS NULL AND last_seen_at < $2`,
-		request.AccountID, request.OldEpochCutoff.UTC()); err != nil {
 		return nil, err
 	}
 	decodedSeed, decodeErr := hex.DecodeString(state.Seed)
@@ -443,8 +435,8 @@ INSERT INTO codex_fingerprint_thread_epochs
 VALUES ($1, $2, $3, $4, $5, $5, $6)
 ON CONFLICT (account_id, source_hash)
 	DO NOTHING
-RETURNING session_epoch, COALESCE(session_epoch_started_at, created_at), COALESCE(session_scope_hash::text, '')`,
-			request.AccountID, sourceHash, resolved.BoundEpoch, resolved.BoundEpochStartedAt.UTC(), request.Now.UTC(), nullableCodexFingerprintScope(resolved.BoundSessionScopeHash))
+RETURNING session_epoch, session_epoch_started_at, session_scope_hash::text`,
+			request.AccountID, sourceHash, resolved.BoundEpoch, resolved.BoundEpochStartedAt.UTC(), request.Now.UTC(), resolved.BoundSessionScopeHash)
 		if err != nil {
 			return false, err
 		}
@@ -483,13 +475,6 @@ RETURNING session_epoch, COALESCE(session_epoch_started_at, created_at), COALESC
 	return created, nil
 }
 
-func nullableCodexFingerprintScope(value string) any {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	return value
-}
-
 func validCodexFingerprintAlgorithmVersion(version string) bool {
-	return version == "v2" || version == "v3"
+	return version == "v3"
 }
