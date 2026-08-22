@@ -251,7 +251,11 @@ gateway:
   # 强制按 Codex CLI 处理 /openai/v1/responses 请求（用于网关未透传/改写 User-Agent 的兜底）。
   #
   # 注意：开启后会影响所有客户端的行为（不仅限于 VS Code / Codex CLI），请谨慎开启。
-  force_codex_cli: false
+    force_codex_cli: false
+    # OAuth Codex 出站形态。默认全量对齐本机抓包确认的 Windows CodexCLI 0.149.0。
+    # legacy 仅用于紧急兼容回滚；全局 force_legacy 的优先级高于账号 extra 覆写。
+    codex_outbound_profile_default: "codex_cli_0_149_0"
+    codex_outbound_force_legacy: false
   # Stop rewriting load-shed Codex originators to the official CLI identity.
   # 关闭「把落在上游降载桶的 Codex originator 改写为官方 CLI 身份（codex_cli_rs）」。
   #

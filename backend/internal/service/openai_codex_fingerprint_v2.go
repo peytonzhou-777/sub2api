@@ -760,7 +760,15 @@ func (s *OpenAIGatewayService) applyCodexFingerprintRawForAttempt(
 	body []byte,
 	newLogicalTurn bool,
 ) ([]byte, error) {
-	return s.applyCodexFingerprintForAttempt(ctx, c, account, body, newLogicalTurn, true)
+	next, err := s.applyCodexFingerprintForAttempt(ctx, c, account, body, newLogicalTurn, true)
+	if err != nil {
+		return body, err
+	}
+	strict, _, strictErr := s.prepareCodexOutboundBody(c, account, next, "ws", false)
+	if strictErr != nil {
+		return body, fmt.Errorf("prepare Codex WS outbound body: %w", strictErr)
+	}
+	return strict, nil
 }
 
 func derefTime(value *time.Time) time.Time {

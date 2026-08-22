@@ -973,6 +973,24 @@
         </div>
       </div>
 
+      <!-- Codex 出站 profile（仅 OpenAI OAuth） -->
+      <div v-if="allOpenAIOAuth" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="mb-3 flex items-center justify-between">
+          <label class="input-label mb-0">{{ t('admin.accounts.openai.codexOutboundProfile') }}</label>
+          <input
+            v-model="enableCodexOutboundProfile"
+            type="checkbox"
+            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          />
+        </div>
+        <div :class="!enableCodexOutboundProfile && 'pointer-events-none opacity-50'">
+          <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.openai.codexOutboundProfileDesc') }}
+          </p>
+          <Select v-model="codexOutboundProfileOverride" data-testid="bulk-codex-outbound-profile-select" :options="codexOutboundProfileOptions" />
+        </div>
+      </div>
+
       <!-- Codex 指纹收敛模式（仅 OpenAI OAuth） -->
       <div v-if="allOpenAIOAuth" class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <div class="mb-3 flex items-center justify-between">
@@ -1733,6 +1751,9 @@ const upstreamBillingAutoProbeMode = ref<'enabled' | 'disabled'>('enabled')
 const codexCLIOnlyEnabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
+type CodexOutboundProfileOverride = '' | 'legacy' | 'codex_cli_0_149_0'
+const enableCodexOutboundProfile = ref(false)
+const codexOutboundProfileOverride = ref<CodexOutboundProfileOverride>('')
 const enableCodexFingerprintMode = ref(false)
 const codexFingerprintMode = ref<CodexFingerprintMode>('off')
 const enableCodexSubagentConcurrency = ref(false)
@@ -1742,6 +1763,11 @@ const codexFingerprintModeOptions = computed(() => [
   { value: 'device' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintDevice') },
   { value: 'session' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintSession') },
   { value: 'full' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintFull') },
+])
+const codexOutboundProfileOptions = computed(() => [
+  { value: '' as CodexOutboundProfileOverride, label: t('admin.accounts.openai.codexOutboundProfileInherit') },
+  { value: 'codex_cli_0_149_0' as CodexOutboundProfileOverride, label: t('admin.accounts.openai.codexOutboundProfileStrict') },
+  { value: 'legacy' as CodexOutboundProfileOverride, label: t('admin.accounts.openai.codexOutboundProfileLegacy') },
 ])
 const openAICompactMode = ref<OpenAICompactMode>('auto')
 const openAICompactModelMappings = ref<ModelMapping[]>([])
@@ -2105,6 +2131,12 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     extra.codex_cli_only = codexCLIOnlyEnabled.value
   }
 
+  if (enableCodexOutboundProfile.value) {
+    const extra = ensureExtra()
+    // 空字符串清除账号覆写，使其重新继承全局默认。
+    extra.codex_outbound_profile = codexOutboundProfileOverride.value
+  }
+
   // 子开关从属于 codex_cli_only：仅当同一次批量编辑也把父开关设为开启时才写入，
   // 与 Create/Edit 语义对齐，避免在父开关关闭的账号上写入无意义的孤立字段。
   if (
@@ -2403,6 +2435,8 @@ watch(
       enableUpstreamBillingAutoProbe.value = false
       enableCodexCLIOnly.value = false
       enableCodexCLIOnlyAppServer.value = false
+      enableCodexOutboundProfile.value = false
+      codexOutboundProfileOverride.value = ''
       enableCodexFingerprintMode.value = false
       codexFingerprintMode.value = 'off'
       enableCodexSubagentConcurrency.value = false

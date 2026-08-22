@@ -608,6 +608,13 @@ export default {
         codexCLIOnlyAppServer: 'Allow Codex app-server clients',
         codexCLIOnlyAppServerDesc:
           "Effective only when the switch above is on. When enabled, this account also allows third-party clients that embed the Codex engine over the app-server protocol (e.g. Claude Code's codex plugin); they still pass the global engine-fingerprint gate. OR-combined with the global app-server toggle.",
+        codexOutboundProfile: 'Codex outbound profile',
+        codexOutboundProfileDesc:
+          'Inherits the global Windows CodexCLI 0.149.0 shape by default. Account overrides are only for incident isolation; legacy does not clear fingerprint or sticky-scheduling state.',
+        codexOutboundProfileInherit: 'Inherit global default',
+        codexOutboundProfileStrict: 'Windows CodexCLI 0.149.0',
+        codexOutboundProfileLegacy: 'Legacy (incident isolation)',
+        codexOutboundProfileEffective: 'Effective: {profile}, zstd: {zstd}',
         codexFingerprintMode: 'Codex fingerprint convergence',
         codexFingerprintModeDesc: 'When multiple users share one OAuth account, keep one stable account device and use long-lived Session epochs. A new Thread can rotate the Session only after both the minimum age and account-idle gates are met. Off by default; roll out per account. Some accounts reported quota shrinkage, so rely on measured results.',
         codexSubagentConcurrency: 'Subagent concurrency gate',

@@ -678,6 +678,13 @@ export default {
         codexCLIOnlyDesc: '仅对 OpenAI OAuth 生效。开启后仅允许 Codex 官方客户端家族访问；关闭后完全绕过并保持原逻辑。',
         codexCLIOnlyAppServer: '允许 Codex app-server 客户端',
         codexCLIOnlyAppServerDesc: '仅在上方开关开启时生效。开启后本账号额外放行内嵌 Codex 引擎、经 app-server 协议接入的第三方客户端（如 Claude Code 的 codex 插件），仍需通过全局引擎指纹门；与全局 app-server 开关取 OR（任一开即放行）。',
+        codexOutboundProfile: 'Codex 出站形态',
+        codexOutboundProfileDesc:
+          '默认继承全局 Windows CodexCLI 0.149.0 形态。账号覆写仅用于单账号故障隔离；legacy 不会清理指纹或粘性调度状态。',
+        codexOutboundProfileInherit: '继承全局默认',
+        codexOutboundProfileStrict: 'Windows CodexCLI 0.149.0',
+        codexOutboundProfileLegacy: 'Legacy（故障隔离）',
+        codexOutboundProfileEffective: '当前生效：{profile}，zstd：{zstd}',
         codexFingerprintMode: 'Codex 指纹收敛',
         codexFingerprintModeDesc: '多人共享同一 OAuth 账号时，设备标识按账号稳定，Session 使用长周期 epoch，并只在达到最短寿命且账号空闲后为新 Thread 轮换。默认关闭（原样透传），请按账号灰度；部分账号开启后出现过额度缩水，请以实测为准。',
         codexSubagentConcurrency: '子代理并发阀门',

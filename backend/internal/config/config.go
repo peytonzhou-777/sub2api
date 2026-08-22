@@ -976,6 +976,11 @@ type GatewayConfig struct {
 	// DisableCodexOriginatorNormalization: 已废弃，等价于 DisableCodexIdentityEnforcement。
 	// 保留以兼容既有配置文件；加载时会折叠进新键，不要在新代码里直接读取。
 	DisableCodexOriginatorNormalization bool `mapstructure:"disable_codex_originator_normalization"`
+	// CodexOutboundProfileDefault: OAuth Codex 出站应用层形态。默认对齐 CodexCLI 0.149.0；
+	// legacy 仅用于紧急回滚。账号可在 extra 中做单账号故障隔离覆写。
+	CodexOutboundProfileDefault string `mapstructure:"codex_outbound_profile_default"`
+	// CodexOutboundForceLegacy: 最高优先级的全局回滚开关，不清理任何指纹或调度状态。
+	CodexOutboundForceLegacy bool `mapstructure:"codex_outbound_force_legacy"`
 	// CodexImageGenerationBridgeEnabled: 是否为 Codex `/v1/responses` 自动注入 image_generation 工具和桥接指令。
 	// 默认关闭，避免纯文本 Codex 请求被意外改写；显式携带 image_generation 工具的请求仍按分组能力转发。
 	CodexImageGenerationBridgeEnabled bool `mapstructure:"codex_image_generation_bridge_enabled"`
@@ -2375,6 +2380,8 @@ func setDefaults() {
 	viper.SetDefault("gateway.force_codex_cli", false)
 	viper.SetDefault("gateway.disable_codex_identity_enforcement", false)
 	viper.SetDefault("gateway.disable_codex_originator_normalization", false)
+	viper.SetDefault("gateway.codex_outbound_profile_default", "codex_cli_0_149_0")
+	viper.SetDefault("gateway.codex_outbound_force_legacy", false)
 	viper.SetDefault("gateway.codex_image_generation_bridge_enabled", false)
 	viper.SetDefault("gateway.codex_fingerprint_secret", "")
 	viper.SetDefault("gateway.codex_fingerprint_min_session_age_hours", 72)
@@ -3302,6 +3309,11 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("gateway.connection_pool_isolation must be one of: %s/%s/%s",
 				ConnectionPoolIsolationProxy, ConnectionPoolIsolationAccount, ConnectionPoolIsolationAccountProxy)
 		}
+	}
+	switch strings.ToLower(strings.TrimSpace(c.Gateway.CodexOutboundProfileDefault)) {
+	case "", "legacy", "codex_cli_0_149_0":
+	default:
+		return fmt.Errorf("gateway.codex_outbound_profile_default must be one of: legacy/codex_cli_0_149_0")
 	}
 	if c.Gateway.ImageConcurrency.MaxConcurrentRequests < 0 {
 		return fmt.Errorf("gateway.image_concurrency.max_concurrent_requests must be non-negative")

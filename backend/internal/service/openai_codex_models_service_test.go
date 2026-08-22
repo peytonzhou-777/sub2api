@@ -202,6 +202,35 @@ func TestFetchCodexModelsManifestPassthrough(t *testing.T) {
 	}
 }
 
+func TestFetchCodexModelsManifestStrictProfileUsesCLI0149Shape(t *testing.T) {
+	manifestBody := `{"models":[]}`
+	var gotClientVersion, gotUserAgent, gotOriginator, gotVersion string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotClientVersion = r.URL.Query().Get("client_version")
+		gotUserAgent = r.Header.Get("User-Agent")
+		gotOriginator = r.Header.Get("Originator")
+		gotVersion = r.Header.Get("Version")
+		_, _ = w.Write([]byte(manifestBody))
+	}))
+	defer server.Close()
+
+	original := chatgptCodexModelsURL
+	chatgptCodexModelsURL = server.URL
+	t.Cleanup(func() { chatgptCodexModelsURL = original })
+
+	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{
+		CodexOutboundProfileDefault: CodexOutboundProfileCLI0149,
+	}}}
+	manifest, err := svc.FetchCodexModelsManifest(context.Background(), newCodexModelsTestAccount(), "9.9.9-untrusted", "")
+
+	require.NoError(t, err)
+	require.Equal(t, manifestBody, string(manifest.Body))
+	require.Equal(t, codexCLI0149Version, gotClientVersion)
+	require.Equal(t, codexCLI0149WindowsUserAgent, gotUserAgent)
+	require.Equal(t, "codex_cli_rs", gotOriginator)
+	require.Empty(t, gotVersion)
+}
+
 func TestFetchCodexModelsManifestUsesAuthoritativeOAuthTokenWhenSchedulerSnapshotHasNoToken(t *testing.T) {
 	manifestBody := `{"models":[{"slug":"gpt-5.5"}]}`
 	var gotAuthorization, gotAccountID string

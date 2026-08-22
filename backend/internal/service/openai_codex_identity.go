@@ -80,6 +80,9 @@ func SetCodexCanonicalUserAgentResolver(resolver func() string) {
 // 取值走与推理相同的解析链：面板 UA 指纹 + 面板/自动同步版本号 + 编译期兜底。
 // 供无账号句柄的出站路径（OAuth 换 Token / 刷新）使用。
 func CodexCanonicalUserAgent() string {
+	if isCodexOutboundGlobalStrict() {
+		return codexCLI0149WindowsUserAgent
+	}
 	return resolveCodexOutboundIdentity("").userAgent
 }
 
@@ -89,6 +92,9 @@ func CodexCanonicalUserAgent() string {
 // （codex-rs login/default_client.rs 的 default_headers()），version 门槛
 // （issue #3901）只存在于 /backend-api/codex 推理面。
 func CodexCanonicalAuthIdentity() (userAgent, originator string) {
+	if isCodexOutboundGlobalStrict() {
+		return codexCLI0149WindowsUserAgent, openai.CodexDefaultOriginator
+	}
 	identity := resolveCodexOutboundIdentity("")
 	return identity.userAgent, identity.originator
 }
@@ -105,6 +111,9 @@ func ApplyCodexCanonicalAuthIdentity(h http.Header) {
 
 // CodexCanonicalClientVersion 返回当前生效的 Codex 客户端版本号。
 func CodexCanonicalClientVersion() string {
+	if isCodexOutboundGlobalStrict() {
+		return codexCLI0149Version
+	}
 	return resolveCodexOutboundIdentity("").version
 }
 

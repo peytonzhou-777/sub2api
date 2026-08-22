@@ -3079,7 +3079,7 @@
       </div>
 
       <div
-        v-if="form.platform === 'openai' && accountCategory === 'oauth-based'"
+        v-if="form.platform === 'openai' && form.type === 'oauth'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <div class="flex items-center justify-between">
@@ -3130,6 +3130,24 @@
               ]"
             />
           </button>
+        </div>
+      </div>
+
+      <!-- Codex 出站 profile（仅 OpenAI OAuth） -->
+      <div
+        v-if="form.platform === 'openai' && accountCategory === 'oauth-based'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <div class="flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexOutboundProfile') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexOutboundProfileDesc') }}
+            </p>
+          </div>
+          <div class="w-52 flex-shrink-0">
+            <Select v-model="codexOutboundProfileOverride" data-testid="create-codex-outbound-profile-select" :options="codexOutboundProfileOptions" />
+          </div>
         </div>
       </div>
 
@@ -4125,6 +4143,8 @@ const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OF
 const codexCLIOnlyEnabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
+type CodexOutboundProfileOverride = '' | 'legacy' | 'codex_cli_0_149_0'
+const codexOutboundProfileOverride = ref<CodexOutboundProfileOverride>('')
 const codexFingerprintMode = ref<CodexFingerprintMode>('off')
 const codexSubagentMaxInflight = ref(0)
 const codexFingerprintModeOptions = computed(() => [
@@ -4132,6 +4152,11 @@ const codexFingerprintModeOptions = computed(() => [
   { value: 'device' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintDevice') },
   { value: 'session' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintSession') },
   { value: 'full' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintFull') },
+])
+const codexOutboundProfileOptions = computed(() => [
+  { value: '' as CodexOutboundProfileOverride, label: t('admin.accounts.openai.codexOutboundProfileInherit') },
+  { value: 'codex_cli_0_149_0' as CodexOutboundProfileOverride, label: t('admin.accounts.openai.codexOutboundProfileStrict') },
+  { value: 'legacy' as CodexOutboundProfileOverride, label: t('admin.accounts.openai.codexOutboundProfileLegacy') },
 ])
 type AnthropicAPIKeyAuthScheme = 'x_api_key' | 'authorization_bearer'
 const anthropicPassthroughEnabled = ref(false)
@@ -5018,6 +5043,7 @@ const resetForm = () => {
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   codexCLIOnlyEnabled.value = false
   codexCLIOnlyAppServerEnabled.value = false
+  codexOutboundProfileOverride.value = ''
   codexFingerprintMode.value = 'off'
   codexSubagentMaxInflight.value = 0
   anthropicPassthroughEnabled.value = false
@@ -5124,6 +5150,11 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
     extra.codex_fingerprint_mode = codexFingerprintMode.value
   } else {
     delete extra.codex_fingerprint_mode
+  }
+  if (form.type === 'oauth' && codexOutboundProfileOverride.value) {
+    extra.codex_outbound_profile = codexOutboundProfileOverride.value
+  } else {
+    delete extra.codex_outbound_profile
   }
   if (
     (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') &&

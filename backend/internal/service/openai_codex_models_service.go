@@ -240,7 +240,15 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", "resolve credential account: %v", err)
 	}
 
+	strictProfile := s.resolveCodexOutboundProfile(credAccount) == CodexOutboundProfileCLI0149
+	if strictProfile {
+		defaultCodexOutboundMetrics.modelsRequests.Add(1)
+	}
 	clientVersion = strings.TrimSpace(clientVersion)
+	if strictProfile {
+		// 严格 profile 的查询参数与固定 0.149.0 UA 原子一致，不继承下游版本噪声。
+		clientVersion = codexCLI0149Version
+	}
 	if clientVersion == "" {
 		clientVersion = CodexCanonicalClientVersion()
 	}
@@ -313,10 +321,17 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	}
 	headers.Set("Accept", "application/json")
 	overrideUA := ""
-	if !useAPIKeyUpstream {
+	if !useAPIKeyUpstream && !strictProfile {
 		overrideUA = credAccount.GetOpenAIUserAgent()
 	}
 	identity := resolveCodexOutboundIdentity(overrideUA)
+	if strictProfile {
+		identity = codexOutboundIdentity{
+			userAgent:  codexCLI0149WindowsUserAgent,
+			originator: "codex_cli_rs",
+			version:    codexCLI0149Version,
+		}
+	}
 	headers.Set("Originator", identity.originator)
 	headers.Set("User-Agent", identity.userAgent)
 	// Version 头优先与 client_version 查询参数同源：客户端自报版本合法且不低于上游
@@ -327,7 +342,9 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	if headerVersion == "" || CompareVersions(headerVersion, codexUpstreamMinVersion) < 0 {
 		headerVersion = identity.version
 	}
-	headers.Set("Version", headerVersion)
+	if !strictProfile {
+		headers.Set("Version", headerVersion)
+	}
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

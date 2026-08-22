@@ -1248,6 +1248,13 @@ export interface Account {
   active_sessions?: number | null // 当前活跃会话数
   current_rpm?: number | null // 当前分钟 RPM 计数
 
+  // OAuth Codex 实际解析后的出站 profile（不包含任何指纹 seed）。
+  codex_outbound_profile?: {
+    profile: 'legacy' | 'codex_cli_0_149_0'
+    user_agent: string
+    zstd: boolean
+  } | null
+
   // 影子账号关系（spark 维度影子）
   parent_account_id?: number | null
   quota_dimension?: string

@@ -2052,6 +2052,30 @@
         </div>
       </div>
 
+      <!-- Codex 出站 profile（仅 OpenAI OAuth） -->
+      <div
+        v-if="account?.platform === 'openai' && account?.type === 'oauth'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <div class="flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexOutboundProfile') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexOutboundProfileDesc') }}
+            </p>
+            <p v-if="account.codex_outbound_profile" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexOutboundProfileEffective', {
+                profile: account.codex_outbound_profile.profile,
+                zstd: account.codex_outbound_profile.zstd ? 'on' : 'off'
+              }) }}
+            </p>
+          </div>
+          <div class="w-52 flex-shrink-0">
+            <Select v-model="codexOutboundProfileOverride" data-testid="edit-codex-outbound-profile-select" :options="codexOutboundProfileOptions" />
+          </div>
+        </div>
+      </div>
+
       <!-- Codex 指纹收敛模式（仅 OpenAI OAuth） -->
       <div
         v-if="account?.platform === 'openai' && account?.type === 'oauth'"
@@ -3127,6 +3151,8 @@ const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OF
 const codexCLIOnlyEnabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
+type CodexOutboundProfileOverride = '' | 'legacy' | 'codex_cli_0_149_0'
+const codexOutboundProfileOverride = ref<CodexOutboundProfileOverride>('')
 const codexFingerprintMode = ref<CodexFingerprintMode>('off')
 const codexSubagentMaxInflight = ref(0)
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
@@ -3165,6 +3191,11 @@ const codexFingerprintModeOptions = computed(() => [
   { value: 'device' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintDevice') },
   { value: 'session' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintSession') },
   { value: 'full' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintFull') },
+])
+const codexOutboundProfileOptions = computed(() => [
+  { value: '' as CodexOutboundProfileOverride, label: t('admin.accounts.openai.codexOutboundProfileInherit') },
+  { value: 'codex_cli_0_149_0' as CodexOutboundProfileOverride, label: t('admin.accounts.openai.codexOutboundProfileStrict') },
+  { value: 'legacy' as CodexOutboundProfileOverride, label: t('admin.accounts.openai.codexOutboundProfileLegacy') },
 ])
 
 const openAIWSModeOptions = computed(() => [
@@ -3602,6 +3633,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   codexCLIOnlyEnabled.value = false
   codexCLIOnlyAppServerEnabled.value = false
+  codexOutboundProfileOverride.value = ''
   codexFingerprintMode.value = 'off'
   codexSubagentMaxInflight.value = 0
   codexImageToolMode.value = 'inherit'
@@ -3656,6 +3688,12 @@ const syncFormFromAccount = (newAccount: Account | null) => {
         extra?.codex_cli_only_allow_app_server === true
     }
     if (newAccount.type === 'oauth') {
+      const outboundProfile = extra?.codex_outbound_profile as string | undefined
+      codexOutboundProfileOverride.value = (
+        ['legacy', 'codex_cli_0_149_0'].includes(outboundProfile || '')
+          ? (outboundProfile as CodexOutboundProfileOverride)
+          : ''
+      )
       const fpMode = extra?.codex_fingerprint_mode as string | undefined
       // 缺省/非法值按 off 呈现，与后端 GetCodexFingerprintMode 的 opt-in 语义一致（#5610）
       codexFingerprintMode.value = (['off', 'device', 'session', 'full'].includes(fpMode || '')
@@ -5035,6 +5073,11 @@ const handleSubmit = async () => {
       // 指纹收敛模式：默认 off（不写入）；device/session/full 是显式 opt-in，
       // 必须落键，否则管理员的选择会被后端当作"未设置"而回落到 off（#5610）。
       if (props.account.type === 'oauth') {
+        if (codexOutboundProfileOverride.value) {
+          newExtra.codex_outbound_profile = codexOutboundProfileOverride.value
+        } else {
+          delete newExtra.codex_outbound_profile
+        }
         if (codexFingerprintMode.value !== 'off') {
           newExtra.codex_fingerprint_mode = codexFingerprintMode.value
         } else {

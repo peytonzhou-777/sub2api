@@ -314,6 +314,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 
 	if err := s.performOpenAIWSGeneratePrewarm(
 		ctx,
+		c,
 		lease,
 		decision,
 		payload,
@@ -327,7 +328,13 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		return nil, err
 	}
 
-	if err := lease.WriteJSONWithContextTimeout(ctx, payload, s.openAIWSWriteTimeout()); err != nil {
+	wirePayload, marshalErr := s.marshalCodexOutboundWSPayload(c, account, payload, string(decision.Transport), "turn")
+	if marshalErr != nil {
+		lease.MarkBroken()
+		return nil, wrapOpenAIWSFallback("marshal_request", marshalErr)
+	}
+	payloadBytes = len(wirePayload)
+	if err := lease.WriteJSONWithContextTimeout(ctx, json.RawMessage(wirePayload), s.openAIWSWriteTimeout()); err != nil {
 		lease.MarkBroken()
 		logOpenAIWSModeInfo(
 			"write_request_fail account_id=%d conn_id=%s cause=%s payload_bytes=%d",

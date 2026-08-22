@@ -771,6 +771,11 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 
 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
 	credentialAccount.ApplyHeaderOverrides(req.Header)
+	if isOAuth {
+		if profileErr := s.applyCodexOutboundProbeProfile(ctx, account, req, payloadBytes); profileErr != nil {
+			return s.sendErrorAndEnd(c, "Failed to prepare Codex outbound profile: "+profileErr.Error())
+		}
+	}
 
 	// Get proxy URL
 	proxyURL := ""
@@ -2099,24 +2104,15 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	if isOAuth {
 		req.Host = "chatgpt.com"
 		setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
-		// 指纹收敛：探测与真实转发走同一个 /responses 端点，身份也必须同构，
-		// 否则探测流量会以「缺 x-codex-installation-id + 非收敛 session」的
-		// 形态暴露在上游眼里。账号关闭收敛（off）时返回 nil，探测保持原样。
-		fingerprintService := &OpenAIGatewayService{accountRepo: s.accountRepo, cfg: s.cfg}
-		fingerprintContext, _ := gin.CreateTestContext(nil)
-		fingerprintContext.Request = req
-		SetOpenAIClientTransport(fingerprintContext, OpenAIClientTransportHTTP)
-		fpIDs, fpErr := fingerprintService.prepareCodexFingerprintForAttempt(ctx, fingerprintContext, account, payloadBytes, true)
-		if fpErr != nil {
-			return s.sendErrorAndEnd(c, "Failed to prepare Codex fingerprint: "+fpErr.Error())
-		}
-		if fpIDs != nil {
-			applyCodexFingerprintHeaders(req.Header, fpIDs)
-		}
 	}
 
 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
 	account.ApplyHeaderOverrides(req.Header)
+	if isOAuth {
+		if profileErr := s.applyCodexOutboundProbeProfile(ctx, account, req, payloadBytes); profileErr != nil {
+			return s.sendErrorAndEnd(c, "Failed to prepare Codex outbound profile: "+profileErr.Error())
+		}
+	}
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -3016,6 +3012,9 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	// 与真实转发一致：账号级自定义 UA 同样作为管理员显式配置传入，否则测试用的身份
 	// 与该账号真实出站的身份不是同一个（issue #3901 的配对不变式由收口保证）。
 	enforceCodexIdentityHeadersWithUA(req.Header, credentialAccount.GetOpenAIUserAgent())
+	if profileErr := s.applyCodexOutboundProbeProfile(ctx, account, req, responsesBody); profileErr != nil {
+		return s.sendErrorAndEnd(c, "Failed to prepare Codex outbound profile: "+profileErr.Error())
+	}
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -3067,6 +3066,40 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	}
 
 	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+	return nil
+}
+
+// applyCodexOutboundProbeProfile 让账号测试请求复用真实业务线的指纹、快照、头和压缩语义。
+func (s *AccountTestService) applyCodexOutboundProbeProfile(ctx context.Context, account *Account, req *http.Request, body []byte) error {
+	if s == nil || account == nil || req == nil || !account.IsOpenAIOAuth() {
+		return nil
+	}
+	gateway := &OpenAIGatewayService{accountRepo: s.accountRepo, cfg: s.cfg}
+	probeContext, _ := gin.CreateTestContext(nil)
+	probeContext.Request = req
+	SetOpenAIClientTransport(probeContext, OpenAIClientTransportHTTP)
+	if gateway.resolveCodexOutboundProfile(account) == CodexOutboundProfileCLI0149 && strings.TrimSpace(req.Header.Get("session-id")) == "" {
+		// 探针没有下游会话；严格 profile 使用账号稳定的探针会话作为缺省缓存谱系。
+		req.Header.Set("session-id", compactProbeSessionID(account.ID))
+	}
+	ids, err := gateway.prepareCodexFingerprintForAttempt(ctx, probeContext, account, body, true)
+	if err != nil {
+		return fmt.Errorf("prepare Codex fingerprint: %w", err)
+	}
+	if ids != nil {
+		applyCodexFingerprintHeaders(req.Header, ids)
+	}
+	projected, _, err := gateway.prepareCodexOutboundBody(probeContext, account, body, "http", false)
+	if err != nil {
+		return fmt.Errorf("prepare Codex outbound body: %w", err)
+	}
+	req.Body = io.NopCloser(bytes.NewReader(projected))
+	req.ContentLength = int64(len(projected))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(projected)), nil
+	}
+	gateway.compressCodexOutboundHTTPRequest(ctx, probeContext, account, req, projected, false)
+	gateway.finalizeCodexOutboundHeaders(probeContext, account, req.Header, false, "http", "", "")
 	return nil
 }
 

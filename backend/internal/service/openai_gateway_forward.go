@@ -1077,6 +1077,13 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// DeepSeek 原生 Responses 端点为无状态实现：强制 store=false、清除
 	// previous_response_id，避免携带状态字段被上游拒绝。
 	body = normalizeDeepSeekResponsesRequestBody(account, body)
+	if account.Type == AccountTypeOAuth {
+		var outboundErr error
+		body, _, outboundErr = s.prepareCodexOutboundBody(c, account, body, "http", isOpenAIResponsesCompactPath(c))
+		if outboundErr != nil {
+			return nil, fmt.Errorf("prepare Codex outbound request: %w", outboundErr)
+		}
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -1183,7 +1190,14 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// 保证不被覆盖丢失）。
 	applyOpenAICodexBetaFeatures(c, account, req.Header)
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
-	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
+	s.compressCodexOutboundHTTPRequest(ctx, c, account, req, body, isOpenAIResponsesCompactPath(c))
+	s.finalizeCodexOutboundHeaders(c, account, req.Header, isOpenAIResponsesCompactPath(c), "http", "", "")
+	if snapshot := stagedCodexOutboundSnapshot(c, account); snapshot != nil {
+		logOpenAIRoutingDiagnostics(ctx, account, "http", snapshot.model, snapshot.serviceTier,
+			strings.TrimSpace(req.Header.Get(openAICodexRoutingHintHeader)) != "", "not_applicable")
+	} else {
+		logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
+	}
 
 	return req, nil
 }

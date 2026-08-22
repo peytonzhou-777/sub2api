@@ -96,6 +96,36 @@ func TestLoadCodexFingerprintSessionAgeCompatibility(t *testing.T) {
 	})
 }
 
+func TestLoadCodexOutboundProfileDefaultsAndValidation(t *testing.T) {
+	t.Run("默认全量使用 0.149.0 严格 profile", func(t *testing.T) {
+		resetViperWithJWTSecret(t)
+		cfg, err := Load()
+		require.NoError(t, err)
+		require.Equal(t, "codex_cli_0_149_0", cfg.Gateway.CodexOutboundProfileDefault)
+		require.False(t, cfg.Gateway.CodexOutboundForceLegacy)
+	})
+
+	t.Run("允许全局 legacy 回滚", func(t *testing.T) {
+		resetViperWithJWTSecret(t)
+		configFile := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(configFile, []byte("gateway:\n  codex_outbound_profile_default: legacy\n  codex_outbound_force_legacy: true\n"), 0o600))
+		t.Setenv("CONFIG_FILE", configFile)
+		cfg, err := Load()
+		require.NoError(t, err)
+		require.Equal(t, "legacy", cfg.Gateway.CodexOutboundProfileDefault)
+		require.True(t, cfg.Gateway.CodexOutboundForceLegacy)
+	})
+
+	t.Run("拒绝未知 profile", func(t *testing.T) {
+		resetViperWithJWTSecret(t)
+		configFile := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(configFile, []byte("gateway:\n  codex_outbound_profile_default: random\n"), 0o600))
+		t.Setenv("CONFIG_FILE", configFile)
+		_, err := Load()
+		require.ErrorContains(t, err, "codex_outbound_profile_default")
+	})
+}
+
 func TestLoadRedisUsernameFromEnvironment(t *testing.T) {
 	resetViperWithJWTSecret(t)
 	t.Setenv("REDIS_USERNAME", "app-user")

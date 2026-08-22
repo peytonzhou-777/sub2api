@@ -190,9 +190,10 @@ type CheckMixedChannelRequest struct {
 // AccountWithConcurrency extends Account with real-time concurrency info
 type AccountWithConcurrency struct {
 	*dto.Account
-	CurrentConcurrency int                          `json:"current_concurrency"`
-	SchedulerScore     *AccountSchedulerScore       `json:"scheduler_score,omitempty"`
-	SchedulerScores    []AccountSchedulerGroupScore `json:"scheduler_scores,omitempty"`
+	CurrentConcurrency   int                                 `json:"current_concurrency"`
+	SchedulerScore       *AccountSchedulerScore              `json:"scheduler_score,omitempty"`
+	SchedulerScores      []AccountSchedulerGroupScore        `json:"scheduler_scores,omitempty"`
+	CodexOutboundProfile *service.CodexOutboundProfileStatus `json:"codex_outbound_profile,omitempty"`
 	// 以下字段仅对 Anthropic OAuth/SetupToken 账号有效，且仅在启用相应功能时返回
 	CurrentWindowCost *float64 `json:"current_window_cost,omitempty"` // 当前窗口费用
 	ActiveSessions    *int     `json:"active_sessions,omitempty"`     // 当前活跃会话数
@@ -225,8 +226,9 @@ func (h *AccountHandler) accountResponseFromService(account *service.Account) *d
 
 func (h *AccountHandler) buildAccountResponseWithRuntime(ctx context.Context, account *service.Account) AccountWithConcurrency {
 	item := AccountWithConcurrency{
-		Account:            h.accountResponseFromService(account),
-		CurrentConcurrency: 0,
+		Account:              h.accountResponseFromService(account),
+		CurrentConcurrency:   0,
+		CodexOutboundProfile: service.CodexOutboundProfileStatusForAccount(account),
 	}
 	if account == nil {
 		return item
@@ -675,10 +677,11 @@ func (h *AccountHandler) List(c *gin.Context) {
 	for i := range accounts {
 		acc := &accounts[i]
 		item := AccountWithConcurrency{
-			Account:            h.accountResponseFromService(acc),
-			CurrentConcurrency: concurrencyCounts[acc.ID],
-			SchedulerScore:     schedulerScores[acc.ID],
-			SchedulerScores:    schedulerGroupScores[acc.ID],
+			Account:              h.accountResponseFromService(acc),
+			CurrentConcurrency:   concurrencyCounts[acc.ID],
+			SchedulerScore:       schedulerScores[acc.ID],
+			SchedulerScores:      schedulerGroupScores[acc.ID],
+			CodexOutboundProfile: service.CodexOutboundProfileStatusForAccount(acc),
 		}
 
 		// 添加窗口费用（仅当启用时）
@@ -2205,6 +2208,9 @@ func toServiceBulkUpdateAccountFilters(filters *BulkUpdateAccountFilters) *servi
 // sanitizeCodexSubagentConcurrencyExtra 将管理员输入规范为 0..64 的整数；保留 0 以支持 JSONB 批量覆盖关闭。
 func sanitizeCodexSubagentConcurrencyExtra(extra map[string]any) error {
 	const key = "codex_subagent_max_inflight_per_session"
+	if err := sanitizeCodexOutboundProfileExtra(extra); err != nil {
+		return err
+	}
 	if extra == nil {
 		return nil
 	}
@@ -2237,6 +2243,30 @@ func sanitizeCodexSubagentConcurrencyExtra(extra map[string]any) error {
 	}
 	extra[key] = value
 	return nil
+}
+
+// sanitizeCodexOutboundProfileExtra 只允许账号做 legacy/0.149.0 故障隔离覆写。
+func sanitizeCodexOutboundProfileExtra(extra map[string]any) error {
+	const key = "codex_outbound_profile"
+	if extra == nil {
+		return nil
+	}
+	raw, exists := extra[key]
+	if !exists || raw == nil {
+		return nil
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return fmt.Errorf("%s must be one of: legacy/codex_cli_0_149_0", key)
+	}
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "", service.CodexOutboundProfileLegacy, service.CodexOutboundProfileCLI0149:
+		extra[key] = value
+		return nil
+	default:
+		return fmt.Errorf("%s must be one of: legacy/codex_cli_0_149_0", key)
+	}
 }
 
 // ========== OAuth Handlers ==========

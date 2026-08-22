@@ -304,15 +304,17 @@ func (s *OpenAIGatewayService) SnapshotOpenAIWSPoolMetrics() OpenAIWSPoolMetrics
 }
 
 type OpenAIWSPerformanceMetricsSnapshot struct {
-	Pool      OpenAIWSPoolMetricsSnapshot      `json:"pool"`
-	Retry     OpenAIWSRetryMetricsSnapshot     `json:"retry"`
-	Transport OpenAIWSTransportMetricsSnapshot `json:"transport"`
+	Pool          OpenAIWSPoolMetricsSnapshot      `json:"pool"`
+	Retry         OpenAIWSRetryMetricsSnapshot     `json:"retry"`
+	Transport     OpenAIWSTransportMetricsSnapshot `json:"transport"`
+	CodexOutbound CodexOutboundMetricsSnapshot     `json:"codex_outbound"`
 }
 
 func (s *OpenAIGatewayService) SnapshotOpenAIWSPerformanceMetrics() OpenAIWSPerformanceMetricsSnapshot {
 	pool := s.getOpenAIWSConnPool()
 	snapshot := OpenAIWSPerformanceMetricsSnapshot{
-		Retry: s.SnapshotOpenAIWSRetryMetrics(),
+		Retry:         s.SnapshotOpenAIWSRetryMetrics(),
+		CodexOutbound: SnapshotCodexOutboundMetrics(),
 	}
 	if pool == nil {
 		return snapshot

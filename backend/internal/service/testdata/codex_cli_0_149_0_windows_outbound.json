@@ -1,0 +1,34 @@
+{
+  "source": {
+    "codex_tag": "rust-v0.149.0",
+    "capture_platform": "Windows 10.0.26100 x86_64",
+    "terminal": "WindowsTerminal",
+    "sanitized": true
+  },
+  "identity": {
+    "originator": "codex_cli_rs",
+    "user_agent": "codex_cli_rs/0.149.0 (Windows 10.0.26100; x86_64) WindowsTerminal"
+  },
+  "models": {
+    "path": "/v1/models?client_version=0.149.0",
+    "accept": "*/*",
+    "forbidden_headers": ["version"]
+  },
+  "responses": {
+    "accept": "text/event-stream",
+    "content_encoding": "zstd",
+    "required_headers": ["session-id", "thread-id", "x-client-request-id", "x-codex-window-id", "x-codex-turn-metadata"],
+    "forbidden_headers": ["version", "session_id", "conversation_id", "accept-language", "x-codex-installation-id"],
+    "top_level_order": ["model", "instructions", "input", "tools", "tool_choice", "parallel_tool_calls", "reasoning", "store", "stream", "stream_options", "include", "service_tier", "prompt_cache_key", "text", "client_metadata"]
+  },
+  "websocket": {
+    "openai_beta": "responses_websockets=2026-02-06",
+    "request_id_equals_thread_id": true,
+    "http_body_content_encoding": null
+  },
+  "compact": {
+    "required_headers": ["x-codex-installation-id", "session-id", "thread-id", "x-codex-turn-metadata"],
+    "forbidden_headers": ["accept", "version", "session_id", "conversation_id", "accept-language", "x-client-request-id"],
+    "body_client_metadata": false
+  }
+}

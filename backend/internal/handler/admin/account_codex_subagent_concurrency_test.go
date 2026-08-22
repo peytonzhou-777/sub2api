@@ -25,3 +25,15 @@ func TestSanitizeCodexSubagentConcurrencyExtra(t *testing.T) {
 		require.Error(t, sanitizeCodexSubagentConcurrencyExtra(extra))
 	}
 }
+
+func TestSanitizeCodexOutboundProfileExtra(t *testing.T) {
+	for _, profile := range []string{"", "legacy", "codex_cli_0_149_0", " CODEX_CLI_0_149_0 "} {
+		extra := map[string]any{"codex_outbound_profile": profile}
+		require.NoError(t, sanitizeCodexSubagentConcurrencyExtra(extra))
+	}
+
+	for _, invalid := range []any{"random", 149, true} {
+		extra := map[string]any{"codex_outbound_profile": invalid}
+		require.Error(t, sanitizeCodexSubagentConcurrencyExtra(extra))
+	}
+}

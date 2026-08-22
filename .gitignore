@@ -136,6 +136,9 @@ docs/*
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
 !docs/ASYNC_IMAGE_TASKS.md
+!docs/CodexCLI出站请求拟真改造计划.md
+!docs/ADR/
+!docs/ADR/*.md
 !docs/legal/
 !docs/legal/*.md
 .serena/
