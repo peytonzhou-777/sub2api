@@ -127,10 +127,69 @@ func TestOpenAIAccountAdmissionDoesNotShortenFinalJitter(t *testing.T) {
 }
 
 func TestEstimateOpenAIAdmissionTokensSupportsMessages(t *testing.T) {
-	short := EstimateOpenAIAdmissionTokens([]byte(`{"model":"gpt-5","max_tokens":10,"messages":[{"role":"user","content":"hi"}]}`), 4096)
-	long := EstimateOpenAIAdmissionTokens([]byte(`{"model":"gpt-5","max_tokens":10,"messages":[{"role":"user","content":"please summarize this long message with several distinct words and details"}]}`), 4096)
+	short := EstimateOpenAIAdmissionTokens([]byte(`{"model":"gpt-5","max_tokens":10,"messages":[{"role":"user","content":"hi"}]}`), 4096, 128000)
+	long := EstimateOpenAIAdmissionTokens([]byte(`{"model":"gpt-5","max_tokens":10,"messages":[{"role":"user","content":"please summarize this long message with several distinct words and details"}]}`), 4096, 128000)
 	if long <= short {
 		t.Fatalf("messages token estimate did not grow: short=%d long=%d", short, long)
+	}
+}
+
+func TestEstimateOpenAIAdmissionTokensCapsUntrustedOutputBudget(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.6-sol","max_output_tokens":4194304,"input":"hello"}`)
+	var req openAIInputTokensCountRequest
+	if err := jsonUnmarshalOpenAIAdmission(body, &req); err != nil {
+		t.Fatal(err)
+	}
+	input, err := estimateOpenAIInputTokens(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := EstimateOpenAIAdmissionTokens(body, 4096, 128000), int64(input)+128000; got != want {
+		t.Fatalf("model-capped estimate = %d, want %d", got, want)
+	}
+	if got, want := EstimateOpenAIAdmissionTokens(body, 4096, 0), int64(input)+4096; got != want {
+		t.Fatalf("configured-capped estimate = %d, want %d", got, want)
+	}
+}
+
+func TestEstimateOpenAIAccountAdmissionTokensUsesMappedModelLimit(t *testing.T) {
+	pricing := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"gpt-5.6-sol": {MaxOutputTokens: 128000},
+	}}
+	gateway := &OpenAIGatewayService{billingService: NewBillingService(nil, pricing)}
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{"client-alias": "gpt-5.6-sol"},
+		},
+	}
+	body := []byte(`{"model":"client-alias","max_output_tokens":4194304,"input":"hello"}`)
+	var req openAIInputTokensCountRequest
+	if err := jsonUnmarshalOpenAIAdmission(body, &req); err != nil {
+		t.Fatal(err)
+	}
+	input, err := estimateOpenAIInputTokens(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := gateway.EstimateOpenAIAccountAdmissionTokens(account, body, "", 4096), int64(input)+128000; got != want {
+		t.Fatalf("mapped model estimate = %d, want %d", got, want)
+	}
+
+	hintBody := []byte(`{"max_output_tokens":4194304,"input":"hello"}`)
+	var hintReq openAIInputTokensCountRequest
+	if err := jsonUnmarshalOpenAIAdmission(hintBody, &hintReq); err != nil {
+		t.Fatal(err)
+	}
+	hintInput, err := estimateOpenAIInputTokens(hintReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := gateway.EstimateOpenAIAccountAdmissionTokens(account, hintBody, "gpt-5.6-sol", 4096), int64(hintInput)+128000; got != want {
+		t.Fatalf("model-hint estimate = %d, want %d", got, want)
 	}
 }
 func (s *openAIAdmissionQueueStub) Remove(context.Context, OpenAIAccountAdmissionTicket) error {

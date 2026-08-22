@@ -108,6 +108,9 @@ var (
 // LiteLLMModelPricing LiteLLM价格数据结构
 // 只保留我们需要的字段，使用指针来处理可能缺失的值
 type LiteLLMModelPricing struct {
+	MaxInputTokens                      int64   `json:"max_input_tokens,omitempty"`
+	MaxOutputTokens                     int64   `json:"max_output_tokens,omitempty"`
+	MaxTokens                           int64   `json:"max_tokens,omitempty"`
 	InputCostPerToken                   float64 `json:"input_cost_per_token"`
 	InputCostPerTokenPriority           float64 `json:"input_cost_per_token_priority"`
 	OutputCostPerToken                  float64 `json:"output_cost_per_token"`
@@ -142,6 +145,9 @@ type PricingRemoteClient interface {
 
 // LiteLLMRawEntry 用于解析原始JSON数据
 type LiteLLMRawEntry struct {
+	MaxInputTokens                      *int64   `json:"max_input_tokens"`
+	MaxOutputTokens                     *int64   `json:"max_output_tokens"`
+	MaxTokens                           *int64   `json:"max_tokens"`
 	InputCostPerToken                   *float64 `json:"input_cost_per_token"`
 	InputCostPerTokenPriority           *float64 `json:"input_cost_per_token_priority"`
 	OutputCostPerToken                  *float64 `json:"output_cost_per_token"`
@@ -454,6 +460,15 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 			SupportsServiceTier:   entry.SupportsServiceTier,
 			TokenPricingAbsent:    entry.InputCostPerToken == nil && entry.OutputCostPerToken == nil,
 		}
+		if entry.MaxInputTokens != nil {
+			pricing.MaxInputTokens = *entry.MaxInputTokens
+		}
+		if entry.MaxOutputTokens != nil {
+			pricing.MaxOutputTokens = *entry.MaxOutputTokens
+		}
+		if entry.MaxTokens != nil {
+			pricing.MaxTokens = *entry.MaxTokens
+		}
 
 		if entry.InputCostPerToken != nil {
 			pricing.InputCostPerToken = *entry.InputCostPerToken
@@ -568,7 +583,17 @@ func (s *PricingService) mergeFallbackPricingData(data map[string]*LiteLLMModelP
 	}
 	merged := 0
 	for modelName, pricing := range fallbackData {
-		if _, ok := data[modelName]; ok {
+		if current, ok := data[modelName]; ok {
+			// 远端价格源可能省略模型能力字段；用内置目录补齐，避免准入层重新信任客户端上限。
+			if current.MaxInputTokens <= 0 {
+				current.MaxInputTokens = pricing.MaxInputTokens
+			}
+			if current.MaxOutputTokens <= 0 {
+				current.MaxOutputTokens = pricing.MaxOutputTokens
+			}
+			if current.MaxTokens <= 0 {
+				current.MaxTokens = pricing.MaxTokens
+			}
 			continue
 		}
 		data[modelName] = pricing
@@ -749,6 +774,18 @@ func (s *PricingService) GetIdentifiedModelPricing(modelName string) *LiteLLMMod
 		return nil
 	}
 	return s.lookupIdentifiedModelPricingLocked(s.buildModelLookupCandidates(modelLower))
+}
+
+// GetIdentifiedModelMaxOutputTokens 返回确定识别模型的输出上限，未知模型不做系列猜测。
+func (s *PricingService) GetIdentifiedModelMaxOutputTokens(modelName string) int64 {
+	pricing := s.GetIdentifiedModelPricing(modelName)
+	if pricing == nil {
+		return 0
+	}
+	if pricing.MaxOutputTokens > 0 {
+		return pricing.MaxOutputTokens
+	}
+	return pricing.MaxTokens
 }
 
 func (s *PricingService) buildModelLookupCandidates(modelLower string) []string {

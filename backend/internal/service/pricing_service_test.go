@@ -45,6 +45,9 @@ func TestParsePricingData_ParsesPriorityAndServiceTierFields(t *testing.T) {
 	svc := &PricingService{}
 	body := []byte(`{
 		"gpt-5.4": {
+			"max_input_tokens": 1050000,
+			"max_output_tokens": 128000,
+			"max_tokens": 128000,
 			"input_cost_per_token": 0.0000025,
 			"input_cost_per_token_priority": 0.000005,
 			"output_cost_per_token": 0.000015,
@@ -67,6 +70,9 @@ func TestParsePricingData_ParsesPriorityAndServiceTierFields(t *testing.T) {
 	require.NoError(t, err)
 	pricing := data["gpt-5.4"]
 	require.NotNil(t, pricing)
+	require.Equal(t, int64(1050000), pricing.MaxInputTokens)
+	require.Equal(t, int64(128000), pricing.MaxOutputTokens)
+	require.Equal(t, int64(128000), pricing.MaxTokens)
 	require.InDelta(t, 5e-6, pricing.InputCostPerTokenPriority, 1e-12)
 	require.InDelta(t, 3e-5, pricing.OutputCostPerTokenPriority, 1e-12)
 	require.InDelta(t, 5e-6, pricing.CacheCreationInputTokenCostPriority, 1e-12)
@@ -75,6 +81,29 @@ func TestParsePricingData_ParsesPriorityAndServiceTierFields(t *testing.T) {
 	require.InDelta(t, 2.0, pricing.LongContextInputCostMultiplier, 1e-12)
 	require.InDelta(t, 1.5, pricing.LongContextOutputCostMultiplier, 1e-12)
 	require.True(t, pricing.SupportsServiceTier)
+}
+
+func TestMergeFallbackPricingDataFillsMissingModelLimits(t *testing.T) {
+	fallbackPath := filepath.Join(t.TempDir(), "fallback.json")
+	require.NoError(t, os.WriteFile(fallbackPath, []byte(`{
+		"gpt-5.6-sol": {
+			"input_cost_per_token": 0.000005,
+			"max_input_tokens": 1050000,
+			"max_output_tokens": 128000,
+			"max_tokens": 128000
+		}
+	}`), 0o600))
+	svc := &PricingService{cfg: &config.Config{Pricing: config.PricingConfig{FallbackFile: fallbackPath}}}
+	data := map[string]*LiteLLMModelPricing{
+		"gpt-5.6-sol": {InputCostPerToken: 0.000006},
+	}
+
+	merged := svc.mergeFallbackPricingData(data)
+	pricing := merged["gpt-5.6-sol"]
+	require.InDelta(t, 0.000006, pricing.InputCostPerToken, 1e-12)
+	require.Equal(t, int64(1050000), pricing.MaxInputTokens)
+	require.Equal(t, int64(128000), pricing.MaxOutputTokens)
+	require.Equal(t, int64(128000), pricing.MaxTokens)
 }
 
 func TestBillingService_GPT56CacheWritePricingUsesOfficialMultiplier(t *testing.T) {
@@ -231,6 +260,7 @@ func TestDefaultPricingIncludesOfficialGPT56Rates(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
+			require.Equal(t, int64(128000), pricingSvc.GetIdentifiedModelMaxOutputTokens(tt.model))
 			pricing, err := billingSvc.GetModelPricing(tt.model)
 			require.NoError(t, err)
 			require.InDelta(t, tt.input, pricing.InputPricePerToken, 1e-12)

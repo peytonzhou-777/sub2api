@@ -294,11 +294,11 @@ func ClassifyOpenAIAdmissionClass(headers http.Header, body []byte) OpenAIAdmiss
 	return OpenAIAdmissionInteractive
 }
 
-// EstimateOpenAIAdmissionTokens 估算输入并为尚未产生的输出预留 TPM。
-func EstimateOpenAIAdmissionTokens(body []byte, defaultOutput int64) int64 {
+// EstimateOpenAIAdmissionTokens 估算输入并按模型或配置上限为尚未产生的输出预留 TPM。
+func EstimateOpenAIAdmissionTokens(body []byte, defaultOutput, maxOutput int64) int64 {
 	var req openAIInputTokensCountRequest
 	if err := jsonUnmarshalOpenAIAdmission(body, &req); err != nil {
-		return openAIAdmissionMaxInt64(defaultOutput, 1)
+		return openAIAdmissionOutputReserve(defaultOutput, defaultOutput, maxOutput)
 	}
 	// Messages 兼容入口先走项目既有结构化转换，再复用 Responses tokenizer。
 	if gjson.GetBytes(body, "messages").Exists() {
@@ -322,7 +322,34 @@ func EstimateOpenAIAdmissionTokens(body []byte, defaultOutput int64) int64 {
 	} else if value := gjsonGetInt64(body, "max_tokens"); value > 0 {
 		output = value
 	}
-	return int64(input) + openAIAdmissionMaxInt64(output, 1)
+	return int64(input) + openAIAdmissionOutputReserve(output, defaultOutput, maxOutput)
+}
+
+// EstimateOpenAIAccountAdmissionTokens 在账号确定后按实际转发模型解析输出上限。
+func (s *OpenAIGatewayService) EstimateOpenAIAccountAdmissionTokens(account *Account, body []byte, modelHint string, defaultOutput int64) int64 {
+	requestedModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
+	if requestedModel == "" {
+		requestedModel = strings.TrimSpace(modelHint)
+	}
+	resolvedModel := normalizeOpenAIModelForUpstream(account, resolveOpenAIForwardModel(account, requestedModel, ""))
+	maxOutput := int64(0)
+	if s != nil && s.billingService != nil && s.billingService.pricingService != nil {
+		maxOutput = s.billingService.pricingService.GetIdentifiedModelMaxOutputTokens(resolvedModel)
+	}
+	return EstimateOpenAIAdmissionTokens(body, defaultOutput, maxOutput)
+}
+
+func openAIAdmissionOutputReserve(requested, configured, modelMax int64) int64 {
+	configured = openAIAdmissionMaxInt64(configured, 1)
+	limit := modelMax
+	if limit <= 0 {
+		limit = configured
+	}
+	requested = openAIAdmissionMaxInt64(requested, 1)
+	if requested > limit {
+		return limit
+	}
+	return requested
 }
 
 func openAIAdmissionMaxInt64(left, right int64) int64 {

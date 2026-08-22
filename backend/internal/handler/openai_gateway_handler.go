@@ -1795,7 +1795,7 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 	result, err := h.accountAdmission.Acquire(ctx, service.OpenAIAccountAdmissionRequest{
 		AccountID:       account.ID,
 		Class:           service.ClassifyOpenAIAdmissionClass(c.Request.Header, body),
-		EstimatedTokens: service.EstimateOpenAIAdmissionTokens(body, cfg.DefaultOutputTokens),
+		EstimatedTokens: h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, body, "", cfg.DefaultOutputTokens),
 		MaxConcurrency:  maxConcurrency,
 		TryAcquireSlot:  h.concurrencyHelper.TryAcquireAccountSlot,
 	}, cfg)
@@ -2427,7 +2427,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				admissionResult, admissionErr := h.accountAdmission.Acquire(admissionCtx, service.OpenAIAccountAdmissionRequest{
 					AccountID:       account.ID,
 					Class:           service.ClassifyOpenAIAdmissionClass(c.Request.Header, wsAttemptMessage),
-					EstimatedTokens: service.EstimateOpenAIAdmissionTokens(wsAttemptMessage, admissionCfg.DefaultOutputTokens),
+					EstimatedTokens: h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, wsAttemptMessage, reqModel, admissionCfg.DefaultOutputTokens),
 					MaxConcurrency:  accountMaxConcurrency,
 					TryAcquireSlot:  h.concurrencyHelper.TryAcquireAccountSlot,
 				}, admissionCfg)
@@ -2640,7 +2640,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			admissionResult, err := h.accountAdmission.Acquire(admissionCtx, service.OpenAIAccountAdmissionRequest{
 				AccountID:       account.ID,
 				Class:           service.ClassifyOpenAIAdmissionClass(c.Request.Header, payload),
-				EstimatedTokens: service.EstimateOpenAIAdmissionTokens(payload, admissionCfg.DefaultOutputTokens),
+				EstimatedTokens: h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, payload, model, admissionCfg.DefaultOutputTokens),
 				MaxConcurrency:  accountMaxConcurrency,
 				TryAcquireSlot:  h.concurrencyHelper.TryAcquireAccountSlot,
 			}, admissionCfg)
