@@ -754,6 +754,18 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/credits/recharge-activities'
   },
   {
+    path: '/admin/balance-refunds',
+    name: 'AdminBalanceRefunds',
+    component: () => import('@/views/admin/orders/AdminBalanceRefundsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Balance Refunds',
+      titleKey: 'nav.balanceRefunds',
+      requiresPayment: true
+    }
+  },
+  {
     path: '/admin/orders/plans',
     name: 'AdminPaymentPlans',
     component: () => import('@/views/admin/orders/AdminPaymentPlansView.vue'),

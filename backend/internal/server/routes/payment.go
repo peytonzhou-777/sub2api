@@ -115,12 +115,21 @@ func RegisterPaymentRoutes(
 			adminOrders.POST("/:id/refund/query", adminPaymentHandler.QueryAndFinalizeRefund)
 		}
 
-		// 余额清退人工核验
+		// 管理员余额清退工作台
 		accountRefunds := adminGroup.Group("/account-refunds")
 		{
+			accountRefunds.GET("/summary", adminPaymentHandler.GetAccountRefundSummary)
+			accountRefunds.GET("", adminPaymentHandler.ListAccountRefunds)
 			accountRefunds.GET("/:user_id", adminPaymentHandler.GetAccountRefund)
+			accountRefunds.POST("/:user_id/start", adminPaymentHandler.StartAccountRefund)
+			accountRefunds.POST("/:user_id/advance", adminPaymentHandler.AdvanceAccountRefund)
+			accountRefunds.POST("/:user_id/confirm", adminPaymentHandler.ConfirmAccountRefund)
+			accountRefunds.POST("/:user_id/continue", adminPaymentHandler.ContinueAccountRefund)
+			accountRefunds.POST("/:user_id/recalculate", adminPaymentHandler.RecalculateAccountRefund)
 			accountRefunds.POST("/:user_id/reconcile", adminPaymentHandler.ReconcileAccountRefund)
+			accountRefunds.POST("/:user_id/finalize", adminPaymentHandler.FinalizeAccountRefund)
 			accountRefunds.POST("/:user_id/cancel", adminPaymentHandler.CancelAccountRefund)
+			accountRefunds.POST("/:user_id/restore-access", adminPaymentHandler.RestoreAccountRefundAccess)
 		}
 
 		// Subscription Plans

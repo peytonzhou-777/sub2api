@@ -212,6 +212,7 @@ export default {
     workbenchOrders: '订单',
     orderManagement: '订单管理',
     paymentDashboard: '支付概览',
+    balanceRefunds: '余额清退',
     paymentConfig: '支付配置',
     paymentPlans: '订阅套餐',
     rechargeActivities: '充值活动',
@@ -224,6 +225,22 @@ export default {
     contentModeration: '内容审核',
     promptAudit: '提示词审计',
     auditLogs: '操作日志',
+  },
+
+  balanceRefunds: {
+    title: '余额清退', subtitle: '核对实时可退负债，并按用户安全推进原路退款或人工核验。', empty: '暂无符合条件的用户', search: '搜索用户名、邮箱或用户 ID', allCurrencies: '全部币种', allStatuses: '全部状态',
+    detailTitle: '清退详情', routes: '订单退款路由', timeline: '处理时间线', order: '订单', rate: '活动赠额比例', routeRefund: '原路退款额', gatewayStatus: '渠道状态', permanent: '永久余额', bonus: '有效充值赠额', clearAmount: '成功清退后还会清空 {amount} 非退款限时额度。',
+    reconcileTitle: '人工核验退款结果', reconcileSucceeded: '外部退款成功', reconcileFailed: '确认外部未退款', externalRefundId: '外部退款单号', evidence: '核验依据或凭证位置', note: '核验备注', reconcileConfirmation: '我已在原支付渠道核对该订单结果，并确认记录准确。',
+    reconcileOutcomes: { succeeded: '确认外部退款成功', failed: '确认外部未退款' },
+    stats: { refundable: '可退用户', automatic: '可快捷清退', processing: '处理中', review: '人工核验' },
+    sort: { updated: '按更新时间', email: '按邮箱', refund: '按可退额', asc: '升序', desc: '降序' },
+    tabs: { refundable: '可清退', processing: '处理中', manual_review: '人工核验', completed: '已完成', all: '全部' },
+    table: { user: '用户', balance: '余额构成', refund: '可退款额', status: '状态' },
+    actions: { start: '开始清退', advance: '检查进度', confirm: '确认退款', continue: '继续处理', recalculate: '重新核算', reconcile: '人工核验', finalize: '完成本地收尾', cancel: '取消清退', 'restore-access': '恢复访问' },
+    actionTitles: { start: '确认开始余额清退', advance: '确认检查清退进度', confirm: '确认提交原路退款', continue: '确认继续处理', recalculate: '确认重新核算', reconcile: '人工核验', finalize: '确认本地收尾', cancel: '确认取消清退', 'restore-access': '确认恢复账户访问' },
+    confirmations: { start: '确认建立计费栅栏并暂时锁定该账户；此步骤不会调用支付网关。', advance: '确认检查排空或已提交退款状态；未知结果不会自动重试。', confirm: '确认报价和订单路由无误，并立即向原支付渠道提交退款。', continue: '确认仅继续处理已明确失败的退款路由。', recalculate: '确认当前未发生外部退款，并使用最新余额重新核算。', reconcile: '确认人工核验。', finalize: '确认所有外部退款均已成功，只重试本地余额清空与状态恢复。', cancel: '确认尚无成功或结果未知的外部退款，并恢复该账户原状态。', 'restore-access': '确认退款事实已终结，仅恢复遗留的账户访问状态。' },
+    states: { estimate: '待开始', draining: '排空中', ready_to_confirm: '待确认', submitting: '提交中', pending: '渠道处理中', succeeded: '已完成', failed: '失败可继续', partial_external_success: '部分成功', canceled: '已取消', manual_review: '人工核验', donated: '已打赏' },
+    reasons: { quote_inconsistent: '金额无法闭合', gateway_unknown: '渠道结果未知', provider_unavailable: '支付渠道不可用', gateway_query_failed: '渠道查询失败', manual_external_required: '需线下原路处理', finalize_failed: '本地收尾失败', access_restore_failed: '账户恢复失败', legacy_unknown: '历史状态待核验' }
   },
 
   // Auth

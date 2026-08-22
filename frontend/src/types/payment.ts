@@ -179,6 +179,10 @@ export interface AccountRefundOrder {
 
 export interface AccountRefundQuote {
   eligible: boolean
+  calculation_status: 'verified' | 'manual_review' | 'none'
+  self_service_eligible: boolean
+  admin_execution_mode: 'automatic' | 'manual_external' | 'blocked'
+  review_reason_code?: string
   block_reason?: string
   donation_eligible: boolean
   donation_block_reason?: string
@@ -207,6 +211,29 @@ export interface AccountRefundRecord {
   session_token?: string
   donation_requested?: boolean
   donation?: AccountRefundDonation
+  state_revision: number
+  review_reason_code?: string
+  failure_stage?: 'pre_gateway' | 'gateway' | 'post_gateway'
+  admin_initiated?: boolean
+  actor?: AccountRefundActor
+  reconciliations?: AccountRefundReconciliation[]
+}
+
+export interface AccountRefundActor {
+  actor_type: 'user' | 'admin' | 'system'
+  actor_id?: number
+  actor_label?: string
+  request_id?: string
+}
+
+export interface AccountRefundReconciliation {
+  order_id: number
+  outcome: 'succeeded' | 'failed'
+  external_refund_id?: string
+  verified_at: string
+  evidence: string
+  note: string
+  actor?: AccountRefundActor
 }
 
 export interface AccountRefundDonation {

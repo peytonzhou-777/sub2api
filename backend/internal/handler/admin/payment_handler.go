@@ -1,11 +1,15 @@
 package admin
 
 import (
+	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -275,18 +279,86 @@ func (h *PaymentHandler) QueryAndFinalizeRefund(c *gin.Context) {
 	response.Success(c, result)
 }
 
-// GetAccountRefund 返回指定用户最近一笔余额清退状态。
+// GetAccountRefundSummary 返回管理员余额清退实时负债摘要。
+func (h *PaymentHandler) GetAccountRefundSummary(c *gin.Context) {
+	summary, err := h.paymentService.GetAdminAccountRefundSummary(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, summary)
+}
+
+// ListAccountRefunds 返回余额清退工作台分页列表。
+func (h *PaymentHandler) ListAccountRefunds(c *gin.Context) {
+	page, pageSize := response.ParsePagination(c)
+	items, total, err := h.paymentService.ListAdminAccountRefunds(c.Request.Context(), service.AdminAccountRefundListParams{
+		Page: page, PageSize: pageSize, Tab: c.Query("tab"), Status: c.Query("status"), Currency: c.Query("currency"), Keyword: c.Query("keyword"), SortBy: c.Query("sort_by"), SortOrder: c.Query("sort_order"),
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Paginated(c, items, total, page, pageSize)
+}
+
+// GetAccountRefund 返回指定用户当前报价和最近清退状态，不推进流程。
 func (h *PaymentHandler) GetAccountRefund(c *gin.Context) {
 	userID, ok := parseIDParam(c, "user_id")
 	if !ok {
 		return
 	}
-	record, err := h.paymentService.GetAdminAccountRefund(c.Request.Context(), userID)
+	detail, err := h.paymentService.GetAdminAccountRefundDetail(c.Request.Context(), userID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, record)
+	response.Success(c, detail)
+}
+
+// StartAccountRefund 建立管理员清退计费栅栏。
+func (h *PaymentHandler) StartAccountRefund(c *gin.Context) {
+	userID, ok := parseIDParam(c, "user_id")
+	if !ok {
+		return
+	}
+	var req service.AdminAccountRefundStartInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	record, err := h.paymentService.AdminStartAccountRefund(c.Request.Context(), userID, req, c.GetHeader("Idempotency-Key"), adminAccountRefundActor(c))
+	respondAdminAccountRefundAction(c, record, err)
+}
+
+// AdvanceAccountRefund 推进排空或查询已提交退款。
+func (h *PaymentHandler) AdvanceAccountRefund(c *gin.Context) {
+	h.handleAccountRefundAction(c, h.paymentService.AdminAdvanceAccountRefund)
+}
+
+// ConfirmAccountRefund 执行管理员第二确认后的原路退款。
+func (h *PaymentHandler) ConfirmAccountRefund(c *gin.Context) {
+	h.handleAccountRefundAction(c, h.paymentService.AdminConfirmAccountRefund)
+}
+
+// ContinueAccountRefund 继续明确失败的剩余路由。
+func (h *PaymentHandler) ContinueAccountRefund(c *gin.Context) {
+	h.handleAccountRefundAction(c, h.paymentService.AdminContinueAccountRefund)
+}
+
+// RecalculateAccountRefund 重算尚未发生外部退款的异常报价。
+func (h *PaymentHandler) RecalculateAccountRefund(c *gin.Context) {
+	h.handleAccountRefundAction(c, h.paymentService.AdminRecalculateAccountRefund)
+}
+
+// FinalizeAccountRefund 只重试本地清退收尾。
+func (h *PaymentHandler) FinalizeAccountRefund(c *gin.Context) {
+	h.handleAccountRefundAction(c, h.paymentService.AdminFinalizeAccountRefund)
+}
+
+// RestoreAccountRefundAccess 恢复终态遗留的账户锁。
+func (h *PaymentHandler) RestoreAccountRefundAccess(c *gin.Context) {
+	h.handleAccountRefundAction(c, h.paymentService.AdminRestoreAccountRefundAccess)
 }
 
 // ReconcileAccountRefund 人工确认不可查询退款路由的最终网关结果。
@@ -300,7 +372,11 @@ func (h *PaymentHandler) ReconcileAccountRefund(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	record, err := h.paymentService.AdminReconcileAccountRefund(c.Request.Context(), userID, req)
+	if req.ExpectedStateRevision <= 0 || req.VerifiedAt == nil {
+		response.BadRequest(c, "expected_state_revision and verified_at are required")
+		return
+	}
+	record, err := h.paymentService.AdminReconcileAccountRefundWithActor(c.Request.Context(), userID, req, adminAccountRefundActor(c))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -310,16 +386,43 @@ func (h *PaymentHandler) ReconcileAccountRefund(c *gin.Context) {
 
 // CancelAccountRefund 在确认没有外部退款成功后取消清退并恢复用户。
 func (h *PaymentHandler) CancelAccountRefund(c *gin.Context) {
+	h.handleAccountRefundAction(c, h.paymentService.AdminCancelAccountRefundWithInput)
+}
+
+type adminAccountRefundActionFunc func(ctx context.Context, userID int64, input service.AdminAccountRefundActionInput, actor service.AccountRefundActor) (*service.AccountRefundRecord, error)
+
+func (h *PaymentHandler) handleAccountRefundAction(c *gin.Context, action adminAccountRefundActionFunc) {
 	userID, ok := parseIDParam(c, "user_id")
 	if !ok {
 		return
 	}
-	record, err := h.paymentService.AdminCancelAccountRefund(c.Request.Context(), userID)
+	var req service.AdminAccountRefundActionInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	record, err := action(c.Request.Context(), userID, req, adminAccountRefundActor(c))
+	respondAdminAccountRefundAction(c, record, err)
+}
+
+func respondAdminAccountRefundAction(c *gin.Context, record *service.AccountRefundRecord, err error) {
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 	response.Success(c, record)
+}
+
+func adminAccountRefundActor(c *gin.Context) service.AccountRefundActor {
+	actor := service.AccountRefundActor{Type: "admin", Label: "admin"}
+	if subject, ok := middleware.GetAuthSubjectFromContext(c); ok {
+		actor.ID = subject.UserID
+		actor.Label = "admin:" + strconv.FormatInt(subject.UserID, 10)
+	}
+	if requestID, ok := c.Request.Context().Value(ctxkey.RequestID).(string); ok {
+		actor.RequestID = strings.TrimSpace(requestID)
+	}
+	return actor
 }
 
 // --- Subscription Plans ---

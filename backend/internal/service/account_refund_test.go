@@ -729,7 +729,8 @@ func TestAdminReconcileAccountRefundFailureAllowsCancelAndRestoresAccount(t *tes
 	fence := &accountRefundFenceStub{}
 	svc := &PaymentService{entClient: client, authCacheInvalidator: fence}
 
-	reconciled, err := svc.AdminReconcileAccountRefund(ctx, userRow.ID, AdminAccountRefundReconcileInput{OrderID: orderID, Outcome: AdminAccountRefundOutcomeFailed, Note: "网关后台确认未退款"})
+	verifiedAt := time.Now().UTC()
+	reconciled, err := svc.AdminReconcileAccountRefund(ctx, userRow.ID, AdminAccountRefundReconcileInput{OrderID: orderID, Outcome: AdminAccountRefundOutcomeFailed, VerifiedAt: &verifiedAt, Evidence: "网关后台记录", Note: "网关后台确认未退款"})
 	require.NoError(t, err)
 	require.Equal(t, AccountRefundStateFailed, reconciled.State)
 	require.Equal(t, payment.ProviderStatusFailed, reconciled.Quote.Orders[0].GatewayStatus)
@@ -766,7 +767,8 @@ func TestAdminReconcileAccountRefundSuccessCompletesAndUnlocks(t *testing.T) {
 	fence := &accountRefundFenceStub{}
 	svc := &PaymentService{entClient: client, authCacheInvalidator: fence}
 
-	completed, err := svc.AdminReconcileAccountRefund(ctx, userRow.ID, AdminAccountRefundReconcileInput{OrderID: orderID, Outcome: AdminAccountRefundOutcomeSucceeded, Note: "网关后台确认退款成功"})
+	verifiedAt := time.Now().UTC()
+	completed, err := svc.AdminReconcileAccountRefund(ctx, userRow.ID, AdminAccountRefundReconcileInput{OrderID: orderID, Outcome: AdminAccountRefundOutcomeSucceeded, ExternalRefundID: "external-refund-1", VerifiedAt: &verifiedAt, Evidence: "网关后台记录", Note: "网关后台确认退款成功"})
 	require.NoError(t, err)
 	require.Equal(t, AccountRefundStateSucceeded, completed.State)
 	require.Equal(t, 1, fence.releaseCalls)
@@ -778,6 +780,19 @@ func TestAdminReconcileAccountRefundSuccessCompletesAndUnlocks(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, OrderStatusRefunded, updatedOrder.Status)
 	require.InDelta(t, 100, updatedOrder.RefundAmount, 1e-8)
+	detail, err := svc.GetAdminAccountRefundDetail(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.Len(t, detail.Record.Reconciliations, 1)
+	require.Equal(t, "网关后台记录", detail.Record.Reconciliations[0].Evidence)
+	require.Equal(t, "external-refund-1", detail.Record.Reconciliations[0].ExternalRefundID)
+	reconciliationEvents := 0
+	for _, event := range detail.Timeline {
+		if event.Reconciliation != nil {
+			reconciliationEvents++
+			require.Equal(t, orderID, event.Reconciliation.OrderID)
+		}
+	}
+	require.Equal(t, 1, reconciliationEvents)
 }
 
 func TestUpdateStatusProtectsActiveRefundLock(t *testing.T) {
@@ -909,6 +924,7 @@ var accountRefundTestOrderSequence atomic.Int64
 type accountRefundFenceStub struct {
 	acquireCalls int
 	releaseCalls int
+	releaseErr   error
 }
 
 func (f *accountRefundFenceStub) InvalidateAuthCacheByKey(context.Context, string)    {}
@@ -920,7 +936,7 @@ func (f *accountRefundFenceStub) AcquireRefundBillingLock(context.Context, int64
 }
 func (f *accountRefundFenceStub) ReleaseRefundBillingLock(context.Context, int64, string) error {
 	f.releaseCalls++
-	return nil
+	return f.releaseErr
 }
 func (f *accountRefundFenceStub) IsRefundBillingLocked(context.Context, int64) (bool, error) {
 	return true, nil

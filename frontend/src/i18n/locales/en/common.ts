@@ -212,6 +212,7 @@ export default {
     workbenchOrders: 'Orders',
     orderManagement: 'Orders',
     paymentDashboard: 'Payment Dashboard',
+    balanceRefunds: 'Balance Refunds',
     paymentConfig: 'Payment Config',
     paymentPlans: 'Plans',
     rechargeActivities: 'Recharge Activities',
@@ -224,6 +225,21 @@ export default {
     contentModeration: 'Content Moderation',
     promptAudit: 'Prompt Audit',
     auditLogs: 'Audit Logs',
+  },
+
+  balanceRefunds: {
+    title: 'Balance Refunds', subtitle: 'Review current refund liabilities and safely process each user.', empty: 'No matching users', search: 'Search username, email, or user ID', allCurrencies: 'All currencies', allStatuses: 'All statuses', detailTitle: 'Refund details', routes: 'Original-order routes', timeline: 'Timeline', order: 'Order', rate: 'Bonus rate', routeRefund: 'Gateway refund', gatewayStatus: 'Gateway status', permanent: 'Permanent balance', bonus: 'Active recharge bonus', clearAmount: '{amount} of other limited credit will also be cleared after completion.',
+    reconcileTitle: 'Reconcile gateway result', reconcileSucceeded: 'External refund succeeded', reconcileFailed: 'No external refund', externalRefundId: 'External refund ID', evidence: 'Evidence or reference', note: 'Review note', reconcileConfirmation: 'I verified this order in the original payment channel and confirm this record is accurate.',
+    reconcileOutcomes: { succeeded: 'External refund confirmed', failed: 'No external refund confirmed' },
+    stats: { refundable: 'Refundable users', automatic: 'Quick refund', processing: 'Processing', review: 'Manual review' },
+    sort: { updated: 'Updated time', email: 'Email', refund: 'Refund amount', asc: 'Ascending', desc: 'Descending' },
+    tabs: { refundable: 'Refundable', processing: 'Processing', manual_review: 'Manual review', completed: 'Completed', all: 'All' },
+    table: { user: 'User', balance: 'Balance', refund: 'Refundable', status: 'Status' },
+    actions: { start: 'Start', advance: 'Check progress', confirm: 'Confirm refund', continue: 'Continue', recalculate: 'Recalculate', reconcile: 'Reconcile', finalize: 'Finalize locally', cancel: 'Cancel', 'restore-access': 'Restore access' },
+    actionTitles: { start: 'Start balance refund', advance: 'Check refund progress', confirm: 'Submit original-channel refund', continue: 'Continue refund', recalculate: 'Recalculate quote', reconcile: 'Reconcile result', finalize: 'Finalize locally', cancel: 'Cancel refund', 'restore-access': 'Restore account access' },
+    confirmations: { start: 'Establish the billing fence and lock this account without calling a gateway.', advance: 'Check drain or submitted status without retrying unknown results.', confirm: 'Submit the reviewed routes to their original payment channels.', continue: 'Continue only routes that definitively failed.', recalculate: 'Recalculate from the current balance before any external success.', reconcile: 'Confirm manual reconciliation.', finalize: 'Retry local finalization only; do not call a gateway.', cancel: 'Cancel only when no external success or unknown result exists.', 'restore-access': 'Restore account access without changing refund facts.' },
+    states: { estimate: 'Not started', draining: 'Draining', ready_to_confirm: 'Awaiting confirmation', submitting: 'Submitting', pending: 'Pending', succeeded: 'Completed', failed: 'Failed', partial_external_success: 'Partially succeeded', canceled: 'Canceled', manual_review: 'Manual review', donated: 'Donated' },
+    reasons: { quote_inconsistent: 'Quote inconsistent', gateway_unknown: 'Gateway result unknown', provider_unavailable: 'Provider unavailable', gateway_query_failed: 'Gateway query failed', manual_external_required: 'External refund required', finalize_failed: 'Local finalization failed', access_restore_failed: 'Access restoration failed', legacy_unknown: 'Legacy state requires review' }
   },
 
   // Auth
