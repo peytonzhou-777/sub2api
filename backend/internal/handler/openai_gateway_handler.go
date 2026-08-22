@@ -94,7 +94,11 @@ type grokMediaEligibilityProber interface {
 	ProbeMediaEligibility(ctx context.Context, accountID int64) (bool, string, error)
 }
 
-const maxOpenAIFirstOutputTimeoutSwitches = 1
+const (
+	maxOpenAIFirstOutputTimeoutSwitches = 1
+	openAIAccountBusyErrorCode          = "account_busy"
+	openAIAccountBusyClientMessage      = "当前账号拥挤，请重试。"
+)
 
 func openAIForwardSucceededForScheduling(result *service.OpenAIForwardResult) bool {
 	return result.SucceededForScheduling()
@@ -1799,29 +1803,8 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 		if c.Request.Context().Err() != nil {
 			return nil, openAISlotAcquireFailed
 		}
-		var admissionErr *service.OpenAIAccountAdmissionError
-		status := http.StatusServiceUnavailable
-		message := "Account admission control is temporarily unavailable"
-		if errors.As(err, &admissionErr) {
-			status = admissionErr.StatusCode
-			if admissionErr.RetryAfter > 0 {
-				seconds := int((admissionErr.RetryAfter + time.Second - 1) / time.Second)
-				c.Header("Retry-After", strconv.Itoa(max(seconds, 1)))
-			}
-			switch admissionErr.Kind {
-			case service.OpenAIAdmissionErrorQueueFull:
-				message = "Account admission queue is full, please retry later"
-			case service.OpenAIAdmissionErrorQueueDisabled:
-				message = "Account rate limit reached, please retry later"
-			case service.OpenAIAdmissionErrorTimeout:
-				message = "Timed out waiting for the selected account, please retry later"
-			}
-			if admissionErr.Wait > 0 {
-				c.Request = c.Request.WithContext(service.ContextWithOpenAIAccountQueueWait(c.Request.Context(), admissionErr.Wait))
-			}
-		}
 		reqLog.Info("openai.account_admission_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
-		h.handleStreamingAwareError(c, status, "rate_limit_error", message, *streamStarted)
+		h.handleOpenAIAccountAdmissionError(c, err, *streamStarted)
 		return nil, openAISlotAcquireAdmissionRejected
 	}
 	if result.Queued && result.QueueWait > 0 {
@@ -1841,6 +1824,34 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 		reqLog.Warn("openai.bind_sticky_session_after_profit_admission_failed", zap.Int64("account_id", latest.ID), zap.Error(err))
 	}
 	return wrapReleaseOnDone(ctx, result.ReleaseFunc), openAISlotAcquireOK
+}
+
+// handleOpenAIAccountAdmissionError 将账号侧拥挤统一映射为平台可重试错误，避免伪装成上游 429。
+func (h *OpenAIGatewayHandler) handleOpenAIAccountAdmissionError(c *gin.Context, err error, streamStarted bool) {
+	status := http.StatusServiceUnavailable
+	errCode := "account_admission_unavailable"
+	message := "账号准入服务暂时不可用，请重试。"
+
+	var admissionErr *service.OpenAIAccountAdmissionError
+	if errors.As(err, &admissionErr) {
+		if admissionErr.RetryAfter > 0 {
+			seconds := int((admissionErr.RetryAfter + time.Second - 1) / time.Second)
+			c.Header("Retry-After", strconv.Itoa(max(seconds, 1)))
+		}
+		if admissionErr.Wait > 0 {
+			c.Request = c.Request.WithContext(service.ContextWithOpenAIAccountQueueWait(c.Request.Context(), admissionErr.Wait))
+		}
+		switch admissionErr.Kind {
+		case service.OpenAIAdmissionErrorQueueFull,
+			service.OpenAIAdmissionErrorQueueDisabled,
+			service.OpenAIAdmissionErrorTimeout:
+			errCode = openAIAccountBusyErrorCode
+			message = openAIAccountBusyClientMessage
+			markOpsRoutingCapacityLimited(c)
+		}
+	}
+
+	h.handleStreamingAwareErrorWithCode(c, status, "server_error", errCode, message, streamStarted, false)
 }
 
 func (h *OpenAIGatewayHandler) recordOpenAIAdmissionRejected(
@@ -2428,7 +2439,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					}
 					h.submitOpenAIAdmissionRejectedUsage(admissionCtx, c, apiKey, account, subscription, reqModel, true, waitMS, reqLog)
 					reqLog.Info("openai.websocket_account_admission_rejected", zap.Int64("account_id", account.ID), zap.Error(admissionErr))
-					closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "selected account is busy, please retry later")
+					closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, openAIAccountBusyClientMessage)
 					return
 				}
 				accountReleaseFunc = admissionResult.ReleaseFunc
@@ -2643,7 +2654,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					model = reqModel
 				}
 				h.submitOpenAIAdmissionRejectedUsage(admissionCtx, c, apiKey, account, subscription, model, true, waitMS, reqLog)
-				return true, service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "selected account is busy, please retry later", err)
+				return true, service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, openAIAccountBusyClientMessage, err)
 			}
 			currentAccountRelease = wrapReleaseOnDone(ctx, admissionResult.ReleaseFunc)
 			if admissionResult.Queued {

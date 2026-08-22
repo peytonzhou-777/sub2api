@@ -164,7 +164,7 @@ func (s *OpenAIAccountAdmissionService) Acquire(ctx context.Context, req OpenAIA
 		kind, status := OpenAIAdmissionErrorUnavailable, http.StatusServiceUnavailable
 		retryAfter := time.Duration(0)
 		if errors.Is(err, ErrOpenAIAdmissionQueueFull) {
-			kind, status = OpenAIAdmissionErrorQueueFull, http.StatusTooManyRequests
+			kind, status = OpenAIAdmissionErrorQueueFull, http.StatusServiceUnavailable
 			retryAfter = time.Second
 		}
 		return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: kind, StatusCode: status, Wait: s.now().Sub(started), RetryAfter: retryAfter, Cause: err}
@@ -176,12 +176,12 @@ func (s *OpenAIAccountAdmissionService) Acquire(ctx context.Context, req OpenAIA
 	for {
 		now := s.now()
 		if !now.Before(deadline) {
-			return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusTooManyRequests, Wait: now.Sub(started), RetryAfter: retryAfter}
+			return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusServiceUnavailable, Wait: now.Sub(started), RetryAfter: retryAfter}
 		}
 		poll, err := s.queue.Poll(ctx, ticket, cfg)
 		if err != nil {
 			if errors.Is(err, ErrOpenAIAdmissionTicketGone) {
-				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusTooManyRequests, Wait: s.now().Sub(started), RetryAfter: retryAfter, Cause: err}
+				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusServiceUnavailable, Wait: s.now().Sub(started), RetryAfter: retryAfter, Cause: err}
 			}
 			return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorUnavailable, StatusCode: http.StatusServiceUnavailable, Wait: s.now().Sub(started), Cause: err}
 		}
@@ -191,10 +191,10 @@ func (s *OpenAIAccountAdmissionService) Acquire(ctx context.Context, req OpenAIA
 				retryAfter = poll.Delay
 			}
 			if !cfg.QueueEnabled {
-				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorQueueDisabled, StatusCode: http.StatusTooManyRequests, Wait: s.now().Sub(started), RetryAfter: retryAfter}
+				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorQueueDisabled, StatusCode: http.StatusServiceUnavailable, Wait: s.now().Sub(started), RetryAfter: retryAfter}
 			}
 			if err := waitOpenAIAdmission(ctx, deadline, poll.Delay); err != nil {
-				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusTooManyRequests, Wait: s.now().Sub(started), RetryAfter: retryAfter, Cause: err}
+				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusServiceUnavailable, Wait: s.now().Sub(started), RetryAfter: retryAfter, Cause: err}
 			}
 			continue
 		}
@@ -207,10 +207,10 @@ func (s *OpenAIAccountAdmissionService) Acquire(ctx context.Context, req OpenAIA
 			waited = true
 			retryAfter = time.Second
 			if !cfg.QueueEnabled {
-				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorQueueDisabled, StatusCode: http.StatusTooManyRequests, Wait: s.now().Sub(started), RetryAfter: retryAfter}
+				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorQueueDisabled, StatusCode: http.StatusServiceUnavailable, Wait: s.now().Sub(started), RetryAfter: retryAfter}
 			}
 			if err := waitOpenAIAdmission(ctx, deadline, 25*time.Millisecond); err != nil {
-				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusTooManyRequests, Wait: s.now().Sub(started), RetryAfter: retryAfter, Cause: err}
+				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusServiceUnavailable, Wait: s.now().Sub(started), RetryAfter: retryAfter, Cause: err}
 			}
 			continue
 		}
@@ -223,7 +223,7 @@ func (s *OpenAIAccountAdmissionService) Acquire(ctx context.Context, req OpenAIA
 		if err != nil {
 			release()
 			if errors.Is(err, ErrOpenAIAdmissionTicketGone) {
-				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusTooManyRequests, Wait: s.now().Sub(started), RetryAfter: retryAfter, Cause: err}
+				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusServiceUnavailable, Wait: s.now().Sub(started), RetryAfter: retryAfter, Cause: err}
 			}
 			return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorUnavailable, StatusCode: http.StatusServiceUnavailable, Wait: s.now().Sub(started), Cause: err}
 		}
@@ -234,17 +234,17 @@ func (s *OpenAIAccountAdmissionService) Acquire(ctx context.Context, req OpenAIA
 				retryAfter = grant.Delay
 			}
 			if !cfg.QueueEnabled {
-				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorQueueDisabled, StatusCode: http.StatusTooManyRequests, Wait: s.now().Sub(started), RetryAfter: retryAfter}
+				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorQueueDisabled, StatusCode: http.StatusServiceUnavailable, Wait: s.now().Sub(started), RetryAfter: retryAfter}
 			}
 			if err := waitOpenAIAdmission(ctx, deadline, grant.Delay); err != nil {
-				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusTooManyRequests, Wait: s.now().Sub(started), RetryAfter: retryAfter, Cause: err}
+				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusServiceUnavailable, Wait: s.now().Sub(started), RetryAfter: retryAfter, Cause: err}
 			}
 			continue
 		}
 		if grant.Delay > 0 {
 			if err := waitOpenAIAdmissionDuration(ctx, deadline, grant.Delay); err != nil {
 				release()
-				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusTooManyRequests, Wait: s.now().Sub(started), RetryAfter: grant.Delay, Cause: err}
+				return OpenAIAccountAdmissionResult{}, &OpenAIAccountAdmissionError{Kind: OpenAIAdmissionErrorTimeout, StatusCode: http.StatusServiceUnavailable, Wait: s.now().Sub(started), RetryAfter: grant.Delay, Cause: err}
 			}
 		}
 		return OpenAIAccountAdmissionResult{

@@ -127,6 +127,46 @@ func TestOpenAIHandleStreamingAwareErrorWithCode_EmitsStableClassification(t *te
 	require.Equal(t, http.StatusBadGateway, streamErr.IntendedStatus)
 }
 
+func TestOpenAIAccountAdmissionErrorReturnsRetryablePlatformError(t *testing.T) {
+	tests := []struct {
+		name string
+		kind service.OpenAIAccountAdmissionErrorKind
+	}{
+		{name: "队列已满", kind: service.OpenAIAdmissionErrorQueueFull},
+		{name: "未启用排队", kind: service.OpenAIAdmissionErrorQueueDisabled},
+		{name: "等待超时", kind: service.OpenAIAdmissionErrorTimeout},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+			h := &OpenAIGatewayHandler{}
+			h.handleOpenAIAccountAdmissionError(c, &service.OpenAIAccountAdmissionError{
+				Kind:       tt.kind,
+				StatusCode: http.StatusTooManyRequests,
+				Wait:       1234 * time.Millisecond,
+				RetryAfter: 1500 * time.Millisecond,
+			}, false)
+
+			require.Equal(t, http.StatusServiceUnavailable, w.Code)
+			require.Equal(t, "2", w.Header().Get("Retry-After"))
+			require.Equal(t, "server_error", gjson.Get(w.Body.String(), "error.type").String())
+			require.Equal(t, openAIAccountBusyErrorCode, gjson.Get(w.Body.String(), "error.code").String())
+			require.Equal(t, openAIAccountBusyClientMessage, gjson.Get(w.Body.String(), "error.message").String())
+			require.True(t, isOpsRoutingCapacityLimited(c))
+			require.Equal(t, int64(1234), service.OpenAIAccountQueueWaitMSFromContext(c.Request.Context()))
+			phase, _, owner, source := classifyOpsErrorLog(c, "server_error", openAIAccountBusyClientMessage, openAIAccountBusyErrorCode, w.Code)
+			require.Equal(t, "routing", phase)
+			require.Equal(t, "platform", owner)
+			require.Equal(t, "gateway", source)
+		})
+	}
+}
+
 func TestOpenAIForwardSucceededForScheduling(t *testing.T) {
 	require.True(t, openAIForwardSucceededForScheduling(nil))
 	require.True(t, openAIForwardSucceededForScheduling(&service.OpenAIForwardResult{}))

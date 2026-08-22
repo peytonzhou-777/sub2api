@@ -11,6 +11,7 @@ import (
 
 type openAIAdmissionQueueStub struct {
 	mu         sync.Mutex
+	enqueueErr error
 	polls      []OpenAIAccountAdmissionPoll
 	pollErr    error
 	grantErr   error
@@ -19,7 +20,7 @@ type openAIAdmissionQueueStub struct {
 }
 
 func (s *openAIAdmissionQueueStub) Enqueue(context.Context, OpenAIAccountAdmissionTicket, OpenAIAccountAdmissionConfig) error {
-	return nil
+	return s.enqueueErr
 }
 func (s *openAIAdmissionQueueStub) Poll(context.Context, OpenAIAccountAdmissionTicket, OpenAIAccountAdmissionConfig) (OpenAIAccountAdmissionPoll, error) {
 	s.mu.Lock()
@@ -49,8 +50,51 @@ func TestOpenAIAccountAdmissionMapsExpiredTicketToTimeout(t *testing.T) {
 		TryAcquireSlot: func(context.Context, int64, int) (func(), bool, error) { return func() {}, true, nil },
 	}, cfg)
 	var admissionErr *OpenAIAccountAdmissionError
-	if !errors.As(err, &admissionErr) || admissionErr.Kind != OpenAIAdmissionErrorTimeout || admissionErr.StatusCode != http.StatusTooManyRequests {
+	if !errors.As(err, &admissionErr) || admissionErr.Kind != OpenAIAdmissionErrorTimeout || admissionErr.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("expired ticket error = %#v", err)
+	}
+}
+
+func TestOpenAIAccountAdmissionMapsCapacityRejectionsToServiceUnavailable(t *testing.T) {
+	tests := []struct {
+		name      string
+		queue     *openAIAdmissionQueueStub
+		configure func(*OpenAIAccountAdmissionConfig)
+		wantKind  OpenAIAccountAdmissionErrorKind
+	}{
+		{
+			name:     "队列已满",
+			queue:    &openAIAdmissionQueueStub{enqueueErr: ErrOpenAIAdmissionQueueFull},
+			wantKind: OpenAIAdmissionErrorQueueFull,
+		},
+		{
+			name:  "未启用排队",
+			queue: &openAIAdmissionQueueStub{polls: []OpenAIAccountAdmissionPoll{{Selected: false}}},
+			configure: func(cfg *OpenAIAccountAdmissionConfig) {
+				cfg.QueueEnabled = false
+			},
+			wantKind: OpenAIAdmissionErrorQueueDisabled,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultOpenAIAccountAdmissionConfig()
+			cfg.Enabled = true
+			cfg.QueueEnabled = true
+			if tt.configure != nil {
+				tt.configure(&cfg)
+			}
+			svc := NewOpenAIAccountAdmissionService(nil, tt.queue)
+			_, err := svc.Acquire(context.Background(), OpenAIAccountAdmissionRequest{
+				AccountID: 1, MaxConcurrency: 1,
+				TryAcquireSlot: func(context.Context, int64, int) (func(), bool, error) { return func() {}, true, nil },
+			}, cfg)
+			var admissionErr *OpenAIAccountAdmissionError
+			if !errors.As(err, &admissionErr) || admissionErr.Kind != tt.wantKind || admissionErr.StatusCode != http.StatusServiceUnavailable {
+				t.Fatalf("capacity rejection error = %#v", err)
+			}
+		})
 	}
 }
 
