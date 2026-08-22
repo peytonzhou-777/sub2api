@@ -348,9 +348,8 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeIdentityMatc
 	require.NoError(t, err)
 	require.Equal(t, converged, upstream.lastReq.Header.Get("session-id"))
 	require.Equal(t, converged, upstream.lastReq.Header.Get("session_id"))
-	expectedInstallation := deriveCodexFingerprintStableUUID(
-		[]byte(secret), mustDecodeCodexFingerprintSeedForTest(t, state.Seed), 0,
-		codexFingerprintKindInstallation, "account-device",
+	expectedInstallation := deriveCodexFingerprintInstallationUUIDV4(
+		[]byte(secret), mustDecodeCodexFingerprintSeedForTest(t, state.Seed), "account-device",
 	)
 	require.Equal(t, expectedInstallation, upstream.lastReq.Header.Get("x-codex-installation-id"),
 		"真实 Codex 每个请求必带 installation-id，探测不得缺失")

@@ -173,7 +173,7 @@ func TestResolveCodexFingerprintContextForAttemptRejectsOldSessionScope(t *testi
 	require.ErrorContains(t, err, "another session scope")
 }
 
-func TestResolveCodexFingerprintContextScopesThreadsAndDerivesRequestID(t *testing.T) {
+func TestResolveCodexFingerprintContextScopesThreadsAndUsesThreadRequestID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	account := &Account{
@@ -218,8 +218,7 @@ func TestResolveCodexFingerprintContextScopesThreadsAndDerivesRequestID(t *testi
 	require.Equal(t, wsScopeHash, wsSecondScopeHash)
 	require.NotEqual(t, httpScopeHash, wsScopeHash, "HTTP 与 WS 必须使用独立的持久化轮换作用域")
 	require.NotEqual(t, httpFirst.ThreadID(), httpSecond.ThreadID(), "不同 API Key 的同名客户端 Session 必须隔离")
-	require.NotEmpty(t, httpFirst.RequestID())
-	require.NotEqual(t, httpFirst.ThreadID(), httpFirst.RequestID(), "请求 ID 不得回退为固定 Thread ID")
+	require.Equal(t, httpFirst.ThreadID(), httpFirst.RequestID(), "CodexCLI 0.149.0 的请求头标识必须复用 Thread ID")
 }
 
 func TestResolveCodexFingerprintSessionScopeUsesUpstreamVisibility(t *testing.T) {
@@ -269,7 +268,6 @@ func TestCodexFingerprintV3RewritesRequestAndPromptCacheIDs(t *testing.T) {
 		codexFingerprintSession, "", codexFingerprintOriginalIDs{
 			clientSessionID: "client-session",
 			turnID:          "turn-1",
-			requestID:       "request-1",
 		},
 	)
 	require.NoError(t, err)
@@ -280,7 +278,7 @@ func TestCodexFingerprintV3RewritesRequestAndPromptCacheIDs(t *testing.T) {
 	applyCodexFingerprintHeaders(headers, ids)
 	require.True(t, applyCodexFingerprintClientMetadata(body, ids))
 
-	assert.Equal(t, fp.RequestID(), headers.Get("x-client-request-id"))
+	assert.Equal(t, fp.ThreadID(), headers.Get("x-client-request-id"))
 	assert.Equal(t, fp.PromptCacheKey(), body["prompt_cache_key"])
 	assert.Equal(t, fp.SessionID(), body["prompt_cache_key"])
 	metadata, ok := body["client_metadata"].(map[string]any)
@@ -389,7 +387,6 @@ func TestCodexFingerprintV3ContextSeparatesClientScopes(t *testing.T) {
 		clientSessionID: "shared-client-session",
 		turnID:          "shared-turn",
 		windowID:        "shared-window",
-		requestID:       "shared-request",
 	}
 	openClawInput := codexInput
 	openClawInput.clientScope = "client:openclaw"
@@ -425,7 +422,6 @@ func TestCodexFingerprintV3ContextSharesClientSessionButSeparatesAPIKeyThreads(t
 		clientSessionID: "shared-client-session",
 		turnID:          "shared-turn",
 		windowID:        "shared-window",
-		requestID:       "shared-request",
 	}
 	secondInput := firstInput
 	secondInput.threadScope = "api-key:202:client:codex"
@@ -486,12 +482,11 @@ func TestCodexFingerprintV3ContextSeparatesAccountsClustersEpochsAndKinds(t *tes
 	assert.NotEqual(t, base.ThreadID(), base.TurnID(), "kind 必须形成独立输入域")
 }
 
-func TestCodexFingerprintV3ContextReusesLogicalTurnWithExpectedUUIDShapes(t *testing.T) {
+func TestCodexFingerprintV3ContextReusesLogicalTurnWithCodexCLI0149UUIDShapes(t *testing.T) {
 	input := codexFingerprintOriginalIDs{
 		clientSessionID: "client-session",
 		turnID:          "logical-turn-123",
 		windowID:        "window-1",
-		requestID:       "request-1",
 	}
 	first, err := newTestCodexFingerprintContextV3(
 		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 9,
@@ -506,20 +501,45 @@ func TestCodexFingerprintV3ContextReusesLogicalTurnWithExpectedUUIDShapes(t *tes
 
 	assert.Equal(t, first.TurnID(), second.TurnID(), "同一逻辑 turn 的重试必须复用映射值")
 	assert.Equal(t, first.SessionID(), first.PromptCacheKey())
+	parsedInstallation, parseErr := uuid.Parse(first.InstallationID())
+	require.NoError(t, parseErr)
+	assert.Equal(t, uuid.Version(4), parsedInstallation.Version())
+	assert.Equal(t, uuid.RFC4122, parsedInstallation.Variant())
 	for _, value := range []string{
-		first.InstallationID(), first.ThreadID(), first.TurnID(), first.WindowID(), first.RequestID(),
+		first.SessionID(), first.PromptCacheKey(), first.ThreadID(), first.TurnID(), first.WindowID(), first.RequestID(),
 	} {
-		parsed, parseErr := uuid.Parse(value)
-		require.NoError(t, parseErr)
-		assert.Equal(t, uuid.Version(4), parsed.Version())
-		assert.Equal(t, uuid.RFC4122, parsed.Variant())
-	}
-	for _, value := range []string{first.SessionID(), first.PromptCacheKey()} {
 		parsed, parseErr := uuid.Parse(value)
 		require.NoError(t, parseErr)
 		assert.Equal(t, uuid.Version(7), parsed.Version())
 		assert.Equal(t, uuid.RFC4122, parsed.Variant())
 	}
+	assert.Equal(t, first.ThreadID(), first.RequestID())
+}
+
+func TestCodexFingerprintV3PreservesOriginalUUIDv7Timestamps(t *testing.T) {
+	startedAt := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+	original := codexFingerprintOriginalIDs{
+		clientScope:     "client:codex:transport:http",
+		threadScope:     "api-key:101:client:codex:transport:http",
+		clientSessionID: "0198a000-0000-7000-8000-000000000001",
+		threadID:        "0198a001-0000-7000-8000-000000000002",
+		parentThreadID:  "0198a002-0000-7000-8000-000000000003",
+		forkedThreadID:  "0198a003-0000-7000-8000-000000000004",
+		turnID:          "0198a004-0000-7000-8000-000000000005",
+		windowID:        "0198a005-0000-7000-8000-000000000006",
+	}
+	fingerprint, err := newCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 9, startedAt,
+		codexFingerprintSession, "", original,
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, codexFingerprintUUIDV7UnixMilli(uuid.MustParse(original.threadID)), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(fingerprint.ThreadID())))
+	assert.Equal(t, codexFingerprintUUIDV7UnixMilli(uuid.MustParse(original.turnID)), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(fingerprint.TurnID())))
+	assert.Equal(t, codexFingerprintUUIDV7UnixMilli(uuid.MustParse(original.windowID)), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(fingerprint.WindowID())))
+	assert.Equal(t, codexFingerprintUUIDV7UnixMilli(uuid.MustParse(original.parentThreadID)), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(fingerprint.parentThreadID)))
+	assert.Equal(t, codexFingerprintUUIDV7UnixMilli(uuid.MustParse(original.forkedThreadID)), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(fingerprint.forkedThreadID)))
+	assert.Equal(t, fingerprint.ThreadID(), fingerprint.RequestID())
 }
 
 func TestCodexFingerprintV3SessionAndPromptUseSameStableUUIDv7(t *testing.T) {
@@ -623,7 +643,6 @@ func TestCodexPromptCacheKeyFollowsConvergedSessionScopes(t *testing.T) {
 		threadID:        "root-thread",
 		turnID:          "turn-1",
 		windowID:        "window-1",
-		requestID:       "request-1",
 	}
 	derive := func(secret []byte, seed string, epoch int64, input codexFingerprintOriginalIDs) *CodexFingerprintContext {
 		fp, err := newCodexFingerprintContextV3(secret, seed, epoch, startedAt, codexFingerprintSession, "", input)
@@ -642,7 +661,6 @@ func TestCodexPromptCacheKeyFollowsConvergedSessionScopes(t *testing.T) {
 	otherDownstream.threadID = "other-thread"
 	otherDownstream.turnID = "other-turn"
 	otherDownstream.windowID = "other-window"
-	otherDownstream.requestID = "other-request"
 	downstreamFP := derive(testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7, otherDownstream)
 	require.Equal(t, base.SessionID(), downstreamFP.SessionID(), "下游用户和逻辑会话不得拆分账号级缓存身份")
 

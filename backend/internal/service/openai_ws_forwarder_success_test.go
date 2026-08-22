@@ -1092,7 +1092,7 @@ func TestOpenAIGatewayService_Forward_WSv2_CodexFingerprintHandshakeBodyParityAn
 	wantInstall := fingerprintIDs.installationID
 	wantSession := fingerprintIDs.sessionID
 	wantThread := fingerprintIDs.threadID
-	wantRequest := fingerprintIDs.requestID
+	wantRequest := fingerprintIDs.threadID
 	wantWindow := fingerprintIDs.windowID
 	wantPromptCache := fingerprintIDs.promptCacheKey
 	require.Equal(t, wantSession, wantPromptCache)

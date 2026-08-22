@@ -288,11 +288,8 @@ func applyCodexFingerprintHeaders(h http.Header, ids *codexFingerprintIDs) {
 
 	// session / full 模式：改写所有相关头
 	h.Set("x-codex-window-id", ids.windowID)
-	if ids.requestID != "" {
-		h.Set("x-client-request-id", ids.requestID)
-	} else {
-		h.Set("x-client-request-id", ids.threadID)
-	}
+	// CodexCLI 0.149.0 的请求头直接复用 Thread ID，避免产生额外的可见身份。
+	h.Set("x-client-request-id", ids.threadID)
 	// 连字符形式和下划线形式都改写，保证一致
 	h.Set("session-id", ids.sessionID)
 	h.Set("session_id", ids.sessionID)
