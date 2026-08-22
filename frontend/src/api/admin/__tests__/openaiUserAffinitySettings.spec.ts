@@ -27,6 +27,9 @@ const config: OpenAIUserAffinityConfig = {
   follower_jitter_max_ms: 500,
   touch_success_mode: 'upstream_accepted',
   manual_reset_exclude_source_account: false,
+  resident_account_slot_count: 1,
+  resident_ttl_seconds: 604800,
+  conversation_active_ttl_seconds: 3600,
   config_version: 7,
   updated_at: '2026-08-15T00:00:00Z'
 }

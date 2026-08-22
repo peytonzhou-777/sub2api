@@ -13,7 +13,6 @@ import (
 
 type resetOpenAIUserAffinityRequest struct {
 	ScopeKey      string `json:"scope_key" binding:"required"`
-	Reason        string `json:"reason" binding:"required"`
 	ExcludeSource bool   `json:"exclude_source_account"`
 }
 
@@ -25,7 +24,7 @@ func (h *AccountHandler) openAIUserAffinityAdminService(c *gin.Context) (service
 	return adminService, ok
 }
 
-// ListOpenAIUserAffinityResidents 查看账号当前仍在 14 天居住期内的用户。
+// ListOpenAIUserAffinityResidents 查看账号当前有效、替换中及排空中的常驻槽位。
 func (h *AccountHandler) ListOpenAIUserAffinityResidents(c *gin.Context) {
 	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || accountID <= 0 {
@@ -77,8 +76,8 @@ func (h *AccountHandler) ResetOpenAIUserAffinityPlacement(c *gin.Context) {
 		return
 	}
 	var req resetOpenAIUserAffinityRequest
-	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Reason) == "" {
-		response.BadRequest(c, "reset reason is required")
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.ScopeKey) == "" {
+		response.BadRequest(c, "scope_key is required")
 		return
 	}
 	subject, ok := middleware.GetAuthSubjectFromContext(c)
@@ -90,7 +89,7 @@ func (h *AccountHandler) ResetOpenAIUserAffinityPlacement(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if response.ErrorFrom(c, adminService.ResetOpenAIUserAffinityPlacement(c.Request.Context(), userID, subject.UserID, req.ScopeKey, req.Reason, req.ExcludeSource)) {
+	if response.ErrorFrom(c, adminService.ResetOpenAIUserAffinityPlacement(c.Request.Context(), userID, subject.UserID, req.ScopeKey, req.ExcludeSource)) {
 		return
 	}
 	response.Success(c, gin.H{"user_id": userID, "reset": true})

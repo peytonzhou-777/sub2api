@@ -12,15 +12,21 @@ var ErrAccountPoolResidentStatsUnavailable = errors.New("account pool resident s
 
 // PublicAccountPoolResidents 是号池公开的账号居民数量投影。
 type PublicAccountPoolResidents struct {
-	Active     int64 `json:"active"`
-	Total      int64 `json:"total"`
-	Applicable bool  `json:"applicable"`
+	Active              int64 `json:"active"`
+	Total               int64 `json:"total"`
+	DrainingSlots       int64 `json:"draining_slots"`
+	ActiveConversations int64 `json:"active_conversations"`
+	ContactedUsers      int64 `json:"contacted_users"`
+	Applicable          bool  `json:"applicable"`
 }
 
 // AccountPoolResidentStats 是仓储按账号聚合的有效居民统计。
 type AccountPoolResidentStats struct {
-	Active int64
-	Total  int64
+	Active              int64
+	Total               int64
+	DrainingSlots       int64
+	ActiveConversations int64
+	ContactedUsers      int64
 }
 
 // AccountPoolResidentStatsReader 批量读取账号有效居民数，避免号池构建产生逐账号查询。
@@ -67,4 +73,7 @@ func applyAccountPoolResidentStats(item *PublicAccountPoolAccount, record Accoun
 	stat := stats[record.ID]
 	item.Residents.Active = stat.Active
 	item.Residents.Total = stat.Total
+	item.Residents.DrainingSlots = stat.DrainingSlots
+	item.Residents.ActiveConversations = stat.ActiveConversations
+	item.Residents.ContactedUsers = stat.ContactedUsers
 }

@@ -40,6 +40,14 @@ func TestParseAccountPoolQueryAcceptsUserRelationFilter(t *testing.T) {
 	}
 }
 
+func TestParseAccountPoolQueryAcceptsPrimaryResidenceFilter(t *testing.T) {
+	c := newAccountPoolQueryContext(t, "/api/v1/account-pool?relation=primary_residence")
+	_, _, query, ok := parseAccountPoolQuery(c)
+	if !ok || query.Relation != service.AccountPoolRelationPrimaryResidence {
+		t.Fatalf("首选居住账号筛选参数不正确: query=%+v ok=%v", query, ok)
+	}
+}
+
 func TestParseAccountPoolQueryRejectsUnknownUserRelation(t *testing.T) {
 	c := newAccountPoolQueryContext(t, "/api/v1/account-pool?relation=reserved_only")
 	if _, _, _, ok := parseAccountPoolQuery(c); ok {

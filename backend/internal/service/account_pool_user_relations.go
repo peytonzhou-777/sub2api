@@ -8,6 +8,7 @@ import (
 
 const (
 	AccountPoolRelationCurrentResidence  = "current_residence"
+	AccountPoolRelationPrimaryResidence  = "primary_residence"
 	AccountPoolRelationSevenDayContact   = "seven_day_contact"
 	AccountPoolRelationHistoricalContact = "historical_contact"
 )
@@ -18,6 +19,7 @@ var ErrAccountPoolUserRelationUnavailable = errors.New("account pool user relati
 type AccountPoolUserRelation struct {
 	AccountID           int64
 	IsCurrentResidence  bool
+	IsPrimaryResidence  bool
 	IsSevenDayContact   bool
 	IsHistoricalContact bool
 }
@@ -30,7 +32,7 @@ type AccountPoolUserRelationReader interface {
 // IsAccountPoolRelationFilter 判断用户关系筛选是否属于公开白名单。
 func IsAccountPoolRelationFilter(relation string) bool {
 	switch relation {
-	case AccountPoolRelationCurrentResidence, AccountPoolRelationSevenDayContact, AccountPoolRelationHistoricalContact:
+	case AccountPoolRelationCurrentResidence, AccountPoolRelationPrimaryResidence, AccountPoolRelationSevenDayContact, AccountPoolRelationHistoricalContact:
 		return true
 	default:
 		return false
@@ -71,6 +73,7 @@ func (s *AccountPoolService) ListForUser(ctx context.Context, enabledEpoch strin
 	for i := range result.Items {
 		relation := relationByAccount[result.Items[i].ID]
 		result.Items[i].IsCurrentResidence = relation.IsCurrentResidence
+		result.Items[i].IsPrimaryResidence = relation.IsPrimaryResidence
 		result.Items[i].IsSevenDayContact = relation.IsSevenDayContact
 		result.Items[i].IsHistoricalContact = relation.IsHistoricalContact
 	}
@@ -81,6 +84,8 @@ func accountPoolRelationMatches(relation AccountPoolUserRelation, filter string)
 	switch filter {
 	case AccountPoolRelationCurrentResidence:
 		return relation.IsCurrentResidence
+	case AccountPoolRelationPrimaryResidence:
+		return relation.IsPrimaryResidence
 	case AccountPoolRelationSevenDayContact:
 		return relation.IsSevenDayContact
 	case AccountPoolRelationHistoricalContact:

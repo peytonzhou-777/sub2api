@@ -90,6 +90,7 @@ type PublicAccountPoolAccount struct {
 	Residents       PublicAccountPoolResidents     `json:"residents"`
 	// 用户关系只在请求响应阶段投影，绝不写入公共号池快照。
 	IsCurrentResidence  bool `json:"is_current_residence"`
+	IsPrimaryResidence  bool `json:"is_primary_residence"`
 	IsSevenDayContact   bool `json:"is_seven_day_contact"`
 	IsHistoricalContact bool `json:"is_historical_contact"`
 }

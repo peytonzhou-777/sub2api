@@ -48,16 +48,21 @@ func (r *accountRepository) GetOpenAIUserAffinityCandidateStats(ctx context.Cont
 		       COALESCE(BOOL_OR(c.user_id = %s AND (
 		           c.touch_expires_at > NOW() OR c.reservation_until > NOW()
 		       )), FALSE) AS user_already_active,
-		       EXISTS (
+		       (EXISTS (
 		           SELECT 1 FROM user_account_placements p
 		           WHERE p.user_id = %s AND p.account_id = a.id
 		             AND p.status = 'active' AND p.expires_at > NOW()
-		       ) AS user_already_resident
+		       ) OR EXISTS (
+		           SELECT 1 FROM openai_user_resident_slots s
+		           WHERE s.user_id = %s AND s.account_id = a.id
+		             AND s.status IN ('provisional', 'active', 'replacement_pending', 'draining')
+		             AND (s.status = 'draining' OR s.expires_at > NOW())
+		       )) AS user_already_resident
 		FROM accounts a
 		LEFT JOIN account_user_contacts c ON c.account_id = a.id
 		WHERE a.id IN (%s)
 		GROUP BY a.id, a.max_contact_users, a.new_resident_cooldown_seconds,
-		         a.new_resident_cooldown_until`, userPlaceholder, userPlaceholder, strings.Join(placeholders, ", ")), args...)
+		         a.new_resident_cooldown_until`, userPlaceholder, userPlaceholder, userPlaceholder, strings.Join(placeholders, ", ")), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +253,7 @@ func (r *accountRepository) TouchOpenAIUserAffinity(ctx context.Context, userID,
 	}
 	now := time.Now().UTC()
 	touchExpiresAt := now.Add(7 * 24 * time.Hour)
-	residenceExpiresAt := now.Add(14 * 24 * time.Hour)
+	residenceExpiresAt := now.Add(config.ResidentTTL())
 	placementMatches := false
 	if generation > 0 {
 		var placementAccount sql.NullInt64
@@ -316,6 +321,12 @@ func (r *accountRepository) TouchOpenAIUserAffinity(ctx context.Context, userID,
 			userID, scopeKey, accountID, now, residenceExpiresAt, generation); err != nil {
 			return err
 		}
+		if _, err := exec.ExecContext(ctx, `
+			UPDATE openai_user_affinity_reset_exclusions SET consumed_at = $3
+			WHERE user_id = $1 AND scope_key = $2 AND consumed_at IS NULL`,
+			userID, normalizeOpenAIUserAffinityScopeKey(scopeKey), now); err != nil {
+			return err
+		}
 	}
 	if tx != nil {
 		return tx.Commit()
@@ -324,18 +335,30 @@ func (r *accountRepository) TouchOpenAIUserAffinity(ctx context.Context, userID,
 }
 
 // ConfirmOpenAIUserAffinitySuccess 只在真实成功终态关闭当前归属的容量事故。
-func (r *accountRepository) ConfirmOpenAIUserAffinitySuccess(ctx context.Context, userID, accountID, generation int64, scopeKey string) error {
-	if r == nil || r.sql == nil || userID <= 0 || accountID <= 0 || generation <= 0 {
+func (r *accountRepository) ConfirmOpenAIUserAffinitySuccess(ctx context.Context, incident service.OpenAIUserAffinityIncidentIdentity) error {
+	if r == nil || r.sql == nil || incident.UserID <= 0 || incident.AccountID <= 0 || incident.Generation() <= 0 {
 		return errors.New("openai user affinity storage unavailable")
 	}
 	now := time.Now().UTC()
+	conversationHash, residentSlotID, slotGeneration := openAIUserAffinityIncidentDimensions(incident)
 	_, err := r.sql.ExecContext(ctx, `
 		UPDATE user_account_capacity_incidents SET status = 'closed', close_reason = 'resident_recovered',
-			closed_at = $5, updated_at = $5
+			closed_at = $8, updated_at = $8
 		WHERE user_id = $1 AND scope_key = $2 AND source_account_id = $3
-		  AND placement_generation = $4 AND closed_at IS NULL`,
-		userID, normalizeOpenAIUserAffinityScopeKey(scopeKey), accountID, generation, now)
+		  AND placement_generation = $4 AND closed_at IS NULL
+		  AND (($5::char(64) IS NULL AND conversation_hash IS NULL) OR conversation_hash = $5::char(64))
+		  AND (($6::bigint IS NULL AND resident_slot_id IS NULL) OR resident_slot_id = $6::bigint)
+		  AND (($7::bigint IS NULL AND slot_generation IS NULL) OR slot_generation = $7::bigint)`,
+		incident.UserID, normalizeOpenAIUserAffinityScopeKey(incident.ScopeKey), incident.AccountID,
+		incident.Generation(), conversationHash, residentSlotID, slotGeneration, now)
 	return err
+}
+
+func openAIUserAffinityIncidentDimensions(incident service.OpenAIUserAffinityIncidentIdentity) (any, any, any) {
+	if strings.TrimSpace(incident.ConversationHash) == "" {
+		return nil, nil, nil
+	}
+	return strings.ToLower(strings.TrimSpace(incident.ConversationHash)), incident.ResidentSlotID, incident.SlotGeneration
 }
 
 // RollbackOpenAIUserAffinityPlacement 按请求 token 恢复失败前归属，避免撤销并发请求已提交的状态。
@@ -445,13 +468,15 @@ func (r *accountRepository) RollbackOpenAIUserAffinityPlacement(ctx context.Cont
 }
 
 // RecordOpenAIUserAffinityCapacityFailure 在固定窗口内累计客户端重试可见的容量失败。
-func (r *accountRepository) RecordOpenAIUserAffinityCapacityFailure(ctx context.Context, userID, accountID, generation int64, scopeKey, requestIDHash, reason string, config service.OpenAIUserAffinityConfig) (*time.Time, error) {
+func (r *accountRepository) RecordOpenAIUserAffinityCapacityFailure(ctx context.Context, incident service.OpenAIUserAffinityIncidentIdentity, requestIDHash, reason string, config service.OpenAIUserAffinityConfig) (*time.Time, error) {
 	if r == nil || r.client == nil {
 		return nil, errors.New("openai user affinity storage unavailable")
 	}
-	scopeKey = normalizeOpenAIUserAffinityScopeKey(scopeKey)
+	incident.ScopeKey = normalizeOpenAIUserAffinityScopeKey(incident.ScopeKey)
 	requestIDHash = strings.TrimSpace(requestIDHash)
-	if len(requestIDHash) != 64 {
+	incident.ConversationHash = strings.ToLower(strings.TrimSpace(incident.ConversationHash))
+	if incident.UserID <= 0 || incident.AccountID <= 0 || incident.Generation() <= 0 || len(requestIDHash) != 64 ||
+		(incident.ConversationHash != "" && (len(incident.ConversationHash) != 64 || incident.ResidentSlotID <= 0 || incident.SlotGeneration <= 0)) {
 		return nil, errors.New("openai user affinity capacity failure requires request id hash")
 	}
 	reason = strings.TrimSpace(reason)
@@ -472,7 +497,7 @@ func (r *accountRepository) RecordOpenAIUserAffinityCapacityFailure(ctx context.
 	var accountThreshold, accountWindow sql.NullInt64
 	if err := scanSingleRow(ctx, exec, `
 		SELECT capacity_failure_migration_threshold, capacity_failure_window_seconds
-		FROM accounts WHERE id = $1`, []any{accountID}, &accountThreshold, &accountWindow); err != nil {
+		FROM accounts WHERE id = $1`, []any{incident.AccountID}, &accountThreshold, &accountWindow); err != nil {
 		return nil, err
 	}
 	if accountThreshold.Valid && accountThreshold.Int64 > 0 {
@@ -482,17 +507,58 @@ func (r *accountRepository) RecordOpenAIUserAffinityCapacityFailure(ctx context.
 		windowSeconds = int(accountWindow.Int64)
 	}
 	now := time.Now().UTC()
-	var currentAccount sql.NullInt64
-	var currentGeneration int64
-	var currentStatus string
-	if err := scanSingleRow(ctx, exec, `
-		SELECT account_id, generation, status FROM user_account_placements
-		WHERE user_id = $1 AND scope_key = $2 FOR UPDATE`, []any{userID, scopeKey}, &currentAccount, &currentGeneration, &currentStatus); err != nil {
-		return nil, err
+	if incident.ConversationHash != "" {
+		var bindingAccountID, bindingSlotID, bindingGeneration int64
+		var bindingStatus, slotStatus string
+		var pendingAccountID, pendingSlotID, pendingGeneration sql.NullInt64
+		var pendingToken sql.NullString
+		var pendingExpiresAt sql.NullTime
+		var incidentSlotAccountID, incidentSlotGeneration int64
+		if err := scanSingleRow(ctx, exec, `
+			SELECT b.account_id, b.resident_slot_id, b.slot_generation, b.status,
+			       b.pending_account_id, b.pending_resident_slot_id, b.pending_slot_generation,
+			       b.pending_token, b.pending_expires_at,
+			       s.account_id, s.generation, s.status
+			FROM openai_user_conversation_bindings b
+			JOIN openai_user_resident_slots s ON s.id = $5
+			WHERE b.user_id = $1 AND b.scope_key = $2 AND b.conversation_hash = $3::char(64)
+			  AND b.expires_at > $4 FOR UPDATE OF b, s`,
+			[]any{incident.UserID, incident.ScopeKey, incident.ConversationHash, now, incident.ResidentSlotID},
+			&bindingAccountID, &bindingSlotID, &bindingGeneration, &bindingStatus,
+			&pendingAccountID, &pendingSlotID, &pendingGeneration, &pendingToken, &pendingExpiresAt,
+			&incidentSlotAccountID, &incidentSlotGeneration, &slotStatus); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		currentMatches := bindingAccountID == incident.AccountID && bindingSlotID == incident.ResidentSlotID &&
+			bindingGeneration == incident.SlotGeneration
+		pendingMatches := pendingAccountID.Valid && pendingSlotID.Valid && pendingGeneration.Valid && pendingToken.Valid && pendingExpiresAt.Valid &&
+			pendingAccountID.Int64 == incident.AccountID && pendingSlotID.Int64 == incident.ResidentSlotID &&
+			pendingGeneration.Int64 == incident.SlotGeneration && now.Before(pendingExpiresAt.Time)
+		bindingEligible := bindingStatus == "active" || bindingStatus == "draining" ||
+			bindingStatus == "provisional" && currentMatches
+		if (!currentMatches && !pendingMatches) || incidentSlotAccountID != incident.AccountID || incidentSlotGeneration != incident.SlotGeneration ||
+			!bindingEligible ||
+			(slotStatus != service.OpenAIUserResidentSlotStatusActive && slotStatus != service.OpenAIUserResidentSlotStatusDraining && slotStatus != service.OpenAIUserResidentSlotStatusReplacementPending) {
+			return nil, nil
+		}
+	} else {
+		var currentAccount sql.NullInt64
+		var currentGeneration int64
+		var currentStatus string
+		if err := scanSingleRow(ctx, exec, `
+			SELECT account_id, generation, status FROM user_account_placements
+			WHERE user_id = $1 AND scope_key = $2 FOR UPDATE`,
+			[]any{incident.UserID, incident.ScopeKey}, &currentAccount, &currentGeneration, &currentStatus); err != nil {
+			return nil, err
+		}
+		if !currentAccount.Valid || currentAccount.Int64 != incident.AccountID || currentGeneration != incident.Generation() || currentStatus != "active" {
+			return nil, nil
+		}
 	}
-	if !currentAccount.Valid || currentAccount.Int64 != accountID || currentGeneration != generation || currentStatus != "active" {
-		return nil, nil
-	}
+	conversationHash, residentSlotID, slotGeneration := openAIUserAffinityIncidentDimensions(incident)
 	var incidentID int64
 	var failureCount int
 	var authorizedAt sql.NullTime
@@ -501,8 +567,12 @@ func (r *accountRepository) RecordOpenAIUserAffinityCapacityFailure(ctx context.
 		FROM user_account_capacity_incidents
 		WHERE user_id = $1 AND scope_key = $2 AND source_account_id = $3
 		  AND placement_generation = $4 AND closed_at IS NULL AND window_expires_at > $5
+		  AND (($6::char(64) IS NULL AND conversation_hash IS NULL) OR conversation_hash = $6::char(64))
+		  AND (($7::bigint IS NULL AND resident_slot_id IS NULL) OR resident_slot_id = $7::bigint)
+		  AND (($8::bigint IS NULL AND slot_generation IS NULL) OR slot_generation = $8::bigint)
 		ORDER BY window_started_at DESC LIMIT 1 FOR UPDATE`,
-		[]any{userID, scopeKey, accountID, generation, now}, &incidentID, &failureCount, &authorizedAt)
+		[]any{incident.UserID, incident.ScopeKey, incident.AccountID, incident.Generation(), now,
+			conversationHash, residentSlotID, slotGeneration}, &incidentID, &failureCount, &authorizedAt)
 	if incidentErr != nil && !errors.Is(incidentErr, sql.ErrNoRows) {
 		return nil, incidentErr
 	}
@@ -511,10 +581,12 @@ func (r *accountRepository) RecordOpenAIUserAffinityCapacityFailure(ctx context.
 		if err := scanSingleRow(ctx, exec, `
 			INSERT INTO user_account_capacity_incidents
 				(user_id, scope_key, source_account_id, placement_generation,
+				 conversation_hash, resident_slot_id, slot_generation,
 				 window_started_at, window_expires_at, failure_threshold, failure_count,
 				 config_version, status)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, 'collecting')
-			RETURNING id`, []any{userID, scopeKey, accountID, generation, now,
+			VALUES ($1, $2, $3, $4, $5::char(64), $6::bigint, $7::bigint, $8, $9, $10, 0, $11, 'collecting')
+			RETURNING id`, []any{incident.UserID, incident.ScopeKey, incident.AccountID, incident.Generation(),
+			conversationHash, residentSlotID, slotGeneration, now,
 			now.Add(time.Duration(windowSeconds) * time.Second), threshold, config.ConfigVersion}, &incidentID); err != nil {
 			return nil, err
 		}
@@ -574,18 +646,25 @@ func (r *accountRepository) RecordOpenAIUserAffinityCapacityFailure(ctx context.
 }
 
 // GetOpenAIUserAffinityMigrationAuthorizedAt 读取当前 generation 尚未关闭的搬迁授权。
-func (r *accountRepository) GetOpenAIUserAffinityMigrationAuthorizedAt(ctx context.Context, userID, accountID, generation int64, scopeKey string) (*time.Time, error) {
+func (r *accountRepository) GetOpenAIUserAffinityMigrationAuthorizedAt(ctx context.Context, incident service.OpenAIUserAffinityIncidentIdentity) (*time.Time, error) {
 	if r == nil || r.sql == nil {
 		return nil, errors.New("openai user affinity storage unavailable")
 	}
-	scopeKey = normalizeOpenAIUserAffinityScopeKey(scopeKey)
+	incident.ScopeKey = normalizeOpenAIUserAffinityScopeKey(incident.ScopeKey)
+	conversationHash, residentSlotID, slotGeneration := openAIUserAffinityIncidentDimensions(incident)
 	var authorizedAt sql.NullTime
 	err := scanSingleRow(ctx, r.sql, `
 		SELECT migration_authorized_at FROM user_account_capacity_incidents
 		WHERE user_id = $1 AND scope_key = $2 AND source_account_id = $3
 		  AND placement_generation = $4 AND closed_at IS NULL
+		  AND (($5::char(64) IS NULL AND conversation_hash IS NULL) OR conversation_hash = $5::char(64))
+		  AND (($6::bigint IS NULL AND resident_slot_id IS NULL) OR resident_slot_id = $6::bigint)
+		  AND (($7::bigint IS NULL AND slot_generation IS NULL) OR slot_generation = $7::bigint)
 		  AND migration_authorized_at IS NOT NULL AND window_expires_at > NOW()
-		ORDER BY migration_authorized_at DESC LIMIT 1`, []any{userID, scopeKey, accountID, generation}, &authorizedAt)
+		ORDER BY migration_authorized_at DESC LIMIT 1`, []any{
+		incident.UserID, incident.ScopeKey, incident.AccountID, incident.Generation(),
+		conversationHash, residentSlotID, slotGeneration,
+	}, &authorizedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -699,7 +778,7 @@ func (r *accountRepository) MigrateOpenAIUserAffinityPlacement(ctx context.Conte
 			predicted_5h_demand = $6, predicted_7d_demand = $7, prediction_version = $8,
 			provisional_token = $11, updated_at = $4
 		WHERE user_id = $1 AND scope_key = $9`, userID, targetAccountID,
-		newGeneration, now, now.Add(14*24*time.Hour), demand.Demand5H, demand.Demand7D, demand.Version, scopeKey, reason,
+		newGeneration, now, now.Add(config.ResidentTTL()), demand.Demand5H, demand.Demand7D, demand.Version, scopeKey, reason,
 		provisionalToken); err != nil {
 		return false, err
 	}

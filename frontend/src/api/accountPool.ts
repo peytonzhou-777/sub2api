@@ -4,7 +4,7 @@ export type AccountPoolFreshness = 'fresh' | 'stale' | 'unavailable'
 export type AccountPoolStatusCode = 'active' | 'disabled' | 'error' | 'temporarily_unavailable' | 'overloaded' | 'rate_limited' | 'paused' | 'quota_exceeded'
 export type AccountPoolSortBy = 'id' | 'status'
 export type AccountPoolSortOrder = 'asc' | 'desc'
-export type AccountPoolRelationFilter = 'current_residence' | 'seven_day_contact' | 'historical_contact'
+export type AccountPoolRelationFilter = 'current_residence' | 'primary_residence' | 'seven_day_contact' | 'historical_contact'
 
 export interface AccountPoolAccount {
   id: number
@@ -39,9 +39,13 @@ export interface AccountPoolAccount {
   residents: {
     active: number
     total: number
+    draining_slots?: number
+    active_conversations?: number
+    contacted_users?: number
     applicable: boolean
   }
   is_current_residence: boolean
+  is_primary_residence?: boolean
   is_seven_day_contact: boolean
   is_historical_contact: boolean
 }

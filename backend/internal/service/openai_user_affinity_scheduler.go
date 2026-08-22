@@ -39,14 +39,45 @@ func (s *OpenAIGatewayService) observeOpenAIUserAffinityShadow(ctx context.Conte
 	}
 }
 
-// selectOpenAIUserAffinity 为高级调度在会话粘性前恢复用户归属。
+// selectOpenAIUserConversation 为高级调度在居民槽位前恢复长期会话绑定。
+func (s *defaultOpenAIAccountScheduler) selectOpenAIUserConversation(ctx context.Context, req OpenAIAccountScheduleRequest, decision *OpenAIAccountScheduleDecision) (*AccountSelectionResult, bool, error) {
+	if s == nil || s.service == nil {
+		return nil, false, nil
+	}
+	selection, found, err := s.service.selectOpenAIUserAffinityConversation(ctx, req)
+	if err != nil || !found || selection == nil || selection.Account == nil {
+		return selection, found, err
+	}
+	s.service.openaiAffinity.metrics.conversationHits.Add(1)
+	decision.Layer = openAIAccountScheduleLayerConversationBinding
+	decision.SelectedAccountID = selection.Account.ID
+	decision.SelectedAccountType = selection.Account.Type
+	return selection, true, nil
+}
+
+// selectOpenAIUserAffinity 为高级调度在普通会话粘性前恢复用户归属。
 func (s *defaultOpenAIAccountScheduler) selectOpenAIUserAffinity(ctx context.Context, req OpenAIAccountScheduleRequest, decision *OpenAIAccountScheduleDecision) (*AccountSelectionResult, bool, error) {
 	if s == nil || s.service == nil || NormalizeOpenAICompatiblePlatform(req.Platform) != PlatformOpenAI {
 		return nil, false, nil
 	}
+	if selection, found, err := s.service.selectOpenAIUserAffinityResidentSlots(ctx, req); err != nil || found {
+		if selection != nil && selection.Account != nil {
+			s.service.openaiAffinity.metrics.residentSlotHits.Add(1)
+			decision.Layer = openAIAccountScheduleLayerUserAffinity
+			decision.SelectedAccountID = selection.Account.ID
+			decision.SelectedAccountType = selection.Account.Type
+		}
+		return selection, found, err
+	}
 	selection, found, err := s.service.selectOpenAIUserAffinityPlacement(ctx, req.GroupID, req.RequestedModel, req.ExcludedIDs, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
 	if err != nil || !found || selection == nil || selection.Account == nil {
 		return selection, false, err
+	}
+	if err := s.service.reserveOpenAIUserAffinityConversation(ctx, req, selection.Account.ID); err != nil {
+		if selection.ReleaseFunc != nil {
+			selection.ReleaseFunc()
+		}
+		return nil, true, err
 	}
 	decision.Layer = openAIAccountScheduleLayerUserAffinity
 	decision.SelectedAccountID = selection.Account.ID
@@ -55,12 +86,13 @@ func (s *defaultOpenAIAccountScheduler) selectOpenAIUserAffinity(ctx context.Con
 }
 
 // reserveOpenAIUserAffinitySelection 为高级调度成功选中的新居民建立归属。
-func (s *defaultOpenAIAccountScheduler) reserveOpenAIUserAffinitySelection(ctx context.Context, req OpenAIAccountScheduleRequest, selection *AccountSelectionResult, selectionErr error) {
+func (s *defaultOpenAIAccountScheduler) reserveOpenAIUserAffinitySelection(ctx context.Context, req OpenAIAccountScheduleRequest, selection *AccountSelectionResult, selectionErr error) error {
 	if s == nil || s.service == nil || selectionErr != nil || selection == nil || selection.Account == nil || NormalizeOpenAICompatiblePlatform(req.Platform) != PlatformOpenAI {
-		return
+		return nil
 	}
 	scopeKey := openAIUserAffinityScopeKey(req.GroupID, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
 	_ = s.service.reserveOpenAIUserAffinityPlacement(ctx, selection.Account.ID, scopeKey)
+	return s.service.reserveOpenAIUserAffinityConversation(ctx, req, selection.Account.ID)
 }
 
 // selectLegacyOpenAIUserAffinityPreflight 保证 legacy 调度同样先处理协议续链，再处理用户归属。
@@ -69,7 +101,18 @@ func (s *OpenAIGatewayService) selectLegacyOpenAIUserAffinityPreflight(
 	req OpenAIAccountScheduleRequest,
 	decision *OpenAIAccountScheduleDecision,
 ) (*AccountSelectionResult, bool, error) {
-	if strings.TrimSpace(req.PreviousResponseID) != "" && req.Platform == PlatformOpenAI {
+	if req.Platform == PlatformOpenAI {
+		if selection, found, err := s.selectOpenAIUserAffinityConversation(ctx, req); err != nil || found {
+			if found && selection != nil && selection.Account != nil {
+				decision.Layer = openAIAccountScheduleLayerConversationBinding
+				decision.SelectedAccountID = selection.Account.ID
+				decision.SelectedAccountType = selection.Account.Type
+			}
+			return selection, found, err
+		}
+	}
+	if strings.TrimSpace(req.PreviousResponseID) != "" && req.Platform == PlatformOpenAI &&
+		!s.usesOpenAIUserAffinityScopedAliases(ctx, req) {
 		selection, err := s.selectAccountByPreviousResponseIDForCapability(ctx, req.GroupID, req.PreviousResponseID, req.RequestedModel, req.ExcludedIDs, req.RequiredCapability, req.RequireCompact)
 		if err != nil {
 			return nil, true, err
@@ -94,12 +137,28 @@ func (s *OpenAIGatewayService) selectLegacyOpenAIUserAffinityPreflight(
 	if req.Platform != PlatformOpenAI {
 		return nil, false, nil
 	}
+	if selection, found, err := s.selectOpenAIUserAffinityResidentSlots(ctx, req); err != nil || found {
+		if found && selection != nil && selection.Account != nil {
+			decision.Layer = openAIAccountScheduleLayerUserAffinity
+			decision.SelectedAccountID = selection.Account.ID
+			decision.SelectedAccountType = selection.Account.Type
+		}
+		return selection, found, err
+	}
 	selection, found, err := s.selectOpenAIUserAffinityPlacement(
 		ctx, req.GroupID, req.RequestedModel, req.ExcludedIDs, req.RequireCompact,
 		req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport,
 	)
 	if err != nil || !found {
 		return selection, found, err
+	}
+	if selection != nil && selection.Account != nil {
+		if err := s.reserveOpenAIUserAffinityConversation(ctx, req, selection.Account.ID); err != nil {
+			if selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			return nil, true, err
+		}
 	}
 	decision.Layer = openAIAccountScheduleLayerUserAffinity
 	if selection != nil && selection.Account != nil {

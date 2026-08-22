@@ -13,6 +13,38 @@ type OpenAIUserAffinityStore interface {
 	RecordOpenAIUserPlacementEvent(ctx context.Context, event OpenAIUserPlacementEvent) error
 }
 
+// OpenAIUserAffinityMultiSlotStore 提供多槽位及会话绑定的权威数据库读路径。
+// P1 只启用只读兼容层，后续阶段在同一契约上增加原子状态转换。
+type OpenAIUserAffinityMultiSlotStore interface {
+	ListOpenAIUserResidentSlots(ctx context.Context, userID int64, scopeKey string) ([]OpenAIUserResidentSlot, error)
+	GetOpenAIUserConversationBinding(ctx context.Context, userID, apiKeyID int64, scopeKey, conversationHash string) (*OpenAIUserConversationBinding, error)
+	GetOpenAIUserConversationBindingByAlias(ctx context.Context, userID, apiKeyID int64, scopeKey, aliasType, aliasHash string) (*OpenAIUserConversationBinding, error)
+}
+
+// OpenAIUserAffinityResidentSlotMaintenanceStore 让配置减槽和 TTL 缩短按当前 scope 幂等收敛。
+type OpenAIUserAffinityResidentSlotMaintenanceStore interface {
+	ConvergeOpenAIUserResidentSlots(ctx context.Context, userID int64, scopeKey string, config OpenAIUserAffinityConfig, now time.Time) error
+}
+
+// OpenAIUserAffinityResetExclusionStore 提供管理员整组重置后的一次性账号排除事实。
+type OpenAIUserAffinityResetExclusionStore interface {
+	ListOpenAIUserAffinityResetExcludedAccountIDs(ctx context.Context, userID int64, scopeKey string) ([]int64, error)
+}
+
+// OpenAIUserAffinityConversationStore 负责会话绑定的 provisional、首输出提交和失败回滚。
+type OpenAIUserAffinityConversationStore interface {
+	OpenAIUserAffinityMultiSlotStore
+	ReserveOpenAIUserConversationBinding(ctx context.Context, reservation OpenAIUserConversationReservation) (*OpenAIUserConversationBinding, bool, error)
+	CommitOpenAIUserConversationBinding(ctx context.Context, transition OpenAIUserConversationTransition) (bool, error)
+	RollbackOpenAIUserConversationBinding(ctx context.Context, transition OpenAIUserConversationTransition) (bool, error)
+}
+
+// OpenAIUserAffinityConversationFailoverStore 以 pending 字段预留会话级切号，提交前不覆盖原绑定。
+type OpenAIUserAffinityConversationFailoverStore interface {
+	ReserveOpenAIUserConversationFailover(ctx context.Context, reservation OpenAIUserConversationFailoverReservation) (*OpenAIUserConversationTransition, bool, error)
+	ReserveOpenAIUserResidentSlotReplacement(ctx context.Context, reservation OpenAIUserResidentSlotReplacementReservation) (*OpenAIUserConversationTransition, bool, error)
+}
+
 // OpenAIUserAffinityCandidateStore 提供新居民装箱所需的当前触达容量快照。
 type OpenAIUserAffinityCandidateStore interface {
 	GetOpenAIUserAffinityCandidateStats(ctx context.Context, userID int64, accountIDs []int64) (map[int64]OpenAIUserAffinityCandidate, error)
@@ -26,10 +58,10 @@ type OpenAIUserAffinityReconciler interface {
 type OpenAIUserAffinityRuntimeStore interface {
 	AssignOpenAIUserAffinityPlacement(ctx context.Context, placement OpenAIUserPlacement, config OpenAIUserAffinityConfig) (bool, error)
 	OpenAIUserAffinityTouchStore
-	ConfirmOpenAIUserAffinitySuccess(ctx context.Context, userID, accountID, generation int64, scopeKey string) error
+	ConfirmOpenAIUserAffinitySuccess(ctx context.Context, incident OpenAIUserAffinityIncidentIdentity) error
 	RollbackOpenAIUserAffinityPlacement(ctx context.Context, transition OpenAIUserAffinityProvisionalTransition, config OpenAIUserAffinityConfig) (bool, error)
-	RecordOpenAIUserAffinityCapacityFailure(ctx context.Context, userID, accountID, generation int64, scopeKey, requestIDHash, reason string, config OpenAIUserAffinityConfig) (*time.Time, error)
-	GetOpenAIUserAffinityMigrationAuthorizedAt(ctx context.Context, userID, accountID, generation int64, scopeKey string) (*time.Time, error)
+	RecordOpenAIUserAffinityCapacityFailure(ctx context.Context, incident OpenAIUserAffinityIncidentIdentity, requestIDHash, reason string, config OpenAIUserAffinityConfig) (*time.Time, error)
+	GetOpenAIUserAffinityMigrationAuthorizedAt(ctx context.Context, incident OpenAIUserAffinityIncidentIdentity) (*time.Time, error)
 	MigrateOpenAIUserAffinityPlacement(ctx context.Context, userID, sourceAccountID, targetAccountID, generation int64, scopeKey, provisionalToken, reason string, config OpenAIUserAffinityConfig) (bool, error)
 	BeginOpenAIUserAffinityReentry(ctx context.Context, input OpenAIUserAffinityReentryBegin) (*OpenAIUserAffinityReentryAdmission, error)
 	ActivateOpenAIUserAffinityReentry(ctx context.Context, input OpenAIUserAffinityReentryTransition) (bool, error)
@@ -46,7 +78,7 @@ type OpenAIUserAffinityTouchStore interface {
 
 // OpenAIUserAffinitySuccessStore 将最终成功与 accepted 触达刷新分离。
 type OpenAIUserAffinitySuccessStore interface {
-	ConfirmOpenAIUserAffinitySuccess(ctx context.Context, userID, accountID, generation int64, scopeKey string) error
+	ConfirmOpenAIUserAffinitySuccess(ctx context.Context, incident OpenAIUserAffinityIncidentIdentity) error
 }
 
 // OpenAIUserAffinityProvisionalStore 负责失败请求的归属 CAS 回滚。
@@ -124,7 +156,150 @@ type OpenAIUserAffinityDemand struct {
 	Version  string
 }
 
-// OpenAIUserPlacement 是 14 天滑动居住归属的服务层投影。
+// OpenAIUserAffinityIncidentIdentity 将单槽兼容事故与多槽会话事故收敛为同一强类型键。
+type OpenAIUserAffinityIncidentIdentity struct {
+	UserID              int64
+	AccountID           int64
+	ScopeKey            string
+	PlacementGeneration int64
+	ConversationHash    string
+	ResidentSlotID      int64
+	SlotGeneration      int64
+}
+
+// Generation 返回事故在当前调度模式下用于 CAS 的 generation。
+func (i OpenAIUserAffinityIncidentIdentity) Generation() int64 {
+	if i.SlotGeneration > 0 {
+		return i.SlotGeneration
+	}
+	return i.PlacementGeneration
+}
+
+const (
+	OpenAIUserResidentSlotStatusProvisional        = "provisional"
+	OpenAIUserResidentSlotStatusActive             = "active"
+	OpenAIUserResidentSlotStatusReplacementPending = "replacement_pending"
+	OpenAIUserResidentSlotStatusDraining           = "draining"
+	OpenAIUserResidentSlotStatusExpired            = "expired"
+	OpenAIUserResidentSlotStatusReset              = "reset"
+)
+
+// OpenAIUserResidentSlot 是用户在单个 scope 内的常驻账号槽位。
+type OpenAIUserResidentSlot struct {
+	ID                      int64      `json:"id"`
+	UserID                  int64      `json:"user_id"`
+	ScopeKey                string     `json:"scope_key"`
+	SlotIndex               int        `json:"slot_index"`
+	AccountID               int64      `json:"account_id"`
+	Generation              int64      `json:"generation"`
+	Status                  string     `json:"status"`
+	AdmittedAt              time.Time  `json:"admitted_at"`
+	LastSuccessAt           *time.Time `json:"last_success_at"`
+	ExpiresAt               time.Time  `json:"expires_at"`
+	UsageScore              float64    `json:"usage_score"`
+	ActiveConversationCount int        `json:"active_conversation_count"`
+	ScoreUpdatedAt          time.Time  `json:"score_updated_at"`
+	ReplacementSourceSlotID *int64     `json:"replacement_source_slot_id"`
+	ConfigVersion           int64      `json:"config_version"`
+	ProvisionalToken        string     `json:"-"`
+}
+
+// OpenAIUserConversationBinding 将一个逻辑会话固定到其首次成功使用的账号。
+type OpenAIUserConversationBinding struct {
+	ID                   int64      `json:"id"`
+	UserID               int64      `json:"user_id"`
+	APIKeyID             int64      `json:"api_key_id"`
+	ScopeKey             string     `json:"scope_key"`
+	ConversationHash     string     `json:"conversation_hash"`
+	ResidentSlotID       int64      `json:"resident_slot_id"`
+	AccountID            int64      `json:"account_id"`
+	SlotGeneration       int64      `json:"slot_generation"`
+	Status               string     `json:"status"`
+	ContextRebuildable   bool       `json:"context_rebuildable"`
+	FirstOutputCommitted bool       `json:"first_output_committed"`
+	ActiveUntil          *time.Time `json:"active_until"`
+	ExpiresAt            time.Time  `json:"expires_at"`
+	LastSuccessAt        *time.Time `json:"last_success_at"`
+	ProvisionalToken     string     `json:"-"`
+}
+
+// OpenAIUserConversationReservation 是选号后、上游首输出前的原子会话预留输入。
+type OpenAIUserConversationReservation struct {
+	UserID              int64
+	APIKeyID            int64
+	ScopeKey            string
+	ConversationHash    string
+	AliasType           string
+	AliasHash           string
+	AccountID           int64
+	PlacementGeneration int64
+	MaxResidentSlots    int
+	ContextRebuildable  bool
+	ProvisionalToken    string
+	Config              OpenAIUserAffinityConfig
+}
+
+// OpenAIUserConversationTransition 以 binding、账号和 token 限定提交或回滚目标。
+type OpenAIUserConversationTransition struct {
+	BindingID         int64
+	UserID            int64
+	APIKeyID          int64
+	ScopeKey          string
+	ConversationHash  string
+	ResidentSlotID    int64
+	AccountID         int64
+	SlotGeneration    int64
+	ProvisionalToken  string
+	Failover          bool
+	SourceAccountID   int64
+	SourceSlotID      int64
+	SourceGeneration  int64
+	Replacement       bool
+	ReplacementSlotID int64
+	ResponseAliasHash string
+	Config            OpenAIUserAffinityConfig
+}
+
+// OpenAIUserConversationFailoverReservation 描述一个不破坏原绑定的槽位内重放预留。
+type OpenAIUserConversationFailoverReservation struct {
+	BindingID            int64
+	UserID               int64
+	ScopeKey             string
+	ConversationHash     string
+	SourceAccountID      int64
+	SourceResidentSlotID int64
+	SourceSlotGeneration int64
+	TargetAccountID      int64
+	TargetResidentSlotID int64
+	TargetSlotGeneration int64
+	ProvisionalToken     string
+	Config               OpenAIUserAffinityConfig
+}
+
+// OpenAIUserResidentSlotVersion 是替换事务必须重新校验的活动槽位快照。
+type OpenAIUserResidentSlotVersion struct {
+	ID         int64
+	AccountID  int64
+	Generation int64
+}
+
+// OpenAIUserResidentSlotReplacementReservation 在全槽位失败后预留 BestFit target。
+type OpenAIUserResidentSlotReplacementReservation struct {
+	BindingID            int64
+	UserID               int64
+	ScopeKey             string
+	ConversationHash     string
+	SourceAccountID      int64
+	SourceResidentSlotID int64
+	SourceSlotGeneration int64
+	VictimSlotID         int64
+	TargetAccountID      int64
+	CheckedSlots         []OpenAIUserResidentSlotVersion
+	ProvisionalToken     string
+	Config               OpenAIUserAffinityConfig
+}
+
+// OpenAIUserPlacement 是常驻槽位首选账号的兼容投影。
 type OpenAIUserPlacement struct {
 	UserID                    int64      `json:"user_id"`
 	ScopeKey                  string     `json:"scope_key"`
@@ -169,4 +344,5 @@ type OpenAIUserPlacementEvent struct {
 	AccountAffinityConfigVersion int64
 	EffectiveSource              string
 	ActorAdminID                 *int64
+	ResidentSlotID               *int64
 }

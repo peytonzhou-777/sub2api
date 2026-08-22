@@ -1,8 +1,10 @@
 export const openAIUserAffinityAccounts = {
   title: 'User Affinity Residents', short: 'Residents', user: 'User', lastActive: 'Last active',
-  residenceExpiry: 'Residence expiry', migrationHistory: 'Migration history', resetReason: 'Reset reason',
+  residenceExpiry: 'Residence expiry', migrationHistory: 'Slots and migration history',
   reset: 'Reset placement', inherit: 'Inherit global', maxContactUsers: 'Maximum contacted users',
-  cooldownSeconds: 'New resident cooldown (seconds)', failureThreshold: 'Migration failure threshold', failureWindow: 'Failure window (seconds)'
+  cooldownSeconds: 'New resident cooldown (seconds)', failureThreshold: 'Migration failure threshold', failureWindow: 'Failure window (seconds)',
+  slot: 'Slot', status: 'Status', heat: 'Heat', slotValue: 'Slot {index} / generation {generation}',
+  heatValue: 'Heat {value}', activeConversations: '{count} active conversations'
 }
 
 export const openAIUserAffinitySettings = {
@@ -27,6 +29,12 @@ export const openAIUserAffinitySettings = {
   },
   maxContactUsers: 'Default maximum contacted users',
   maxContactUsersHint: 'Maximum unique users with an active 7-day contact TTL on an account; new accounts default to 10.',
+  residentSlotCount: 'Resident account slots',
+  residentSlotCountHint: 'Maximum resident OpenAI accounts per user and scheduling scope. Keep 1 by default, then roll out 2 and 3 progressively.',
+  residentTTL: 'Residence and binding TTL (seconds)',
+  residentTTLHint: 'Sliding TTL refreshed by successful requests for slots and long-lived conversation bindings. Defaults to 604800 seconds (7 days).',
+  conversationActiveTTL: 'Active conversation occupancy (seconds)',
+  conversationActiveTTLHint: 'How long a successful new conversation occupies its slot. Defaults to 3600 seconds; other new conversations may use a secondary slot while occupied.',
   cooldownSeconds: 'New resident cooldown (seconds)',
   cooldownSecondsHint: 'After accepting a new resident, the account cannot accept another new or migrating resident for this period.',
   failureThreshold: 'Migration failure threshold',

@@ -47,6 +47,9 @@
         </div>
 
         <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <NumberField v-model="config.resident_account_slot_count" :label="t('admin.settings.openAIUserAffinity.residentSlotCount')" :hint="t('admin.settings.openAIUserAffinity.residentSlotCountHint')" :min="1" :max="5" />
+          <NumberField v-model="config.resident_ttl_seconds" :label="t('admin.settings.openAIUserAffinity.residentTTL')" :hint="t('admin.settings.openAIUserAffinity.residentTTLHint')" :min="86400" :max="2592000" />
+          <NumberField v-model="config.conversation_active_ttl_seconds" :label="t('admin.settings.openAIUserAffinity.conversationActiveTTL')" :hint="t('admin.settings.openAIUserAffinity.conversationActiveTTLHint')" :min="300" :max="86400" />
           <NumberField v-model="config.default_max_contact_users" :label="t('admin.settings.openAIUserAffinity.maxContactUsers')" :hint="t('admin.settings.openAIUserAffinity.maxContactUsersHint')" :min="1" :max="10000" />
           <NumberField v-model="config.default_new_resident_cooldown_seconds" :label="t('admin.settings.openAIUserAffinity.cooldownSeconds')" :hint="t('admin.settings.openAIUserAffinity.cooldownSecondsHint')" :min="1" :max="86400" />
           <NumberField v-model="config.capacity_failure_migration_threshold" :label="t('admin.settings.openAIUserAffinity.failureThreshold')" :hint="t('admin.settings.openAIUserAffinity.failureThresholdHint')" :min="2" :max="100" />

@@ -596,6 +596,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				turn,
 				writeClientMessage,
 			)
+			if bridgeErr == nil && result != nil && result.SucceededForScheduling() {
+				s.stageOpenAIUserAffinityResponseAlias(ctx, account.ID, result.RequestID)
+			}
 			if hooks != nil && hooks.AfterTurn != nil {
 				hooks.AfterTurn(turn, result, bridgeErr)
 			}
@@ -1614,6 +1617,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			return finalErr
 		}
 		lastTurnClean = true
+		if result != nil && result.SucceededForScheduling() {
+			s.stageOpenAIUserAffinityResponseAlias(ctx, account.ID, result.RequestID)
+		}
 		if hooks != nil && hooks.AfterTurn != nil {
 			hooks.AfterTurn(turn, result, nil)
 		}

@@ -6,11 +6,34 @@ export interface OpenAIUserAffinityResident {
   user_email: string
   account_id: number
   scope_key: string
+  resident_slot_id: number
+  slot_index: number
   generation: number
+  status: string
   assigned_at: string
   last_active_at: string | null
   expires_at: string
+  usage_score: number
+  active_conversation_count: number
   touch_expires_at: string | null
+}
+
+export interface OpenAIUserResidentSlot {
+  id: number
+  user_id: number
+  scope_key: string
+  slot_index: number
+  account_id: number
+  generation: number
+  status: string
+  admitted_at: string
+  last_success_at: string | null
+  expires_at: string
+  usage_score: number
+  active_conversation_count: number
+  score_updated_at: string
+  replacement_source_slot_id: number | null
+  config_version: number
 }
 
 export interface OpenAIUserAffinityEvent {
@@ -22,6 +45,7 @@ export interface OpenAIUserAffinityEvent {
   event_type: string
   reason: string
   actor_admin_id: number | null
+  resident_slot_id: number | null
   created_at: string
 }
 
@@ -40,6 +64,7 @@ export interface OpenAIUserAffinityPlacement {
 export interface OpenAIUserAffinityUserDetail {
   placement: OpenAIUserAffinityPlacement | null
   placements: OpenAIUserAffinityPlacement[]
+  resident_slots: OpenAIUserResidentSlot[]
   events: OpenAIUserAffinityEvent[]
 }
 
@@ -66,10 +91,9 @@ export async function getOpenAIUserAffinityUserDetail(userId: number): Promise<O
   return data
 }
 
-export async function resetOpenAIUserAffinityPlacement(userId: number, scopeKey: string, reason: string, excludeSourceAccount = false): Promise<void> {
+export async function resetOpenAIUserAffinityPlacement(userId: number, scopeKey: string, excludeSourceAccount = false): Promise<void> {
   await apiClient.post(`/admin/accounts/user-affinity/${userId}/reset`, {
     scope_key: scopeKey,
-    reason,
     exclude_source_account: excludeSourceAccount
   })
 }

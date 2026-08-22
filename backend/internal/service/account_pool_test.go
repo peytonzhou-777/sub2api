@@ -243,7 +243,7 @@ func TestAccountPoolListForUserFiltersBeforePaginationAndProjectsRelations(t *te
 	}}
 	svc := NewAccountPoolService(source, nil, nil, AccountPoolOptions{})
 	svc.SetUserRelationReader(accountPoolUserRelationReaderStub{relations: []AccountPoolUserRelation{
-		{AccountID: 11, IsCurrentResidence: true},
+		{AccountID: 11, IsCurrentResidence: true, IsPrimaryResidence: true},
 		{AccountID: 12, IsSevenDayContact: true, IsHistoricalContact: true},
 		{AccountID: 13, IsHistoricalContact: true},
 	}})
@@ -269,6 +269,14 @@ func TestAccountPoolListForUserFiltersBeforePaginationAndProjectsRelations(t *te
 	}
 	if len(page.Items) != 1 || page.Items[0].ID != 12 || !page.Items[0].IsSevenDayContact || !page.Items[0].IsHistoricalContact {
 		t.Fatalf("用户关系投影不完整: %+v", page.Items)
+	}
+
+	page, err = svc.ListForUser(context.Background(), "epoch-a", 42, 1, 20, AccountPoolListQuery{
+		Relation: AccountPoolRelationPrimaryResidence,
+		SortBy:   AccountPoolSortByID, SortOrder: AccountPoolSortAsc,
+	})
+	if err != nil || len(page.Items) != 1 || page.Items[0].ID != 11 || !page.Items[0].IsPrimaryResidence {
+		t.Fatalf("首选居住账号筛选不完整: page=%+v err=%v", page, err)
 	}
 }
 

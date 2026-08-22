@@ -29,6 +29,37 @@ func (r *accountRepository) ReconcileOpenAIUserAffinity(ctx context.Context, now
 	}{
 		{"placements", `UPDATE user_account_placements SET status = 'expired', updated_at = $1
 			WHERE status = 'active' AND expires_at <= $1`},
+		{"conversation_bindings", `UPDATE openai_user_conversation_bindings SET status = 'expired',
+			pending_resident_slot_id = NULL, pending_account_id = NULL, pending_slot_generation = NULL,
+			pending_token = NULL, pending_expires_at = NULL, updated_at = $1
+			WHERE status IN ('provisional', 'active', 'draining', 'reset') AND expires_at <= $1`},
+		{"conversation_pending", `UPDATE openai_user_conversation_bindings SET
+			pending_resident_slot_id = NULL, pending_account_id = NULL, pending_slot_generation = NULL,
+			pending_token = NULL, pending_expires_at = NULL, updated_at = $1
+			WHERE pending_expires_at <= $1`},
+		{"replacement_victims", `UPDATE openai_user_resident_slots victim SET status = 'active', updated_at = $1
+			WHERE victim.status = 'replacement_pending' AND EXISTS (
+				SELECT 1 FROM openai_user_resident_slots target
+				WHERE target.replacement_source_slot_id = victim.id
+				  AND target.status = 'provisional' AND target.expires_at <= $1
+			)`},
+		{"resident_slots", `UPDATE openai_user_resident_slots SET status = 'expired',
+			provisional_token = NULL, updated_at = $1
+			WHERE status IN ('provisional', 'active', 'replacement_pending') AND expires_at <= $1`},
+		{"draining_slots", `UPDATE openai_user_resident_slots s SET status = 'expired', updated_at = $1
+			WHERE s.status = 'draining' AND NOT EXISTS (
+				SELECT 1 FROM openai_user_conversation_bindings b
+				WHERE b.resident_slot_id = s.id AND b.status IN ('provisional', 'active', 'draining')
+				  AND b.expires_at > $1
+			)`},
+		{"reset_slots", `UPDATE openai_user_resident_slots s SET status = 'expired', updated_at = $1
+			WHERE s.status = 'reset' AND NOT EXISTS (
+				SELECT 1 FROM openai_user_conversation_bindings b
+				WHERE b.resident_slot_id = s.id AND b.status = 'draining' AND b.expires_at > $1
+			)`},
+		{"conversation_aliases", `DELETE FROM openai_user_conversation_aliases WHERE expires_at <= $1`},
+		{"reset_exclusions", `DELETE FROM openai_user_affinity_reset_exclusions
+			WHERE consumed_at IS NOT NULL AND consumed_at <= $1 - INTERVAL '30 days'`},
 		{"contacts", `UPDATE account_user_contacts SET reservation_kind = NULL,
 			reservation_token = NULL, reservation_until = NULL, reentry_batch_token = NULL,
 			reentry_state = CASE WHEN reentry_state IN ('leader_pending', 'stagger_releasing') THEN 'failed' ELSE reentry_state END,

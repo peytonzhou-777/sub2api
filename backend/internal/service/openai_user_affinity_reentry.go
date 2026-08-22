@@ -27,22 +27,45 @@ var (
 const openAIUserAffinityReconcileInterval = 10 * time.Minute
 
 type openAIUserAffinityRequestState struct {
-	admission   OpenAIUserAffinityReentryAdmission
-	released    bool
-	provisional *OpenAIUserAffinityProvisionalTransition
-	scopeKey    string
-	generation  int64
-	accountID   int64
-	createdAt   time.Time
+	admission             OpenAIUserAffinityReentryAdmission
+	released              bool
+	provisional           *OpenAIUserAffinityProvisionalTransition
+	scopeKey              string
+	generation            int64
+	accountID             int64
+	createdAt             time.Time
+	conversation          *OpenAIUserConversationTransition
+	conversationCommitted atomic.Bool
+	responseAliasHash     atomic.Value
+}
+
+func (s *openAIUserAffinityRequestState) openAIUserAffinityIncidentIdentity(userID int64) OpenAIUserAffinityIncidentIdentity {
+	if s == nil {
+		return OpenAIUserAffinityIncidentIdentity{UserID: userID}
+	}
+	identity := OpenAIUserAffinityIncidentIdentity{
+		UserID: userID, AccountID: s.accountID, ScopeKey: s.scopeKey, PlacementGeneration: s.generation,
+	}
+	if s.conversation != nil {
+		identity.ConversationHash = s.conversation.ConversationHash
+		identity.ResidentSlotID = s.conversation.ResidentSlotID
+		identity.SlotGeneration = s.conversation.SlotGeneration
+	}
+	return identity
 }
 
 type openAIUserAffinityMetrics struct {
-	reentryLeaders        atomic.Uint64
-	reentryFollowers      atomic.Uint64
-	followersReleased     atomic.Uint64
-	leaderTakeovers       atomic.Uint64
-	reentryLeaderFailures atomic.Uint64
-	shadowEvaluations     atomic.Uint64
+	reentryLeaders                  atomic.Uint64
+	reentryFollowers                atomic.Uint64
+	followersReleased               atomic.Uint64
+	leaderTakeovers                 atomic.Uint64
+	reentryLeaderFailures           atomic.Uint64
+	shadowEvaluations               atomic.Uint64
+	conversationHits                atomic.Uint64
+	residentSlotHits                atomic.Uint64
+	residentSlotFillAttempts        atomic.Uint64
+	conversationFailoverAttempts    atomic.Uint64
+	residentSlotReplacementAttempts atomic.Uint64
 }
 
 // openAIUserAffinityState 集中保存进程级亲和性协调状态，减少网关主结构的接线字段。
@@ -56,12 +79,17 @@ type openAIUserAffinityState struct {
 }
 
 type OpenAIUserAffinityMetricsSnapshot struct {
-	ReentryLeaders        uint64
-	ReentryFollowers      uint64
-	FollowersReleased     uint64
-	LeaderTakeovers       uint64
-	ReentryLeaderFailures uint64
-	ShadowEvaluations     uint64
+	ReentryLeaders                  uint64
+	ReentryFollowers                uint64
+	FollowersReleased               uint64
+	LeaderTakeovers                 uint64
+	ReentryLeaderFailures           uint64
+	ShadowEvaluations               uint64
+	ConversationHits                uint64
+	ResidentSlotHits                uint64
+	ResidentSlotFillAttempts        uint64
+	ConversationFailoverAttempts    uint64
+	ResidentSlotReplacementAttempts uint64
 }
 
 // SnapshotOpenAIUserAffinityMetrics 返回进程级协调指标，供运维采集器和诊断使用。
@@ -70,12 +98,17 @@ func (s *OpenAIGatewayService) SnapshotOpenAIUserAffinityMetrics() OpenAIUserAff
 		return OpenAIUserAffinityMetricsSnapshot{}
 	}
 	return OpenAIUserAffinityMetricsSnapshot{
-		ReentryLeaders:        s.openaiAffinity.metrics.reentryLeaders.Load(),
-		ReentryFollowers:      s.openaiAffinity.metrics.reentryFollowers.Load(),
-		FollowersReleased:     s.openaiAffinity.metrics.followersReleased.Load(),
-		LeaderTakeovers:       s.openaiAffinity.metrics.leaderTakeovers.Load(),
-		ReentryLeaderFailures: s.openaiAffinity.metrics.reentryLeaderFailures.Load(),
-		ShadowEvaluations:     s.openaiAffinity.metrics.shadowEvaluations.Load(),
+		ReentryLeaders:                  s.openaiAffinity.metrics.reentryLeaders.Load(),
+		ReentryFollowers:                s.openaiAffinity.metrics.reentryFollowers.Load(),
+		FollowersReleased:               s.openaiAffinity.metrics.followersReleased.Load(),
+		LeaderTakeovers:                 s.openaiAffinity.metrics.leaderTakeovers.Load(),
+		ReentryLeaderFailures:           s.openaiAffinity.metrics.reentryLeaderFailures.Load(),
+		ShadowEvaluations:               s.openaiAffinity.metrics.shadowEvaluations.Load(),
+		ConversationHits:                s.openaiAffinity.metrics.conversationHits.Load(),
+		ResidentSlotHits:                s.openaiAffinity.metrics.residentSlotHits.Load(),
+		ResidentSlotFillAttempts:        s.openaiAffinity.metrics.residentSlotFillAttempts.Load(),
+		ConversationFailoverAttempts:    s.openaiAffinity.metrics.conversationFailoverAttempts.Load(),
+		ResidentSlotReplacementAttempts: s.openaiAffinity.metrics.residentSlotReplacementAttempts.Load(),
 	}
 }
 
@@ -377,6 +410,7 @@ func (s *OpenAIGatewayService) rememberOpenAIUserAffinityAttempt(ctx context.Con
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cancel()
 		s.failOpenAIUserAffinityReentryLeader(cleanupCtx)
+		s.rollbackOpenAIUserAffinityConversation(cleanupCtx, current)
 	})
 	s.pruneOpenAIUserAffinityRequestStates()
 }
@@ -394,10 +428,14 @@ func (s *OpenAIGatewayService) pruneOpenAIUserAffinityRequestStates() {
 	if s == nil {
 		return
 	}
-	cutoff := time.Now().UTC().Add(-10 * time.Minute)
+	now := time.Now().UTC()
 	s.openaiAffinity.requests.Range(func(key, value any) bool {
 		state, ok := value.(*openAIUserAffinityRequestState)
-		if !ok || state == nil || !state.createdAt.IsZero() && state.createdAt.Before(cutoff) {
+		retention := 10 * time.Minute
+		if ok && state != nil && state.conversation != nil && state.conversation.Config.ConversationActiveTTL() > retention {
+			retention = state.conversation.Config.ConversationActiveTTL()
+		}
+		if !ok || state == nil || !state.createdAt.IsZero() && state.createdAt.Add(retention).Before(now) {
 			s.openaiAffinity.requests.Delete(key)
 		}
 		return true

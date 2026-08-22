@@ -18,6 +18,9 @@ export interface OpenAIUserAffinityConfig {
   follower_jitter_max_ms: number
   touch_success_mode: 'upstream_accepted' | 'response_completed'
   manual_reset_exclude_source_account: boolean
+  resident_account_slot_count: number
+  resident_ttl_seconds: number
+  conversation_active_ttl_seconds: number
   config_version: number
   updated_at: string
 }

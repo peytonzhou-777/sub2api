@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -11,22 +12,30 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
-// ListOpenAIUserAffinityResidents 分页列出账号当前 14 天居住期内的用户。
+// ListOpenAIUserAffinityResidents 从多槽位权威表分页列出账号当前居民及排空状态。
 func (r *accountRepository) ListOpenAIUserAffinityResidents(ctx context.Context, accountID int64, limit, offset int) ([]service.OpenAIUserAffinityResident, int64, error) {
 	if r == nil || r.sql == nil {
 		return nil, 0, errors.New("openai user affinity storage unavailable")
 	}
 	rows, err := r.sql.QueryContext(ctx, `
-		SELECT p.user_id, COALESCE(u.email, ''), p.account_id, p.scope_key, p.generation,
-		       p.assigned_at, p.last_active_at, p.expires_at, c.touch_expires_at,
+		SELECT s.user_id, COALESCE(u.email, ''), s.account_id, s.scope_key, s.id,
+		       s.slot_index, s.generation, s.status, s.admitted_at, s.last_success_at,
+		       s.expires_at, s.usage_score,
+		       (SELECT COUNT(*) FROM openai_user_conversation_bindings b
+		        WHERE b.resident_slot_id = s.id AND b.status IN ('provisional', 'active', 'draining')
+		          AND b.active_until > NOW() AND b.expires_at > NOW()),
+		       c.touch_expires_at,
 		       COUNT(*) OVER()
-		FROM user_account_placements p
-		JOIN users u ON u.id = p.user_id
-		LEFT JOIN account_user_contacts c ON c.account_id = p.account_id AND c.user_id = p.user_id
-		WHERE p.status = 'active' AND p.account_id = $1
-		  AND (p.scope_key = 'openai' OR p.scope_key LIKE 'openai:v1:%')
-		  AND p.expires_at > NOW()
-		ORDER BY p.last_active_at DESC NULLS LAST, p.assigned_at DESC
+		FROM openai_user_resident_slots s
+		JOIN users u ON u.id = s.user_id
+		LEFT JOIN account_user_contacts c ON c.account_id = s.account_id AND c.user_id = s.user_id
+		WHERE s.account_id = $1
+		  AND (s.scope_key = 'openai' OR s.scope_key LIKE 'openai:v1:%')
+		  AND ((s.status IN ('provisional', 'active', 'replacement_pending', 'draining') AND s.expires_at > NOW())
+		       OR (s.status = 'reset' AND EXISTS (
+		           SELECT 1 FROM openai_user_conversation_bindings b
+		           WHERE b.resident_slot_id = s.id AND b.status = 'draining' AND b.expires_at > NOW())))
+		ORDER BY (s.status = 'active') DESC, s.last_success_at DESC NULLS LAST, s.admitted_at DESC
 		LIMIT $2 OFFSET $3`, accountID, limit, offset)
 	if err != nil {
 		return nil, 0, err
@@ -37,8 +46,10 @@ func (r *accountRepository) ListOpenAIUserAffinityResidents(ctx context.Context,
 	for rows.Next() {
 		var item service.OpenAIUserAffinityResident
 		var lastActive, touchExpires sql.NullTime
-		if err := rows.Scan(&item.UserID, &item.UserEmail, &item.AccountID, &item.ScopeKey, &item.Generation,
-			&item.AssignedAt, &lastActive, &item.ExpiresAt, &touchExpires, &total); err != nil {
+		if err := rows.Scan(&item.UserID, &item.UserEmail, &item.AccountID, &item.ScopeKey,
+			&item.ResidentSlotID, &item.SlotIndex, &item.Generation, &item.Status,
+			&item.AssignedAt, &lastActive, &item.ExpiresAt, &item.UsageScore,
+			&item.ActiveConversationCount, &touchExpires, &total); err != nil {
 			return nil, 0, err
 		}
 		if lastActive.Valid {
@@ -63,9 +74,13 @@ func (r *accountRepository) GetOpenAIUserAffinityUserDetail(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	slots, err := r.listOpenAIUserAffinityAdminResidentSlots(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := r.sql.QueryContext(ctx, `
 		SELECT id, scope_key, placement_generation, source_account_id, target_account_id,
-		       event_type, reason, actor_admin_id, created_at
+		       event_type, reason, actor_admin_id, resident_slot_id, created_at
 		FROM user_account_placement_events
 		WHERE user_id = $1 AND (scope_key = 'openai' OR scope_key LIKE 'openai:v1:%')
 		ORDER BY created_at DESC, id DESC LIMIT $2`, userID, eventLimit)
@@ -76,9 +91,9 @@ func (r *accountRepository) GetOpenAIUserAffinityUserDetail(ctx context.Context,
 	events := make([]service.OpenAIUserAffinityAdminEvent, 0, eventLimit)
 	for rows.Next() {
 		var event service.OpenAIUserAffinityAdminEvent
-		var sourceID, targetID, actorID sql.NullInt64
+		var sourceID, targetID, actorID, residentSlotID sql.NullInt64
 		if err := rows.Scan(&event.ID, &event.ScopeKey, &event.PlacementGeneration, &sourceID, &targetID,
-			&event.EventType, &event.Reason, &actorID, &event.CreatedAt); err != nil {
+			&event.EventType, &event.Reason, &actorID, &residentSlotID, &event.CreatedAt); err != nil {
 			return nil, err
 		}
 		if sourceID.Valid {
@@ -93,17 +108,85 @@ func (r *accountRepository) GetOpenAIUserAffinityUserDetail(ctx context.Context,
 			value := actorID.Int64
 			event.ActorAdminID = &value
 		}
+		if residentSlotID.Valid {
+			value := residentSlotID.Int64
+			event.ResidentSlotID = &value
+		}
 		events = append(events, event)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	detail := &service.OpenAIUserAffinityUserDetail{Placements: placements, Events: events}
-	if len(placements) > 0 {
+	detail := &service.OpenAIUserAffinityUserDetail{Placements: placements, ResidentSlots: slots, Events: events}
+	if len(slots) > 0 && slots[0].Status == service.OpenAIUserResidentSlotStatusActive {
+		primary := openAIUserResidentSlotPlacement(slots[0])
+		detail.Placement = &primary
+	} else if len(placements) > 0 {
 		placement := placements[0]
 		detail.Placement = &placement
 	}
 	return detail, nil
+}
+
+func (r *accountRepository) listOpenAIUserAffinityAdminResidentSlots(ctx context.Context, userID int64) ([]service.OpenAIUserResidentSlot, error) {
+	rows, err := r.sql.QueryContext(ctx, `
+		WITH affinity_config AS (
+			SELECT GREATEST(COALESCE((
+				SELECT NULLIF((value::jsonb ->> 'resident_ttl_seconds')::double precision, 0)
+				FROM settings WHERE key = 'openai_user_affinity_scheduling'
+			), 604800), 1) AS resident_ttl_seconds
+		)
+		SELECT s.id, s.user_id, s.scope_key, s.slot_index, s.account_id, s.generation, s.status,
+		       s.admitted_at, s.last_success_at, s.expires_at, s.usage_score, s.score_updated_at,
+		       s.replacement_source_slot_id, s.config_version,
+		       (SELECT COUNT(*) FROM openai_user_conversation_bindings b
+		        WHERE b.resident_slot_id = s.id AND b.status IN ('provisional', 'active', 'draining')
+		          AND b.active_until > NOW() AND b.expires_at > NOW())
+		FROM openai_user_resident_slots s CROSS JOIN affinity_config c
+		WHERE s.user_id = $1 AND (s.scope_key = 'openai' OR s.scope_key LIKE 'openai:v1:%')
+		  AND ((s.status IN ('provisional', 'active', 'replacement_pending', 'draining') AND s.expires_at > NOW())
+		       OR (s.status = 'reset' AND EXISTS (
+		           SELECT 1 FROM openai_user_conversation_bindings b
+		           WHERE b.resident_slot_id = s.id AND b.status = 'draining' AND b.expires_at > NOW())))
+		ORDER BY (s.status = 'active') DESC,
+		         s.usage_score * POWER(0.5, GREATEST(EXTRACT(EPOCH FROM (NOW() - s.score_updated_at)), 0) / c.resident_ttl_seconds) DESC,
+		         s.last_success_at DESC NULLS LAST, s.admitted_at, s.account_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	slots := make([]service.OpenAIUserResidentSlot, 0)
+	for rows.Next() {
+		var slot service.OpenAIUserResidentSlot
+		var lastSuccess sql.NullTime
+		var replacementSource sql.NullInt64
+		if err := rows.Scan(&slot.ID, &slot.UserID, &slot.ScopeKey, &slot.SlotIndex, &slot.AccountID,
+			&slot.Generation, &slot.Status, &slot.AdmittedAt, &lastSuccess, &slot.ExpiresAt,
+			&slot.UsageScore, &slot.ScoreUpdatedAt, &replacementSource, &slot.ConfigVersion,
+			&slot.ActiveConversationCount); err != nil {
+			return nil, err
+		}
+		if lastSuccess.Valid {
+			value := lastSuccess.Time.UTC()
+			slot.LastSuccessAt = &value
+		}
+		if replacementSource.Valid {
+			value := replacementSource.Int64
+			slot.ReplacementSourceSlotID = &value
+		}
+		slots = append(slots, slot)
+	}
+	return slots, rows.Err()
+}
+
+func openAIUserResidentSlotPlacement(slot service.OpenAIUserResidentSlot) service.OpenAIUserPlacement {
+	accountID := slot.AccountID
+	return service.OpenAIUserPlacement{
+		UserID: slot.UserID, ScopeKey: slot.ScopeKey, AccountID: &accountID,
+		Generation: slot.Generation, Status: slot.Status, AssignedAt: slot.AdmittedAt,
+		LastActiveAt: slot.LastSuccessAt, ExpiresAt: slot.ExpiresAt,
+		AssignmentReason: "resident_slot_primary",
+	}
 }
 
 func (r *accountRepository) listOpenAIUserAffinityPlacements(ctx context.Context, userID int64) ([]service.OpenAIUserPlacement, error) {
@@ -169,8 +252,8 @@ func (r *accountRepository) listOpenAIUserAffinityPlacements(ctx context.Context
 	return placements, rows.Err()
 }
 
-// ResetOpenAIUserAffinityPlacement 原子清除当前归属，用户下次请求按新居民重新装箱。
-func (r *accountRepository) ResetOpenAIUserAffinityPlacement(ctx context.Context, userID, actorAdminID int64, scopeKey, reason string, excludeSource bool) error {
+// ResetOpenAIUserAffinityPlacement 原子重置整个 scope；旧会话保留 draining 绑定，新会话重新 BestFit。
+func (r *accountRepository) ResetOpenAIUserAffinityPlacement(ctx context.Context, userID, actorAdminID int64, scopeKey string, excludeSource bool) error {
 	if r == nil || r.client == nil {
 		return errors.New("openai user affinity storage unavailable")
 	}
@@ -187,28 +270,142 @@ func (r *accountRepository) ResetOpenAIUserAffinityPlacement(ctx context.Context
 		defer func() { _ = tx.Rollback() }()
 		exec = tx.Client()
 	}
-	var sourceAccountID sql.NullInt64
-	var generation int64
-	if err := scanSingleRow(ctx, exec, `
+	lockKey := fmt.Sprintf("%d:%s", userID, scopeKey)
+	if _, err := exec.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, lockKey); err != nil {
+		return err
+	}
+	var legacyAccountID sql.NullInt64
+	var legacyGeneration int64
+	legacyErr := scanSingleRow(ctx, exec, `
 		SELECT account_id, generation FROM user_account_placements
-		WHERE user_id = $1 AND scope_key = $2 FOR UPDATE`, []any{userID, scopeKey}, &sourceAccountID, &generation); err != nil {
+		WHERE user_id = $1 AND scope_key = $2 FOR UPDATE`, []any{userID, scopeKey}, &legacyAccountID, &legacyGeneration)
+	if legacyErr != nil && !errors.Is(legacyErr, sql.ErrNoRows) {
+		return legacyErr
+	}
+	type resetSlot struct {
+		id, accountID, generation int64
+	}
+	rows, err := exec.QueryContext(ctx, `
+		SELECT id, account_id, generation FROM openai_user_resident_slots
+		WHERE user_id = $1 AND scope_key = $2
+		  AND status IN ('provisional', 'active', 'replacement_pending', 'draining')
+		ORDER BY account_id, id FOR UPDATE`, userID, scopeKey)
+	if err != nil {
+		return err
+	}
+	slots := make([]resetSlot, 0)
+	accountIDs := make(map[int64]struct{})
+	maxGeneration := legacyGeneration
+	for rows.Next() {
+		var slot resetSlot
+		if err := rows.Scan(&slot.id, &slot.accountID, &slot.generation); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		slots = append(slots, slot)
+		accountIDs[slot.accountID] = struct{}{}
+		if slot.generation > maxGeneration {
+			maxGeneration = slot.generation
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if legacyAccountID.Valid {
+		accountIDs[legacyAccountID.Int64] = struct{}{}
+	}
+	pendingRows, err := exec.QueryContext(ctx, `
+		SELECT account_id FROM openai_user_affinity_reset_exclusions
+		WHERE user_id = $1 AND scope_key = $2 AND consumed_at IS NULL
+		ORDER BY account_id FOR UPDATE`, userID, scopeKey)
+	if err != nil {
+		return err
+	}
+	for pendingRows.Next() {
+		var accountID int64
+		if err := pendingRows.Scan(&accountID); err != nil {
+			_ = pendingRows.Close()
+			return err
+		}
+		accountIDs[accountID] = struct{}{}
+	}
+	if err := pendingRows.Close(); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
 	if _, err := exec.ExecContext(ctx, `
-		UPDATE user_account_placements SET account_id = NULL, generation = generation + 1,
-			status = 'reset', reset_at = $2, reset_by_admin_id = $3, reset_reason = $4,
-			reset_exclude_source_account = $5, reset_source_account_id = $6,
-			expires_at = $2, updated_at = $2
-		WHERE user_id = $1 AND scope_key = $7`, userID, now, actorAdminID, reason, excludeSource, sourceAccountID, scopeKey); err != nil {
+		UPDATE openai_user_affinity_reset_exclusions SET consumed_at = $3
+		WHERE user_id = $1 AND scope_key = $2 AND consumed_at IS NULL`, userID, scopeKey, now); err != nil {
 		return err
 	}
-	if sourceAccountID.Valid {
+	nextGeneration := maxGeneration + 1
+	if nextGeneration < 1 {
+		nextGeneration = 1
+	}
+	var compatibilitySource any
+	if legacyAccountID.Valid {
+		compatibilitySource = legacyAccountID.Int64
+	} else if len(slots) > 0 {
+		compatibilitySource = slots[0].accountID
+	} else {
+		var smallestAccountID int64
+		for accountID := range accountIDs {
+			if smallestAccountID == 0 || accountID < smallestAccountID {
+				smallestAccountID = accountID
+			}
+		}
+		if smallestAccountID > 0 {
+			compatibilitySource = smallestAccountID
+		}
+	}
+	if _, err := exec.ExecContext(ctx, `
+		INSERT INTO user_account_placements
+			(user_id, scope_key, account_id, generation, status, assigned_at, expires_at,
+			 assignment_reason, reset_at, reset_by_admin_id, reset_reason,
+			 reset_exclude_source_account, reset_source_account_id, created_at, updated_at)
+		VALUES ($1, $2, NULL, $3, 'reset', $4, $4, 'admin_reset', $4, $5, NULL, $6, $7, $4, $4)
+		ON CONFLICT (user_id, scope_key) DO UPDATE SET
+			account_id = NULL, generation = EXCLUDED.generation, status = 'reset',
+			assigned_at = EXCLUDED.assigned_at, last_active_at = NULL, expires_at = EXCLUDED.expires_at,
+			assignment_reason = EXCLUDED.assignment_reason, reset_at = EXCLUDED.reset_at,
+			reset_by_admin_id = EXCLUDED.reset_by_admin_id, reset_reason = NULL,
+			reset_exclude_source_account = EXCLUDED.reset_exclude_source_account,
+			reset_source_account_id = EXCLUDED.reset_source_account_id,
+			provisional_token = NULL, updated_at = EXCLUDED.updated_at`,
+		userID, scopeKey, nextGeneration, now, actorAdminID, excludeSource, compatibilitySource); err != nil {
+		return err
+	}
+	if _, err := exec.ExecContext(ctx, `
+		UPDATE openai_user_resident_slots SET status = 'reset', provisional_token = NULL, updated_at = $3
+		WHERE user_id = $1 AND scope_key = $2
+		  AND status IN ('provisional', 'active', 'replacement_pending', 'draining')`, userID, scopeKey, now); err != nil {
+		return err
+	}
+	if _, err := exec.ExecContext(ctx, `
+		UPDATE openai_user_conversation_bindings SET
+			status = CASE WHEN first_output_committed THEN 'draining' ELSE 'reset' END,
+			provisional_token = NULL,
+			pending_resident_slot_id = NULL, pending_account_id = NULL, pending_slot_generation = NULL,
+			pending_token = NULL, pending_expires_at = NULL, updated_at = $3
+		WHERE user_id = $1 AND scope_key = $2 AND status IN ('provisional', 'active', 'draining')`, userID, scopeKey, now); err != nil {
+		return err
+	}
+	for accountID := range accountIDs {
 		if _, err := exec.ExecContext(ctx, `
 			UPDATE account_user_contacts SET reservation_kind = NULL, reservation_token = NULL,
 				reservation_until = NULL, updated_at = $3
-			WHERE account_id = $1 AND user_id = $2`, sourceAccountID.Int64, userID, now); err != nil {
+			WHERE account_id = $1 AND user_id = $2`, accountID, userID, now); err != nil {
 			return err
+		}
+		if excludeSource {
+			if _, err := exec.ExecContext(ctx, `
+				INSERT INTO openai_user_affinity_reset_exclusions
+					(user_id, scope_key, account_id, reset_generation, actor_admin_id, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6)
+				ON CONFLICT (user_id, scope_key, account_id, reset_generation) DO NOTHING`,
+				userID, scopeKey, accountID, nextGeneration, actorAdminID, now); err != nil {
+				return err
+			}
 		}
 	}
 	if _, err := exec.ExecContext(ctx, `
@@ -217,13 +414,26 @@ func (r *accountRepository) ResetOpenAIUserAffinityPlacement(ctx context.Context
 		WHERE user_id = $1 AND scope_key = $3 AND closed_at IS NULL`, userID, now, scopeKey); err != nil {
 		return err
 	}
-	if _, err := exec.ExecContext(ctx, `
-		INSERT INTO user_account_placement_events
-			(user_id, scope_key, placement_generation, source_account_id, event_type,
-			 reason, effective_source, actor_admin_id)
-		VALUES ($1, $2, $3, $4, 'admin_reset', $5, 'global', $6)`,
-		userID, scopeKey, generation+1, sourceAccountID, reason, actorAdminID); err != nil {
-		return err
+	if len(slots) == 0 {
+		if _, err := exec.ExecContext(ctx, `
+			INSERT INTO user_account_placement_events
+				(user_id, scope_key, placement_generation, source_account_id, event_type,
+				 reason, effective_source, actor_admin_id)
+			VALUES ($1, $2, $3, $4, 'admin_reset', 'admin_manual_reset', 'global', $5)`,
+			userID, scopeKey, nextGeneration, compatibilitySource, actorAdminID); err != nil {
+			return err
+		}
+	} else {
+		for _, slot := range slots {
+			if _, err := exec.ExecContext(ctx, `
+				INSERT INTO user_account_placement_events
+					(user_id, scope_key, placement_generation, source_account_id, event_type,
+					 reason, effective_source, actor_admin_id, resident_slot_id)
+				VALUES ($1, $2, $3, $4, 'slot_admin_reset', 'admin_manual_reset', 'global', $5, $6)`,
+				userID, scopeKey, slot.generation, slot.accountID, actorAdminID, slot.id); err != nil {
+				return err
+			}
+		}
 	}
 	if tx != nil {
 		return tx.Commit()

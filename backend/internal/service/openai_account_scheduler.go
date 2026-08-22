@@ -384,9 +384,13 @@ func (s *defaultOpenAIAccountScheduler) Select(
 		s.metrics.recordSelect(decision)
 	}()
 
+	if selection, found, err := s.selectOpenAIUserConversation(ctx, req, &decision); err != nil || found {
+		return selection, decision, err
+	}
+	scopedAliases := s.service.usesOpenAIUserAffinityScopedAliases(ctx, req)
 	previousResponseID := strings.TrimSpace(req.PreviousResponseID)
 	if previousResponseID != "" && NormalizeOpenAICompatiblePlatform(req.Platform) == PlatformOpenAI &&
-		(!req.StickyWeighted || !req.PreviousResponseCanMove) {
+		!scopedAliases && (!req.StickyWeighted || !req.PreviousResponseCanMove) {
 		selection, err := s.service.selectAccountByPreviousResponseIDForCapability(
 			ctx,
 			req.GroupID,
@@ -464,7 +468,12 @@ func (s *defaultOpenAIAccountScheduler) Select(
 			}
 		}
 	}
-	s.reserveOpenAIUserAffinitySelection(ctx, req, selection, err)
+	if reserveErr := s.reserveOpenAIUserAffinitySelection(ctx, req, selection, err); reserveErr != nil {
+		if selection != nil && selection.ReleaseFunc != nil {
+			selection.ReleaseFunc()
+		}
+		return nil, decision, reserveErr
+	}
 	return selection, decision, nil
 }
 
@@ -2180,6 +2189,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 	decision := OpenAIAccountScheduleDecision{}
 	affinityReq := newOpenAIUserAffinityScheduleRequest(groupID, platform, previousResponseID, requestedModel,
 		requiredTransport, requiredCapability, requiredImageCapability, requireCompact, excludedIDs)
+	affinityReq.SessionHash = sessionHash
 	affinityReq.PreviousResponseCanMove = previousResponseCanMove
 	defer s.observeOpenAIUserAffinityShadow(ctx, affinityReq, &decision)()
 	scheduler := s.getOpenAIAccountScheduler(ctx)
@@ -2256,28 +2266,17 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 	stickyWeighted := s.isOpenAIAdvancedSchedulerStickyWeightedEnabled(ctx)
 	subscriptionPriority := s.isOpenAIAdvancedSchedulerSubscriptionPriorityEnabled(ctx)
 	stickyPreviousAccountID := int64(0)
-	if stickyWeighted && previousResponseCanMove && strings.TrimSpace(previousResponseID) != "" && platform == PlatformOpenAI {
+	if stickyWeighted && previousResponseCanMove && strings.TrimSpace(previousResponseID) != "" && platform == PlatformOpenAI &&
+		!s.usesOpenAIUserAffinityScopedAliases(ctx, affinityReq) {
 		stickyPreviousAccountID = s.ResolveAccountIDByPreviousResponseIDForScheduler(ctx, groupID, previousResponseID, requestedModel, excludedIDs, requiredCapability, requireCompact)
 	}
 
-	return scheduler.Select(ctx, OpenAIAccountScheduleRequest{
-		GroupID:                 groupID,
-		Platform:                platform,
-		SessionHash:             sessionHash,
-		StickyAccountID:         stickyAccountID,
-		StickyPreviousAccountID: stickyPreviousAccountID,
-		StickyWeighted:          stickyWeighted,
-		SubscriptionPriority:    subscriptionPriority,
-		PreviousResponseID:      previousResponseID,
-		PreviousResponseCanMove: previousResponseCanMove,
-		UseUpstreamTokenCost:    useUpstreamTokenCost,
-		RequestedModel:          requestedModel,
-		RequiredTransport:       requiredTransport,
-		RequiredCapability:      requiredCapability,
-		RequiredImageCapability: requiredImageCapability,
-		RequireCompact:          requireCompact,
-		ExcludedIDs:             excludedIDs,
-	})
+	affinityReq.StickyAccountID = stickyAccountID
+	affinityReq.StickyPreviousAccountID = stickyPreviousAccountID
+	affinityReq.StickyWeighted = stickyWeighted
+	affinityReq.SubscriptionPriority = subscriptionPriority
+	affinityReq.UseUpstreamTokenCost = useUpstreamTokenCost
+	return scheduler.Select(ctx, affinityReq)
 }
 
 func accountSupportsOpenAICapabilities(account *Account, requiredCapability OpenAIEndpointCapability, requiredImageCapability OpenAIImagesCapability) bool {

@@ -1176,6 +1176,7 @@ func (s *OpenAIGatewayService) bindHTTPResponseAccount(ctx context.Context, c *g
 	if responseID == "" {
 		return
 	}
+	s.stageOpenAIUserAffinityResponseAlias(ctx, account.ID, responseID)
 	store := s.getOpenAIWSStateStore()
 	if store == nil {
 		return

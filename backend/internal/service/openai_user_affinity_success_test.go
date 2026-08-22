@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -22,18 +23,61 @@ func (r *openAIUserAffinitySuccessSettingRepo) GetValue(context.Context, string)
 
 type openAIUserAffinitySuccessTouchRepo struct {
 	AccountRepository
-	mu        sync.Mutex
-	touches   []OpenAIUserAffinityConfig
-	confirms  int
-	rollbacks int
-	touchCh   chan struct{}
+	OpenAIUserAffinityRuntimeStore
+	mu                    sync.Mutex
+	touches               []OpenAIUserAffinityConfig
+	confirms              int
+	rollbacks             int
+	conversationCommits   int
+	conversationRollbacks int
+	commitTransitions     []OpenAIUserConversationTransition
+	capacityIncidents     []OpenAIUserAffinityIncidentIdentity
+	touchCh               chan struct{}
 }
 
-func (r *openAIUserAffinitySuccessTouchRepo) ConfirmOpenAIUserAffinitySuccess(context.Context, int64, int64, int64, string) error {
+func (r *openAIUserAffinitySuccessTouchRepo) ListOpenAIUserResidentSlots(context.Context, int64, string) ([]OpenAIUserResidentSlot, error) {
+	return nil, nil
+}
+
+func (r *openAIUserAffinitySuccessTouchRepo) GetOpenAIUserConversationBinding(context.Context, int64, int64, string, string) (*OpenAIUserConversationBinding, error) {
+	return nil, nil
+}
+
+func (r *openAIUserAffinitySuccessTouchRepo) GetOpenAIUserConversationBindingByAlias(context.Context, int64, int64, string, string, string) (*OpenAIUserConversationBinding, error) {
+	return nil, nil
+}
+
+func (r *openAIUserAffinitySuccessTouchRepo) ReserveOpenAIUserConversationBinding(context.Context, OpenAIUserConversationReservation) (*OpenAIUserConversationBinding, bool, error) {
+	return nil, false, nil
+}
+
+func (r *openAIUserAffinitySuccessTouchRepo) CommitOpenAIUserConversationBinding(_ context.Context, transition OpenAIUserConversationTransition) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.conversationCommits++
+	r.commitTransitions = append(r.commitTransitions, transition)
+	return true, nil
+}
+
+func (r *openAIUserAffinitySuccessTouchRepo) RollbackOpenAIUserConversationBinding(context.Context, OpenAIUserConversationTransition) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.conversationRollbacks++
+	return true, nil
+}
+
+func (r *openAIUserAffinitySuccessTouchRepo) ConfirmOpenAIUserAffinitySuccess(context.Context, OpenAIUserAffinityIncidentIdentity) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.confirms++
 	return nil
+}
+
+func (r *openAIUserAffinitySuccessTouchRepo) RecordOpenAIUserAffinityCapacityFailure(_ context.Context, incident OpenAIUserAffinityIncidentIdentity, _, _ string, _ OpenAIUserAffinityConfig) (*time.Time, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.capacityIncidents = append(r.capacityIncidents, incident)
+	return nil, nil
 }
 
 func (r *openAIUserAffinitySuccessTouchRepo) RollbackOpenAIUserAffinityPlacement(context.Context, OpenAIUserAffinityProvisionalTransition, OpenAIUserAffinityConfig) (bool, error) {
@@ -86,6 +130,7 @@ func newOpenAIUserAffinitySuccessTestService(t *testing.T, mode string) (*OpenAI
 
 func openAIUserAffinitySuccessTestContext(requestID string) context.Context {
 	ctx := context.WithValue(context.Background(), ctxkey.UserID, int64(42))
+	ctx = context.WithValue(ctx, ctxkey.APIKeyID, int64(77))
 	return context.WithValue(ctx, ctxkey.RequestID, requestID)
 }
 
@@ -113,6 +158,118 @@ func TestOpenAIUserAffinityAcceptedDoesNotConfirmIncidentUntilTerminalSuccess(t 
 
 	service.RecordOpenAIUserAffinitySuccess(ctx, accountID)
 	require.Equal(t, 1, repo.confirmCount())
+}
+
+func TestOpenAIUserAffinityConversationCommitsOnlyOnTerminalSuccessAndRollsBackOnFailure(t *testing.T) {
+	service, repo := newOpenAIUserAffinitySuccessTestService(t, OpenAIUserAffinityTouchAccepted)
+	accountID := int64(9)
+
+	acceptedCtx := openAIUserAffinitySuccessTestContext("conversation-accepted")
+	acceptedState := &openAIUserAffinityRequestState{
+		accountID: accountID, scopeKey: "openai", generation: 2,
+		conversation: &OpenAIUserConversationTransition{
+			BindingID: 1, AccountID: accountID, ProvisionalToken: "accepted-token",
+			Config: DefaultOpenAIUserAffinityConfig(),
+		},
+	}
+	service.openaiAffinity.requests.Store(openAIUserAffinityRequestKey(acceptedCtx), acceptedState)
+	service.RecordOpenAIUserAffinityAccepted(acceptedCtx, accountID)
+	require.False(t, acceptedState.conversationCommitted.Load(), "响应头不得提前提交会话绑定")
+	repo.mu.Lock()
+	require.Zero(t, repo.conversationCommits)
+	repo.mu.Unlock()
+	service.RecordOpenAIUserAffinitySuccess(acceptedCtx, accountID)
+	require.True(t, acceptedState.conversationCommitted.Load())
+
+	failedCtx := openAIUserAffinitySuccessTestContext("conversation-failed")
+	service.openaiAffinity.requests.Store(openAIUserAffinityRequestKey(failedCtx), &openAIUserAffinityRequestState{
+		accountID: accountID, scopeKey: "openai", generation: 2,
+		conversation: &OpenAIUserConversationTransition{
+			BindingID: 2, AccountID: accountID, ProvisionalToken: "failed-token",
+		},
+	})
+	service.RecordOpenAIUserAffinityFailure(failedCtx, accountID)
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	require.Equal(t, 1, repo.conversationCommits)
+	require.Equal(t, 1, repo.conversationRollbacks)
+}
+
+func TestOpenAIUserAffinityResponseAliasIsStagedUntilTerminalSuccess(t *testing.T) {
+	service, repo := newOpenAIUserAffinitySuccessTestService(t, OpenAIUserAffinityTouchCompleted)
+	ctx := openAIUserAffinitySuccessTestContext("conversation-response-alias")
+	accountID := int64(9)
+	state := &openAIUserAffinityRequestState{
+		accountID: accountID, scopeKey: "openai:v1:group:1:lane:general", generation: 2,
+		conversation: &OpenAIUserConversationTransition{
+			BindingID: 1, UserID: 42, APIKeyID: 77, ScopeKey: "openai:v1:group:1:lane:general",
+			AccountID: accountID, ProvisionalToken: "response-alias-token",
+			Config: DefaultOpenAIUserAffinityConfig(),
+		},
+	}
+	service.openaiAffinity.requests.Store(openAIUserAffinityRequestKey(ctx), state)
+
+	service.stageOpenAIUserAffinityResponseAlias(ctx, accountID, "resp_scoped_001")
+	repo.mu.Lock()
+	require.Empty(t, repo.commitTransitions)
+	repo.mu.Unlock()
+
+	service.RecordOpenAIUserAffinityAccepted(ctx, accountID)
+	service.RecordOpenAIUserAffinitySuccess(ctx, accountID)
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	require.Len(t, repo.commitTransitions, 1)
+	require.Equal(t,
+		openAIUserAffinityScopedStateHash(42, 77, state.scopeKey, "response_id", "resp_scoped_001"),
+		repo.commitTransitions[0].ResponseAliasHash,
+	)
+}
+
+func TestOpenAIUserAffinityProvisionalConversationRecordsCapacityBeforeRollback(t *testing.T) {
+	service, repo := newOpenAIUserAffinitySuccessTestService(t, OpenAIUserAffinityTouchCompleted)
+	ctx := openAIUserAffinitySuccessTestContext("provisional-capacity-failure")
+	accountID := int64(9)
+	service.openaiAffinity.requests.Store(openAIUserAffinityRequestKey(ctx), &openAIUserAffinityRequestState{
+		accountID: accountID, scopeKey: "openai:v1:group:1:lane:general", generation: 3,
+		conversation: &OpenAIUserConversationTransition{
+			BindingID: 10, UserID: 42, APIKeyID: 77, ScopeKey: "openai:v1:group:1:lane:general",
+			ConversationHash: strings.Repeat("a", 64), ResidentSlotID: 20, AccountID: accountID,
+			SlotGeneration: 3, ProvisionalToken: "capacity-token", Config: DefaultOpenAIUserAffinityConfig(),
+		},
+	})
+
+	service.RecordOpenAIUserAffinityCapacityFailure(ctx, accountID, "concurrency_unavailable")
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	require.Len(t, repo.capacityIncidents, 1)
+	require.Equal(t, strings.Repeat("a", 64), repo.capacityIncidents[0].ConversationHash)
+	require.Equal(t, 1, repo.conversationRollbacks)
+}
+
+func TestOpenAIUserAffinityPruningRetainsLongRunningConversationState(t *testing.T) {
+	service := &OpenAIGatewayService{}
+	config := DefaultOpenAIUserAffinityConfig()
+	createdAt := time.Now().UTC().Add(-30 * time.Minute)
+	acceptedKey := "accepted-long-running"
+	requestKey := "request-long-running"
+	service.openaiAffinity.accepted.Store(acceptedKey, openAIUserAffinityAcceptedState{config: config, createdAt: createdAt})
+	service.openaiAffinity.requests.Store(requestKey, &openAIUserAffinityRequestState{
+		createdAt: createdAt,
+		conversation: &OpenAIUserConversationTransition{
+			Config: config,
+		},
+	})
+
+	service.pruneOpenAIUserAffinityAcceptedStates()
+	service.pruneOpenAIUserAffinityRequestStates()
+
+	_, acceptedExists := service.openaiAffinity.accepted.Load(acceptedKey)
+	_, requestExists := service.openaiAffinity.requests.Load(requestKey)
+	require.True(t, acceptedExists)
+	require.True(t, requestExists)
 }
 
 func TestOpenAIUserAffinityCompletedModeRequiresAcceptedFact(t *testing.T) {

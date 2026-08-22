@@ -42,6 +42,13 @@ func (s *OpenAIGatewayService) evaluateOpenAIUserAffinityShadow(ctx context.Cont
 		}
 	}
 	excluded, preferExistingAffinity := resolveOpenAIUserAffinityNewResidentPolicy(placement, req.ExcludedIDs)
+	excluded, resetPending, err := s.applyOpenAIUserAffinityResetExclusions(ctx, userID, scopeKey, excluded)
+	if err != nil {
+		return 0
+	}
+	if resetPending {
+		preferExistingAffinity = false
+	}
 	_, candidates, err := s.openAIUserAffinityCandidates(ctx, userID, req.GroupID, req.RequestedModel, excluded, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
 	if err != nil {
 		return 0

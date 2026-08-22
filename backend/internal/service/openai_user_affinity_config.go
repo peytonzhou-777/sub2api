@@ -63,6 +63,9 @@ type OpenAIUserAffinityConfig struct {
 	FollowerJitterMaxMS               int     `json:"follower_jitter_max_ms"`
 	TouchSuccessMode                  string  `json:"touch_success_mode"`
 	ManualResetExcludeSourceAccount   bool    `json:"manual_reset_exclude_source_account"`
+	ResidentAccountSlotCount          int     `json:"resident_account_slot_count"`
+	ResidentTTLSeconds                int     `json:"resident_ttl_seconds"`
+	ConversationActiveTTLSeconds      int     `json:"conversation_active_ttl_seconds"`
 	ConfigVersion                     int64   `json:"config_version"`
 	UpdatedAt                         string  `json:"updated_at,omitempty"`
 }
@@ -86,6 +89,9 @@ func DefaultOpenAIUserAffinityConfig() OpenAIUserAffinityConfig {
 		FollowerJitterMinMS:               100,
 		FollowerJitterMaxMS:               500,
 		TouchSuccessMode:                  OpenAIUserAffinityTouchAccepted,
+		ResidentAccountSlotCount:          1,
+		ResidentTTLSeconds:                7 * 24 * 60 * 60,
+		ConversationActiveTTLSeconds:      60 * 60,
 		ConfigVersion:                     0,
 	}
 }
@@ -104,6 +110,16 @@ func ValidateAndNormalizeOpenAIUserAffinityConfig(cfg OpenAIUserAffinityConfig) 
 	}
 	if cfg.TouchSuccessMode == "" {
 		cfg.TouchSuccessMode = defaults.TouchSuccessMode
+	}
+	// 新增字段对旧配置和旧管理端请求补默认值，零值不得成为实际 TTL 或槽位上限。
+	if cfg.ResidentAccountSlotCount == 0 {
+		cfg.ResidentAccountSlotCount = defaults.ResidentAccountSlotCount
+	}
+	if cfg.ResidentTTLSeconds == 0 {
+		cfg.ResidentTTLSeconds = defaults.ResidentTTLSeconds
+	}
+	if cfg.ConversationActiveTTLSeconds == 0 {
+		cfg.ConversationActiveTTLSeconds = defaults.ConversationActiveTTLSeconds
 	}
 	if cfg.Mode != OpenAIUserAffinityModeShadow && cfg.Mode != OpenAIUserAffinityModeEnforce {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "mode must be shadow or enforce")
@@ -141,7 +157,38 @@ func ValidateAndNormalizeOpenAIUserAffinityConfig(cfg OpenAIUserAffinityConfig) 
 	if cfg.FollowerJitterMinMS < 0 || cfg.FollowerJitterMaxMS < cfg.FollowerJitterMinMS || cfg.FollowerJitterMaxMS > 10000 {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "follower jitter range is invalid")
 	}
+	if cfg.ResidentAccountSlotCount < 1 || cfg.ResidentAccountSlotCount > 5 {
+		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "resident_account_slot_count must be between 1 and 5")
+	}
+	if cfg.ResidentTTLSeconds < 24*60*60 || cfg.ResidentTTLSeconds > 30*24*60*60 {
+		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "resident_ttl_seconds must be between 86400 and 2592000")
+	}
+	if cfg.ConversationActiveTTLSeconds < 5*60 || cfg.ConversationActiveTTLSeconds > 24*60*60 {
+		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "conversation_active_ttl_seconds must be between 300 and 86400")
+	}
 	return cfg, nil
+}
+
+// RuntimeResidentAccountSlotCount 返回当前阶段真正启用的槽位数。
+// P1 仅建立兼容数据模型，运行时保持单槽，待多槽调度原子链路完成后再放开配置值。
+func (cfg OpenAIUserAffinityConfig) RuntimeResidentAccountSlotCount() int {
+	if cfg.ResidentAccountSlotCount < 1 {
+		return 1
+	}
+	if cfg.ResidentAccountSlotCount > 5 {
+		return 5
+	}
+	return cfg.ResidentAccountSlotCount
+}
+
+// ResidentTTL 返回常驻槽位及长期会话绑定的统一滑动 TTL。
+func (cfg OpenAIUserAffinityConfig) ResidentTTL() time.Duration {
+	return time.Duration(cfg.ResidentTTLSeconds) * time.Second
+}
+
+// ConversationActiveTTL 返回新会话对常驻槽位的短期活跃占用 TTL。
+func (cfg OpenAIUserAffinityConfig) ConversationActiveTTL() time.Duration {
+	return time.Duration(cfg.ConversationActiveTTLSeconds) * time.Second
 }
 
 // GetOpenAIUserAffinityConfig 读取完整配置；未初始化时返回默认值和版本 0。

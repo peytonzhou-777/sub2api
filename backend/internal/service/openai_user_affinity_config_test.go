@@ -19,7 +19,7 @@ func (s *openAIUserAffinityAdminStoreStub) ListOpenAIUserAffinityResidents(conte
 func (s *openAIUserAffinityAdminStoreStub) GetOpenAIUserAffinityUserDetail(context.Context, int64, int) (*OpenAIUserAffinityUserDetail, error) {
 	return nil, nil
 }
-func (s *openAIUserAffinityAdminStoreStub) ResetOpenAIUserAffinityPlacement(_ context.Context, _, _ int64, _, _ string, excludeSource bool) error {
+func (s *openAIUserAffinityAdminStoreStub) ResetOpenAIUserAffinityPlacement(_ context.Context, _, _ int64, _ string, excludeSource bool) error {
 	s.excludeSource = excludeSource
 	return nil
 }
@@ -71,6 +71,12 @@ func TestDefaultOpenAIUserAffinityConfig(t *testing.T) {
 	if cfg.Enabled || cfg.DefaultMaxContactUsers != 10 || cfg.DefaultNewResidentCooldownSeconds != 300 {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
+	if cfg.ResidentAccountSlotCount != 1 || cfg.ResidentTTLSeconds != 7*24*60*60 || cfg.ConversationActiveTTLSeconds != 60*60 {
+		t.Fatalf("unexpected multi-slot defaults: %+v", cfg)
+	}
+	if cfg.RuntimeResidentAccountSlotCount() != 1 {
+		t.Fatalf("P1 runtime slot count = %d, want 1", cfg.RuntimeResidentAccountSlotCount())
+	}
 	if cfg.ConfigVersion != 0 {
 		t.Fatalf("default version = %d, want 0", cfg.ConfigVersion)
 	}
@@ -96,6 +102,9 @@ func TestValidateAndNormalizeOpenAIUserAffinityConfig(t *testing.T) {
 		{"max contact", func(c *OpenAIUserAffinityConfig) { c.DefaultMaxContactUsers = 0 }},
 		{"jitter", func(c *OpenAIUserAffinityConfig) { c.FollowerJitterMaxMS = c.FollowerJitterMinMS - 1 }},
 		{"strategy", func(c *OpenAIUserAffinityConfig) { c.BestFitStrategy = "other" }},
+		{"resident slots", func(c *OpenAIUserAffinityConfig) { c.ResidentAccountSlotCount = 6 }},
+		{"resident ttl", func(c *OpenAIUserAffinityConfig) { c.ResidentTTLSeconds = 60 }},
+		{"conversation ttl", func(c *OpenAIUserAffinityConfig) { c.ConversationActiveTTLSeconds = 60 }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -105,6 +114,41 @@ func TestValidateAndNormalizeOpenAIUserAffinityConfig(t *testing.T) {
 				t.Fatal("expected validation error")
 			}
 		})
+	}
+}
+
+func TestOpenAIUserAffinityLegacyConfigFillsMultiSlotDefaults(t *testing.T) {
+	repo := &openAIUserAffinitySettingRepoStub{values: map[string]string{
+		SettingKeyOpenAIUserAffinityScheduling: `{
+			"enabled":true,
+			"mode":"enforce",
+			"quota_reserve_ratio_5h":0.1,
+			"quota_reserve_ratio_7d":0.1,
+			"cold_start_demand_quantile":0.75,
+			"best_fit_strategy":"7d_then_5h",
+			"best_fit_close_tolerance_ratio":0.01,
+			"default_max_contact_users":10,
+			"default_new_resident_cooldown_seconds":300,
+			"resident_reentry_overcommit_enabled":true,
+			"capacity_failure_migration_threshold":3,
+			"capacity_failure_window_seconds":60,
+			"migration_stability_seconds":60,
+			"follower_jitter_min_ms":100,
+			"follower_jitter_max_ms":500,
+			"touch_success_mode":"upstream_accepted",
+			"config_version":9
+		}`,
+	}}
+	svc := NewSettingService(repo, nil)
+	cfg, err := svc.GetOpenAIUserAffinityConfig(context.Background())
+	if err != nil {
+		t.Fatalf("get legacy config: %v", err)
+	}
+	if cfg.ResidentAccountSlotCount != 1 || cfg.ResidentTTLSeconds != 604800 || cfg.ConversationActiveTTLSeconds != 3600 {
+		t.Fatalf("legacy defaults were not filled: %+v", cfg)
+	}
+	if cfg.ConfigVersion != 9 || !cfg.Enabled {
+		t.Fatalf("legacy fields changed unexpectedly: %+v", cfg)
 	}
 }
 
@@ -149,7 +193,7 @@ func TestOpenAIUserAffinityManualResetUsesConfiguredSourceExclusion(t *testing.T
 		accountRepo: store, settingService: NewSettingService(settingRepo, nil),
 	}
 
-	if err := adminService.ResetOpenAIUserAffinityPlacement(context.Background(), 42, 7, "openai", "manual", false); err != nil {
+	if err := adminService.ResetOpenAIUserAffinityPlacement(context.Background(), 42, 7, "openai", false); err != nil {
 		t.Fatalf("reset placement: %v", err)
 	}
 	if !store.excludeSource {

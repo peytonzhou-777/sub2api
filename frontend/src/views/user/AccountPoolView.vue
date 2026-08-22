@@ -102,7 +102,10 @@
                 </td>
                 <td class="min-w-40 px-4 py-3 text-sm">
                   <div class="flex flex-wrap gap-1">
-                    <span v-if="account.is_current_residence" class="rounded bg-primary-100 px-1.5 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                    <span v-if="account.is_primary_residence" class="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                      {{ t('accountPool.relations.primaryResidence') }}
+                    </span>
+                    <span v-else-if="account.is_current_residence" class="rounded bg-primary-100 px-1.5 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
                       {{ t('accountPool.relations.currentResidence') }}
                     </span>
                     <span v-if="account.is_seven_day_contact" class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
@@ -123,6 +126,18 @@
                     <div data-test="resident-total" class="flex items-center justify-between gap-3 whitespace-nowrap">
                       <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('accountPool.residents.total') }}</span>
                       <span class="font-medium text-gray-700 dark:text-gray-200">{{ account.residents.total }}</span>
+                    </div>
+                    <div data-test="resident-draining" class="flex items-center justify-between gap-3 whitespace-nowrap">
+                      <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('accountPool.residents.draining') }}</span>
+                      <span class="font-medium text-amber-600 dark:text-amber-400">{{ account.residents.draining_slots ?? 0 }}</span>
+                    </div>
+                    <div data-test="resident-conversations" class="flex items-center justify-between gap-3 whitespace-nowrap">
+                      <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('accountPool.residents.conversations') }}</span>
+                      <span class="font-medium text-gray-700 dark:text-gray-200">{{ account.residents.active_conversations ?? 0 }}</span>
+                    </div>
+                    <div data-test="resident-contacted" class="flex items-center justify-between gap-3 whitespace-nowrap">
+                      <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('accountPool.residents.contacted') }}</span>
+                      <span class="font-medium text-gray-700 dark:text-gray-200">{{ account.residents.contacted_users ?? 0 }}</span>
                     </div>
                   </div>
                   <span v-else data-test="resident-not-applicable" class="text-gray-400 dark:text-gray-500">--</span>
@@ -224,6 +239,7 @@ const statusOptions = computed(() => [
 ])
 const relationOptions = computed(() => [
   { value: '', label: t('accountPool.relations.all') },
+  { value: 'primary_residence', label: t('accountPool.relations.primaryResidence') },
   { value: 'current_residence', label: t('accountPool.relations.currentResidence') },
   { value: 'seven_day_contact', label: t('accountPool.relations.sevenDayContact') },
   { value: 'historical_contact', label: t('accountPool.relations.historicalContact') },

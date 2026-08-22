@@ -59,6 +59,14 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinitySuccess(ctx context.Conte
 	if err != nil || !latest.Enabled || latest.Mode != OpenAIUserAffinityModeEnforce {
 		return
 	}
+	if !s.commitOpenAIUserAffinityConversation(ctx, accountID) {
+		slog.Warn("openai_user_affinity.conversation_commit_failed", "account_id", accountID)
+		if attempt, found := s.openAIUserAffinityAttempt(ctx, accountID); found {
+			s.rollbackOpenAIUserAffinityConversation(ctx, attempt)
+		}
+		s.failOpenAIUserAffinityReentryLeader(ctx)
+		return
+	}
 	if !state.touched && !s.touchOpenAIUserAffinity(ctx, accountID, state.config) {
 		return
 	}
@@ -72,6 +80,9 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinityFailure(ctx context.Conte
 		return
 	}
 	s.openaiAffinity.accepted.Delete(openAIUserAffinitySuccessKey(ctx, accountID, eventKeys...))
+	if attempt, found := s.openAIUserAffinityAttempt(ctx, accountID); found {
+		s.rollbackOpenAIUserAffinityConversation(ctx, attempt)
+	}
 	s.failOpenAIUserAffinityReentryLeader(ctx)
 }
 
@@ -119,7 +130,7 @@ func (s *OpenAIGatewayService) confirmOpenAIUserAffinitySuccess(ctx context.Cont
 	if !ok {
 		return
 	}
-	if err := store.ConfirmOpenAIUserAffinitySuccess(ctx, userID, accountID, attempt.generation, attempt.scopeKey); err != nil {
+	if err := store.ConfirmOpenAIUserAffinitySuccess(ctx, attempt.openAIUserAffinityIncidentIdentity(userID)); err != nil {
 		slog.Warn("openai_user_affinity.success_confirm_failed", "user_id", userID, "account_id", accountID, "error", err)
 	}
 }
@@ -146,10 +157,13 @@ func (s *OpenAIGatewayService) pruneOpenAIUserAffinityAcceptedStates() {
 	if !s.openaiAffinity.acceptedPruneUnix.CompareAndSwap(previous, now.Unix()) {
 		return
 	}
-	cutoff := now.Add(-10 * time.Minute)
 	s.openaiAffinity.accepted.Range(func(key, value any) bool {
 		state, ok := value.(openAIUserAffinityAcceptedState)
-		if !ok || state.createdAt.Before(cutoff) {
+		retention := state.config.ConversationActiveTTL()
+		if retention < 10*time.Minute {
+			retention = 10 * time.Minute
+		}
+		if !ok || state.createdAt.Add(retention).Before(now) {
 			s.openaiAffinity.accepted.Delete(key)
 		}
 		return true
@@ -177,9 +191,6 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinityCapacityFailure(ctx conte
 	if !found {
 		return
 	}
-	if s.failOpenAIUserAffinityReentryLeader(ctx) {
-		return
-	}
 	reason := "concurrency_unavailable"
 	if len(reasons) > 0 && strings.TrimSpace(reasons[0]) != "" {
 		reason = strings.TrimSpace(reasons[0])
@@ -189,9 +200,12 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinityCapacityFailure(ctx conte
 		slog.Warn("openai_user_affinity.capacity_failure_missing_request_id", "user_id", userID, "account_id", accountID)
 		return
 	}
-	if _, err := runtimeStore.RecordOpenAIUserAffinityCapacityFailure(ctx, userID, accountID, attempt.generation, attempt.scopeKey, requestIDHash, reason, config); err != nil {
+	incident := attempt.openAIUserAffinityIncidentIdentity(userID)
+	if _, err := runtimeStore.RecordOpenAIUserAffinityCapacityFailure(ctx, incident, requestIDHash, reason, config); err != nil {
 		slog.Warn("openai_user_affinity.capacity_failure_record_failed", "user_id", userID, "account_id", accountID, "error", err)
 	}
+	s.rollbackOpenAIUserAffinityConversation(ctx, attempt)
+	s.failOpenAIUserAffinityReentryLeader(ctx)
 }
 
 func (s *OpenAIGatewayService) predictOpenAIUserAffinityDemand(ctx context.Context, userID int64, config OpenAIUserAffinityConfig) OpenAIUserAffinityDemand {
@@ -222,12 +236,12 @@ type openAIUserAffinityDemandCacheEntry struct {
 	expiresAt time.Time
 }
 
-func recordOpenAIUserAffinityCapacityFailure(ctx context.Context, store OpenAIUserAffinityRuntimeStore, userID, accountID, generation int64, scopeKey, reason string, config OpenAIUserAffinityConfig) (*time.Time, error) {
+func recordOpenAIUserAffinityCapacityFailure(ctx context.Context, store OpenAIUserAffinityRuntimeStore, incident OpenAIUserAffinityIncidentIdentity, reason string, config OpenAIUserAffinityConfig) (*time.Time, error) {
 	requestIDHash := openAIUserAffinityRequestIDHash(ctx)
 	if requestIDHash == "" {
 		return nil, nil
 	}
-	return store.RecordOpenAIUserAffinityCapacityFailure(ctx, userID, accountID, generation, scopeKey, requestIDHash, reason, config)
+	return store.RecordOpenAIUserAffinityCapacityFailure(ctx, incident, requestIDHash, reason, config)
 }
 
 // getOpenAIUserAffinityResidentAccount 读取居民账号原始状态，避免新流量调度阈值提前抹掉失败类别。

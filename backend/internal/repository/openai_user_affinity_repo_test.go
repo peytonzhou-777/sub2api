@@ -25,6 +25,52 @@ func newOpenAIUserAffinityRepositoryTest(t *testing.T) (*accountRepository, sqlm
 	return newAccountRepositoryWithSQL(client, db, nil), mock
 }
 
+func TestListOpenAIUserResidentSlotsReadsAuthoritativeProjection(t *testing.T) {
+	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
+	now := time.Now().UTC()
+	mock.ExpectQuery(`(?s)SELECT id, user_id, scope_key, slot_index, account_id, generation, status.*FROM openai_user_resident_slots.*ORDER BY s\.usage_score DESC`).
+		WithArgs(int64(42), "openai").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "user_id", "scope_key", "slot_index", "account_id", "generation", "status",
+			"admitted_at", "last_success_at", "expires_at", "usage_score", "score_updated_at",
+			"replacement_source_slot_id", "provisional_token", "config_version",
+			"active_conversation_count",
+		}).AddRow(7, 42, "openai", 1, 11, 3, service.OpenAIUserResidentSlotStatusActive,
+			now.Add(-time.Hour), now, now.Add(time.Hour), 2.5, now, nil, nil, 8, 2))
+
+	slots, err := repo.ListOpenAIUserResidentSlots(context.Background(), 42, "")
+	require.NoError(t, err)
+	require.Len(t, slots, 1)
+	require.Equal(t, int64(11), slots[0].AccountID)
+	require.NotNil(t, slots[0].LastSuccessAt)
+	require.Equal(t, 2.5, slots[0].UsageScore)
+	require.Equal(t, 2, slots[0].ActiveConversationCount)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetOpenAIUserConversationBindingByAliasScopesLookup(t *testing.T) {
+	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
+	now := time.Now().UTC()
+	hash := strings.Repeat("a", 64)
+	mock.ExpectQuery(`(?s)FROM openai_user_conversation_aliases a.*JOIN openai_user_conversation_bindings b`).
+		WithArgs(int64(42), int64(9), "openai", "response_id", hash).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "user_id", "api_key_id", "scope_key", "conversation_hash", "resident_slot_id",
+			"account_id", "slot_generation", "status", "context_rebuildable", "first_output_committed",
+			"active_until", "expires_at", "last_success_at", "provisional_token",
+		}).AddRow(5, 42, 9, "openai", hash, 7, 11, 3, "active", true, true,
+			now.Add(time.Hour), now.Add(7*24*time.Hour), now, nil))
+
+	binding, err := repo.GetOpenAIUserConversationBindingByAlias(
+		context.Background(), 42, 9, "", " RESPONSE_ID ", strings.ToUpper(hash),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, binding)
+	require.Equal(t, int64(11), binding.AccountID)
+	require.True(t, binding.FirstOutputCommitted)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestGetOpenAIUserAffinityCandidateStatsMarksAlreadyActiveUser(t *testing.T) {
 	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
 	mock.ExpectQuery(`(?s)SELECT a.id, a.max_contact_users.*BOOL_OR\(c.user_id = \$3.*WHERE a.id IN \(\$1, \$2\)`).
@@ -230,12 +276,15 @@ func TestTouchAndConfirmOpenAIUserAffinitySeparateAcceptedFromRecovery(t *testin
 	mock.ExpectExec(`(?s)UPDATE account_user_contact_periods SET last_touched_at`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`(?s)INSERT INTO account_user_contacts`).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(`(?s)UPDATE user_account_placements SET last_active_at`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`(?s)UPDATE openai_user_affinity_reset_exclusions SET consumed_at`).WillReturnResult(sqlmock.NewResult(0, 2))
 	mock.ExpectCommit()
 	mock.ExpectExec(`(?s)UPDATE user_account_capacity_incidents SET status = 'closed'.*resident_recovered`).WillReturnResult(sqlmock.NewResult(0, 1))
 
 	err := repo.TouchOpenAIUserAffinity(context.Background(), 42, 11, 3, scopeKey, config)
 	require.NoError(t, err)
-	err = repo.ConfirmOpenAIUserAffinitySuccess(context.Background(), 42, 11, 3, scopeKey)
+	err = repo.ConfirmOpenAIUserAffinitySuccess(context.Background(), service.OpenAIUserAffinityIncidentIdentity{
+		UserID: 42, AccountID: 11, ScopeKey: scopeKey, PlacementGeneration: 3,
+	})
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -262,7 +311,9 @@ func TestRecordOpenAIUserAffinityCapacityFailureExtendsAuthorizedWindow(t *testi
 	mock.ExpectCommit()
 
 	authorizedAt, err := repo.RecordOpenAIUserAffinityCapacityFailure(
-		context.Background(), 42, 11, 3, scopeKey, strings.Repeat("a", 64), "concurrency_unavailable", config,
+		context.Background(), service.OpenAIUserAffinityIncidentIdentity{
+			UserID: 42, AccountID: 11, ScopeKey: scopeKey, PlacementGeneration: 3,
+		}, strings.Repeat("a", 64), "concurrency_unavailable", config,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, authorizedAt)
@@ -273,10 +324,12 @@ func TestGetOpenAIUserAffinityMigrationAuthorizedAtIgnoresExpiredWindow(t *testi
 	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
 	scopeKey := "openai:v1:group:1:lane:general"
 	mock.ExpectQuery(`(?s)SELECT migration_authorized_at.*window_expires_at > NOW\(\)`).
-		WithArgs(int64(42), scopeKey, int64(11), int64(3)).
+		WithArgs(int64(42), scopeKey, int64(11), int64(3), nil, nil, nil).
 		WillReturnRows(sqlmock.NewRows([]string{"migration_authorized_at"}))
 
-	authorizedAt, err := repo.GetOpenAIUserAffinityMigrationAuthorizedAt(context.Background(), 42, 11, 3, scopeKey)
+	authorizedAt, err := repo.GetOpenAIUserAffinityMigrationAuthorizedAt(context.Background(), service.OpenAIUserAffinityIncidentIdentity{
+		UserID: 42, AccountID: 11, ScopeKey: scopeKey, PlacementGeneration: 3,
+	})
 	require.NoError(t, err)
 	require.Nil(t, authorizedAt)
 	require.NoError(t, mock.ExpectationsWereMet())

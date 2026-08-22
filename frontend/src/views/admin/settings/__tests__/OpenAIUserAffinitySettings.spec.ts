@@ -48,6 +48,9 @@ const config = {
   follower_jitter_max_ms: 500,
   touch_success_mode: 'upstream_accepted',
   manual_reset_exclude_source_account: false,
+  resident_account_slot_count: 1,
+  resident_ttl_seconds: 604800,
+  conversation_active_ttl_seconds: 3600,
   config_version: 1,
   updated_at: '2026-08-15T00:00:00Z'
 }
@@ -79,6 +82,7 @@ describe('OpenAIUserAffinitySettings', () => {
 
     expect(wrapper.find('[data-test="affinity-details"]').exists()).toBe(true)
     expect(wrapper.find('input[type="text"]').exists()).toBe(false)
+    expect(wrapper.findAll('input[type="number"]')).toHaveLength(14)
 
     await wrapper.get('button.btn-primary').trigger('click')
     await flushPromises()

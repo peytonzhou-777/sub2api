@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
@@ -11,15 +13,38 @@ import (
 
 // selectLegacyOpenAIAccountWithUserAffinity 为 legacy 公共入口统一处理居民恢复和新居民归属。
 func (s *OpenAIGatewayService) selectLegacyOpenAIAccountWithUserAffinity(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}) (*AccountSelectionResult, error) {
+	req := newOpenAIUserAffinityScheduleRequest(groupID, PlatformOpenAI, "", requestedModel,
+		OpenAIUpstreamTransportHTTPSSE, "", "", false, excludedIDs)
+	req.SessionHash = sessionHash
+	if selection, found, err := s.selectOpenAIUserAffinityConversation(ctx, req); err != nil || found {
+		return selection, err
+	}
+	if selection, found, err := s.selectOpenAIUserAffinityResidentSlots(ctx, req); err != nil || found {
+		return selection, err
+	}
 	if selection, found, err := s.selectOpenAIUserAffinityPlacement(
 		ctx, groupID, requestedModel, excludedIDs, false, "", "", OpenAIUpstreamTransportHTTPSSE,
 	); err != nil || found {
+		if err == nil && selection != nil && selection.Account != nil {
+			if reserveErr := s.reserveOpenAIUserAffinityConversation(ctx, req, selection.Account.ID); reserveErr != nil {
+				if selection.ReleaseFunc != nil {
+					selection.ReleaseFunc()
+				}
+				return nil, reserveErr
+			}
+		}
 		return selection, err
 	}
 	result, err := s.selectAccountWithLoadAwareness(ctx, groupID, PlatformOpenAI, sessionHash, requestedModel, excludedIDs, false, "", true)
 	if err == nil && result != nil && result.Account != nil {
 		scopeKey := openAIUserAffinityScopeKey(groupID, false, "", "", OpenAIUpstreamTransportHTTPSSE)
 		_ = s.reserveOpenAIUserAffinityPlacement(ctx, result.Account.ID, scopeKey)
+		if reserveErr := s.reserveOpenAIUserAffinityConversation(ctx, req, result.Account.ID); reserveErr != nil {
+			if result.ReleaseFunc != nil {
+				result.ReleaseFunc()
+			}
+			return nil, reserveErr
+		}
 	}
 	return result, err
 }
@@ -137,9 +162,13 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Con
 		return nil, false, err
 	}
 	if placement != nil && placement.Status == "active" && placement.AccountID != nil && now.Before(placement.ExpiresAt) {
+		incident := OpenAIUserAffinityIncidentIdentity{
+			UserID: userID, AccountID: *placement.AccountID, ScopeKey: placement.ScopeKey,
+			PlacementGeneration: placement.Generation,
+		}
 		runtimeStore, runtimeOK := s.accountRepo.(OpenAIUserAffinityRuntimeStore)
 		if runtimeOK {
-			authorizedAt, authErr := runtimeStore.GetOpenAIUserAffinityMigrationAuthorizedAt(ctx, userID, *placement.AccountID, placement.Generation, placement.ScopeKey)
+			authorizedAt, authErr := runtimeStore.GetOpenAIUserAffinityMigrationAuthorizedAt(ctx, incident)
 			if authErr != nil {
 				return nil, true, authErr
 			}
@@ -153,7 +182,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Con
 					return s.selectOpenAIUserAffinityPlacement(ctx, groupID, requestedModel, excludedIDs, requireCompact, requiredCapability, requiredImageCapability, requiredTransport)
 				}
 				if runtimeOK {
-					authorizedAt, failureErr := recordOpenAIUserAffinityCapacityFailure(ctx, runtimeStore, userID, *placement.AccountID, placement.Generation, placement.ScopeKey, "resident_account_excluded", config)
+					authorizedAt, failureErr := recordOpenAIUserAffinityCapacityFailure(ctx, runtimeStore, incident, "resident_account_excluded", config)
 					if failureErr != nil {
 						return nil, true, failureErr
 					}
@@ -178,7 +207,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Con
 		if admission != openAIUserAffinityResidentAllowed {
 			// 5h、RPM 和临时运行时门控只累计不同客户端请求，未达阈值不改变归属。
 			if runtimeOK {
-				authorizedAt, failureErr := recordOpenAIUserAffinityCapacityFailure(ctx, runtimeStore, userID, *placement.AccountID, placement.Generation, placement.ScopeKey, "resident_account_unavailable", config)
+				authorizedAt, failureErr := recordOpenAIUserAffinityCapacityFailure(ctx, runtimeStore, incident, "resident_account_unavailable", config)
 				if failureErr != nil {
 					return nil, true, failureErr
 				}
@@ -206,7 +235,37 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Con
 	}
 
 	newResidentExcluded, preferExistingAffinity := resolveOpenAIUserAffinityNewResidentPolicy(placement, excludedIDs)
+	newResidentExcluded, resetPending, err := s.applyOpenAIUserAffinityResetExclusions(ctx, userID, scopeKey, newResidentExcluded)
+	if err != nil {
+		return nil, true, err
+	}
+	if resetPending {
+		preferExistingAffinity = false
+	}
 	return s.selectOpenAIUserAffinityNewResident(ctx, groupID, requestedModel, newResidentExcluded, requireCompact, requiredCapability, requiredImageCapability, requiredTransport, scopeKey, config, now, preferExistingAffinity)
+}
+
+// applyOpenAIUserAffinityResetExclusions 合并整组重置的全部原账号，并强制绕过触达优先直达 BestFit。
+func (s *OpenAIGatewayService) applyOpenAIUserAffinityResetExclusions(ctx context.Context, userID int64, scopeKey string, excludedIDs map[int64]struct{}) (map[int64]struct{}, bool, error) {
+	store, ok := s.accountRepo.(OpenAIUserAffinityResetExclusionStore)
+	if !ok {
+		return excludedIDs, false, nil
+	}
+	accountIDs, err := store.ListOpenAIUserAffinityResetExcludedAccountIDs(ctx, userID, scopeKey)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(accountIDs) == 0 {
+		return excludedIDs, false, nil
+	}
+	merged := cloneExcludedAccountIDs(excludedIDs)
+	if merged == nil {
+		merged = make(map[int64]struct{}, len(accountIDs))
+	}
+	for _, accountID := range accountIDs {
+		merged[accountID] = struct{}{}
+	}
+	return merged, true, nil
 }
 
 // resolveOpenAIUserAffinityNewResidentPolicy 将手动重置排除语义统一为严格的新居民重选：
@@ -290,12 +349,9 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityNewResident(ctx context.C
 	if err != nil {
 		return nil, true, err
 	}
-	knownQuota := false
 	unknownQuota := false
 	for _, candidate := range candidates {
-		if candidate.Quota5HKnown && candidate.Quota7DKnown {
-			knownQuota = true
-		} else {
+		if !candidate.Quota5HKnown || !candidate.Quota7DKnown {
 			unknownQuota = true
 		}
 	}
@@ -326,8 +382,8 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityNewResident(ctx context.C
 		}
 		candidates = removeOpenAIUserAffinityCandidate(candidates, candidate.AccountID)
 	}
-	if !knownQuota && unknownQuota {
-		// 仅额度快照未知时回退普通调度，用一次真实请求自愈响应头快照。
+	if unknownQuota {
+		// 已知候选均未通过时，仍允许未知快照回退普通调度并用真实请求自愈。
 		return nil, false, nil
 	}
 	return nil, true, ErrNoAvailableAccounts
@@ -373,9 +429,28 @@ func (s *OpenAIGatewayService) openAIUserAffinityCandidates(ctx context.Context,
 		candidate.AccountID = accountID
 		candidate.Available5HRatio, candidate.Quota5HKnown = readOpenAIUserAffinityQuotaAvailableRatio(account.Extra, "5h", time.Now())
 		candidate.Available7DRatio, candidate.Quota7DKnown = readOpenAIUserAffinityQuotaAvailableRatio(account.Extra, "7d", time.Now())
+		candidate.Quota5HWindowMinutes, candidate.Quota5HResetAt = readOpenAIUserAffinityQuotaWindowHorizon(account.Extra, "5h")
+		candidate.Quota7DWindowMinutes, candidate.Quota7DResetAt = readOpenAIUserAffinityQuotaWindowHorizon(account.Extra, "7d")
 		candidates = append(candidates, candidate)
 	}
 	return accountByID, candidates, nil
+}
+
+func readOpenAIUserAffinityQuotaWindowHorizon(extra map[string]any, window string) (int, *time.Time) {
+	windowMinutes := ParseExtraInt(extra["codex_"+window+"_window_minutes"])
+	if windowMinutes <= 0 {
+		return 0, nil
+	}
+	resetRaw, ok := extra["codex_"+window+"_reset_at"]
+	if !ok || resetRaw == nil {
+		return windowMinutes, nil
+	}
+	resetAt, err := parseTime(strings.TrimSpace(fmt.Sprint(resetRaw)))
+	if err != nil {
+		return windowMinutes, nil
+	}
+	value := resetAt.UTC()
+	return windowMinutes, &value
 }
 
 func removeOpenAIUserAffinityCandidate(candidates []OpenAIUserAffinityCandidate, accountID int64) []OpenAIUserAffinityCandidate {
@@ -420,7 +495,7 @@ func (s *OpenAIGatewayService) reserveOpenAIUserAffinityPlacement(ctx context.Co
 	}
 	placement := OpenAIUserPlacement{
 		UserID: userID, ScopeKey: scopeKey, AccountID: &accountID, Generation: generation,
-		Status: "active", AssignedAt: now, ExpiresAt: now.Add(14 * 24 * time.Hour),
+		Status: "active", AssignedAt: now, ExpiresAt: now.Add(config.ResidentTTL()),
 		AssignmentReason: assignmentReason,
 	}
 	demand := s.predictOpenAIUserAffinityDemand(ctx, userID, config)

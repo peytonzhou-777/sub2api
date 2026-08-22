@@ -13,6 +13,10 @@ type OpenAIUserAffinityCandidate struct {
 	Available7DRatio           float64
 	Quota5HKnown               bool
 	Quota7DKnown               bool
+	Quota5HWindowMinutes       int
+	Quota7DWindowMinutes       int
+	Quota5HResetAt             *time.Time
+	Quota7DResetAt             *time.Time
 	ActiveContactUsers         int
 	UserAlreadyActive          bool
 	UserAlreadyResident        bool
@@ -73,8 +77,12 @@ func selectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates 
 	if len(valid) == 0 {
 		return nil, false
 	}
-	primary := func(c OpenAIUserAffinityCandidate) float64 { return c.Available7DRatio - demand7D }
-	secondary := func(c OpenAIUserAffinityCandidate) float64 { return c.Available5HRatio - demand5H }
+	primary := func(c OpenAIUserAffinityCandidate) float64 {
+		return openAIUserAffinityEffectiveCapacity(c.Available7DRatio, demand7D, c.Quota7DWindowMinutes, c.Quota7DResetAt, now)
+	}
+	secondary := func(c OpenAIUserAffinityCandidate) float64 {
+		return openAIUserAffinityEffectiveCapacity(c.Available5HRatio, demand5H, c.Quota5HWindowMinutes, c.Quota5HResetAt, now)
+	}
 	if cfg.BestFitStrategy == OpenAIUserAffinityBestFit5HThen7D {
 		primary, secondary = secondary, primary
 	}
@@ -129,6 +137,25 @@ func selectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates 
 		}
 	}
 	return &selected, true
+}
+
+// openAIUserAffinityEffectiveCapacity 把临近重置的有限窗口视为即将恢复的额外容量。
+// 当前额度硬准入仍在调用前完成，renewal credit 只影响已准入候选的相对顺序。
+func openAIUserAffinityEffectiveCapacity(availableRatio, predictedDemand float64, windowMinutes int, resetAt *time.Time, now time.Time) float64 {
+	score := availableRatio - predictedDemand
+	if windowMinutes <= 0 || resetAt == nil {
+		return score
+	}
+	windowDuration := time.Duration(windowMinutes) * time.Minute
+	remaining := resetAt.Sub(now)
+	remainingRatio := 0.0
+	if remaining > 0 {
+		remainingRatio = float64(remaining) / float64(windowDuration)
+		if remainingRatio > 1 {
+			remainingRatio = 1
+		}
+	}
+	return score + 1 - remainingRatio
 }
 
 func effectiveMaxContactUsers(cfg OpenAIUserAffinityConfig, override int) int {

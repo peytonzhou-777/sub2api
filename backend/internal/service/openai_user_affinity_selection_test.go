@@ -61,6 +61,25 @@ func TestSelectOpenAIUserAffinityCandidateSupports5HPrimary(t *testing.T) {
 	require.Equal(t, int64(1), selected.AccountID)
 }
 
+func TestSelectOpenAIUserAffinityCandidateCreditsQuotaWindowNearReset(t *testing.T) {
+	cfg := DefaultOpenAIUserAffinityConfig()
+	now := time.Now().UTC()
+	nearReset := now.Add(time.Hour)
+	farReset := now.Add(6 * 24 * time.Hour)
+	selected, ok := SelectOpenAIUserAffinityCandidate(cfg, []OpenAIUserAffinityCandidate{
+		{
+			AccountID: 1, Available7DRatio: 0.70, Available5HRatio: 0.8,
+			Quota5HKnown: true, Quota7DKnown: true, Quota7DWindowMinutes: 10080, Quota7DResetAt: &farReset,
+		},
+		{
+			AccountID: 2, Available7DRatio: 0.60, Available5HRatio: 0.8,
+			Quota5HKnown: true, Quota7DKnown: true, Quota7DWindowMinutes: 10080, Quota7DResetAt: &nearReset,
+		},
+	}, 0.05, 0.05, now)
+	require.True(t, ok)
+	require.Equal(t, int64(2), selected.AccountID, "更早重置的 7d 窗口应获得 renewal credit")
+}
+
 func TestSelectOpenAIUserAffinityCandidateIsDeterministicAcrossInputOrder(t *testing.T) {
 	cfg := DefaultOpenAIUserAffinityConfig()
 	account1 := OpenAIUserAffinityCandidate{AccountID: 1, Available7DRatio: 0.70, Available5HRatio: 0.80, Quota5HKnown: true, Quota7DKnown: true, ActiveContactUsers: 2}
@@ -71,6 +90,20 @@ func TestSelectOpenAIUserAffinityCandidateIsDeterministicAcrossInputOrder(t *tes
 		require.True(t, ok)
 		require.Equal(t, int64(1), selected.AccountID)
 	}
+}
+
+func TestSortOpenAIUserResidentSlotsUsesDecayedScore(t *testing.T) {
+	now := time.Now().UTC()
+	halfLife := 7 * 24 * time.Hour
+	recentSuccess := now.Add(-time.Hour)
+	slots := []OpenAIUserResidentSlot{
+		{AccountID: 1, UsageScore: 8, ScoreUpdatedAt: now.Add(-4 * halfLife), AdmittedAt: now.Add(-30 * 24 * time.Hour)},
+		{AccountID: 2, UsageScore: 1, ScoreUpdatedAt: now, LastSuccessAt: &recentSuccess, AdmittedAt: now.Add(-24 * time.Hour)},
+	}
+
+	sortOpenAIUserResidentSlots(slots, halfLife, now)
+
+	require.Equal(t, int64(2), slots[0].AccountID, "旧高分应按半衰期衰减后再参与排序")
 }
 
 func TestClassifyOpenAIUserAffinityResidentAdmission(t *testing.T) {

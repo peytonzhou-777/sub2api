@@ -16,15 +16,20 @@ var ErrOpenAIUserAffinityContactLimitConflict = infraerrors.Conflict(
 
 // OpenAIUserAffinityResident 是管理员按账号查看的当前居民投影。
 type OpenAIUserAffinityResident struct {
-	UserID         int64      `json:"user_id"`
-	UserEmail      string     `json:"user_email"`
-	AccountID      int64      `json:"account_id"`
-	ScopeKey       string     `json:"scope_key"`
-	Generation     int64      `json:"generation"`
-	AssignedAt     time.Time  `json:"assigned_at"`
-	LastActiveAt   *time.Time `json:"last_active_at"`
-	ExpiresAt      time.Time  `json:"expires_at"`
-	TouchExpiresAt *time.Time `json:"touch_expires_at"`
+	UserID                  int64      `json:"user_id"`
+	UserEmail               string     `json:"user_email"`
+	AccountID               int64      `json:"account_id"`
+	ScopeKey                string     `json:"scope_key"`
+	ResidentSlotID          int64      `json:"resident_slot_id"`
+	SlotIndex               int        `json:"slot_index"`
+	Generation              int64      `json:"generation"`
+	Status                  string     `json:"status"`
+	AssignedAt              time.Time  `json:"assigned_at"`
+	LastActiveAt            *time.Time `json:"last_active_at"`
+	ExpiresAt               time.Time  `json:"expires_at"`
+	UsageScore              float64    `json:"usage_score"`
+	ActiveConversationCount int        `json:"active_conversation_count"`
+	TouchExpiresAt          *time.Time `json:"touch_expires_at"`
 }
 
 // OpenAIUserAffinityAdminEvent 是管理员反查用户搬迁历史的只读投影。
@@ -37,13 +42,15 @@ type OpenAIUserAffinityAdminEvent struct {
 	EventType           string    `json:"event_type"`
 	Reason              string    `json:"reason"`
 	ActorAdminID        *int64    `json:"actor_admin_id"`
+	ResidentSlotID      *int64    `json:"resident_slot_id"`
 	CreatedAt           time.Time `json:"created_at"`
 }
 
 type OpenAIUserAffinityUserDetail struct {
-	Placement  *OpenAIUserPlacement           `json:"placement,omitempty"`
-	Placements []OpenAIUserPlacement          `json:"placements"`
-	Events     []OpenAIUserAffinityAdminEvent `json:"events"`
+	Placement     *OpenAIUserPlacement           `json:"placement,omitempty"`
+	Placements    []OpenAIUserPlacement          `json:"placements"`
+	ResidentSlots []OpenAIUserResidentSlot       `json:"resident_slots"`
+	Events        []OpenAIUserAffinityAdminEvent `json:"events"`
 }
 
 // OpenAIUserAffinityAccountPolicy 是账号级覆盖；nil 表示继承网关全局配置。
@@ -61,7 +68,7 @@ type OpenAIUserAffinityAccountPolicy struct {
 type OpenAIUserAffinityAdminStore interface {
 	ListOpenAIUserAffinityResidents(ctx context.Context, accountID int64, limit, offset int) ([]OpenAIUserAffinityResident, int64, error)
 	GetOpenAIUserAffinityUserDetail(ctx context.Context, userID int64, eventLimit int) (*OpenAIUserAffinityUserDetail, error)
-	ResetOpenAIUserAffinityPlacement(ctx context.Context, userID, actorAdminID int64, scopeKey, reason string, excludeSource bool) error
+	ResetOpenAIUserAffinityPlacement(ctx context.Context, userID, actorAdminID int64, scopeKey string, excludeSource bool) error
 	GetOpenAIUserAffinityAccountPolicy(ctx context.Context, accountID int64) (*OpenAIUserAffinityAccountPolicy, error)
 	UpdateOpenAIUserAffinityAccountPolicy(ctx context.Context, policy OpenAIUserAffinityAccountPolicy) error
 }
@@ -70,7 +77,7 @@ type OpenAIUserAffinityAdminStore interface {
 type OpenAIUserAffinityAdminService interface {
 	ListOpenAIUserAffinityResidents(ctx context.Context, accountID int64, limit, offset int) ([]OpenAIUserAffinityResident, int64, error)
 	GetOpenAIUserAffinityUserDetail(ctx context.Context, userID int64, eventLimit int) (*OpenAIUserAffinityUserDetail, error)
-	ResetOpenAIUserAffinityPlacement(ctx context.Context, userID, actorAdminID int64, scopeKey, reason string, excludeSource bool) error
+	ResetOpenAIUserAffinityPlacement(ctx context.Context, userID, actorAdminID int64, scopeKey string, excludeSource bool) error
 	GetOpenAIUserAffinityAccountPolicy(ctx context.Context, accountID int64) (*OpenAIUserAffinityAccountPolicy, error)
 	UpdateOpenAIUserAffinityAccountPolicy(ctx context.Context, policy OpenAIUserAffinityAccountPolicy) error
 }
@@ -100,14 +107,10 @@ func (s *adminServiceImpl) GetOpenAIUserAffinityUserDetail(ctx context.Context, 
 	return store.GetOpenAIUserAffinityUserDetail(ctx, userID, eventLimit)
 }
 
-func (s *adminServiceImpl) ResetOpenAIUserAffinityPlacement(ctx context.Context, userID, actorAdminID int64, scopeKey, reason string, excludeSource bool) error {
+func (s *adminServiceImpl) ResetOpenAIUserAffinityPlacement(ctx context.Context, userID, actorAdminID int64, scopeKey string, excludeSource bool) error {
 	store, ok := s.accountRepo.(OpenAIUserAffinityAdminStore)
 	if !ok {
 		return errors.New("openai user affinity admin storage unavailable")
-	}
-	reason = strings.TrimSpace(reason)
-	if reason == "" {
-		return errors.New("reset reason is required")
 	}
 	scopeKey = strings.TrimSpace(scopeKey)
 	if scopeKey == "" {
@@ -120,7 +123,7 @@ func (s *adminServiceImpl) ResetOpenAIUserAffinityPlacement(ctx context.Context,
 		}
 		excludeSource = config.ManualResetExcludeSourceAccount
 	}
-	return store.ResetOpenAIUserAffinityPlacement(ctx, userID, actorAdminID, scopeKey, reason, excludeSource)
+	return store.ResetOpenAIUserAffinityPlacement(ctx, userID, actorAdminID, scopeKey, excludeSource)
 }
 
 func (s *adminServiceImpl) GetOpenAIUserAffinityAccountPolicy(ctx context.Context, accountID int64) (*OpenAIUserAffinityAccountPolicy, error) {

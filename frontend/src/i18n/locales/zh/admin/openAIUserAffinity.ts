@@ -1,8 +1,10 @@
 export const openAIUserAffinityAccounts = {
   title: '用户粘性归属', short: '居民', user: '用户', lastActive: '最后活跃',
-  residenceExpiry: '居住到期', migrationHistory: '搬迁记录', resetReason: '重置原因',
+  residenceExpiry: '居住到期', migrationHistory: '槽位与搬迁记录',
   reset: '重置归属', inherit: '继承全局', maxContactUsers: '最大触达用户数',
-  cooldownSeconds: '新居民冷却（秒）', failureThreshold: '搬迁失败阈值', failureWindow: '失败窗口（秒）'
+  cooldownSeconds: '新居民冷却（秒）', failureThreshold: '搬迁失败阈值', failureWindow: '失败窗口（秒）',
+  slot: '槽位', status: '状态', heat: '热度', slotValue: '槽位 {index} / generation {generation}',
+  heatValue: '热度 {value}', activeConversations: '{count} 个活跃会话'
 }
 
 export const openAIUserAffinitySettings = {
@@ -27,6 +29,12 @@ export const openAIUserAffinitySettings = {
   },
   maxContactUsers: '默认最大触达用户数',
   maxContactUsersHint: '账号当前可计入 7 天触达 TTL 的唯一用户上限；新账号默认 10。',
+  residentSlotCount: '常驻账号槽位数',
+  residentSlotCountHint: '每个用户在同一调度范围内可保留的常驻 OpenAI 账号数量；默认 1，建议按 1、2、3 的顺序逐步放量。',
+  residentTTL: '常驻与会话续期（秒）',
+  residentTTLHint: '槽位和长期会话绑定在成功请求后的滑动续期时间；默认 604800 秒（7 天）。',
+  conversationActiveTTL: '会话活跃占用（秒）',
+  conversationActiveTTLHint: '新会话成功后占用当前槽位的时间；默认 3600 秒，占用期间其他新会话可选择次选槽位。',
   cooldownSeconds: '新居民冷却（秒）',
   cooldownSecondsHint: '账号接收一个新居民后，在此期间不再接收其他新居民或迁入用户。',
   failureThreshold: '搬迁失败阈值',
