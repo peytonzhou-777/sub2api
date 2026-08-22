@@ -2,7 +2,7 @@
 
 ## 1. 文档信息
 
-- 状态：阶段 0–3 已实施并通过完整服务回归，待运维线程部署与全量观察；阶段 4 仅保留 ADR
+- 状态：阶段 1–3 已实施并通过完整服务回归；阶段 0 的源码/UA contract 已冻结，完整多路径真实抓包复核保留为部署前置；阶段 4 仅保留 ADR
 - 编制日期：2026-08-21
 - 最近修订：2026-08-22（收敛为官方 `0.149.0` 单一行为基线，移除专项性能测试并改为测试站全量发布）
 - sub2api 基线：`e45ac11c9`（`main`）
@@ -14,13 +14,15 @@
 
 ### 1.1 实施结果（2026-08-22）
 
-- 已冻结官方 `rust-v0.149.0` 与本机 Windows Terminal 脱敏 fixture，固定 UA 为 `codex_cli_rs/0.149.0 (Windows 10.0.26100; x86_64) WindowsTerminal`。
+- 已冻结官方 `rust-v0.149.0` 源码 contract 与本机 Windows Terminal 脱敏 UA，固定 UA 为 `codex_cli_rs/0.149.0 (Windows 10.0.26100; x86_64) WindowsTerminal`；现有 fixture 已驱动头集合和字段顺序断言，但不冒充完整原始抓包，HTTP/WS/compact/models 的完整真实捕获复核仍是部署前置。
 - 已增加全局默认 profile、全局 `legacy` 紧急回滚开关和账号 `extra.codex_outbound_profile` 故障隔离覆写；标准配置加载和服务构造入口均将缺省值归一为 `codex_cli_0_149_0`。
 - 已在最终账号选定后生成统一出站快照，并将 HTTP、HTTP passthrough、WS、WS 预热、compact 和 `/models` 投影到同一 profile；现有 Session、Thread、Prompt Cache、epoch 与用户粘性调度作用域未改变。
 - 严格 profile 已固定 Windows UA、去除旧兼容头、主动合成受控 metadata、按官方顶层顺序编码 JSON，并仅对普通 OAuth `/responses` 启用 zstd level 3；compact 和 WS 不启用 HTTP body 压缩。
 - WS 在真正写业务帧或预热帧前补充字符串形态的 `x-codex-ws-stream-request-start-ms`；最终写帧使用有序原始 JSON，并在语义未变化时复用 `tools`、`input` 等原始子树。
 - `/models` 已固定 `client_version=0.149.0`，复用统一 UA/originator 且不发送 `Version`；账号管理端已展示生效 profile、UA 与 zstd 状态，并支持继承、严格、单账号 legacy 三态编辑。
 - 不可信下游 metadata 会被丢弃；只有现有指纹状态和本站明确可确认的父子代理字段进入快照。当前没有可靠来源的 parent/root turn、agent、sandbox 或工具命名空间字段继续省略，不伪造或透传。
+- 独立审查后已进一步禁止 strict snapshot 在指纹 `off/device` 缺少服务端 ID 时回读下游身份：缺失字段直接省略，原始 Prompt Cache Key 删除，不暗中改变 Session 收敛 opt-in；未知顶层字段则让 body、identity 和 compression 整请求回退 legacy，并记录低基数 fallback 指标。
+- 后台 Codex 用量探测已复用业务 gateway profile；WS 连接池使用不出站的 snapshot topology scope 保持根/子/兄弟线程隔离；非 OAuth `/models` 不再继承全局严格版本；Codex 导入入口统一拒绝非法账号 profile。
 - 已加入进程级低基数统计并并入现有 OpenAI WS 性能快照；统计不包含 Authorization、完整 Session、Thread、Prompt Cache、body 或 metadata。
 - 后端 `internal/service` 完整回归、`internal/config`、`internal/handler/admin` 回归及前端目标 lint、完整类型检查均通过；按本计划不执行专项性能测试。
 - 阶段 4 已由 `docs/ADR/0017-codex-rust-transport-sidecar.md` 明确延期，本次只承诺应用层高度一致，不宣称 TLS/HTTP2/WebSocket 线级指纹完全一致。

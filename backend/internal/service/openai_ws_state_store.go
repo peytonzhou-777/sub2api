@@ -53,13 +53,13 @@ type openAIWSConnectionTarget struct {
 	proxyURL               string
 }
 
-func newOpenAIWSConnectionTarget(account *Account, transport OpenAIUpstreamTransport, wsURL string, headers http.Header) openAIWSConnectionTarget {
+func newOpenAIWSConnectionTarget(account *Account, transport OpenAIUpstreamTransport, wsURL string, headers http.Header, topologyScopes ...string) openAIWSConnectionTarget {
 	target := openAIWSConnectionTarget{transport: transport, wsURL: strings.TrimSpace(wsURL)}
 	if account == nil {
 		return target
 	}
 	target.accountID = account.ID
-	target.handshakeCompatibility = normalizeOpenAIWSHandshakeCompatibility(headers)
+	target.handshakeCompatibility = normalizeOpenAIWSHandshakeCompatibility(headers, topologyScopes...)
 	if account.ProxyID != nil && account.Proxy != nil {
 		target.proxyURL = strings.TrimSpace(account.Proxy.URL())
 	}
@@ -88,12 +88,24 @@ func normalizeOpenAIWSFingerprintScope(headers http.Header) string {
 
 // normalizeOpenAIWSTopologyScope 防止根线程、子线程和兄弟线程复用同一条有状态连接。
 func normalizeOpenAIWSTopologyScope(headers http.Header) string {
-	if headers == nil || strings.TrimSpace(headers.Get("x-codex-installation-id")) == "" {
+	if headers == nil {
 		return ""
 	}
-	threadID := firstNonEmptyHeader(headers, "thread-id", "thread_id")
-	parentThreadID := strings.TrimSpace(headers.Get("x-codex-parent-thread-id"))
-	subagent := strings.TrimSpace(headers.Get("x-openai-subagent"))
+	return normalizeOpenAIWSTopologyScopeValues(
+		strings.TrimSpace(headers.Get("x-codex-installation-id")),
+		firstNonEmptyHeader(headers, "thread-id", "thread_id"),
+		strings.TrimSpace(headers.Get("x-codex-parent-thread-id")),
+		strings.TrimSpace(headers.Get("x-openai-subagent")),
+	)
+}
+
+func normalizeOpenAIWSTopologyScopeValues(installationID, threadID, parentThreadID, subagent string) string {
+	if strings.TrimSpace(installationID) == "" {
+		return ""
+	}
+	threadID = strings.TrimSpace(threadID)
+	parentThreadID = strings.TrimSpace(parentThreadID)
+	subagent = strings.TrimSpace(subagent)
 	if threadID == "" && parentThreadID == "" && subagent == "" {
 		return ""
 	}

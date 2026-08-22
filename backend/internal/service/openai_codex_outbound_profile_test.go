@@ -71,11 +71,30 @@ func decodeTopLevelJSONKeys(t *testing.T, body []byte) []string {
 	return keys
 }
 
-func TestCodexCLI0149FixtureIsSanitizedAndMatchesIdentity(t *testing.T) {
+func loadCodexCLI0149Fixture(t *testing.T) []byte {
+	t.Helper()
 	raw, err := os.ReadFile("testdata/codex_cli_0_149_0_windows_outbound.json")
 	require.NoError(t, err)
+	return raw
+}
+
+func fixtureStringArray(t *testing.T, raw []byte, path string) []string {
+	t.Helper()
+	values := gjson.GetBytes(raw, path).Array()
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		result = append(result, value.String())
+	}
+	return result
+}
+
+func TestCodexCLI0149FixtureIsSanitizedAndMatchesIdentity(t *testing.T) {
+	raw := loadCodexCLI0149Fixture(t)
 	require.True(t, gjson.GetBytes(raw, "source.sanitized").Bool())
 	require.Equal(t, codexCLI0149WindowsUserAgent, gjson.GetBytes(raw, "identity.user_agent").String())
+	require.NotEmpty(t, fixtureStringArray(t, raw, "responses.required_headers"))
+	require.NotEmpty(t, fixtureStringArray(t, raw, "responses.top_level_order"))
+	require.NotEmpty(t, fixtureStringArray(t, raw, "compact.forbidden_headers"))
 	require.NotContains(t, string(raw), "Authorization")
 	require.NotContains(t, string(raw), "ChatGPT-Account-ID")
 }
@@ -94,6 +113,29 @@ func TestResolveCodexOutboundProfilePrecedence(t *testing.T) {
 
 	apiKeyAccount := &Account{ID: 12, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
 	require.Equal(t, CodexOutboundProfileLegacy, svc.resolveCodexOutboundProfile(apiKeyAccount))
+}
+
+func TestCodexOutboundAccountLegacyOverrideRestoresLegacyIdentity(t *testing.T) {
+	previousProfile, _ := codexOutboundDefaultProfile.Load().(string)
+	previousForceLegacy := codexOutboundForceLegacy.Load()
+	t.Cleanup(func() { SetCodexOutboundProfileConfig(previousProfile, previousForceLegacy) })
+	legacyIdentity := resolveCodexOutboundIdentity("")
+	SetCodexOutboundProfileConfig(CodexOutboundProfileCLI0149, false)
+
+	svc := newCodexOutboundStrictTestService()
+	account := &Account{ID: 14, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: map[string]any{
+		codexOutboundProfileExtraKey: CodexOutboundProfileLegacy,
+	}}
+	c := newCodexOutboundTestContext()
+	headers := http.Header{
+		"Originator": {"codex_cli_rs"},
+		"User-Agent": {codexCLI0149WindowsUserAgent},
+		"Version":    {codexCLI0149Version},
+	}
+	svc.finalizeCodexOutboundHeaders(c, account, headers, true, "http", "", "")
+	require.Equal(t, legacyIdentity.userAgent, headers.Get("User-Agent"))
+	require.Equal(t, legacyIdentity.originator, headers.Get("originator"))
+	require.Equal(t, legacyIdentity.version, headers.Get("Version"))
 }
 
 func TestCodexOutboundGlobalForceLegacyRestoresLegacyIdentity(t *testing.T) {
@@ -117,6 +159,7 @@ func TestCodexOutboundGlobalForceLegacyRestoresLegacyIdentity(t *testing.T) {
 }
 
 func TestCodexOutboundStrictHTTPProjection(t *testing.T) {
+	fixture := loadCodexCLI0149Fixture(t)
 	metricsBefore := SnapshotCodexOutboundMetrics()
 	svc := newCodexOutboundStrictTestService()
 	account := &Account{ID: 21, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
@@ -127,10 +170,14 @@ func TestCodexOutboundStrictHTTPProjection(t *testing.T) {
 	ordered, snapshot, err := svc.prepareCodexOutboundBody(c, account, body, "http", false)
 	require.NoError(t, err)
 	require.NotNil(t, snapshot)
-	require.Equal(t, []string{
-		"model", "instructions", "input", "tools", "reasoning", "store", "stream", "include",
-		"service_tier", "prompt_cache_key", "client_metadata",
-	}, decodeTopLevelJSONKeys(t, ordered))
+	wantOrder := fixtureStringArray(t, fixture, "responses.top_level_order")
+	presentOrder := make([]string, 0, len(wantOrder))
+	for _, key := range wantOrder {
+		if gjson.GetBytes(ordered, key).Exists() {
+			presentOrder = append(presentOrder, key)
+		}
+	}
+	require.Equal(t, presentOrder, decodeTopLevelJSONKeys(t, ordered))
 	require.Contains(t, string(ordered), `"tools":[{"z":1,"a":"<raw>"}]`)
 	require.Equal(t, ids.sessionID, gjson.GetBytes(ordered, "prompt_cache_key").String())
 	require.Equal(t, ids.sessionID, gjson.GetBytes(ordered, "client_metadata.session_id").String())
@@ -166,6 +213,12 @@ func TestCodexOutboundStrictHTTPProjection(t *testing.T) {
 	require.Empty(t, req.Header.Get("traceparent"))
 	require.Empty(t, req.Header.Get("tracestate"))
 	require.Equal(t, "model=gpt-5.4;tier=priority", req.Header.Get(openAICodexRoutingHintHeader))
+	for _, name := range fixtureStringArray(t, fixture, "responses.required_headers") {
+		require.NotEmpty(t, req.Header.Get(name), name)
+	}
+	for _, name := range fixtureStringArray(t, fixture, "responses.forbidden_headers") {
+		require.Empty(t, req.Header.Get(name), name)
+	}
 
 	compressed, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
@@ -189,18 +242,21 @@ func TestAccountTestServiceCodexProbeUsesStrictOutboundProfile(t *testing.T) {
 	account := &Account{ID: 22, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: map[string]any{
 		codexFingerprintModeExtraKey: "off",
 	}}
-	body := []byte(`{"model":"gpt-5.4","input":[]}`)
+	body := []byte(`{"model":"gpt-5.4","input":[],"prompt_cache_key":"raw-session","client_metadata":{"session_id":"raw-session","thread_id":"raw-thread"}}`)
 	req := httptest.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", bytes.NewReader(body))
 	req.Header.Set("originator", "untrusted")
 	req.Header.Set("User-Agent", "untrusted/1.0")
 	req.Header.Set("Version", "1.0")
+	req.Header.Set("session-id", "raw-session")
+	req.Header.Set("thread-id", "raw-thread")
 
 	require.NoError(t, probeService.applyCodexOutboundProbeProfile(t.Context(), account, req, body))
 	require.Equal(t, codexCLI0149WindowsUserAgent, req.Header.Get("User-Agent"))
 	require.Equal(t, "codex_cli_rs", req.Header.Get("originator"))
 	require.Empty(t, req.Header.Get("Version"))
 	require.Equal(t, "zstd", req.Header.Get("Content-Encoding"))
-	require.NotEmpty(t, req.Header.Get("session-id"))
+	require.Empty(t, req.Header.Get("session-id"))
+	require.Empty(t, req.Header.Get("thread-id"))
 
 	compressed, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
@@ -209,11 +265,15 @@ func TestAccountTestServiceCodexProbeUsesStrictOutboundProfile(t *testing.T) {
 	t.Cleanup(decoder.Close)
 	decompressed, err := decoder.DecodeAll(compressed, nil)
 	require.NoError(t, err)
-	require.Equal(t, req.Header.Get("session-id"), gjson.GetBytes(decompressed, "prompt_cache_key").String())
-	require.Equal(t, req.Header.Get("session-id"), gjson.GetBytes(decompressed, "client_metadata.session_id").String())
+	require.False(t, gjson.GetBytes(decompressed, "prompt_cache_key").Exists())
+	require.False(t, gjson.GetBytes(decompressed, "client_metadata.session_id").Exists())
+	require.False(t, gjson.GetBytes(decompressed, "client_metadata.thread_id").Exists())
+	require.NotContains(t, string(decompressed), "raw-session")
+	require.NotContains(t, string(decompressed), "raw-thread")
 }
 
 func TestCodexOutboundStrictWSAndCompactProjection(t *testing.T) {
+	fixture := loadCodexCLI0149Fixture(t)
 	svc := newCodexOutboundStrictTestService()
 	account := &Account{ID: 31, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 	c := newCodexOutboundTestContext()
@@ -234,6 +294,7 @@ func TestCodexOutboundStrictWSAndCompactProjection(t *testing.T) {
 	}
 	svc.finalizeCodexOutboundHeaders(c, account, wsHeaders, false, "ws_v2", "gpt-5.4", "")
 	require.Equal(t, openAIWSBetaV2Value, wsHeaders.Get("OpenAI-Beta"))
+	require.Equal(t, gjson.GetBytes(fixture, "websocket.openai_beta").String(), wsHeaders.Get("OpenAI-Beta"))
 	require.Equal(t, ids.sessionID, wsHeaders.Get("session-id"))
 	require.Equal(t, ids.threadID, wsHeaders.Get("x-client-request-id"))
 	require.Empty(t, wsHeaders.Get("Content-Encoding"))
@@ -256,6 +317,68 @@ func TestCodexOutboundStrictWSAndCompactProjection(t *testing.T) {
 	require.Empty(t, compactHeaders.Get("Content-Encoding"))
 	require.Equal(t, ids.installationID, compactHeaders.Get("x-codex-installation-id"))
 	require.Equal(t, ids.sessionID, compactHeaders.Get("session-id"))
+	for _, name := range fixtureStringArray(t, fixture, "compact.required_headers") {
+		require.NotEmpty(t, compactHeaders.Get(name), name)
+	}
+	for _, name := range fixtureStringArray(t, fixture, "compact.forbidden_headers") {
+		require.Empty(t, compactHeaders.Get(name), name)
+	}
+}
+
+func TestCodexOutboundStrictUnknownFieldFallsBackWholeRequest(t *testing.T) {
+	metricsBefore := SnapshotCodexOutboundMetrics()
+	svc := newCodexOutboundStrictTestService()
+	account := &Account{ID: 33, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	c := newCodexOutboundTestContext()
+	body := []byte(`{"model":"gpt-5.4","input":[],"future_field":{"enabled":true}}`)
+
+	projected, snapshot, err := svc.prepareCodexOutboundBody(c, account, body, "http", false)
+	require.NoError(t, err)
+	require.Nil(t, snapshot)
+	require.Equal(t, body, projected)
+	require.Equal(t, CodexOutboundProfileLegacy, svc.resolveCodexOutboundProfileForRequest(c, account))
+
+	req := httptest.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", bytes.NewReader(projected))
+	req.Header.Set("User-Agent", "legacy-client/1.0")
+	req.Header.Set("Version", "1.0")
+	legacyIdentity := resolveCodexOutboundIdentity("")
+	svc.compressCodexOutboundHTTPRequest(t.Context(), c, account, req, projected, false)
+	svc.finalizeCodexOutboundHeaders(c, account, req.Header, false, "http", "gpt-5.4", "")
+	require.Empty(t, req.Header.Get("Content-Encoding"))
+	require.Equal(t, legacyIdentity.userAgent, req.Header.Get("User-Agent"))
+	require.Equal(t, legacyIdentity.originator, req.Header.Get("originator"))
+	require.Equal(t, legacyIdentity.version, req.Header.Get("Version"))
+	require.Greater(t, SnapshotCodexOutboundMetrics().ProfileFallbackTotal, metricsBefore.ProfileFallbackTotal)
+}
+
+func TestCodexOutboundStrictWSTopologyUsesInternalSnapshot(t *testing.T) {
+	svc := newCodexOutboundStrictTestService()
+	account := &Account{ID: 34, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	c := newCodexOutboundTestContext()
+	stageCodexOutboundTestIDs(c, account.ID)
+	body := []byte(`{"type":"response.create","model":"gpt-5.4","input":[]}`)
+	_, _, err := svc.prepareCodexOutboundBody(c, account, body, "ws_v2", false)
+	require.NoError(t, err)
+
+	headers := make(http.Header)
+	svc.finalizeCodexOutboundHeaders(c, account, headers, false, "ws_v2", "gpt-5.4", "")
+	require.Empty(t, headers.Get("x-codex-installation-id"))
+	topologyScope := stagedCodexOutboundTopologyScope(c, account)
+	require.NotEmpty(t, topologyScope)
+	require.Empty(t, normalizeOpenAIWSHandshakeCompatibility(headers).topologyScope)
+	require.Equal(t, topologyScope, normalizeOpenAIWSHandshakeCompatibility(headers, topologyScope).topologyScope)
+	rootTarget := newOpenAIWSConnectionTarget(account, OpenAIUpstreamTransportResponsesWebsocketV2, "wss://chatgpt.com/backend-api/codex/responses", headers, topologyScope)
+
+	childIDs := stageCodexOutboundTestIDs(c, account.ID)
+	childIDs.threadID = "0198a000-0000-7000-8000-000000000103"
+	childIDs.parentThreadID = "0198a000-0000-7000-8000-000000000003"
+	stageCodexFingerprintIDs(c, childIDs)
+	_, _, err = svc.prepareCodexOutboundBody(c, account, body, "ws_v2", false)
+	require.NoError(t, err)
+	childScope := stagedCodexOutboundTopologyScope(c, account)
+	require.NotEqual(t, topologyScope, childScope)
+	childTarget := newOpenAIWSConnectionTarget(account, OpenAIUpstreamTransportResponsesWebsocketV2, "wss://chatgpt.com/backend-api/codex/responses", headers, childScope)
+	require.False(t, rootTarget.matches(childTarget))
 }
 
 func TestCodexOutboundStrictWSFinalFrameKeepsOrderAndRawSubtrees(t *testing.T) {

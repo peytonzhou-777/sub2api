@@ -684,7 +684,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	if buildHdrErr != nil {
 		return fmt.Errorf("build ws headers: %w", buildHdrErr)
 	}
-	connectionTarget = newOpenAIWSConnectionTarget(account, wsDecision.Transport, wsURL, wsHeaders)
+	topologyScope := stagedCodexOutboundTopologyScope(c, account)
+	connectionTarget = newOpenAIWSConnectionTarget(account, wsDecision.Transport, wsURL, wsHeaders, topologyScope)
 	// 首次解析 payload 时握手头尚未构造；现在按实际 fingerprint scope 重新解析首选连接。
 	refreshIngressRouteState(firstPayload)
 	baseAcquireReq := openAIWSAcquireRequest{
@@ -692,6 +693,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		WSURL:                   wsURL,
 		Headers:                 wsHeaders,
 		FingerprintSessionScope: stagedCodexFingerprintSessionScopeHash(c),
+		TopologyScope:           topologyScope,
 		HeadersFactory: func(factoryCtx context.Context, headers http.Header) (http.Header, error) {
 			return s.refreshOpenAIAgentIdentityHeaders(factoryCtx, account, headers)
 		},

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -27,6 +28,7 @@ const (
 	CodexOutboundProfileCLI0149        = "codex_cli_0_149_0"
 	codexOutboundProfileExtraKey       = "codex_outbound_profile"
 	codexOutboundSnapshotContextKey    = "codex_outbound_snapshot"
+	codexOutboundFallbackContextKey    = "codex_outbound_fallback"
 	codexOutboundTurnStartedContextKey = "codex_outbound_turn_started_at_unix_ms"
 
 	// 严格 profile 使用同一低熵客户端类别模板；它不表示账号来自同一设备或安装。
@@ -66,6 +68,7 @@ type CodexOutboundMetricsSnapshot struct {
 	MetadataSynthesizedTotal      uint64 `json:"metadata_synthesized_total"`
 	ForbiddenHeadersStrippedTotal uint64 `json:"forbidden_headers_stripped_total"`
 	UnknownFieldsPreservedTotal   uint64 `json:"unknown_fields_preserved_total"`
+	ProfileFallbackTotal          uint64 `json:"profile_fallback_total"`
 	ZstdRequestsTotal             uint64 `json:"zstd_requests_total"`
 	ZstdFallbackTotal             uint64 `json:"zstd_fallback_total"`
 	ZstdInputBytesTotal           uint64 `json:"zstd_input_bytes_total"`
@@ -85,6 +88,7 @@ type codexOutboundMetrics struct {
 	metadataSynthesized      atomic.Uint64
 	forbiddenHeadersStripped atomic.Uint64
 	unknownFieldsPreserved   atomic.Uint64
+	profileFallback          atomic.Uint64
 	zstdRequests             atomic.Uint64
 	zstdFallback             atomic.Uint64
 	zstdInputBytes           atomic.Uint64
@@ -106,6 +110,7 @@ func SnapshotCodexOutboundMetrics() CodexOutboundMetricsSnapshot {
 		MetadataSynthesizedTotal:      defaultCodexOutboundMetrics.metadataSynthesized.Load(),
 		ForbiddenHeadersStrippedTotal: defaultCodexOutboundMetrics.forbiddenHeadersStripped.Load(),
 		UnknownFieldsPreservedTotal:   defaultCodexOutboundMetrics.unknownFieldsPreserved.Load(),
+		ProfileFallbackTotal:          defaultCodexOutboundMetrics.profileFallback.Load(),
 		ZstdRequestsTotal:             defaultCodexOutboundMetrics.zstdRequests.Load(),
 		ZstdFallbackTotal:             defaultCodexOutboundMetrics.zstdFallback.Load(),
 		ZstdInputBytesTotal:           defaultCodexOutboundMetrics.zstdInputBytes.Load(),
@@ -236,10 +241,40 @@ type CodexOutboundSnapshot struct {
 	orderedBody         []byte
 }
 
+type codexOutboundFallback struct {
+	accountID int64
+	reason    string
+}
+
 func stageCodexOutboundSnapshot(c *gin.Context, snapshot *CodexOutboundSnapshot) {
 	if c != nil {
 		c.Set(codexOutboundSnapshotContextKey, snapshot)
 	}
+}
+
+func stageCodexOutboundFallback(c *gin.Context, fallback *codexOutboundFallback) {
+	if c != nil {
+		c.Set(codexOutboundFallbackContextKey, fallback)
+	}
+}
+
+func stagedCodexOutboundFallback(c *gin.Context, account *Account) *codexOutboundFallback {
+	if c == nil || account == nil {
+		return nil
+	}
+	value, exists := c.Get(codexOutboundFallbackContextKey)
+	fallback, ok := value.(*codexOutboundFallback)
+	if !exists || !ok || fallback == nil || fallback.accountID != account.ID {
+		return nil
+	}
+	return fallback
+}
+
+func (s *OpenAIGatewayService) resolveCodexOutboundProfileForRequest(c *gin.Context, account *Account) string {
+	if stagedCodexOutboundFallback(c, account) != nil {
+		return CodexOutboundProfileLegacy
+	}
+	return s.resolveCodexOutboundProfile(account)
 }
 
 func stagedCodexOutboundSnapshot(c *gin.Context, account *Account) *CodexOutboundSnapshot {
@@ -252,6 +287,19 @@ func stagedCodexOutboundSnapshot(c *gin.Context, account *Account) *CodexOutboun
 		return nil
 	}
 	return snapshot
+}
+
+func stagedCodexOutboundTopologyScope(c *gin.Context, account *Account) string {
+	snapshot := stagedCodexOutboundSnapshot(c, account)
+	if snapshot == nil {
+		return ""
+	}
+	return normalizeOpenAIWSTopologyScopeValues(
+		snapshot.installationID,
+		snapshot.threadID,
+		snapshot.parentThreadID,
+		snapshot.subagentKind,
+	)
 }
 
 func stableCodexOutboundTurnStartedAt(c *gin.Context, fallback int64) int64 {
@@ -309,78 +357,13 @@ func buildCodexOutboundSnapshot(c *gin.Context, account *Account, body []byte, t
 		snapshot.turnStartedAtUnixMs = ids.turnStartedAtUnixMs
 	}
 
-	turnMetadata := gjson.Parse(strings.TrimSpace(gjson.GetBytes(body, "client_metadata.x-codex-turn-metadata").String()))
-	if snapshot.installationID == "" {
-		snapshot.installationID = firstNonEmptyCodexOutboundString(
-			gjson.GetBytes(body, "client_metadata.x-codex-installation-id").String(),
-			turnMetadata.Get("installation_id").String(),
-			requestHeader(c, "x-codex-installation-id"),
-		)
-	}
-	if snapshot.sessionID == "" {
-		snapshot.sessionID = firstNonEmptyCodexOutboundString(
-			gjson.GetBytes(body, "client_metadata.session_id").String(),
-			turnMetadata.Get("session_id").String(),
-			requestHeader(c, "session-id"),
-			requestHeader(c, "session_id"),
-		)
-	}
-	if snapshot.threadID == "" {
-		snapshot.threadID = firstNonEmptyCodexOutboundString(
-			gjson.GetBytes(body, "client_metadata.thread_id").String(),
-			turnMetadata.Get("thread_id").String(),
-			requestHeader(c, "thread-id"),
-		)
-	}
-	if snapshot.parentThreadID == "" {
-		snapshot.parentThreadID = firstNonEmptyCodexOutboundString(
-			gjson.GetBytes(body, "client_metadata.parent_thread_id").String(),
-			turnMetadata.Get("parent_thread_id").String(),
-			requestHeader(c, "x-codex-parent-thread-id"),
-		)
-	}
-	if snapshot.forkedThreadID == "" {
-		snapshot.forkedThreadID = firstNonEmptyCodexOutboundString(
-			gjson.GetBytes(body, "client_metadata.forked_from_thread_id").String(),
-			turnMetadata.Get("forked_from_thread_id").String(),
-		)
-	}
-	if snapshot.turnID == "" {
-		snapshot.turnID = firstNonEmptyCodexOutboundString(gjson.GetBytes(body, "client_metadata.turn_id").String(), turnMetadata.Get("turn_id").String())
-	}
-	if snapshot.windowID == "" {
-		snapshot.windowID = firstNonEmptyCodexOutboundString(
-			gjson.GetBytes(body, "client_metadata.x-codex-window-id").String(),
-			turnMetadata.Get("window_id").String(),
-			requestHeader(c, "x-codex-window-id"),
-		)
-	}
 	if snapshot.promptCacheKey == "" {
 		// 共享特征优先：Codex OAuth 缺省缓存键与当前 Session 收口为同一生命周期。
 		snapshot.promptCacheKey = snapshot.sessionID
 	}
-	if marker := firstNonEmptyCodexOutboundString(requestHeader(c, "x-openai-subagent"), turnMetadata.Get("subagent_kind").String()); len(marker) <= 64 {
-		snapshot.subagentKind = marker
-	}
 	snapshot.turnStartedAtUnixMs = stableCodexOutboundTurnStartedAt(c, snapshot.turnStartedAtUnixMs)
 	snapshot.turnMetadata = marshalCodexOutboundTurnMetadata(snapshot)
 	return snapshot
-}
-
-func requestHeader(c *gin.Context, name string) string {
-	if c == nil || c.Request == nil {
-		return ""
-	}
-	return strings.TrimSpace(c.Request.Header.Get(name))
-}
-
-func firstNonEmptyCodexOutboundString(values ...string) string {
-	for _, value := range values {
-		if value = strings.TrimSpace(value); value != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 func marshalCodexOutboundTurnMetadata(snapshot *CodexOutboundSnapshot) string {
@@ -462,11 +445,40 @@ var codexCompactFieldOrder = []string{
 
 // prepareCodexOutboundBody 在所有业务改写完成后执行纯本地严格投影和有序编码。
 func (s *OpenAIGatewayService) prepareCodexOutboundBody(c *gin.Context, account *Account, body []byte, transport string, compact bool) ([]byte, *CodexOutboundSnapshot, error) {
+	stageCodexOutboundFallback(c, nil)
 	if s.resolveCodexOutboundProfile(account) != CodexOutboundProfileCLI0149 {
 		if account != nil && account.IsOpenAIOAuth() {
 			defaultCodexOutboundMetrics.legacyRequests.Add(1)
 		}
 		stageCodexOutboundSnapshot(c, nil)
+		return body, nil, nil
+	}
+	order := codexHTTPResponseFieldOrder
+	if compact {
+		order = codexCompactFieldOrder
+	} else if strings.HasPrefix(strings.ToLower(strings.TrimSpace(transport)), "ws") || gjson.GetBytes(body, "type").String() == "response.create" {
+		order = codexWSResponseFieldOrder
+	}
+	unknown, unknownErr := unknownCodexOutboundTopLevelFields(body, order)
+	if unknownErr == nil && len(unknown) > 0 {
+		requestKind := "turn"
+		if compact {
+			requestKind = "compaction"
+		} else if generate := gjson.GetBytes(body, "generate"); generate.Exists() && generate.Type == gjson.False {
+			requestKind = "prewarm"
+		}
+		stageCodexOutboundSnapshot(c, nil)
+		stageCodexOutboundFallback(c, &codexOutboundFallback{accountID: account.ID, reason: "unknown_top_level_field"})
+		defaultCodexOutboundMetrics.profileFallback.Add(1)
+		defaultCodexOutboundMetrics.legacyRequests.Add(1)
+		logger.L().Warn("Codex 严格 profile 遇到未识别顶层字段，整请求回退 legacy",
+			zap.Int64("account_id", account.ID),
+			zap.String("profile", CodexOutboundProfileCLI0149),
+			zap.String("transport", strings.TrimSpace(transport)),
+			zap.String("request_kind", requestKind),
+			zap.String("reason", "unknown_top_level_field"),
+			zap.Int("unknown_field_count", len(unknown)),
+		)
 		return body, nil, nil
 	}
 	serializeStartedAt := time.Now()
@@ -518,6 +530,12 @@ func projectCodexOutboundBody(body []byte, snapshot *CodexOutboundSnapshot, tran
 			if err != nil {
 				return body, err
 			}
+		} else if gjson.GetBytes(next, "prompt_cache_key").Exists() {
+			var err error
+			next, err = sjson.DeleteBytes(next, "prompt_cache_key")
+			if err != nil {
+				return body, err
+			}
 		}
 		return marshalOrderedCodexJSONWithReference(next, reference, codexCompactFieldOrder)
 	}
@@ -534,6 +552,12 @@ func projectCodexOutboundBody(body []byte, snapshot *CodexOutboundSnapshot, tran
 	if snapshot.promptCacheKey != "" {
 		var err error
 		next, err = sjson.SetBytes(next, "prompt_cache_key", snapshot.promptCacheKey)
+		if err != nil {
+			return body, err
+		}
+	} else if gjson.GetBytes(next, "prompt_cache_key").Exists() {
+		var err error
+		next, err = sjson.DeleteBytes(next, "prompt_cache_key")
 		if err != nil {
 			return body, err
 		}
@@ -571,6 +595,34 @@ func projectCodexOutboundBody(body []byte, snapshot *CodexOutboundSnapshot, tran
 // 未识别字段按稳定字典序追加，避免协议升级时静默丢失业务语义。
 func marshalOrderedCodexJSON(body []byte, order []string) ([]byte, error) {
 	return marshalOrderedCodexJSONWithReference(body, nil, order)
+}
+
+func unknownCodexOutboundTopLevelFields(body []byte, order []string) ([]string, error) {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	fields := make(map[string]json.RawMessage)
+	if err := decoder.Decode(&fields); err != nil {
+		return nil, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return nil, errors.New("multiple JSON values")
+		}
+		return nil, err
+	}
+	known := make(map[string]struct{}, len(order))
+	for _, key := range order {
+		known[key] = struct{}{}
+	}
+	unknown := make([]string, 0)
+	for key := range fields {
+		if _, ok := known[key]; !ok {
+			unknown = append(unknown, key)
+		}
+	}
+	sort.Strings(unknown)
+	return unknown, nil
 }
 
 // marshalOrderedCodexJSONWithReference 在值语义未变化时借用参考体的原始子树。
@@ -649,7 +701,7 @@ func (s *OpenAIGatewayService) marshalCodexOutboundWSPayload(
 	requestKind string,
 ) ([]byte, error) {
 	raw, err := marshalOpenAIUpstreamJSON(payload)
-	if err != nil || s.resolveCodexOutboundProfile(account) != CodexOutboundProfileCLI0149 {
+	if err != nil || s.resolveCodexOutboundProfileForRequest(c, account) != CodexOutboundProfileCLI0149 {
 		return raw, err
 	}
 	snapshot := stagedCodexOutboundSnapshot(c, account)
@@ -727,6 +779,35 @@ func (s *OpenAIGatewayService) compressCodexOutboundHTTPRequest(
 	}
 }
 
+// applyCodexOutboundProbeProfile 让账号测试与后台用量探测复用业务请求的严格出站语义。
+func (s *OpenAIGatewayService) applyCodexOutboundProbeProfile(ctx context.Context, account *Account, req *http.Request, body []byte) error {
+	if s == nil || account == nil || req == nil || !account.IsOpenAIOAuth() {
+		return nil
+	}
+	probeContext, _ := gin.CreateTestContext(nil)
+	probeContext.Request = req
+	SetOpenAIClientTransport(probeContext, OpenAIClientTransportHTTP)
+	ids, err := s.prepareCodexFingerprintForAttempt(ctx, probeContext, account, body, true)
+	if err != nil {
+		return fmt.Errorf("prepare Codex fingerprint: %w", err)
+	}
+	if ids != nil {
+		applyCodexFingerprintHeaders(req.Header, ids)
+	}
+	projected, _, err := s.prepareCodexOutboundBody(probeContext, account, body, "http", false)
+	if err != nil {
+		return fmt.Errorf("prepare Codex outbound body: %w", err)
+	}
+	req.Body = io.NopCloser(bytes.NewReader(projected))
+	req.ContentLength = int64(len(projected))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(projected)), nil
+	}
+	s.compressCodexOutboundHTTPRequest(ctx, probeContext, account, req, projected, false)
+	s.finalizeCodexOutboundHeaders(probeContext, account, req.Header, false, "http", "", "")
+	return nil
+}
+
 // finalizeCodexOutboundHeaders 在所有旧逻辑与账号覆写之后执行严格白名单收口。
 func (s *OpenAIGatewayService) finalizeCodexOutboundHeaders(
 	c *gin.Context,
@@ -737,7 +818,32 @@ func (s *OpenAIGatewayService) finalizeCodexOutboundHeaders(
 	model string,
 	serviceTier string,
 ) {
-	if headers == nil || s.resolveCodexOutboundProfile(account) != CodexOutboundProfileCLI0149 {
+	if headers == nil {
+		return
+	}
+	if fallback := stagedCodexOutboundFallback(c, account); fallback != nil {
+		// 请求级兼容回退必须同时恢复 identity/body/compression，不能留下严格 profile 混合形态。
+		identity := resolveCodexOutboundIdentity(account.GetOpenAIUserAgent())
+		headers.Set("User-Agent", identity.userAgent)
+		headers.Set("originator", identity.originator)
+		headers.Set("version", identity.version)
+		deleteOpenAIHeaderEqualFold(headers, "content-encoding")
+		return
+	}
+	if s.resolveCodexOutboundProfileForRequest(c, account) != CodexOutboundProfileCLI0149 {
+		explicitLegacy := account != nil && account.GetCodexOutboundProfileOverride() == CodexOutboundProfileLegacy
+		forcedLegacy := s != nil && s.cfg != nil && s.cfg.Gateway.CodexOutboundForceLegacy
+		if (explicitLegacy || forcedLegacy) && strings.TrimSpace(headers.Get("originator")) != "" {
+			overrideUA := ""
+			if account != nil {
+				overrideUA = account.GetOpenAIUserAgent()
+			}
+			identity := resolveCodexOutboundIdentity(overrideUA)
+			headers.Set("User-Agent", identity.userAgent)
+			headers.Set("originator", identity.originator)
+			headers.Set("version", identity.version)
+			deleteOpenAIHeaderEqualFold(headers, "content-encoding")
+		}
 		return
 	}
 	snapshot := stagedCodexOutboundSnapshot(c, account)

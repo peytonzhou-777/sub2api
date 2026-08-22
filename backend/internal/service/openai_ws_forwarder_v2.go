@@ -133,7 +133,8 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	if buildHdrErr != nil {
 		return nil, fmt.Errorf("build ws headers: %w", buildHdrErr)
 	}
-	connectionTarget := newOpenAIWSConnectionTarget(account, decision.Transport, wsURL, wsHeaders)
+	topologyScope := stagedCodexOutboundTopologyScope(c, account)
+	connectionTarget := newOpenAIWSConnectionTarget(account, decision.Transport, wsURL, wsHeaders, topologyScope)
 	preferredConnID := ""
 	if stateStore != nil && previousResponseID != "" {
 		if connID, ok := getOpenAIWSResponseConn(stateStore, previousResponseID, connectionTarget); ok {
@@ -189,6 +190,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		WSURL:                   wsURL,
 		Headers:                 wsHeaders,
 		FingerprintSessionScope: stagedCodexFingerprintSessionScopeHash(c),
+		TopologyScope:           topologyScope,
 		HeadersFactory: func(factoryCtx context.Context, headers http.Header) (http.Header, error) {
 			return s.refreshOpenAIAgentIdentityHeaders(factoryCtx, account, headers)
 		},

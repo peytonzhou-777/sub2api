@@ -250,7 +250,8 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		clientVersion = codexCLI0149Version
 	}
 	if clientVersion == "" {
-		clientVersion = CodexCanonicalClientVersion()
+		// 非 OAuth 上游不继承全局严格 profile，保持其原有 UA/Version 解析链自洽。
+		clientVersion = resolveCodexOutboundIdentity("").version
 	}
 
 	requestEndpoint := chatgptCodexModelsURL

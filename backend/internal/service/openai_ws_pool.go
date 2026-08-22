@@ -65,6 +65,8 @@ type openAIWSAcquireRequest struct {
 	Headers http.Header
 	// FingerprintSessionScope 用于连接复用、轮换忙碌与清理的本地指纹 Session 边界。
 	FingerprintSessionScope string
+	// TopologyScope 从服务端权威快照计算，只用于本地连接兼容判定，不发送给上游。
+	TopologyScope string
 	// HeadersFactory is evaluated inside dialConn. It exists so credentials
 	// whose authorization is per-dial (Agent Identity) are never cached in
 	// lastAcquire or delayed prewarm state.
@@ -885,7 +887,7 @@ func (p *openAIWSConnPool) acquire(ctx context.Context, req openAIWSAcquireReque
 
 retryAcquire:
 	accountID := req.Account.ID
-	compatibility := normalizeOpenAIWSHandshakeCompatibility(req.Headers)
+	compatibility := normalizeOpenAIWSHandshakeCompatibility(req.Headers, req.TopologyScope)
 	routingAffinity := normalizeOpenAIWSRoutingAffinity(req.Headers)
 	effectiveMaxConns := p.effectiveMaxConnsByAccount(req.Account)
 	if effectiveMaxConns <= 0 {
@@ -1736,7 +1738,7 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 	id := p.nextConnID(req.Account.ID)
 	pooledConn := newOpenAIWSConn(id, req.Account.ID, conn, handshakeHeaders)
 	// 记录实际拨号头；若认证工厂意外改变 UA/指纹字段，后续请求会拒绝复用该连接。
-	pooledConn.handshakeCompatibility = normalizeOpenAIWSHandshakeCompatibility(headers)
+	pooledConn.handshakeCompatibility = normalizeOpenAIWSHandshakeCompatibility(headers, req.TopologyScope)
 	pooledConn.routingAffinity = normalizeOpenAIWSRoutingAffinity(headers)
 	pooledConn.fingerprintSessionScope = strings.TrimSpace(req.FingerprintSessionScope)
 	pooledConn.wsURL = stringsTrim(req.WSURL)
@@ -1968,12 +1970,19 @@ func normalizeOpenAIWSOpenAIBeta(headers http.Header) string {
 	return strings.Join(normalized, ",")
 }
 
-func normalizeOpenAIWSHandshakeCompatibility(headers http.Header) openAIWSHandshakeCompatibilityKey {
+func normalizeOpenAIWSHandshakeCompatibility(headers http.Header, topologyScopes ...string) openAIWSHandshakeCompatibilityKey {
+	topologyScope := ""
+	if len(topologyScopes) > 0 {
+		topologyScope = strings.TrimSpace(topologyScopes[0])
+	}
+	if topologyScope == "" {
+		topologyScope = normalizeOpenAIWSTopologyScope(headers)
+	}
 	return openAIWSHandshakeCompatibilityKey{
 		betaFeatures:     normalizeOpenAIWSBetaFeatures(headers),
 		openAIBeta:       normalizeOpenAIWSOpenAIBeta(headers),
 		fingerprintScope: normalizeOpenAIWSFingerprintScope(headers),
-		topologyScope:    normalizeOpenAIWSTopologyScope(headers),
+		topologyScope:    topologyScope,
 		userAgent:        strings.TrimSpace(headers.Get("User-Agent")),
 		originator:       strings.TrimSpace(headers.Get("originator")),
 	}

@@ -12,7 +12,19 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
+
+func TestDeployExampleConfigParsesAndContainsCodexOutboundProfile(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "config.example.yaml"))
+	require.NoError(t, err)
+	var document map[string]any
+	require.NoError(t, yaml.Unmarshal(raw, &document))
+	gateway, ok := document["gateway"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "codex_cli_0_149_0", gateway["codex_outbound_profile_default"])
+	require.Equal(t, false, gateway["codex_outbound_force_legacy"])
+}
 
 func resetViperWithJWTSecret(t *testing.T) {
 	t.Helper()

@@ -13,6 +13,14 @@ type accountUsageCodexProbeRepo struct {
 	rateLimitCh   chan time.Time
 }
 
+func TestProvideAccountUsageServiceSharesOpenAIGatewayProfile(t *testing.T) {
+	gateway := &OpenAIGatewayService{}
+	service := ProvideAccountUsageService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, gateway)
+	if service.openAIGatewayService != gateway {
+		t.Fatal("AccountUsageService 未复用 OpenAIGatewayService 出站 profile")
+	}
+}
+
 func (r *accountUsageCodexProbeRepo) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
 	if r.updateExtraCh != nil {
 		copied := make(map[string]any, len(updates))

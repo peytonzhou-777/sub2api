@@ -125,6 +125,10 @@ func (h *AccountHandler) ImportCodexSession(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	if err := sanitizeCodexSubagentConcurrencyExtra(req.Extra); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 	if req.Concurrency != nil && *req.Concurrency < 0 {
 		response.BadRequest(c, "concurrency must be >= 0")
 		return
@@ -227,6 +231,21 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 		}
 		credentials := mergeCodexImportMap(item.Credentials, credentialExtras)
 		extra := mergeCodexImportMap(req.Extra, item.Extra)
+		if err := sanitizeCodexSubagentConcurrencyExtra(extra); err != nil {
+			result.Failed++
+			result.Items = append(result.Items, CodexSessionImportItem{
+				Index:   entry.Index,
+				Name:    accountName,
+				Action:  "failed",
+				Message: err.Error(),
+			})
+			result.Errors = append(result.Errors, CodexSessionImportMessage{
+				Index:   entry.Index,
+				Name:    accountName,
+				Message: err.Error(),
+			})
+			continue
+		}
 		for _, warning := range item.WarningTexts {
 			result.Warnings = append(result.Warnings, CodexSessionImportMessage{
 				Index:   entry.Index,
@@ -276,6 +295,21 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 			}
 			mergedCredentials := mergeCodexImportCredentials(existing.Credentials, credentials, item)
 			mergedExtra := mergeCodexImportMap(existing.Extra, extra)
+			if err := sanitizeCodexSubagentConcurrencyExtra(mergedExtra); err != nil {
+				result.Failed++
+				result.Items = append(result.Items, CodexSessionImportItem{
+					Index:   entry.Index,
+					Name:    accountName,
+					Action:  "failed",
+					Message: err.Error(),
+				})
+				result.Errors = append(result.Errors, CodexSessionImportMessage{
+					Index:   entry.Index,
+					Name:    accountName,
+					Message: err.Error(),
+				})
+				continue
+			}
 			updateInput := &service.UpdateAccountInput{
 				Credentials:        mergedCredentials,
 				Extra:              mergedExtra,

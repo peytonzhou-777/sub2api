@@ -648,6 +648,27 @@ func TestImportCodexSessionsAccessTokenOnlySameWorkspaceDifferentUsersCreatesTwo
 	}
 }
 
+func TestImportCodexSessionsRejectsInvalidOutboundProfile(t *testing.T) {
+	svc := newCodexImportMemoryAdminService(nil)
+	handler := NewAccountHandler(svc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	req := CodexSessionImportRequest{
+		SkipDefaultGroupBind: boolPtr(true),
+		Extra:                map[string]any{"codex_outbound_profile": "strict-ish"},
+	}
+	entries := []codexImportEntry{{Index: 1, Value: buildCodexAccessOnlyImportValue(t, "workspace-1", "user-1")}}
+
+	result, err := handler.importCodexSessions(context.Background(), req, entries)
+	if err != nil {
+		t.Fatalf("importCodexSessions error = %v", err)
+	}
+	if result.Failed != 1 || result.Created != 0 || len(svc.createdAccounts) != 0 {
+		t.Fatalf("result = %+v, created=%d, want one rejected item", result, len(svc.createdAccounts))
+	}
+	if len(result.Errors) != 1 || !strings.Contains(result.Errors[0].Message, "codex_outbound_profile") {
+		t.Fatalf("errors = %+v, want outbound profile validation error", result.Errors)
+	}
+}
+
 func TestImportCodexSessionsAccessTokenOnlySameWorkspaceAndUserDifferentTokensCreatesTwoAccounts(t *testing.T) {
 	svc := newCodexImportMemoryAdminService(nil)
 	handler := NewAccountHandler(svc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)

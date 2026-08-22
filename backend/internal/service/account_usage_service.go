@@ -301,6 +301,7 @@ type AccountUsageService struct {
 	cache                   *UsageCache
 	identityCache           IdentityCache
 	tlsFPProfileService     *TLSFingerprintProfileService
+	openAIGatewayService    *OpenAIGatewayService
 	agentIdentityTaskMu     sync.Mutex
 	agentIdentityWS         agentIdentityWSConnectionInvalidator
 }
@@ -880,6 +881,12 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 	// 强制统一开启时客户端身份不参与构造，探针与真实转发用同一套规范身份出站。
 	enforceCodexIdentityHeadersWithUA(req.Header, account.GetOpenAIUserAgent())
 	setOpenAIChatGPTAccountHeaders(req.Header, account)
+	account.ApplyHeaderOverrides(req.Header)
+	if s.openAIGatewayService != nil {
+		if err := s.openAIGatewayService.applyCodexOutboundProbeProfile(reqCtx, account, req, payloadBytes); err != nil {
+			return nil, fmt.Errorf("prepare openai codex probe profile: %w", err)
+		}
+	}
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

@@ -574,6 +574,31 @@ func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {
 	}
 }
 
+func TestFetchCodexModelsManifestAPIKeyDefaultVersionIgnoresGlobalStrictProfile(t *testing.T) {
+	previousProfile, _ := codexOutboundDefaultProfile.Load().(string)
+	previousForceLegacy := codexOutboundForceLegacy.Load()
+	t.Cleanup(func() { SetCodexOutboundProfileConfig(previousProfile, previousForceLegacy) })
+	expectedIdentity := resolveCodexOutboundIdentity("")
+	SetCodexOutboundProfileConfig(CodexOutboundProfileCLI0149, false)
+
+	var gotRequest *http.Request
+	upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		gotRequest = req
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"models":[{"slug":"gpt-5.6"}]}`)),
+		}, nil
+	}}
+	svc := newCodexModelsAPIKeyTestService(upstream)
+	_, err := svc.FetchCodexModelsManifest(context.Background(), newCodexModelsAPIKeyTestAccount("https://upstream.example/v1"), "", "")
+	require.NoError(t, err)
+	require.NotNil(t, gotRequest)
+	require.Equal(t, expectedIdentity.version, gotRequest.URL.Query().Get("client_version"))
+	require.Equal(t, expectedIdentity.version, gotRequest.Header.Get("Version"))
+	require.Equal(t, expectedIdentity.userAgent, gotRequest.Header.Get("User-Agent"))
+}
+
 func TestFetchCodexModelsManifestAPIKeyConvertsStandardOpenAIModelList(t *testing.T) {
 	upstreamBody := `{"object":"list","data":[{"id":"gpt-5.6","object":"model"},{"id":"  ","object":"model"},{"id":"gpt-5.6-codex","object":"model"}]}`
 	upstream := &codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {

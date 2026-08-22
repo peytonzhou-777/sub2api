@@ -3075,32 +3075,7 @@ func (s *AccountTestService) applyCodexOutboundProbeProfile(ctx context.Context,
 		return nil
 	}
 	gateway := &OpenAIGatewayService{accountRepo: s.accountRepo, cfg: s.cfg}
-	probeContext, _ := gin.CreateTestContext(nil)
-	probeContext.Request = req
-	SetOpenAIClientTransport(probeContext, OpenAIClientTransportHTTP)
-	if gateway.resolveCodexOutboundProfile(account) == CodexOutboundProfileCLI0149 && strings.TrimSpace(req.Header.Get("session-id")) == "" {
-		// 探针没有下游会话；严格 profile 使用账号稳定的探针会话作为缺省缓存谱系。
-		req.Header.Set("session-id", compactProbeSessionID(account.ID))
-	}
-	ids, err := gateway.prepareCodexFingerprintForAttempt(ctx, probeContext, account, body, true)
-	if err != nil {
-		return fmt.Errorf("prepare Codex fingerprint: %w", err)
-	}
-	if ids != nil {
-		applyCodexFingerprintHeaders(req.Header, ids)
-	}
-	projected, _, err := gateway.prepareCodexOutboundBody(probeContext, account, body, "http", false)
-	if err != nil {
-		return fmt.Errorf("prepare Codex outbound body: %w", err)
-	}
-	req.Body = io.NopCloser(bytes.NewReader(projected))
-	req.ContentLength = int64(len(projected))
-	req.GetBody = func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(projected)), nil
-	}
-	gateway.compressCodexOutboundHTTPRequest(ctx, probeContext, account, req, projected, false)
-	gateway.finalizeCodexOutboundHeaders(probeContext, account, req.Header, false, "http", "", "")
-	return nil
+	return gateway.applyCodexOutboundProbeProfile(ctx, account, req, body)
 }
 
 func (s *AccountTestService) sendEvent(c *gin.Context, event TestEvent) {
