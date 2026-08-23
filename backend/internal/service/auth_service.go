@@ -291,7 +291,7 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 		}
 	}
 	s.postAuthUserBootstrap(ctx, user, "email", true)
-	s.assignSignupEntitlements(ctx, user.ID, grantPlan)
+	s.assignSignupEntitlements(ctx, user.ID, user.Email, grantPlan)
 	// snapshot user × platform quota（fail-open）
 	_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
 	if s.affiliateService != nil {
@@ -687,7 +687,7 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 			} else {
 				user = newUser
 				s.postAuthUserBootstrap(ctx, user, signupSource, false)
-				s.assignSignupEntitlements(ctx, user.ID, grantPlan)
+				s.assignSignupEntitlements(ctx, user.ID, user.Email, grantPlan)
 				// snapshot user × platform quota（fail-open）
 				_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
 			}
@@ -832,7 +832,7 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 				user = newUser
 				created = true
 				s.postAuthUserBootstrap(ctx, user, signupSource, false)
-				s.assignSignupEntitlements(ctx, user.ID, grantPlan)
+				s.assignSignupEntitlements(ctx, user.ID, user.Email, grantPlan)
 				// snapshot user × platform quota（fail-open）
 				_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
 				s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
@@ -901,8 +901,8 @@ func (s *AuthService) assignSubscriptions(ctx context.Context, userID int64, ite
 	}
 }
 
-// assignSignupEntitlements 为刚创建的用户发放默认订阅、限时额度和永久冻结保证金。
-func (s *AuthService) assignSignupEntitlements(ctx context.Context, userID int64, plan signupGrantPlan) {
+// assignSignupEntitlements 为刚创建的用户发放默认权益与符合资格的老用户赠额。
+func (s *AuthService) assignSignupEntitlements(ctx context.Context, userID int64, email string, plan signupGrantPlan) {
 	s.assignSubscriptions(ctx, userID, plan.Subscriptions, "auto assigned by signup defaults")
 	if userID <= 0 {
 		return
@@ -917,6 +917,7 @@ func (s *AuthService) assignSignupEntitlements(ctx context.Context, userID int64
 			logger.LegacyPrintf("service.auth", "[Auth] Failed to grant default security deposit: user_id=%d err=%v", userID, err)
 		}
 	}
+	s.grantLegacyRegistrationCredit(ctx, userID, email)
 }
 
 func (s *AuthService) resolveSignupGrantPlan(ctx context.Context, signupSource string) signupGrantPlan {

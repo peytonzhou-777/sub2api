@@ -29,11 +29,12 @@ var (
 	)
 )
 
-// RegistrationControlSettings 是注册容量与老用户免邀开关的原子读取结果。
+// RegistrationControlSettings 是注册容量、老用户免邀与赠额事件的原子读取结果。
 type RegistrationControlSettings struct {
 	UserLimit                        int64
 	InvitationCodeEnabled            bool
 	LegacyInvitationExemptionEnabled bool
+	LegacyRegistrationGrantEventID   int64
 }
 
 // RegistrationCapacityStatus 描述当前用户量相对配置上限的状态。
@@ -80,6 +81,7 @@ func (s *SettingService) GetRegistrationControlSettings(ctx context.Context) (Re
 		SettingKeyRegistrationUserLimit,
 		SettingKeyInvitationCodeEnabled,
 		SettingKeyLegacyInvitationExemptionEnabled,
+		SettingKeyLegacyRegistrationGrantEventID,
 	})
 	if err != nil {
 		return RegistrationControlSettings{}, fmt.Errorf("load registration control settings: %w", err)
@@ -94,10 +96,19 @@ func (s *SettingService) GetRegistrationControlSettings(ctx context.Context) (Re
 		}
 		limit = parsed
 	}
+	eventID := int64(0)
+	rawEventID := strings.TrimSpace(values[SettingKeyLegacyRegistrationGrantEventID])
+	if rawEventID != "" {
+		parsed, parseErr := strconv.ParseInt(rawEventID, 10, 64)
+		if parseErr == nil && parsed > 0 {
+			eventID = parsed
+		}
+	}
 	return RegistrationControlSettings{
 		UserLimit:                        limit,
 		InvitationCodeEnabled:            values[SettingKeyInvitationCodeEnabled] == "true",
 		LegacyInvitationExemptionEnabled: values[SettingKeyLegacyInvitationExemptionEnabled] == "true",
+		LegacyRegistrationGrantEventID:   eventID,
 	}, nil
 }
 

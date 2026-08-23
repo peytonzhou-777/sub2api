@@ -115,3 +115,17 @@ func TestNormalizeRegistrationEligibilityEmailMatchesOperationsCSVContract(t *te
 	require.Equal(t, "yuqi.li.91@gmail.com", NormalizeRegistrationEligibilityEmail("  YuQi.Li.91@GMAIL.COM "))
 	require.Equal(t, "siumabon123tw+congee@gmail.com", NormalizeRegistrationEligibilityEmail("Siumabon123tw+congee@gmail.com"))
 }
+
+func TestGetRegistrationControlSettingsParsesLegacyCreditEventIDFailClosed(t *testing.T) {
+	ctx := context.Background()
+	values := registrationControlSettings("150")
+	values[SettingKeyLegacyRegistrationGrantEventID] = "42"
+	settings, err := NewSettingService(&settingRepoStub{values: values}, nil).GetRegistrationControlSettings(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(42), settings.LegacyRegistrationGrantEventID)
+
+	values[SettingKeyLegacyRegistrationGrantEventID] = "invalid"
+	settings, err = NewSettingService(&settingRepoStub{values: values}, nil).GetRegistrationControlSettings(ctx)
+	require.NoError(t, err)
+	require.Zero(t, settings.LegacyRegistrationGrantEventID)
+}

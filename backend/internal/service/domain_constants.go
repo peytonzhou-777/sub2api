@@ -194,6 +194,9 @@ const WeChatConnectSyntheticEmailDomain = "@wechat-connect.invalid"
 // DingTalkConnectSyntheticEmailDomain 是 DingTalk Connect 用户的合成邮箱后缀（RFC 保留域名）。
 const DingTalkConnectSyntheticEmailDomain = "@dingtalk-connect.invalid"
 
+// SettingKeyLegacyRegistrationGrantEventID 配置老用户注册成功后自动触发的赠额事件，0 表示关闭。
+const SettingKeyLegacyRegistrationGrantEventID = "legacy_registration_credit_grant_event_id"
+
 // Setting keys
 const (
 	// 注册设置

@@ -213,7 +213,20 @@ func (s *adminServiceImpl) DeleteCreditGrantEvent(ctx context.Context, id int64,
 
 // TriggerCreditGrantEvent 原子完成发放、流水和每用户一次的触发记录。
 func (s *adminServiceImpl) TriggerCreditGrantEvent(ctx context.Context, userID, eventID int64) (*CreditGrantEventUserStatus, error) {
-	tx, err := s.entClient.Tx(ctx)
+	status, err := triggerCreditGrantEvent(ctx, s.entClient, userID, eventID)
+	if err != nil {
+		return nil, err
+	}
+	s.invalidateAdminCreditCaches(ctx, userID)
+	return status, nil
+}
+
+// triggerCreditGrantEvent 供管理员手工发放与注册自动赠额共用同一原子事务。
+func triggerCreditGrantEvent(ctx context.Context, entClient *dbent.Client, userID, eventID int64) (*CreditGrantEventUserStatus, error) {
+	if entClient == nil {
+		return nil, infraerrors.New(http.StatusServiceUnavailable, "CREDIT_GRANT_EVENT_UNAVAILABLE", "credit grant event service is unavailable")
+	}
+	tx, err := entClient.Tx(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +340,6 @@ func (s *adminServiceImpl) TriggerCreditGrantEvent(ctx context.Context, userID, 
 	if err = tx.Commit(); err != nil {
 		return nil, mapCreditGrantEventTriggerError(err)
 	}
-	s.invalidateAdminCreditCaches(ctx, userID)
 	return &status, nil
 }
 
