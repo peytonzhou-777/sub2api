@@ -127,14 +127,6 @@
                       <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('accountPool.residents.total') }}</span>
                       <span class="font-medium text-gray-700 dark:text-gray-200">{{ account.residents.total }}</span>
                     </div>
-                    <div data-test="resident-draining" class="flex items-center justify-between gap-3 whitespace-nowrap">
-                      <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('accountPool.residents.draining') }}</span>
-                      <span class="font-medium text-amber-600 dark:text-amber-400">{{ account.residents.draining_slots ?? 0 }}</span>
-                    </div>
-                    <div data-test="resident-conversations" class="flex items-center justify-between gap-3 whitespace-nowrap">
-                      <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('accountPool.residents.conversations') }}</span>
-                      <span class="font-medium text-gray-700 dark:text-gray-200">{{ account.residents.active_conversations ?? 0 }}</span>
-                    </div>
                     <div data-test="resident-contacted" class="flex items-center justify-between gap-3 whitespace-nowrap">
                       <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('accountPool.residents.contacted') }}</span>
                       <span class="font-medium text-gray-700 dark:text-gray-200">{{ account.residents.contacted_users ?? 0 }}</span>
