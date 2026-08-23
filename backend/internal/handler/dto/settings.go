@@ -28,6 +28,12 @@ type CustomEndpoint struct {
 // SystemSettings represents the admin settings API response payload.
 type SystemSettings struct {
 	RegistrationEnabled                 bool                     `json:"registration_enabled"`
+	RegistrationUserLimit               int64                    `json:"registration_user_limit"`
+	RegistrationCurrentUserCount        int64                    `json:"registration_current_user_count"`
+	RegistrationRemainingCapacity       int64                    `json:"registration_remaining_capacity"`
+	RegistrationCapacityReached         bool                     `json:"registration_capacity_reached"`
+	RegistrationLegacyHistoricalCount   int64                    `json:"registration_legacy_historical_count"`
+	RegistrationLegacyEligibleCount     int64                    `json:"registration_legacy_eligible_count"`
 	EmailVerifyEnabled                  bool                     `json:"email_verify_enabled"`
 	RegistrationEmailSuffixWhitelist    []string                 `json:"registration_email_suffix_whitelist"`
 	RegistrationEmailDomainQuotaEnabled bool                     `json:"registration_email_domain_quota_enabled"`
@@ -35,6 +41,7 @@ type SystemSettings struct {
 	PasswordResetEnabled                bool                     `json:"password_reset_enabled"`
 	FrontendURL                         string                   `json:"frontend_url"`
 	InvitationCodeEnabled               bool                     `json:"invitation_code_enabled"`
+	LegacyInvitationExemptionEnabled    bool                     `json:"legacy_invitation_exemption_enabled"`
 	TotpEnabled                         bool                     `json:"totp_enabled"`                   // TOTP 双因素认证
 	TotpEncryptionKeyConfigured         bool                     `json:"totp_encryption_key_configured"` // TOTP 加密密钥是否已配置
 	PasskeyEnabled                      bool                     `json:"passkey_enabled"`
@@ -371,6 +378,7 @@ type DefaultLimitedCreditSetting struct {
 
 type PublicSettings struct {
 	RegistrationEnabled                 bool                     `json:"registration_enabled"`
+	LegacyInvitationExemptionEnabled    bool                     `json:"legacy_invitation_exemption_enabled"`
 	EmailVerifyEnabled                  bool                     `json:"email_verify_enabled"`
 	ForceEmailOnThirdPartySignup        bool                     `json:"force_email_on_third_party_signup"`
 	RegistrationEmailSuffixWhitelist    []string                 `json:"registration_email_suffix_whitelist"`

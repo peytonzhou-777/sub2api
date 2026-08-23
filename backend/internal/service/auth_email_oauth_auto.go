@@ -158,7 +158,7 @@ func (s *AuthService) createEmailOAuthUser(ctx context.Context, email, username,
 	if s.settingService == nil || !s.settingService.IsRegistrationEnabled(ctx) {
 		return nil, ErrRegDisabled
 	}
-	invitationRedeemCode, err := s.validateOAuthRegistrationInvitation(ctx, invitationCode)
+	invitationRedeemCode, err := s.validateOAuthRegistrationInvitation(ctx, email, invitationCode)
 	if err != nil {
 		if errors.Is(err, ErrInvitationCodeRequired) {
 			return nil, ErrOAuthInvitationRequired
@@ -190,13 +190,16 @@ func (s *AuthService) createEmailOAuthUser(ctx context.Context, email, username,
 		Status:       StatusActive,
 		SignupSource: providerType,
 	}
-	if err := s.userRepo.Create(ctx, user); err != nil {
+	if err := s.createUserWithRegistrationEmailGuard(ctx, user, invitationRedeemCode != nil); err != nil {
 		if errors.Is(err, ErrEmailExists) {
 			existing, loadErr := s.userRepo.GetByEmail(ctx, email)
 			if loadErr != nil {
 				return nil, ErrServiceUnavailable
 			}
 			return existing, nil
+		}
+		if errors.Is(err, ErrRegistrationCapacityReached) || errors.Is(err, ErrEmailDomainRegistrationLimit) {
+			return nil, err
 		}
 		return nil, ErrServiceUnavailable
 	}

@@ -198,6 +198,7 @@ const DingTalkConnectSyntheticEmailDomain = "@dingtalk-connect.invalid"
 const (
 	// 注册设置
 	SettingKeyRegistrationEnabled              = "registration_enabled"                // 是否开放注册
+	SettingKeyRegistrationUserLimit            = "registration_user_limit"             // 未删除用户绝对上限（0=不限）
 	SettingKeyEmailVerifyEnabled               = "email_verify_enabled"                // 是否开启邮件验证
 	SettingKeyRegistrationEmailSuffixWhitelist = "registration_email_suffix_whitelist" // 注册邮箱后缀白名单（JSON 数组）
 	// 白名单非空时，是否放行非白名单域名按主域名限量注册（每域名 1 个账户）。
@@ -207,6 +208,7 @@ const (
 	SettingKeyPasswordResetEnabled                = "password_reset_enabled"                // 是否启用忘记密码功能（需要先开启邮件验证）
 	SettingKeyFrontendURL                         = "frontend_url"                          // 前端基础URL，用于生成邮件中的重置密码链接
 	SettingKeyInvitationCodeEnabled               = "invitation_code_enabled"               // 是否启用邀请码注册
+	SettingKeyLegacyInvitationExemptionEnabled    = "legacy_invitation_exemption_enabled"   // 是否允许符合条件的老用户免邀请码
 	SettingKeyAffiliateEnabled                    = "affiliate_enabled"                     // 邀请返利功能总开关
 	SettingKeyAffiliateRebateRate                 = "affiliate_rebate_rate"                 // 邀请返利比例（百分比，0-100）
 	SettingKeyAffiliateRebateFreezeHours          = "affiliate_rebate_freeze_hours"         // 返利冻结期（小时，0=不冻结）

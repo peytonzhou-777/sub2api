@@ -1428,6 +1428,98 @@
                 <Toggle v-model="form.registration_enabled" />
               </div>
 
+              <!-- Registration Capacity -->
+              <div
+                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+                data-testid="registration-capacity-settings"
+              >
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.registration.currentUsers") }}
+                    </p>
+                    <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                      {{ form.registration_current_user_count }}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.registration.expectedCapacity") }}
+                    </p>
+                    <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                      {{
+                        form.registration_user_limit > 0
+                          ? form.registration_user_limit
+                          : t("admin.settings.registration.unlimited")
+                      }}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.registration.remainingCapacity") }}
+                    </p>
+                    <p
+                      class="mt-1 text-lg font-semibold"
+                      :class="
+                        form.registration_user_limit > 0 &&
+                        form.registration_current_user_count >= form.registration_user_limit
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-gray-900 dark:text-white'
+                      "
+                    >
+                      {{
+                        form.registration_user_limit > 0
+                          ? Math.max(
+                              0,
+                              form.registration_user_limit -
+                                form.registration_current_user_count,
+                            )
+                          : t("admin.settings.registration.unlimited")
+                      }}
+                    </p>
+                  </div>
+                </div>
+                <label class="mt-4 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t("admin.settings.registration.expectedCapacity") }}
+                </label>
+                <input
+                  v-model.number="form.registration_user_limit"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="input mt-2 max-w-xs"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.registration.capacityHint") }}
+                </p>
+                <div class="mt-4 flex flex-wrap items-end gap-3">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {{ t("admin.settings.registration.additionalSlots") }}
+                    </label>
+                    <input
+                      v-model.number="registrationCapacityIncrement"
+                      type="number"
+                      min="1"
+                      step="1"
+                      class="input mt-2 w-36"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-secondary min-h-10"
+                    :disabled="
+                      !Number.isSafeInteger(Number(registrationCapacityIncrement)) ||
+                      Number(registrationCapacityIncrement) <= 0
+                    "
+                    @click="applyRegistrationCapacityIncrement"
+                  >
+                    <Icon name="plus" size="sm" />
+                    {{ t("admin.settings.registration.applyAdditionalSlots") }}
+                  </button>
+                </div>
+              </div>
+
               <!-- Email Verification -->
               <div
                 class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
@@ -1557,6 +1649,33 @@
                   </p>
                 </div>
                 <Toggle v-model="form.invitation_code_enabled" />
+              </div>
+
+              <!-- Legacy-user Invitation Exemption -->
+              <div
+                v-if="form.invitation_code_enabled"
+                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+                data-testid="legacy-invitation-exemption-settings"
+              >
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <label class="font-medium text-gray-900 dark:text-white">{{
+                      t("admin.settings.registration.legacyExemption")
+                    }}</label>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.registration.legacyExemptionHint") }}
+                    </p>
+                  </div>
+                  <Toggle v-model="form.legacy_invitation_exemption_enabled" />
+                </div>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  {{
+                    t("admin.settings.registration.legacyImportStats", {
+                      historical: form.registration_legacy_historical_count,
+                      eligible: form.registration_legacy_eligible_count,
+                    })
+                  }}
+                </p>
               </div>
               <!-- Password Reset - Only show when email verification is enabled -->
               <div
@@ -9819,14 +9938,22 @@ type SettingsForm = Omit<
 };
 
 const schedulingThresholdPlatforms = SCHEDULING_THRESHOLD_PLATFORMS;
+const registrationCapacityIncrement = ref<number>(100);
 
 const form = reactive<SettingsForm>({
   registration_enabled: true,
+  registration_user_limit: 0,
+  registration_current_user_count: 0,
+  registration_remaining_capacity: 0,
+  registration_capacity_reached: false,
+  registration_legacy_historical_count: 0,
+  registration_legacy_eligible_count: 0,
   email_verify_enabled: false,
   registration_email_suffix_whitelist: [],
   registration_email_domain_quota_enabled: false,
   promo_code_enabled: true,
   invitation_code_enabled: false,
+  legacy_invitation_exemption_enabled: false,
   password_reset_enabled: false,
   totp_enabled: false,
   totp_encryption_key_configured: false,
@@ -10118,6 +10245,16 @@ const form = reactive<SettingsForm>({
   // Allow user view error requests
   allow_user_view_error_requests: false,
 });
+
+// applyRegistrationCapacityIncrement 以当前实时用户数为基准换算绝对容量。
+function applyRegistrationCapacityIncrement(): void {
+  const increment = Number(registrationCapacityIncrement.value);
+  if (!Number.isSafeInteger(increment) || increment <= 0) {
+    appStore.showError(t("admin.settings.registration.additionalSlotsInvalid"));
+    return;
+  }
+  form.registration_user_limit = form.registration_current_user_count + increment;
+}
 
 // 人机验证 UI 状态：单卡片「总开关 + 服务商单选」，落库仍是三个独立
 // enabled 键（与上游一致），由下面的映射保证同一时间至多一家启用。
@@ -11521,8 +11658,20 @@ async function saveSettings() {
     form.claude_oauth_system_prompt_blocks =
       claudeOAuthSystemPromptBlocksJSON;
 
+    const registrationUserLimit = Number(form.registration_user_limit);
+    if (
+      !Number.isSafeInteger(registrationUserLimit) ||
+      registrationUserLimit < 0
+    ) {
+      appStore.showError(
+        t("admin.settings.registration.capacityInvalid"),
+      );
+      return;
+    }
+
     const payload: UpdateSettingsRequest = {
       registration_enabled: form.registration_enabled,
+      registration_user_limit: registrationUserLimit,
       email_verify_enabled: form.email_verify_enabled,
       registration_email_suffix_whitelist:
         registrationEmailSuffixWhitelistTags.value.map((suffix) =>
@@ -11532,6 +11681,8 @@ async function saveSettings() {
         form.registration_email_domain_quota_enabled,
       promo_code_enabled: form.promo_code_enabled,
       invitation_code_enabled: form.invitation_code_enabled,
+      legacy_invitation_exemption_enabled:
+        form.legacy_invitation_exemption_enabled,
       password_reset_enabled: form.password_reset_enabled,
       totp_enabled: form.totp_enabled,
       passkey_enabled: form.passkey_enabled,

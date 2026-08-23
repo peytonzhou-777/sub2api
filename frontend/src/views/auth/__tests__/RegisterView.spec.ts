@@ -2,10 +2,18 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import RegisterView from '@/views/auth/RegisterView.vue'
 
-const { getPublicSettingsMock, registerMock, showErrorMock } = vi.hoisted(() => ({
+const {
+  checkLegacyRegistrationEligibilityMock,
+  getPublicSettingsMock,
+  registerMock,
+  showErrorMock,
+  validateInvitationCodeMock
+} = vi.hoisted(() => ({
+  checkLegacyRegistrationEligibilityMock: vi.fn(),
   getPublicSettingsMock: vi.fn(),
   registerMock: vi.fn(),
-  showErrorMock: vi.fn()
+  showErrorMock: vi.fn(),
+  validateInvitationCodeMock: vi.fn()
 }))
 
 const publicSettings = {
@@ -58,7 +66,10 @@ vi.mock('@/api/auth', async () => {
   const actual = await vi.importActual<typeof import('@/api/auth')>('@/api/auth')
   return {
     ...actual,
-    getPublicSettings: (...args: unknown[]) => getPublicSettingsMock(...args)
+    checkLegacyRegistrationEligibility: (...args: unknown[]) =>
+      checkLegacyRegistrationEligibilityMock(...args),
+    getPublicSettings: (...args: unknown[]) => getPublicSettingsMock(...args),
+    validateInvitationCode: (...args: unknown[]) => validateInvitationCodeMock(...args)
   }
 })
 
@@ -84,10 +95,14 @@ function mountRegister() {
 describe('RegisterView invitation layout', () => {
   beforeEach(() => {
     getPublicSettingsMock.mockReset()
+    checkLegacyRegistrationEligibilityMock.mockReset()
     registerMock.mockReset()
     showErrorMock.mockReset()
+    validateInvitationCodeMock.mockReset()
     getPublicSettingsMock.mockResolvedValue(publicSettings)
+    checkLegacyRegistrationEligibilityMock.mockResolvedValue({ eligible: true, reason_codes: [] })
     registerMock.mockResolvedValue({})
+    validateInvitationCodeMock.mockResolvedValue({ valid: true })
   })
 
   it('keeps the optional affiliate invitation field before Turnstile', async () => {
@@ -116,6 +131,77 @@ describe('RegisterView invitation layout', () => {
 
     expect(wrapper.find('[data-testid="affiliate-invitation-field"]').exists()).toBe(false)
     expect(wrapper.get('#invitation_code').exists()).toBe(true)
+  })
+
+  it('allows an eligible legacy email to register without an invitation code', async () => {
+    getPublicSettingsMock.mockResolvedValueOnce({
+      ...publicSettings,
+      turnstile_enabled: false,
+      invitation_code_enabled: true,
+      legacy_invitation_exemption_enabled: true
+    })
+
+    const wrapper = mountRegister()
+    await flushPromises()
+    await wrapper.get('#email').setValue('Legacy.User@Example.com')
+    await wrapper.get('#password').setValue('secret-123')
+    await wrapper.get('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(checkLegacyRegistrationEligibilityMock).toHaveBeenCalledWith('legacy.user@example.com')
+    expect(registerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'Legacy.User@Example.com',
+        invitation_code: undefined
+      })
+    )
+  })
+
+  it('reports legacy eligibility reasons and blocks an ineligible email', async () => {
+    getPublicSettingsMock.mockResolvedValueOnce({
+      ...publicSettings,
+      turnstile_enabled: false,
+      invitation_code_enabled: true,
+      legacy_invitation_exemption_enabled: true
+    })
+    checkLegacyRegistrationEligibilityMock.mockResolvedValueOnce({
+      eligible: false,
+      reason_codes: ['INSUFFICIENT_SUCCESS_CALLS', 'CYBER_POLICY_WARNING']
+    })
+
+    const wrapper = mountRegister()
+    await flushPromises()
+    await wrapper.get('#email').setValue('legacy@example.com')
+    await wrapper.get('#password').setValue('secret-123')
+    await wrapper.get('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(registerMock).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('auth.legacyReasonInsufficientSuccessCalls')
+    expect(wrapper.text()).toContain('auth.legacyReasonCyberPolicyWarning')
+  })
+
+  it('uses a valid invitation code without checking legacy eligibility', async () => {
+    getPublicSettingsMock.mockResolvedValueOnce({
+      ...publicSettings,
+      turnstile_enabled: false,
+      invitation_code_enabled: true,
+      legacy_invitation_exemption_enabled: true
+    })
+
+    const wrapper = mountRegister()
+    await flushPromises()
+    await wrapper.get('#email').setValue('new@example.com')
+    await wrapper.get('#password').setValue('secret-123')
+    await wrapper.get('#invitation_code').setValue('INVITE-100')
+    await wrapper.get('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(validateInvitationCodeMock).toHaveBeenCalledWith('INVITE-100')
+    expect(checkLegacyRegistrationEligibilityMock).not.toHaveBeenCalled()
+    expect(registerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ invitation_code: 'INVITE-100' })
+    )
   })
 
   it('submits a non-whitelist email domain so the backend can enforce its registration quota', async () => {

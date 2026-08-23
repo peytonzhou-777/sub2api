@@ -36,6 +36,7 @@ func (s *UserRepoSuite) SetupTest() {
 	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM auth_identities")
 	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM user_subscriptions")
 	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM user_allowed_groups")
+	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM registration_legacy_eligibilities")
 	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM users")
 }
 
@@ -102,6 +103,68 @@ func (s *UserRepoSuite) TestCreateWithEmailAliasGuardAndDomainLimitConcurrent() 
 	count, err := s.repo.CountUsersByEmailDomain(s.ctx, domain)
 	s.Require().NoError(err)
 	s.Require().Equal(1, count)
+}
+
+func (s *UserRepoSuite) TestCreateWithRegistrationGuardsConcurrentCapacity() {
+	users := []*service.User{
+		{Email: "capacity-first@example.com", PasswordHash: "hash", Role: service.RoleUser, Status: service.StatusActive},
+		{Email: "capacity-second@example.com", PasswordHash: "hash", Role: service.RoleUser, Status: service.StatusActive},
+	}
+
+	errs := make(chan error, len(users))
+	var wg sync.WaitGroup
+	for _, user := range users {
+		wg.Add(1)
+		go func(user *service.User) {
+			defer wg.Done()
+			errs <- s.repo.CreateWithRegistrationGuards(s.ctx, user, "", 1)
+		}(user)
+	}
+	wg.Wait()
+	close(errs)
+
+	var success, capacityReached int
+	for err := range errs {
+		switch {
+		case err == nil:
+			success++
+		case errors.Is(err, service.ErrRegistrationCapacityReached):
+			capacityReached++
+		default:
+			s.Require().NoError(err)
+		}
+	}
+	s.Require().Equal(1, success)
+	s.Require().Equal(1, capacityReached)
+	count, err := s.repo.CountRegistrationUsers(s.ctx)
+	s.Require().NoError(err)
+	s.Require().Equal(int64(1), count)
+}
+
+func (s *UserRepoSuite) TestRegistrationLegacyEligibilityQueriesPostgreSQLArrays() {
+	_, err := integrationDB.ExecContext(s.ctx, `
+		INSERT INTO registration_legacy_eligibilities
+			(normalized_email, eligible, failure_reasons, source_batch)
+		VALUES
+			($1::text, false, ARRAY['insufficient_success_calls', 'insufficient_active_days']::text[], $2::text),
+			($3::text, true, ARRAY[]::text[], $2::text)`,
+		"legacy.user@example.com", "integration-batch", "eligible@example.com")
+	s.Require().NoError(err)
+
+	record, err := s.repo.GetRegistrationLegacyEligibility(s.ctx, "legacy.user@example.com")
+	s.Require().NoError(err)
+	s.Require().NotNil(record)
+	s.Require().False(record.Eligible)
+	s.Require().Equal([]string{"insufficient_success_calls", "insufficient_active_days"}, record.FailureReasons)
+
+	missing, err := s.repo.GetRegistrationLegacyEligibility(s.ctx, "missing@example.com")
+	s.Require().NoError(err)
+	s.Require().Nil(missing)
+
+	stats, err := s.repo.GetRegistrationEligibilityStats(s.ctx)
+	s.Require().NoError(err)
+	s.Require().Equal(int64(2), stats.HistoricalUsers)
+	s.Require().Equal(int64(1), stats.EligibleUsers)
 }
 
 func (s *UserRepoSuite) mustCreateGroup(name string) *service.Group {

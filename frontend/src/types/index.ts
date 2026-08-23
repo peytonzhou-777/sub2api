@@ -174,6 +174,7 @@ export interface AffiliateTransferResponse {
 
 export interface SendVerifyCodeRequest {
   email: string
+  invitation_code?: string
   turnstile_token?: string
   tencent_captcha_ticket?: string
   tencent_captcha_randstr?: string
@@ -210,6 +211,7 @@ export interface LoginAgreementDocument {
 
 export interface PublicSettings {
   registration_enabled: boolean
+  legacy_invitation_exemption_enabled?: boolean
   email_verify_enabled: boolean
   force_email_on_third_party_signup: boolean
   registration_email_suffix_whitelist: string[]

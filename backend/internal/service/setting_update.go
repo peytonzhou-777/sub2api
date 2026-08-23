@@ -199,7 +199,11 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates := make(map[string]string)
 
 	// 注册设置
+	if settings.RegistrationUserLimit < 0 {
+		return nil, infraerrors.BadRequest("INVALID_REGISTRATION_USER_LIMIT", "registration user limit must not be negative")
+	}
 	updates[SettingKeyRegistrationEnabled] = strconv.FormatBool(settings.RegistrationEnabled)
+	updates[SettingKeyRegistrationUserLimit] = strconv.FormatInt(settings.RegistrationUserLimit, 10)
 	updates[SettingKeyEmailVerifyEnabled] = strconv.FormatBool(settings.EmailVerifyEnabled)
 	registrationEmailSuffixWhitelistJSON, err := json.Marshal(settings.RegistrationEmailSuffixWhitelist)
 	if err != nil {
@@ -211,6 +215,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyPasswordResetEnabled] = strconv.FormatBool(settings.PasswordResetEnabled)
 	updates[SettingKeyFrontendURL] = settings.FrontendURL
 	updates[SettingKeyInvitationCodeEnabled] = strconv.FormatBool(settings.InvitationCodeEnabled)
+	updates[SettingKeyLegacyInvitationExemptionEnabled] = strconv.FormatBool(settings.LegacyInvitationExemptionEnabled)
 	updates[SettingKeyTotpEnabled] = strconv.FormatBool(settings.TotpEnabled)
 	updates[SettingKeyPasskeyEnabled] = strconv.FormatBool(settings.PasskeyEnabled)
 	updates[SettingKeySessionBindingEnabled] = strconv.FormatBool(settings.SessionBindingEnabled)

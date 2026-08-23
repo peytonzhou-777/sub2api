@@ -64,6 +64,10 @@ func RegisterAuthRoutes(
 		auth.POST("/validate-invitation-code", rateLimiter.LimitWithOptions("validate-invitation", 10, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), h.Auth.ValidateInvitationCode)
+		// 老用户资格会披露拒绝原因，使用注册同级的严格匿名限流。
+		auth.POST("/check-legacy-registration-eligibility", rateLimiter.LimitWithOptions("check-legacy-registration-eligibility", 5, time.Minute, middleware.RateLimitOptions{
+			FailureMode: middleware.RateLimitFailClose,
+		}), h.Auth.CheckLegacyRegistrationEligibility)
 		// 忘记密码接口添加速率限制：每分钟最多 5 次（Redis 故障时 fail-close）
 		auth.POST("/forgot-password", rateLimiter.LimitWithOptions("forgot-password", 5, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,

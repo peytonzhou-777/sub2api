@@ -541,6 +541,7 @@ async function sendCode(): Promise<void> {
 
     const requestPayload = {
       email: email.value,
+      ...(invitationCode.value ? { invitation_code: invitationCode.value } : {}),
       [pendingAuthTokenField.value]: pendingAuthToken.value || undefined,
       // 优先使用重发时新获取的 token（因为初始 token 可能已被使用）
       turnstile_token:
@@ -783,8 +784,12 @@ function buildEmailSuffixNotAllowedMessage(): string {
 }
 
 function buildRegistrationErrorMessage(error: unknown, fallback: string): string {
-  if (extractApiErrorCode(error) === 'EMAIL_DOMAIN_REGISTRATION_LIMIT') {
+  const code = extractApiErrorCode(error)
+  if (code === 'EMAIL_DOMAIN_REGISTRATION_LIMIT') {
     return t('auth.emailDomainRegistrationLimit')
+  }
+  if (code === 'REGISTRATION_CAPACITY_REACHED') {
+    return t('auth.registrationCapacityReached')
   }
   return buildAuthErrorMessage(error, { fallback })
 }

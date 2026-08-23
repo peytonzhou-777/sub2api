@@ -440,6 +440,12 @@ export function deriveWeChatConnectStoredMode(
 export interface SystemSettings {
   // Registration settings
   registration_enabled: boolean;
+  registration_user_limit: number;
+  registration_current_user_count: number;
+  registration_remaining_capacity: number;
+  registration_capacity_reached: boolean;
+  registration_legacy_historical_count: number;
+  registration_legacy_eligible_count: number;
   email_verify_enabled: boolean;
   registration_email_suffix_whitelist: string[];
   registration_email_domain_quota_enabled: boolean;
@@ -447,6 +453,7 @@ export interface SystemSettings {
   password_reset_enabled: boolean;
   frontend_url: string;
   invitation_code_enabled: boolean;
+  legacy_invitation_exemption_enabled: boolean;
   totp_enabled: boolean; // TOTP 双因素认证
   totp_encryption_key_configured: boolean; // TOTP 加密密钥是否已配置
   passkey_enabled: boolean;
@@ -807,6 +814,7 @@ export interface SystemSettings {
 
 export interface UpdateSettingsRequest {
   registration_enabled?: boolean;
+  registration_user_limit?: number;
   email_verify_enabled?: boolean;
   registration_email_suffix_whitelist?: string[];
   registration_email_domain_quota_enabled?: boolean;
@@ -814,6 +822,7 @@ export interface UpdateSettingsRequest {
   password_reset_enabled?: boolean;
   frontend_url?: string;
   invitation_code_enabled?: boolean;
+  legacy_invitation_exemption_enabled?: boolean;
   totp_enabled?: boolean; // TOTP 双因素认证
   passkey_enabled?: boolean;
   session_binding_enabled?: boolean; // 会话 IP/UA 绑定

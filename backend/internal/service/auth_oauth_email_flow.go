@@ -58,8 +58,19 @@ func (s *AuthService) SendPendingOAuthVerifyCode(ctx context.Context, email stri
 	}, nil
 }
 
-func (s *AuthService) validateOAuthRegistrationInvitation(ctx context.Context, invitationCode string) (*RedeemCode, error) {
-	if s == nil || s.settingService == nil || !s.settingService.IsInvitationCodeEnabled(ctx) {
+func (s *AuthService) validateOAuthRegistrationInvitation(ctx context.Context, email, invitationCode string) (*RedeemCode, error) {
+	if s == nil || s.settingService == nil {
+		return nil, ErrServiceUnavailable
+	}
+	if !s.settingService.IsInvitationCodeEnabled(ctx) || strings.TrimSpace(invitationCode) == "" {
+		if err := s.authorizeRegistrationWithoutInvitation(ctx, email); err != nil {
+			if s.settingService.IsInvitationCodeEnabled(ctx) && (errors.Is(err, ErrInvitationCodeRequired) ||
+				errors.Is(err, ErrLegacyRegistrationNotEligible) ||
+				errors.Is(err, ErrRegistrationCapacityReached)) {
+				return nil, ErrInvitationCodeRequired
+			}
+			return nil, err
+		}
 		return nil, nil
 	}
 	if s.redeemRepo == nil && s.oauthEmailFlowClient(ctx) == nil {
@@ -67,9 +78,6 @@ func (s *AuthService) validateOAuthRegistrationInvitation(ctx context.Context, i
 	}
 
 	invitationCode = strings.TrimSpace(invitationCode)
-	if invitationCode == "" {
-		return nil, ErrInvitationCodeRequired
-	}
 
 	redeemCode, err := s.loadOAuthRegistrationInvitation(ctx, invitationCode)
 	if err != nil {
@@ -126,7 +134,8 @@ func (s *AuthService) RegisterOAuthEmailAccount(
 		return nil, nil, err
 	}
 
-	if _, err := s.validateOAuthRegistrationInvitation(ctx, invitationCode); err != nil {
+	invitationRedeemCode, err := s.validateOAuthRegistrationInvitation(ctx, email, invitationCode)
+	if err != nil {
 		slog.Error("oauth email register: invitation failed", "email", email, "error", err.Error())
 		return nil, nil, err
 	}
@@ -163,12 +172,14 @@ func (s *AuthService) RegisterOAuthEmailAccount(
 		SignupSource: signupSource,
 	}
 
-	if err := s.createUserWithRegistrationEmailGuard(ctx, user); err != nil {
+	if err := s.createUserWithRegistrationEmailGuard(ctx, user, invitationRedeemCode != nil); err != nil {
 		switch {
 		case errors.Is(err, ErrEmailExists):
 			return nil, nil, ErrEmailExists
 		case errors.Is(err, ErrEmailDomainRegistrationLimit):
 			return nil, nil, ErrEmailDomainRegistrationLimit
+		case errors.Is(err, ErrRegistrationCapacityReached):
+			return nil, nil, ErrRegistrationCapacityReached
 		default:
 			slog.Error("oauth email register: userRepo.Create failed", "email", email, "signup_source", signupSource, "error", err.Error())
 			return nil, nil, ErrServiceUnavailable
@@ -212,7 +223,8 @@ func (s *AuthService) RegisterVerifiedOAuthEmailAccount(
 	if strings.TrimSpace(password) == "" {
 		return nil, nil, infraerrors.BadRequest("PASSWORD_REQUIRED", "password is required")
 	}
-	if _, err := s.validateOAuthRegistrationInvitation(ctx, invitationCode); err != nil {
+	invitationRedeemCode, err := s.validateOAuthRegistrationInvitation(ctx, email, invitationCode)
+	if err != nil {
 		return nil, nil, err
 	}
 
@@ -250,12 +262,14 @@ func (s *AuthService) RegisterVerifiedOAuthEmailAccount(
 		SignupSource: signupSource,
 	}
 
-	if err := s.createUserWithRegistrationEmailGuard(ctx, user); err != nil {
+	if err := s.createUserWithRegistrationEmailGuard(ctx, user, invitationRedeemCode != nil); err != nil {
 		switch {
 		case errors.Is(err, ErrEmailExists):
 			return nil, nil, ErrEmailExists
 		case errors.Is(err, ErrEmailDomainRegistrationLimit):
 			return nil, nil, ErrEmailDomainRegistrationLimit
+		case errors.Is(err, ErrRegistrationCapacityReached):
+			return nil, nil, ErrRegistrationCapacityReached
 		default:
 			return nil, nil, ErrServiceUnavailable
 		}
@@ -283,7 +297,7 @@ func (s *AuthService) FinalizeOAuthEmailAccount(
 	}
 
 	signupSource = normalizeOAuthSignupSource(signupSource)
-	invitationRedeemCode, err := s.validateOAuthRegistrationInvitation(ctx, invitationCode)
+	invitationRedeemCode, err := s.validateOAuthRegistrationInvitation(ctx, user.Email, invitationCode)
 	if err != nil {
 		return err
 	}

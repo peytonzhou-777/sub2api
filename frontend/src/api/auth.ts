@@ -527,6 +527,22 @@ export async function validateInvitationCode(code: string): Promise<ValidateInvi
   return data
 }
 
+export interface RegistrationEligibilityCheckResponse {
+  eligible: boolean
+  reason_codes: string[]
+}
+
+/** 检测当前邮箱是否可作为符合条件的老用户免邀请码注册。 */
+export async function checkLegacyRegistrationEligibility(
+  email: string
+): Promise<RegistrationEligibilityCheckResponse> {
+  const { data } = await apiClient.post<RegistrationEligibilityCheckResponse>(
+    '/auth/check-legacy-registration-eligibility',
+    { email }
+  )
+  return data
+}
+
 /**
  * Forgot password request
  */
@@ -700,6 +716,7 @@ export const authAPI = {
   sendPendingOAuthVerifyCode,
   validatePromoCode,
   validateInvitationCode,
+  checkLegacyRegistrationEligibility,
   forgotPassword,
   resetPassword,
   refreshToken,

@@ -202,12 +202,9 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 	if isReservedEmail(email) {
 		return "", nil, ErrEmailReserved
 	}
-	// 检查是否需要邀请码
+	// 只有验证通过的真实邀请码才绕过容量；无邀请码路径先检查容量，再判断老用户免邀资格。
 	var invitationRedeemCode *RedeemCode
-	if s.settingService != nil && s.settingService.IsInvitationCodeEnabled(ctx) {
-		if invitationCode == "" {
-			return "", nil, ErrInvitationCodeRequired
-		}
+	if s.settingService.IsInvitationCodeEnabled(ctx) && strings.TrimSpace(invitationCode) != "" {
 		// 验证邀请码
 		redeemCode, err := s.redeemRepo.GetByCode(ctx, invitationCode)
 		if err != nil {
@@ -220,6 +217,8 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 			return "", nil, ErrInvitationCodeInvalid
 		}
 		invitationRedeemCode = redeemCode
+	} else if err := s.authorizeRegistrationWithoutInvitation(ctx, email); err != nil {
+		return "", nil, err
 	}
 
 	// 检查是否需要邮件验证
@@ -338,6 +337,11 @@ type SendVerifyCodeResult struct {
 
 // SendVerifyCode 发送邮箱验证码（同步方式）
 func (s *AuthService) SendVerifyCode(ctx context.Context, email string, locale ...string) error {
+	return s.SendVerifyCodeWithInvitation(ctx, email, "", locale...)
+}
+
+// SendVerifyCodeWithInvitation 在发信前按真实邀请码或免邀资格执行注册门禁。
+func (s *AuthService) SendVerifyCodeWithInvitation(ctx context.Context, email, invitationCode string, locale ...string) error {
 	// 检查是否开放注册（默认关闭）
 	if s.settingService == nil || !s.settingService.IsRegistrationEnabled(ctx) {
 		return ErrRegDisabled
@@ -345,6 +349,9 @@ func (s *AuthService) SendVerifyCode(ctx context.Context, email string, locale .
 
 	if isReservedEmail(email) {
 		return ErrEmailReserved
+	}
+	if err := s.authorizeRegistrationPreflight(ctx, email, invitationCode); err != nil {
+		return err
 	}
 	// 检查邮箱是否已存在（含 +别名 / Gmail 点号变体归一化，防止单个收件箱批量派生注册）
 	existsEmail, err := s.existsByEmailOrAlias(ctx, email)
@@ -375,6 +382,11 @@ func (s *AuthService) SendVerifyCode(ctx context.Context, email string, locale .
 
 // SendVerifyCodeAsync 异步发送邮箱验证码并返回倒计时
 func (s *AuthService) SendVerifyCodeAsync(ctx context.Context, email string, locale ...string) (*SendVerifyCodeResult, error) {
+	return s.SendVerifyCodeAsyncWithInvitation(ctx, email, "", locale...)
+}
+
+// SendVerifyCodeAsyncWithInvitation 异步发信前按真实邀请码或免邀资格执行注册门禁。
+func (s *AuthService) SendVerifyCodeAsyncWithInvitation(ctx context.Context, email, invitationCode string, locale ...string) (*SendVerifyCodeResult, error) {
 	logger.LegacyPrintf("service.auth", "[Auth] SendVerifyCodeAsync called for email: %s", email)
 
 	// 检查是否开放注册（默认关闭）
@@ -385,6 +397,9 @@ func (s *AuthService) SendVerifyCodeAsync(ctx context.Context, email string, loc
 
 	if isReservedEmail(email) {
 		return nil, ErrEmailReserved
+	}
+	if err := s.authorizeRegistrationPreflight(ctx, email, invitationCode); err != nil {
+		return nil, err
 	}
 	// 检查邮箱是否已存在（含 +别名 / Gmail 点号变体归一化；在发信前拦截，避免批量脚本消耗发信配额）
 	existsEmail, err := s.existsByEmailOrAlias(ctx, email)
@@ -622,6 +637,9 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 			if s.settingService == nil || !s.settingService.IsRegistrationEnabled(ctx) {
 				return "", nil, ErrRegDisabled
 			}
+			if err := s.authorizeRegistrationWithoutInvitation(ctx, email); err != nil {
+				return "", nil, err
+			}
 
 			randomPassword, err := randomHexString(32)
 			if err != nil {
@@ -652,7 +670,7 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 				SignupSource: signupSource,
 			}
 
-			if err := s.userRepo.Create(ctx, newUser); err != nil {
+			if err := s.createUserWithRegistrationEmailGuard(ctx, newUser, false); err != nil {
 				if errors.Is(err, ErrEmailExists) {
 					// 并发场景：GetByEmail 与 Create 之间用户被创建。
 					user, err = s.userRepo.GetByEmail(ctx, email)
@@ -660,6 +678,8 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 						logger.LegacyPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
 						return "", nil, ErrServiceUnavailable
 					}
+				} else if errors.Is(err, ErrRegistrationCapacityReached) || errors.Is(err, ErrEmailDomainRegistrationLimit) {
+					return "", nil, err
 				} else {
 					logger.LegacyPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
 					return "", nil, ErrServiceUnavailable
@@ -752,20 +772,12 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 				return nil, nil, ErrRegDisabled
 			}
 
-			// 检查是否需要邀请码
-			var invitationRedeemCode *RedeemCode
-			if s.settingService != nil && s.settingService.IsInvitationCodeEnabled(ctx) {
-				if invitationCode == "" {
+			invitationRedeemCode, err := s.validateOAuthRegistrationInvitation(ctx, email, invitationCode)
+			if err != nil {
+				if errors.Is(err, ErrInvitationCodeRequired) {
 					return nil, nil, ErrOAuthInvitationRequired
 				}
-				redeemCode, err := s.redeemRepo.GetByCode(ctx, invitationCode)
-				if err != nil {
-					return nil, nil, ErrInvitationCodeInvalid
-				}
-				if redeemCode.Type != RedeemTypeInvitation || !redeemCode.CanUse() {
-					return nil, nil, ErrInvitationCodeInvalid
-				}
-				invitationRedeemCode = redeemCode
+				return nil, nil, err
 			}
 
 			randomPassword, err := randomHexString(32)
@@ -801,68 +813,29 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 				SignupSource: signupSource,
 			}
 
-			if s.entClient != nil && invitationRedeemCode != nil {
-				tx, err := s.entClient.Tx(ctx)
-				if err != nil {
-					logger.LegacyPrintf("service.auth", "[Auth] Failed to begin transaction for oauth registration: %v", err)
+			if err := s.createUserAndClaimInvitation(ctx, newUser, invitationRedeemCode); err != nil {
+				if errors.Is(err, ErrEmailExists) {
+					user, err = s.userRepo.GetByEmail(ctx, email)
+					if err != nil {
+						logger.LegacyPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
+						return nil, nil, ErrServiceUnavailable
+					}
+				} else if errors.Is(err, ErrRegistrationCapacityReached) ||
+					errors.Is(err, ErrEmailDomainRegistrationLimit) ||
+					errors.Is(err, ErrInvitationCodeInvalid) {
+					return nil, nil, err
+				} else {
+					logger.LegacyPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
 					return nil, nil, ErrServiceUnavailable
 				}
-				defer func() { _ = tx.Rollback() }()
-				txCtx := dbent.NewTxContext(ctx, tx)
-
-				if err := s.userRepo.Create(txCtx, newUser); err != nil {
-					if errors.Is(err, ErrEmailExists) {
-						user, err = s.userRepo.GetByEmail(ctx, email)
-						if err != nil {
-							logger.LegacyPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
-							return nil, nil, ErrServiceUnavailable
-						}
-					} else {
-						logger.LegacyPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
-						return nil, nil, ErrServiceUnavailable
-					}
-				} else {
-					if err := s.redeemRepo.Use(txCtx, invitationRedeemCode.ID, newUser.ID); err != nil {
-						return nil, nil, ErrInvitationCodeInvalid
-					}
-					if err := tx.Commit(); err != nil {
-						logger.LegacyPrintf("service.auth", "[Auth] Failed to commit oauth registration transaction: %v", err)
-						return nil, nil, ErrServiceUnavailable
-					}
-					user = newUser
-					created = true
-					s.postAuthUserBootstrap(ctx, user, signupSource, false)
-					s.assignSignupEntitlements(ctx, user.ID, grantPlan)
-					// snapshot user × platform quota（fail-open）
-					_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
-					s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
-				}
 			} else {
-				if err := s.userRepo.Create(ctx, newUser); err != nil {
-					if errors.Is(err, ErrEmailExists) {
-						user, err = s.userRepo.GetByEmail(ctx, email)
-						if err != nil {
-							logger.LegacyPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
-							return nil, nil, ErrServiceUnavailable
-						}
-					} else {
-						logger.LegacyPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
-						return nil, nil, ErrServiceUnavailable
-					}
-				} else {
-					user = newUser
-					created = true
-					s.postAuthUserBootstrap(ctx, user, signupSource, false)
-					s.assignSignupEntitlements(ctx, user.ID, grantPlan)
-					// snapshot user × platform quota（fail-open）
-					_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
-					s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
-					if invitationRedeemCode != nil {
-						if err := s.redeemRepo.Use(ctx, invitationRedeemCode.ID, user.ID); err != nil {
-							return nil, nil, ErrInvitationCodeInvalid
-						}
-					}
-				}
+				user = newUser
+				created = true
+				s.postAuthUserBootstrap(ctx, user, signupSource, false)
+				s.assignSignupEntitlements(ctx, user.ID, grantPlan)
+				// snapshot user × platform quota（fail-open）
+				_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
+				s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
 			}
 		} else {
 			logger.LegacyPrintf("service.auth", "[Auth] Database error during oauth login: %v", err)
@@ -1295,16 +1268,34 @@ func (s *AuthService) validateRegistrationEmailQuota(ctx context.Context, email 
 	return nil
 }
 
-func (s *AuthService) createUserWithRegistrationEmailGuard(ctx context.Context, user *User) error {
+func (s *AuthService) createUserWithRegistrationEmailGuard(ctx context.Context, user *User, bypassCapacity bool) error {
 	if s == nil || s.userRepo == nil {
 		return ErrServiceUnavailable
+	}
+	userLimit := int64(0)
+	if !bypassCapacity {
+		if s.settingService == nil {
+			return ErrServiceUnavailable
+		}
+		settings, err := s.settingService.GetRegistrationControlSettings(ctx)
+		if err != nil {
+			return ErrServiceUnavailable
+		}
+		userLimit = settings.UserLimit
 	}
 	whitelist := []string{}
 	if s.settingService != nil {
 		whitelist = s.settingService.GetRegistrationEmailSuffixWhitelist(ctx)
 	}
 	domain := RegistrationEmailDomain(user.Email)
-	if !IsRegistrationEmailSuffixLimited(user.Email, whitelist) {
+	domainLimited := IsRegistrationEmailSuffixLimited(user.Email, whitelist)
+	if !domainLimited {
+		if registrationRepo, ok := s.userRepo.(RegistrationControlRepository); ok {
+			return registrationRepo.CreateWithRegistrationGuards(ctx, user, "", userLimit)
+		}
+		if userLimit > 0 && s.entClient != nil {
+			return ErrServiceUnavailable
+		}
 		return s.userRepo.CreateWithEmailAliasGuard(ctx, user)
 	}
 	// 开关关闭时非白名单域名在校验阶段已被拒绝；此处兜底防御设置竞态变更。
@@ -1314,8 +1305,12 @@ func (s *AuthService) createUserWithRegistrationEmailGuard(ctx context.Context, 
 	if domain == "" {
 		return buildEmailSuffixNotAllowedError(whitelist)
 	}
+	registrationRepo, ok := s.userRepo.(RegistrationControlRepository)
+	if ok {
+		return registrationRepo.CreateWithRegistrationGuards(ctx, user, domain, userLimit)
+	}
 	quotaRepo, ok := s.userRepo.(RegistrationEmailDomainRepository)
-	if !ok {
+	if !ok || userLimit > 0 {
 		if s.entClient != nil {
 			return ErrServiceUnavailable
 		}
@@ -1339,7 +1334,7 @@ func (s *AuthService) createUserWithRegistrationEmailGuard(ctx context.Context, 
 // 并发正确性仍由 Use 的条件更新兜底（可能产生孤儿用户，但不会放行第二个注册）。
 func (s *AuthService) createUserAndClaimInvitation(ctx context.Context, user *User, invitation *RedeemCode) error {
 	commitUser := func(execCtx context.Context) error {
-		if err := s.createUserWithRegistrationEmailGuard(execCtx, user); err != nil {
+		if err := s.createUserWithRegistrationEmailGuard(execCtx, user, invitation != nil); err != nil {
 			return err
 		}
 		if invitation == nil {

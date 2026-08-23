@@ -371,10 +371,17 @@ const ImageUploadStub = defineComponent({
 
 const baseSettingsResponse = {
   registration_enabled: true,
+  registration_user_limit: 0,
+  registration_current_user_count: 0,
+  registration_remaining_capacity: 0,
+  registration_capacity_reached: false,
+  registration_legacy_historical_count: 0,
+  registration_legacy_eligible_count: 0,
   email_verify_enabled: false,
   registration_email_suffix_whitelist: [],
   promo_code_enabled: true,
   invitation_code_enabled: false,
+  legacy_invitation_exemption_enabled: false,
   password_reset_enabled: false,
   totp_enabled: false,
   totp_encryption_key_configured: false,
@@ -752,6 +759,47 @@ describe("admin SettingsView payment visible method controls", () => {
 
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({ compact_home_enabled: true }),
+    );
+  });
+
+  it("按当前用户数换算新增名额并提交老用户免邀配置", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      registration_user_limit: 36,
+      registration_current_user_count: 36,
+      registration_remaining_capacity: 0,
+      registration_capacity_reached: true,
+      registration_legacy_historical_count: 7384,
+      registration_legacy_eligible_count: 541,
+      invitation_code_enabled: true,
+      legacy_invitation_exemption_enabled: true,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+
+    const capacity = wrapper.get('[data-testid="registration-capacity-settings"]');
+    const inputs = capacity.findAll('input[type="number"]');
+    expect((inputs[0].element as HTMLInputElement).value).toBe("36");
+    expect((inputs[1].element as HTMLInputElement).value).toBe("100");
+
+    const applyButton = capacity
+      .findAll("button")
+      .find((node) =>
+        node.text().includes("admin.settings.registration.applyAdditionalSlots"),
+      );
+    expect(applyButton).toBeDefined();
+    await applyButton?.trigger("click");
+    expect((inputs[0].element as HTMLInputElement).value).toBe("136");
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registration_user_limit: 136,
+        legacy_invitation_exemption_enabled: true,
+      }),
     );
   });
 

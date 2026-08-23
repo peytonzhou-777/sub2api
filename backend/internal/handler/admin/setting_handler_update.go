@@ -25,6 +25,7 @@ import (
 type UpdateSettingsRequest struct {
 	// 注册设置
 	RegistrationEnabled                 bool                         `json:"registration_enabled"`
+	RegistrationUserLimit               int64                        `json:"registration_user_limit"`
 	EmailVerifyEnabled                  bool                         `json:"email_verify_enabled"`
 	RegistrationEmailSuffixWhitelist    []string                     `json:"registration_email_suffix_whitelist"`
 	RegistrationEmailDomainQuotaEnabled *bool                        `json:"registration_email_domain_quota_enabled"` // 非白名单域名限量注册开关（省略=保持现值）
@@ -32,6 +33,7 @@ type UpdateSettingsRequest struct {
 	PasswordResetEnabled                bool                         `json:"password_reset_enabled"`
 	FrontendURL                         string                       `json:"frontend_url"`
 	InvitationCodeEnabled               bool                         `json:"invitation_code_enabled"`
+	LegacyInvitationExemptionEnabled    bool                         `json:"legacy_invitation_exemption_enabled"`
 	TotpEnabled                         bool                         `json:"totp_enabled"`             // TOTP 双因素认证
 	PasskeyEnabled                      *bool                        `json:"passkey_enabled"`          // Passkey 登录（省略=保持现值）
 	SessionBindingEnabled               *bool                        `json:"session_binding_enabled"`  // 会话 IP/UA 绑定（省略=保持现值）
@@ -1555,6 +1557,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		AccountSchedulingThresholds: req.AccountSchedulingThresholds,
 
 		RegistrationEnabled:                 req.RegistrationEnabled,
+		RegistrationUserLimit:               req.RegistrationUserLimit,
 		EmailVerifyEnabled:                  req.EmailVerifyEnabled,
 		RegistrationEmailSuffixWhitelist:    req.RegistrationEmailSuffixWhitelist,
 		RegistrationEmailDomainQuotaEnabled: registrationEmailDomainQuotaEnabled,
@@ -1562,6 +1565,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PasswordResetEnabled:                req.PasswordResetEnabled,
 		FrontendURL:                         req.FrontendURL,
 		InvitationCodeEnabled:               req.InvitationCodeEnabled,
+		LegacyInvitationExemptionEnabled:    req.LegacyInvitationExemptionEnabled,
 		TotpEnabled:                         req.TotpEnabled,
 		PasskeyEnabled:                      passkeyEnabled,
 		SessionBindingEnabled:               sessionBindingEnabled,
@@ -2206,6 +2210,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 
 	payload := dto.SystemSettings{
 		RegistrationEnabled:                                    updatedSettings.RegistrationEnabled,
+		RegistrationUserLimit:                                  updatedSettings.RegistrationUserLimit,
 		EmailVerifyEnabled:                                     updatedSettings.EmailVerifyEnabled,
 		RegistrationEmailSuffixWhitelist:                       updatedSettings.RegistrationEmailSuffixWhitelist,
 		RegistrationEmailDomainQuotaEnabled:                    updatedSettings.RegistrationEmailDomainQuotaEnabled,
@@ -2213,6 +2218,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PasswordResetEnabled:                                   updatedSettings.PasswordResetEnabled,
 		FrontendURL:                                            updatedSettings.FrontendURL,
 		InvitationCodeEnabled:                                  updatedSettings.InvitationCodeEnabled,
+		LegacyInvitationExemptionEnabled:                       updatedSettings.LegacyInvitationExemptionEnabled,
 		TotpEnabled:                                            updatedSettings.TotpEnabled,
 		TotpEncryptionKeyConfigured:                            h.settingService.IsTotpEncryptionKeyConfigured(),
 		PasskeyEnabled:                                         updatedSettings.PasskeyEnabled,
@@ -2490,6 +2496,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	} else {
 		payload.DefaultPlatformQuotas = platformQuotas
 	}
+	capacity, eligibilityStats := h.registrationRuntime(c.Request.Context())
+	payload.RegistrationCurrentUserCount = capacity.Current
+	payload.RegistrationRemainingCapacity = capacity.Remaining
+	payload.RegistrationCapacityReached = capacity.Reached
+	payload.RegistrationLegacyHistoricalCount = eligibilityStats.HistoricalUsers
+	payload.RegistrationLegacyEligibleCount = eligibilityStats.EligibleUsers
 	response.Success(c, systemSettingsResponseData(payload, updatedAuthSourceDefaults))
 }
 

@@ -62,6 +62,7 @@ type RegisterRequest struct {
 // SendVerifyCodeRequest 发送验证码请求
 type SendVerifyCodeRequest struct {
 	Email                 string `json:"email" binding:"required,email"`
+	InvitationCode        string `json:"invitation_code"`
 	TurnstileToken        string `json:"turnstile_token"`
 	TencentCaptchaTicket  string `json:"tencent_captcha_ticket"`
 	TencentCaptchaRandstr string `json:"tencent_captcha_randstr"`
@@ -222,7 +223,7 @@ func (h *AuthHandler) SendVerifyCode(c *gin.Context) {
 		return
 	}
 
-	result, err := h.authService.SendVerifyCodeAsync(c.Request.Context(), req.Email, c.GetHeader("Accept-Language"))
+	result, err := h.authService.SendVerifyCodeAsyncWithInvitation(c.Request.Context(), req.Email, req.InvitationCode, c.GetHeader("Accept-Language"))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -588,6 +589,27 @@ func (h *AuthHandler) ValidateInvitationCode(c *gin.Context) {
 	response.Success(c, ValidateInvitationCodeResponse{
 		Valid: true,
 	})
+}
+
+// CheckLegacyRegistrationEligibilityRequest 老用户免邀请码资格检测请求。
+type CheckLegacyRegistrationEligibilityRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// CheckLegacyRegistrationEligibility 先受容量门禁，再返回最小化原因码。
+// POST /api/v1/auth/check-legacy-registration-eligibility
+func (h *AuthHandler) CheckLegacyRegistrationEligibility(c *gin.Context) {
+	var req CheckLegacyRegistrationEligibilityRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	result, err := h.authService.CheckRegistrationLegacyEligibility(c.Request.Context(), req.Email)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 // ForgotPasswordRequest 忘记密码请求

@@ -87,7 +87,7 @@
           </p>
         </div>
 
-        <!-- Invitation Code Input (Required when enabled) -->
+        <!-- Invitation Code Input -->
         <div v-if="invitationCodeEnabled">
           <label for="invitation_code" class="input-label">
             {{ t('auth.invitationCodeLabel') }}
@@ -132,6 +132,52 @@
               </span>
             </div>
           </transition>
+
+          <div
+            v-if="legacyInvitationExemptionEnabled && !formData.invitation_code.trim()"
+            class="mt-3 border-l-2 border-gray-200 pl-3 dark:border-dark-600"
+          >
+            <button
+              type="button"
+              class="btn btn-secondary min-h-10"
+              :disabled="registrationActionDisabled || legacyEligibilityChecking"
+              @click="checkLegacyRegistrationEligibilityForEmail"
+            >
+              <svg
+                v-if="legacyEligibilityChecking"
+                class="h-4 w-4 animate-spin"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <Icon v-else name="search" size="sm" />
+              {{ legacyEligibilityChecking ? t('auth.legacyEligibilityChecking') : t('auth.legacyEligibilityCheck') }}
+            </button>
+
+            <div
+              v-if="legacyEligibilityCheckedForCurrentEmail && legacyEligibility.eligible"
+              class="mt-2 flex items-start gap-2 text-sm text-green-700 dark:text-green-400"
+            >
+              <Icon name="checkCircle" size="sm" class="mt-0.5 flex-shrink-0" />
+              <span>{{ t('auth.legacyEligibilityEligible') }}</span>
+            </div>
+            <div
+              v-else-if="legacyEligibilityCheckedForCurrentEmail"
+              class="mt-2 text-sm text-red-700 dark:text-red-400"
+            >
+              <div class="flex items-start gap-2">
+                <Icon name="exclamationCircle" size="sm" class="mt-0.5 flex-shrink-0" />
+                <span>{{ t('auth.legacyEligibilityNotEligible') }}</span>
+              </div>
+              <ul class="mt-1 list-disc space-y-0.5 pl-8">
+                <li v-for="reason in legacyEligibility.reasonCodes" :key="reason">
+                  {{ getLegacyEligibilityReasonMessage(reason) }}
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
 
         <!-- Affiliate Invitation Code Input (Optional) -->
@@ -349,11 +395,16 @@ import {
   isWeChatWebOAuthEnabled,
   startOAuthLogin,
   type OAuthLoginStart,
+  checkLegacyRegistrationEligibility,
   validatePromoCode,
   validateInvitationCode
 } from '@/api/auth'
 import { buildAuthErrorMessage } from '@/utils/authError'
-import { extractApiErrorCode, extractI18nErrorMessage } from '@/utils/apiError'
+import {
+  extractApiErrorCode,
+  extractApiErrorMetadata,
+  extractI18nErrorMessage
+} from '@/utils/apiError'
 import {
   formatRegistrationEmailSuffixWhitelistForMessage,
   isRegistrationEmailSuffixAllowed,
@@ -388,6 +439,7 @@ const registrationEnabled = ref<boolean>(true)
 const emailVerifyEnabled = ref<boolean>(false)
 const promoCodeEnabled = ref<boolean>(true)
 const invitationCodeEnabled = ref<boolean>(false)
+const legacyInvitationExemptionEnabled = ref<boolean>(false)
 const affiliateEnabled = ref<boolean>(false)
 const turnstileEnabled = ref<boolean>(false)
 const turnstileSiteKey = ref<string>('')
@@ -458,6 +510,13 @@ const invitationValidation = reactive({
 })
 let invitationValidateTimeout: ReturnType<typeof setTimeout> | null = null
 
+const legacyEligibilityChecking = ref<boolean>(false)
+const legacyEligibility = reactive({
+  checkedEmail: '',
+  eligible: false,
+  reasonCodes: [] as string[]
+})
+
 const formData = reactive({
   email: '',
   password: '',
@@ -472,6 +531,13 @@ const errors = reactive({
   turnstile: '',
   invitation_code: ''
 })
+
+const normalizedEligibilityEmail = computed(() => formData.email.trim().toLowerCase())
+const legacyEligibilityCheckedForCurrentEmail = computed(
+  () =>
+    Boolean(legacyEligibility.checkedEmail) &&
+    legacyEligibility.checkedEmail === normalizedEligibilityEmail.value
+)
 
 const validationToastMessage = computed(() =>
   errors.email ||
@@ -525,6 +591,8 @@ onMounted(async () => {
     emailVerifyEnabled.value = settings.email_verify_enabled
     promoCodeEnabled.value = settings.promo_code_enabled
     invitationCodeEnabled.value = settings.invitation_code_enabled
+    legacyInvitationExemptionEnabled.value =
+      settings.legacy_invitation_exemption_enabled === true
     affiliateEnabled.value = settings.affiliate_enabled
     turnstileEnabled.value = settings.turnstile_enabled
     turnstileSiteKey.value = settings.turnstile_site_key || ''
@@ -573,6 +641,12 @@ watch(
     syncAffiliateReferralCode()
   }
 )
+
+watch(normalizedEligibilityEmail, (email) => {
+  if (legacyEligibility.checkedEmail && legacyEligibility.checkedEmail !== email) {
+    resetLegacyEligibility()
+  }
+})
 
 onUnmounted(() => {
   if (promoValidateTimeout) {
@@ -788,6 +862,71 @@ function getInvitationErrorMessage(errorCode?: string): string {
   }
 }
 
+function resetLegacyEligibility(): void {
+  legacyEligibility.checkedEmail = ''
+  legacyEligibility.eligible = false
+  legacyEligibility.reasonCodes = []
+}
+
+// checkLegacyRegistrationEligibilityForEmail 只展示后端允许公开的资格原因码。
+async function checkLegacyRegistrationEligibilityForEmail(): Promise<boolean> {
+  const email = normalizedEligibilityEmail.value
+  if (!email) {
+    errors.email = t('auth.emailRequired')
+    return false
+  }
+  if (!validateEmail(email)) {
+    errors.email = t('auth.invalidEmail')
+    return false
+  }
+
+  legacyEligibilityChecking.value = true
+  errors.email = ''
+  errors.invitation_code = ''
+  try {
+    const result = await checkLegacyRegistrationEligibility(email)
+    legacyEligibility.checkedEmail = email
+    legacyEligibility.eligible = result.eligible
+    legacyEligibility.reasonCodes = Array.isArray(result.reason_codes) ? result.reason_codes : []
+    return result.eligible
+  } catch (error: unknown) {
+    resetLegacyEligibility()
+    const message = buildRegistrationErrorMessage(error, t('auth.registrationFailed'))
+    errorMessage.value = message
+    appStore.showError(message)
+    return false
+  } finally {
+    legacyEligibilityChecking.value = false
+  }
+}
+
+function getLegacyEligibilityReasonMessage(reason: string): string {
+  switch (reason) {
+    case 'REGISTRATION_CAPACITY_REACHED':
+      return t('auth.registrationCapacityReached')
+    case 'INSUFFICIENT_SUCCESS_CALLS':
+      return t('auth.legacyReasonInsufficientSuccessCalls')
+    case 'INSUFFICIENT_ACTIVE_DAYS':
+      return t('auth.legacyReasonInsufficientActiveDays')
+    case 'CYBER_POLICY_WARNING':
+      return t('auth.legacyReasonCyberPolicyWarning')
+    case 'SOFT_DELETED':
+      return t('auth.legacyReasonSoftDeleted')
+    case 'LEGACY_EXEMPTION_DISABLED':
+      return t('auth.legacyReasonExemptionDisabled')
+    case 'NOT_LEGACY_USER':
+    default:
+      return t('auth.legacyReasonNotLegacyUser')
+  }
+}
+
+function legacyEligibilityFormError(): string {
+  if (legacyEligibility.reasonCodes.includes('REGISTRATION_CAPACITY_REACHED')) {
+    return t('auth.registrationCapacityReached')
+  }
+  return t('auth.legacyEligibilityRequired')
+}
+
 // ==================== Turnstile Handlers ====================
 
 function onTurnstileVerify(token: string, randstr = ''): void {
@@ -928,9 +1067,9 @@ function validateForm(): boolean {
     isValid = false
   }
 
-  // Invitation code validation (required when enabled)
+  // 开启邀请码注册后，真实邀请码或通过检测的老用户邮箱满足其一即可。
   if (invitationCodeEnabled.value) {
-    if (!formData.invitation_code.trim()) {
+    if (!formData.invitation_code.trim() && !legacyInvitationExemptionEnabled.value) {
       errors.invitation_code = t('auth.invitationCodeRequired')
       isValid = false
     }
@@ -989,6 +1128,16 @@ async function handleRegister(): Promise<void> {
       await validateInvitationCodeDebounced(formData.invitation_code.trim())
       if (!invitationValidation.valid) {
         errorMessage.value = t('auth.invitationCodeInvalidCannotRegister')
+        return
+      }
+    }
+    if (!formData.invitation_code.trim() && legacyInvitationExemptionEnabled.value) {
+      if (!legacyEligibilityCheckedForCurrentEmail.value) {
+        await checkLegacyRegistrationEligibilityForEmail()
+      }
+      if (!legacyEligibility.eligible) {
+        errors.invitation_code = legacyEligibilityFormError()
+        errorMessage.value = errors.invitation_code
         return
       }
     }
@@ -1063,8 +1212,24 @@ async function handleRegister(): Promise<void> {
 }
 
 function buildRegistrationErrorMessage(error: unknown, fallback: string): string {
-  if (extractApiErrorCode(error) === 'EMAIL_DOMAIN_REGISTRATION_LIMIT') {
+  const code = extractApiErrorCode(error)
+  if (code === 'EMAIL_DOMAIN_REGISTRATION_LIMIT') {
     return t('auth.emailDomainRegistrationLimit')
+  }
+  if (code === 'REGISTRATION_CAPACITY_REACHED') {
+    return t('auth.registrationCapacityReached')
+  }
+  if (code === 'LEGACY_REGISTRATION_NOT_ELIGIBLE') {
+    const rawReasons = extractApiErrorMetadata(error)?.reason_codes
+    const reasonCodes = Array.isArray(rawReasons)
+      ? rawReasons.map(String)
+      : typeof rawReasons === 'string'
+        ? rawReasons.split(',').filter(Boolean)
+        : []
+    const reasons = reasonCodes.map(getLegacyEligibilityReasonMessage).join('; ')
+    return reasons
+      ? `${t('auth.legacyEligibilityNotEligible')}: ${reasons}`
+      : t('auth.legacyEligibilityNotEligible')
   }
   return buildAuthErrorMessage(error, { fallback })
 }

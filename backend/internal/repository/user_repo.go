@@ -45,13 +45,13 @@ func newUserRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *userRepos
 }
 
 func (r *userRepository) Create(ctx context.Context, userIn *service.User) error {
-	return r.create(ctx, userIn, false, "")
+	return r.create(ctx, userIn, false, "", 0)
 }
 
 // CreateWithEmailAliasGuard 见 service.UserRepository：在邮箱唯一性锁内复查收件箱身份，
 // 供注册路径使用。
 func (r *userRepository) CreateWithEmailAliasGuard(ctx context.Context, userIn *service.User) error {
-	return r.create(ctx, userIn, true, "")
+	return r.create(ctx, userIn, true, "", 0)
 }
 
 // CountUsersByEmailDomain 统计指定可注册主域名及其子域名下的未删除用户。
@@ -59,13 +59,77 @@ func (r *userRepository) CountUsersByEmailDomain(ctx context.Context, domain str
 	return countUsersByEmailDomainWithClient(ctx, clientFromContext(ctx, r.client), domain)
 }
 
+// CountRegistrationUsers 统计当前未删除用户，作为绝对注册容量的口径。
+func (r *userRepository) CountRegistrationUsers(ctx context.Context) (int64, error) {
+	client := clientFromContext(ctx, r.client)
+	if client == nil {
+		return 0, nil
+	}
+	count, err := client.User.Query().Count(ctx)
+	return int64(count), err
+}
+
+// GetRegistrationLegacyEligibility 按基础标准化邮箱读取老用户资格。
+func (r *userRepository) GetRegistrationLegacyEligibility(ctx context.Context, normalizedEmail string) (*service.RegistrationLegacyEligibility, error) {
+	if r.sql == nil {
+		return nil, nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT eligible, failure_reasons
+		FROM registration_legacy_eligibilities
+		WHERE normalized_email = $1::text`, strings.TrimSpace(normalizedEmail))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		return nil, rows.Err()
+	}
+
+	result := &service.RegistrationLegacyEligibility{}
+	if err := rows.Scan(&result.Eligible, pq.Array(&result.FailureReasons)); err != nil {
+		return nil, err
+	}
+	if rows.Next() {
+		return nil, errors.New("duplicate registration legacy eligibility")
+	}
+	return result, rows.Err()
+}
+
+// GetRegistrationEligibilityStats 返回完整历史和符合条件的标准化邮箱数量。
+func (r *userRepository) GetRegistrationEligibilityStats(ctx context.Context) (*service.RegistrationEligibilityStats, error) {
+	if r.sql == nil {
+		return &service.RegistrationEligibilityStats{}, nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT COUNT(*)::bigint, COUNT(*) FILTER (WHERE eligible)::bigint
+		FROM registration_legacy_eligibilities`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		return nil, rows.Err()
+	}
+	result := &service.RegistrationEligibilityStats{}
+	if err := rows.Scan(&result.HistoricalUsers, &result.EligibleUsers); err != nil {
+		return nil, err
+	}
+	return result, rows.Err()
+}
+
 // CreateWithEmailAliasGuardAndDomainLimit 串行化非白名单域名的注册请求，
 // 并在用户写入的同一事务内复查域名额度。
 func (r *userRepository) CreateWithEmailAliasGuardAndDomainLimit(ctx context.Context, userIn *service.User, domain string) error {
-	return r.create(ctx, userIn, true, normalizeEmailDomain(domain))
+	return r.create(ctx, userIn, true, normalizeEmailDomain(domain), 0)
 }
 
-func (r *userRepository) create(ctx context.Context, userIn *service.User, guardEmailAlias bool, domainLimit string) error {
+// CreateWithRegistrationGuards 在同一事务中串行化容量、域名和邮箱身份检查。
+func (r *userRepository) CreateWithRegistrationGuards(ctx context.Context, userIn *service.User, domain string, userLimit int64) error {
+	return r.create(ctx, userIn, true, normalizeEmailDomain(domain), userLimit)
+}
+
+func (r *userRepository) create(ctx context.Context, userIn *service.User, guardEmailAlias bool, domainLimit string, userLimit int64) error {
 	if userIn == nil {
 		return nil
 	}
@@ -107,6 +171,9 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 	if domainLimit != "" {
 		lockKeys = append(lockKeys, registrationEmailDomainLockKey(domainLimit))
 	}
+	if userLimit > 0 {
+		lockKeys = append(lockKeys, registrationUserCapacityLockKey())
+	}
 	releaseEmailLock, err := lockRepositoryScopedKeys(
 		txCtx,
 		txClient,
@@ -117,6 +184,16 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 		return err
 	}
 	defer releaseEmailLock()
+
+	if userLimit > 0 {
+		count, err := txClient.User.Query().Count(txCtx)
+		if err != nil {
+			return err
+		}
+		if int64(count) >= userLimit {
+			return service.ErrRegistrationCapacityReached
+		}
+	}
 
 	if domainLimit != "" {
 		count, err := countUsersByEmailDomainWithClient(txCtx, txClient, domainLimit)
@@ -1373,6 +1450,10 @@ func registrationEmailDomainLockKey(domain string) string {
 		return ""
 	}
 	return "users:registration-email-domain:" + domain
+}
+
+func registrationUserCapacityLockKey() string {
+	return "users:registration-capacity"
 }
 
 func normalizeEmailDomain(domain string) string {

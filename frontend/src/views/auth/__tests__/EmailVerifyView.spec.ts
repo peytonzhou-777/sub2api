@@ -231,6 +231,36 @@ describe('EmailVerifyView', () => {
     expect(sendVerifyCodeMock).not.toHaveBeenCalled()
   })
 
+  it('forwards the invitation code when requesting the initial verification email', async () => {
+    sessionStorage.setItem(
+      'register_data',
+      JSON.stringify({
+        email: 'invited@example.com',
+        password: 'secret-123',
+        invitation_code: 'INVITE-100'
+      })
+    )
+
+    mount(EmailVerifyView, {
+      global: {
+        stubs: {
+          AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
+          Icon: true,
+          TurnstileWidget: true,
+          transition: false
+        }
+      }
+    })
+    await flushPromises()
+
+    expect(sendVerifyCodeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'invited@example.com',
+        invitation_code: 'INVITE-100'
+      })
+    )
+  })
+
   it('requires a fresh captcha proof after the initial send-code request fails', async () => {
     getPublicSettingsMock.mockResolvedValue({
       turnstile_enabled: true,

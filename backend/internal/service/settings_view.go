@@ -13,6 +13,7 @@ func firstNonEmpty(values ...string) string {
 
 type SystemSettings struct {
 	RegistrationEnabled                 bool
+	RegistrationUserLimit               int64
 	EmailVerifyEnabled                  bool
 	RegistrationEmailSuffixWhitelist    []string
 	RegistrationEmailDomainQuotaEnabled bool // 白名单非空时放行非白名单域名限量注册（默认关闭）
@@ -20,6 +21,7 @@ type SystemSettings struct {
 	PasswordResetEnabled                bool
 	FrontendURL                         string
 	InvitationCodeEnabled               bool
+	LegacyInvitationExemptionEnabled    bool
 	TotpEnabled                         bool // TOTP 双因素认证
 	PasskeyEnabled                      bool // Passkey 登录
 	SessionBindingEnabled               bool // 会话 IP/UA 绑定（变更即失效）
@@ -338,6 +340,7 @@ type DefaultLimitedCreditSetting struct {
 
 type PublicSettings struct {
 	RegistrationEnabled                 bool
+	LegacyInvitationExemptionEnabled    bool
 	EmailVerifyEnabled                  bool
 	ForceEmailOnThirdPartySignup        bool
 	RegistrationEmailSuffixWhitelist    []string

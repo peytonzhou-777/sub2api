@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -62,6 +63,7 @@ type SettingHandler struct {
 	notificationEmailService *service.NotificationEmailService
 	totpService              *service.TotpService
 	userService              *service.UserService
+	authService              *service.AuthService
 }
 
 // NewSettingHandler 创建系统设置处理器
@@ -96,6 +98,11 @@ func (h *SettingHandler) SetAliyunCaptchaService(aliyunCaptchaService *service.A
 func (h *SettingHandler) SetStepUpDeps(totpService *service.TotpService, userService *service.UserService) {
 	h.totpService = totpService
 	h.userService = userService
+}
+
+// SetRegistrationDeps 注入注册容量和名单统计服务，不改变已有测试使用的构造函数。
+func (h *SettingHandler) SetRegistrationDeps(authService *service.AuthService) {
+	h.authService = authService
 }
 
 // defaultLimitedCreditsToDTO 将服务层默认限时额度配置转换为管理员 API DTO。
@@ -144,9 +151,16 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		paymentCfg = &service.PaymentConfig{}
 	}
 	passkeyConfigured, passkeyRPID, passkeyRPOrigins := h.settingService.PasskeyConfiguration()
+	capacity, eligibilityStats := h.registrationRuntime(c.Request.Context())
 
 	payload := dto.SystemSettings{
 		RegistrationEnabled:                                    settings.RegistrationEnabled,
+		RegistrationUserLimit:                                  settings.RegistrationUserLimit,
+		RegistrationCurrentUserCount:                           capacity.Current,
+		RegistrationRemainingCapacity:                          capacity.Remaining,
+		RegistrationCapacityReached:                            capacity.Reached,
+		RegistrationLegacyHistoricalCount:                      eligibilityStats.HistoricalUsers,
+		RegistrationLegacyEligibleCount:                        eligibilityStats.EligibleUsers,
 		EmailVerifyEnabled:                                     settings.EmailVerifyEnabled,
 		RegistrationEmailSuffixWhitelist:                       settings.RegistrationEmailSuffixWhitelist,
 		RegistrationEmailDomainQuotaEnabled:                    settings.RegistrationEmailDomainQuotaEnabled,
@@ -154,6 +168,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PasswordResetEnabled:                                   settings.PasswordResetEnabled,
 		FrontendURL:                                            settings.FrontendURL,
 		InvitationCodeEnabled:                                  settings.InvitationCodeEnabled,
+		LegacyInvitationExemptionEnabled:                       settings.LegacyInvitationExemptionEnabled,
 		TotpEnabled:                                            settings.TotpEnabled,
 		TotpEncryptionKeyConfigured:                            h.settingService.IsTotpEncryptionKeyConfigured(),
 		PasskeyEnabled:                                         settings.PasskeyEnabled,
@@ -436,6 +451,25 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 	}
 
 	response.Success(c, systemSettingsResponseData(payload, authSourceDefaults))
+}
+
+func (h *SettingHandler) registrationRuntime(ctx context.Context) (*service.RegistrationCapacityStatus, *service.RegistrationEligibilityStats) {
+	capacity := &service.RegistrationCapacityStatus{}
+	stats := &service.RegistrationEligibilityStats{}
+	if h == nil || h.authService == nil {
+		return capacity, stats
+	}
+	if current, err := h.authService.GetRegistrationCapacityStatus(ctx); err == nil {
+		capacity = current
+	} else {
+		slog.Warn("load registration capacity for admin settings failed", "error", err)
+	}
+	if current, err := h.authService.GetRegistrationEligibilityStats(ctx); err == nil {
+		stats = current
+	} else {
+		slog.Warn("load registration eligibility stats for admin settings failed", "error", err)
+	}
+	return capacity, stats
 }
 
 // openaiFastPolicySettingsToDTO converts service -> dto for OpenAI fast policy.
