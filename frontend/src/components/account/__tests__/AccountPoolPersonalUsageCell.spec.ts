@@ -40,8 +40,8 @@ describe('AccountPoolPersonalUsageCell', () => {
       account_id: 17,
       observed_at: new Date().toISOString(),
       windows: [
-        { code: '5h', label: '5h', start_at: '2026-08-01T07:00:00Z', end_at: '2026-08-01T12:00:00Z', requests: 0, tokens: 12, actual_cost: 0 },
-        { code: '7d', label: '7d', start_at: '2026-07-25T12:00:00Z', end_at: '2026-08-01T12:00:00Z', requests: 4, tokens: 300, actual_cost: 1.25 },
+        { code: '5h', label: '5h', start_at: '2026-08-01T07:00:00Z', end_at: '2026-08-01T12:00:00Z', requests: 0, input_tokens: 0, output_tokens: 0, tokens: 0, cache_rate: 0.95, actual_cost: 0 },
+        { code: '7d', label: '7d', start_at: '2026-07-25T12:00:00Z', end_at: '2026-08-01T12:00:00Z', requests: 4, input_tokens: 120, output_tokens: 80, tokens: 300, cache_rate: 0.5, actual_cost: 1.25 },
       ],
     })
     const wrapper = mount(AccountPoolPersonalUsageCell, {
@@ -53,10 +53,17 @@ describe('AccountPoolPersonalUsageCell', () => {
     await flushPromises()
 
     expect(getPersonalUsage).toHaveBeenCalledWith(17, expect.objectContaining({ signal: expect.any(AbortSignal) }))
-    expect(wrapper.text()).toContain('0')
-    expect(wrapper.text()).toContain('12')
-    expect(wrapper.text()).toContain('$0.00')
-    expect(wrapper.text()).toContain('1.25')
+    expect(wrapper.find('[data-test="personal-usage-5h"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="personal-usage-7d"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('accountPool.personalUsage.requests')
+    expect(wrapper.text()).toContain('accountPool.personalUsage.input')
+    expect(wrapper.text()).toContain('accountPool.personalUsage.output')
+    expect(wrapper.text()).toContain('accountPool.personalUsage.total')
+    expect(wrapper.text()).toContain('accountPool.personalUsage.cacheRate')
+    expect(wrapper.text()).toContain('accountPool.personalUsage.billing')
+    expect(wrapper.text()).toContain('95%')
+    expect(wrapper.text()).toContain('0.00$')
+    expect(wrapper.text()).toContain('1.25$')
     wrapper.unmount()
   })
 

@@ -13,6 +13,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestUsageLog_GetUserAccountPersonalUsageAggregatesTokenBreakdown(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	client := tx.Client()
+	repo := newUsageLogRepositoryWithSQL(client, tx)
+
+	user := mustCreateUser(t, client, &service.User{Email: "personal-usage@test.com"})
+	otherUser := mustCreateUser(t, client, &service.User{Email: "personal-usage-other@test.com"})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-personal-usage", Name: "personal-usage"})
+	otherAPIKey := mustCreateApiKey(t, client, &service.APIKey{UserID: otherUser.ID, Key: "sk-personal-usage-other", Name: "personal-usage-other"})
+	account := mustCreateAccount(t, client, &service.Account{Name: "personal-usage-account"})
+	now := time.Now().UTC()
+
+	createUsage := func(ownerID, keyID int64, createdAt time.Time, input, output, cacheCreation, cacheRead int, actualCost float64) {
+		t.Helper()
+		_, err := repo.Create(ctx, &service.UsageLog{
+			UserID: ownerID, APIKeyID: keyID, AccountID: account.ID,
+			Model: "gpt-5", InputTokens: input, OutputTokens: output,
+			CacheCreationTokens: cacheCreation, CacheReadTokens: cacheRead,
+			ActualCost: actualCost, CreatedAt: createdAt,
+		})
+		require.NoError(t, err)
+	}
+	createUsage(user.ID, apiKey.ID, now.Add(-time.Hour), 5, 3, 2, 90, 0.4)
+	createUsage(user.ID, apiKey.ID, now.Add(-6*time.Hour), 4, 1, 1, 4, 0.1)
+	createUsage(otherUser.ID, otherAPIKey.ID, now.Add(-time.Hour), 100, 100, 100, 100, 10)
+
+	stats, err := repo.GetUserAccountPersonalUsage(
+		ctx, user.ID, account.ID, now.Add(-5*time.Hour), now.Add(-7*24*time.Hour), now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, service.AccountPoolUsageMetrics{
+		Requests: 1, InputTokens: 5, OutputTokens: 3,
+		CacheCreationTokens: 2, CacheReadTokens: 90, Tokens: 100, ActualCost: 0.4,
+	}, stats.FiveHour)
+	require.Equal(t, service.AccountPoolUsageMetrics{
+		Requests: 2, InputTokens: 9, OutputTokens: 4,
+		CacheCreationTokens: 3, CacheReadTokens: 94, Tokens: 110, ActualCost: 0.5,
+	}, stats.SevenDay)
+}
+
 func TestUsageLog_UpstreamModelMismatchFilterAndPartialIndex(t *testing.T) {
 	ctx := context.Background()
 	tx := testEntTx(t)

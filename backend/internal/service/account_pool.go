@@ -126,13 +126,16 @@ func IsPublicAccountPoolStatus(status string) bool {
 
 // AccountPoolPersonalUsageWindow 是当前用户在账号窗口内的本地用量汇总。
 type AccountPoolPersonalUsageWindow struct {
-	Code       string    `json:"code"`
-	Label      string    `json:"label"`
-	StartAt    time.Time `json:"start_at"`
-	EndAt      time.Time `json:"end_at"`
-	Requests   int64     `json:"requests"`
-	Tokens     int64     `json:"tokens"`
-	ActualCost float64   `json:"actual_cost"`
+	Code         string    `json:"code"`
+	Label        string    `json:"label"`
+	StartAt      time.Time `json:"start_at"`
+	EndAt        time.Time `json:"end_at"`
+	Requests     int64     `json:"requests"`
+	InputTokens  int64     `json:"input_tokens"`
+	OutputTokens int64     `json:"output_tokens"`
+	Tokens       int64     `json:"tokens"`
+	CacheRate    float64   `json:"cache_rate"`
+	ActualCost   float64   `json:"actual_cost"`
 }
 
 // AccountPoolPersonalUsage 是号池个人用量接口的私有响应 DTO。
@@ -149,9 +152,22 @@ type AccountPoolPersonalUsageStats struct {
 }
 
 type AccountPoolUsageMetrics struct {
-	Requests   int64
-	Tokens     int64
-	ActualCost float64
+	Requests            int64
+	InputTokens         int64
+	OutputTokens        int64
+	CacheCreationTokens int64
+	CacheReadTokens     int64
+	Tokens              int64
+	ActualCost          float64
+}
+
+// CacheRate 返回缓存读取 Token 占全部输入侧 Token 的比例。
+func (m AccountPoolUsageMetrics) CacheRate() float64 {
+	inputSideTokens := m.InputTokens + m.CacheCreationTokens + m.CacheReadTokens
+	if inputSideTokens <= 0 {
+		return 0
+	}
+	return float64(m.CacheReadTokens) / float64(inputSideTokens)
 }
 
 // AccountPoolSourceRecord 仅在构建进程内存在，Extra 经过映射后绝不进入公开快照。
@@ -519,9 +535,13 @@ func (s *AccountPoolService) GetPersonalUsage(ctx context.Context, enabledEpoch 
 			ObservedAt: now,
 			Windows: []AccountPoolPersonalUsageWindow{
 				{Code: "5h", Label: "5h", StartAt: fiveHourStart, EndAt: now,
-					Requests: stats.FiveHour.Requests, Tokens: stats.FiveHour.Tokens, ActualCost: stats.FiveHour.ActualCost},
+					Requests: stats.FiveHour.Requests, InputTokens: stats.FiveHour.InputTokens,
+					OutputTokens: stats.FiveHour.OutputTokens, Tokens: stats.FiveHour.Tokens,
+					CacheRate: stats.FiveHour.CacheRate(), ActualCost: stats.FiveHour.ActualCost},
 				{Code: "7d", Label: "7d", StartAt: sevenDayStart, EndAt: now,
-					Requests: stats.SevenDay.Requests, Tokens: stats.SevenDay.Tokens, ActualCost: stats.SevenDay.ActualCost},
+					Requests: stats.SevenDay.Requests, InputTokens: stats.SevenDay.InputTokens,
+					OutputTokens: stats.SevenDay.OutputTokens, Tokens: stats.SevenDay.Tokens,
+					CacheRate: stats.SevenDay.CacheRate(), ActualCost: stats.SevenDay.ActualCost},
 			},
 		}
 		s.setPersonalUsageCache(ctx, cacheKey, value, now.Add(accountPoolPersonalUsageCacheTTL))

@@ -1,15 +1,41 @@
 <template>
   <div v-if="supported" class="space-y-1">
     <div v-if="data" class="flex items-start gap-2" :title="observedAtTitle">
-      <div class="min-w-0 flex-1 space-y-1">
-        <div v-for="window in data.windows" :key="window.code" class="space-y-0.5">
-          <div class="flex flex-wrap items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400">
-            <span class="w-7 shrink-0 rounded bg-gray-100 px-1 py-0.5 text-center dark:bg-dark-800">{{ window.label }}</span>
-            <span class="rounded bg-gray-100 px-1 py-0.5 dark:bg-dark-800">{{ t('accountPool.personalUsage.req') }} {{ formatCompactNumber(window.requests, { allowBillions: false }) }}</span>
-            <span class="rounded bg-gray-100 px-1 py-0.5 dark:bg-dark-800">{{ t('accountPool.personalUsage.token') }} {{ formatCompactNumber(window.tokens) }}</span>
-            <span class="rounded bg-gray-100 px-1 py-0.5 dark:bg-dark-800">{{ t('accountPool.personalUsage.actualCost') }} {{ formatCurrency(window.actual_cost) }}</span>
-          </div>
-        </div>
+      <div class="grid min-w-0 flex-1 grid-cols-2 gap-x-5">
+        <section
+          v-for="window in data.windows"
+          :key="window.code"
+          :data-test="`personal-usage-${window.code}`"
+          class="min-w-0"
+        >
+          <div class="mb-1 text-[10px] font-semibold text-gray-500 dark:text-gray-400">{{ window.label }}</div>
+          <dl class="space-y-0.5 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <dt class="text-gray-500 dark:text-gray-400">{{ t('accountPool.personalUsage.requests') }}:</dt>
+              <dd class="font-medium text-gray-700 dark:text-gray-300">{{ formatMetric(window.requests) }}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <dt class="text-gray-500 dark:text-gray-400">{{ t('accountPool.personalUsage.input') }}:</dt>
+              <dd class="font-medium text-gray-700 dark:text-gray-300">{{ formatMetric(window.input_tokens) }}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <dt class="text-gray-500 dark:text-gray-400">{{ t('accountPool.personalUsage.output') }}:</dt>
+              <dd class="font-medium text-gray-700 dark:text-gray-300">{{ formatMetric(window.output_tokens) }}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <dt class="text-gray-500 dark:text-gray-400">{{ t('accountPool.personalUsage.total') }}:</dt>
+              <dd class="font-semibold text-gray-700 dark:text-gray-300">{{ formatMetric(window.tokens) }}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <dt class="text-gray-500 dark:text-gray-400">{{ t('accountPool.personalUsage.cacheRate') }}:</dt>
+              <dd class="font-medium text-gray-700 dark:text-gray-300">{{ formatCacheRate(window.cache_rate) }}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <dt class="text-gray-500 dark:text-gray-400">{{ t('accountPool.personalUsage.billing') }}:</dt>
+              <dd class="font-medium text-emerald-600 dark:text-emerald-400">{{ formatBilledCost(window.actual_cost) }}</dd>
+            </div>
+          </dl>
+        </section>
       </div>
       <button
         type="button"
@@ -57,7 +83,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Icon from '@/components/icons/Icon.vue'
 import accountPoolAPI, { type AccountPoolAccount, type AccountPoolPersonalUsage } from '@/api/accountPool'
-import { formatCompactNumber, formatCurrency } from '@/utils/format'
+import { formatCompactNumber } from '@/utils/format'
 import { useI18n } from 'vue-i18n'
 
 const personalUsageCache = new Map<number, { data: AccountPoolPersonalUsage | null; loadedAt: number; retryUntil: number }>()
@@ -93,6 +119,20 @@ const observedAtLabel = computed(() => {
   return Number.isNaN(observedAt.getTime()) ? '--' : new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(observedAt)
 })
 const observedAtTitle = computed(() => data.value?.observed_at ? new Date(data.value.observed_at).toLocaleString() : '')
+
+const formatMetric = (value: number) => formatCompactNumber(value, { allowBillions: false })
+const formatCacheRate = (value: number) => {
+  const rate = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : 0
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(rate * 100)}%`
+}
+const formatBilledCost = (value: number) => {
+  const amount = Number.isFinite(value) ? Math.max(value, 0) : 0
+  const fractionDigits = amount > 0 && amount < 0.01 ? 6 : 2
+  return `${new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(amount)}$`
+}
 
 function armRetryTimer() {
   const remaining = retryUntil.value - Date.now()

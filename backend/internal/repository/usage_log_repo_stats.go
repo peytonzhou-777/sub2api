@@ -26,10 +26,18 @@ func (r *usageLogRepository) GetUserAccountPersonalUsage(
 	query := `
 		SELECT
 			COUNT(*) FILTER (WHERE created_at >= $3 AND created_at < $5),
+			COALESCE(SUM(input_tokens) FILTER (WHERE created_at >= $3 AND created_at < $5), 0),
+			COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= $3 AND created_at < $5), 0),
+			COALESCE(SUM(cache_creation_tokens) FILTER (WHERE created_at >= $3 AND created_at < $5), 0),
+			COALESCE(SUM(cache_read_tokens) FILTER (WHERE created_at >= $3 AND created_at < $5), 0),
 			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens)
 				FILTER (WHERE created_at >= $3 AND created_at < $5), 0),
 			COALESCE(SUM(actual_cost) FILTER (WHERE created_at >= $3 AND created_at < $5), 0),
 			COUNT(*) FILTER (WHERE created_at >= $4 AND created_at < $5),
+			COALESCE(SUM(input_tokens) FILTER (WHERE created_at >= $4 AND created_at < $5), 0),
+			COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= $4 AND created_at < $5), 0),
+			COALESCE(SUM(cache_creation_tokens) FILTER (WHERE created_at >= $4 AND created_at < $5), 0),
+			COALESCE(SUM(cache_read_tokens) FILTER (WHERE created_at >= $4 AND created_at < $5), 0),
 			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens)
 				FILTER (WHERE created_at >= $4 AND created_at < $5), 0),
 			COALESCE(SUM(actual_cost) FILTER (WHERE created_at >= $4 AND created_at < $5), 0)
@@ -46,9 +54,17 @@ func (r *usageLogRepository) GetUserAccountPersonalUsage(
 		query,
 		[]any{userID, accountID, fiveHourStart, sevenDayStart, end},
 		&stats.FiveHour.Requests,
+		&stats.FiveHour.InputTokens,
+		&stats.FiveHour.OutputTokens,
+		&stats.FiveHour.CacheCreationTokens,
+		&stats.FiveHour.CacheReadTokens,
 		&stats.FiveHour.Tokens,
 		&stats.FiveHour.ActualCost,
 		&stats.SevenDay.Requests,
+		&stats.SevenDay.InputTokens,
+		&stats.SevenDay.OutputTokens,
+		&stats.SevenDay.CacheCreationTokens,
+		&stats.SevenDay.CacheReadTokens,
 		&stats.SevenDay.Tokens,
 		&stats.SevenDay.ActualCost,
 	); err != nil {

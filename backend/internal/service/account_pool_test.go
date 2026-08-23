@@ -579,8 +579,14 @@ func TestAccountPoolPersonalUsageUsesLocalWindowsAndPrivateCache(t *testing.T) {
 		},
 	}}
 	reader := &accountPoolPersonalUsageReaderStub{stats: &AccountPoolPersonalUsageStats{
-		FiveHour: AccountPoolUsageMetrics{Requests: 0, Tokens: 12, ActualCost: 0},
-		SevenDay: AccountPoolUsageMetrics{Requests: 4, Tokens: 300, ActualCost: 1.25},
+		FiveHour: AccountPoolUsageMetrics{
+			Requests: 0, InputTokens: 1, OutputTokens: 2,
+			CacheCreationTokens: 3, CacheReadTokens: 6, Tokens: 12, ActualCost: 0,
+		},
+		SevenDay: AccountPoolUsageMetrics{
+			Requests: 4, InputTokens: 100, OutputTokens: 50,
+			CacheCreationTokens: 50, CacheReadTokens: 100, Tokens: 300, ActualCost: 1.25,
+		},
 	}}
 	svc := NewAccountPoolService(nil, cache, nil, AccountPoolOptions{})
 	svc.now = func() time.Time { return now }
@@ -593,10 +599,14 @@ func TestAccountPoolPersonalUsageUsesLocalWindowsAndPrivateCache(t *testing.T) {
 	if reader.calls.Load() != 1 || len(value.Windows) != 2 {
 		t.Fatalf("首次查询应读取一次并返回两个窗口，calls=%d windows=%d", reader.calls.Load(), len(value.Windows))
 	}
-	if value.Windows[0].Requests != 0 || value.Windows[0].StartAt != fiveHourReset.Add(-5*time.Hour) {
+	if value.Windows[0].Requests != 0 || value.Windows[0].InputTokens != 1 || value.Windows[0].OutputTokens != 2 ||
+		value.Windows[0].Tokens != 12 || value.Windows[0].CacheRate != 0.6 ||
+		value.Windows[0].StartAt != fiveHourReset.Add(-5*time.Hour) {
 		t.Fatalf("5h 零值或窗口起点错误: %+v", value.Windows[0])
 	}
-	if value.Windows[1].ActualCost != 1.25 || value.Windows[1].StartAt != sevenDayReset.Add(-7*24*time.Hour) {
+	if value.Windows[1].ActualCost != 1.25 || value.Windows[1].InputTokens != 100 ||
+		value.Windows[1].OutputTokens != 50 || value.Windows[1].CacheRate != 0.4 ||
+		value.Windows[1].StartAt != sevenDayReset.Add(-7*24*time.Hour) {
 		t.Fatalf("7d 聚合或窗口起点错误: %+v", value.Windows[1])
 	}
 	if _, err := svc.GetPersonalUsage(context.Background(), "epoch-a", 42, 7); err != nil {

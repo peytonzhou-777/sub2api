@@ -64,7 +64,10 @@ export interface AccountPoolPersonalUsageWindow {
   start_at: string
   end_at: string
   requests: number
+  input_tokens: number
+  output_tokens: number
   tokens: number
+  cache_rate: number
   actual_cost: number
 }
 

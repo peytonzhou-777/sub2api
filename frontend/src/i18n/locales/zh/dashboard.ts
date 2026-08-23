@@ -950,7 +950,7 @@ export default {
     columns: { id: '账号ID', platformType: '账号类型', relation: '我的关系', residents: '居民', capacity: '账号容量', usageWindow: '账号用量', personalUsage: '个人用量', resetCount: '账号重置次数', status: '账号状态' },
     relations: { all: '全部关系', currentResidence: '常驻账号', primaryResidence: '首选账号', sevenDayContact: '七日触达账号', historicalContact: '历史触达账号' },
     residents: { active: '活跃居民', total: '常驻居民', draining: '排空槽位', conversations: '活跃会话', contacted: '七日触达用户' },
-    personalUsage: { query: '查询个人用量', loading: '查询中', unavailable: '暂不可用', notSupported: '不支持', observedAt: '观测于', actualCost: '实际消耗', req: 'req', token: 'token' },
+    personalUsage: { query: '查询个人用量', loading: '查询中', unavailable: '暂不可用', notSupported: '不支持', observedAt: '观测于', requests: '请求', input: '输入', output: '输出', total: '总计', cacheRate: '缓存率', billing: '计费' },
     status: { active: '正常', disabled: '已禁用', error: '异常', temporarily_unavailable: '暂不可用', overloaded: '过载', rate_limited: '限流中', paused: '已暂停', quota_exceeded: '配额超限' },
   },
 

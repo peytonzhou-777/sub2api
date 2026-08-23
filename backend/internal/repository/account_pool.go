@@ -20,7 +20,7 @@ const (
 	accountPoolKeyPrefix              = "account_pool:v1:"
 	accountPoolCurrentKey             = accountPoolKeyPrefix + "current"
 	accountPoolLockKey                = accountPoolKeyPrefix + "build_lock"
-	accountPoolPersonalUsageKeyPrefix = accountPoolKeyPrefix + "personal_usage:v1:"
+	accountPoolPersonalUsageKeyPrefix = accountPoolKeyPrefix + "personal_usage:v2:"
 )
 
 type accountPoolSource struct{ client *dbent.Client }

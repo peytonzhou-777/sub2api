@@ -124,12 +124,18 @@ func TestAccountPoolPersonalUsageCacheRoundTripIsPrivate(t *testing.T) {
 	cache := &accountPoolSnapshotCache{rdb: redis.NewClient(&redis.Options{Addr: server.Addr()})}
 	ctx := context.Background()
 	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	if err := server.Set("account_pool:v1:personal_usage:v1:epoch:user:account", `{"account_id":7}`); err != nil {
+		t.Fatalf("写入旧版个人用量缓存: %v", err)
+	}
+	if _, hit, err := cache.GetAccountPoolPersonalUsage(ctx, "epoch:user:account"); err != nil || hit {
+		t.Fatalf("新版代码不得读取旧版个人用量缓存: hit=%v err=%v", hit, err)
+	}
 	value := &service.AccountPoolPersonalUsage{
 		AccountID:  7,
 		ObservedAt: now,
 		Windows: []service.AccountPoolPersonalUsageWindow{{
 			Code: "5h", Label: "5h", StartAt: now.Add(-5 * time.Hour), EndAt: now,
-			Requests: 0, Tokens: 12, ActualCost: 0,
+			Requests: 0, InputTokens: 1, OutputTokens: 2, Tokens: 12, CacheRate: 0.6, ActualCost: 0,
 		}},
 	}
 	if err := cache.SetAccountPoolPersonalUsage(ctx, "epoch:user:account", value, time.Minute); err != nil {
@@ -139,7 +145,8 @@ func TestAccountPoolPersonalUsageCacheRoundTripIsPrivate(t *testing.T) {
 	if err != nil || !hit || got == nil {
 		t.Fatalf("读取个人用量缓存: hit=%v err=%v value=%+v", hit, err, got)
 	}
-	if got.AccountID != value.AccountID || got.Windows[0].Requests != 0 || got.Windows[0].ActualCost != 0 {
+	if got.AccountID != value.AccountID || got.Windows[0].Requests != 0 || got.Windows[0].InputTokens != 1 ||
+		got.Windows[0].OutputTokens != 2 || got.Windows[0].CacheRate != 0.6 || got.Windows[0].ActualCost != 0 {
 		t.Fatalf("缓存值损坏: %+v", got)
 	}
 	if _, hit, err := cache.GetAccountPoolPersonalUsage(ctx, "other-key"); err != nil || hit {
