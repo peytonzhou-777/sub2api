@@ -41,10 +41,20 @@ type openaiNonStreamingResult struct {
 }
 
 func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel string) (*openaiStreamingResult, error) {
-	return s.handleStreamingResponseWithReasoning(ctx, resp, c, account, startTime, originalModel, mappedModel, "")
+	return s.handleStreamingResponseWithReasoning(ctx, resp, c, account, startTime, startTime, originalModel, mappedModel, "")
 }
 
-func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel, reasoningEffort string) (*openaiStreamingResult, error) {
+func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
+	ctx context.Context,
+	resp *http.Response,
+	c *gin.Context,
+	account *Account,
+	timeoutStartTime time.Time,
+	firstTokenStartTime time.Time,
+	originalModel string,
+	mappedModel string,
+	reasoningEffort string,
+) (*openaiStreamingResult, error) {
 	observer := upstreamResponseModelObserverFromContext(c)
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
@@ -220,7 +230,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	var firstOutputTimer *time.Timer
 	var firstOutputCh <-chan time.Time
 	if firstOutputTimeout > 0 {
-		remaining := time.Until(startTime.Add(firstOutputTimeout))
+		remaining := time.Until(timeoutStartTime.Add(firstOutputTimeout))
 		if remaining <= 0 {
 			remaining = time.Nanosecond
 		}
@@ -304,7 +314,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			stopFirstOutputTimer()
 		}
 		if completedVisibleEvent && firstTokenMs == nil {
-			ms := int(time.Since(startTime).Milliseconds())
+			ms := int(time.Since(firstTokenStartTime).Milliseconds())
 			firstTokenMs = &ms
 		}
 		eventStartsClientOutput = false
@@ -642,7 +652,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 
 			// Record first token time
 			if !guardFirstOutput && firstTokenMs == nil && startsVisibleOutput {
-				ms := int(time.Since(startTime).Milliseconds())
+				ms := int(time.Since(firstTokenStartTime).Milliseconds())
 				firstTokenMs = &ms
 				stopFirstOutputTimer()
 			}
@@ -813,7 +823,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				markEventProcessed(ev)
 			}
 			return resultWithUsage(), s.newOpenAIFirstOutputTimeoutError(
-				ctx, c, account, startTime, originalModel, reasoningEffort,
+				ctx, c, account, timeoutStartTime, originalModel, reasoningEffort,
 				firstOutputTimeout, "semantic_output", resp.Header,
 			)
 

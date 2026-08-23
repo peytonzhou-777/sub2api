@@ -973,7 +973,15 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		searchCount := 0
 		var imageOutputSizes []string
 		if reqStream {
-			streamResult, err := s.handleStreamingResponseWithReasoning(ctx, resp, c, account, startTime, originalModel, upstreamModel, reasoningEffortValue)
+			firstTokenStartTime := startTime
+			if account.Platform == PlatformOpenAI {
+				// 仅 OpenAI 首字统计本次实际上游发送后的等待；整体超时仍沿用 Forward 起点。
+				firstTokenStartTime = upstreamStart
+			}
+			streamResult, err := s.handleStreamingResponseWithReasoning(
+				ctx, resp, c, account, startTime, firstTokenStartTime,
+				originalModel, upstreamModel, reasoningEffortValue,
+			)
 			if err != nil {
 				return nil, err
 			}

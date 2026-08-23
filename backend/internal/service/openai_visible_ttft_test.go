@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -105,6 +106,72 @@ func TestOpenAINativeMetadataDoesNotDisarmFirstOutputTimeout(t *testing.T) {
 	}
 }
 
+func TestOpenAIHTTPFirstTokenStartsAtUpstreamDispatch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const (
+		preflightDelay = 400 * time.Millisecond
+		upstreamDelay  = 120 * time.Millisecond
+	)
+	body := []byte(`{"model":"gpt-5.2","stream":true,"instructions":"local-test-instructions","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}]}`)
+
+	for _, passthrough := range []bool{false, true} {
+		name := "native"
+		if passthrough {
+			name = "passthrough"
+		}
+		t.Run(name, func(t *testing.T) {
+			upstream := &timedTTFTHTTPUpstream{responseDelay: upstreamDelay, httpUpstreamRecorder: &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body: io.NopCloser(strings.NewReader(
+					"data: {\"type\":\"response.output_text.delta\",\"delta\":\"test output\"}\n\n" +
+						"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_test\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n" +
+						"data: [DONE]\n\n",
+				)),
+			}}}
+			tokenCache := &delayedTTFTTokenCache{delay: preflightDelay, token: "cached-token"}
+			svc := &OpenAIGatewayService{
+				cfg:                 &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}},
+				httpUpstream:        upstream,
+				openAITokenProvider: NewOpenAITokenProvider(nil, tokenCache, nil),
+			}
+			account := &Account{
+				ID:          1,
+				Name:        "account_test",
+				Platform:    PlatformOpenAI,
+				Type:        AccountTypeOAuth,
+				Concurrency: 1,
+				Credentials: map[string]any{
+					"access_token":       "account-token",
+					"chatgpt_account_id": "chatgpt-account-test",
+				},
+				Extra:       map[string]any{"openai_passthrough": passthrough},
+				Status:      StatusActive,
+				Schedulable: true,
+			}
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+			forwardStarted := time.Now()
+			result, err := svc.Forward(context.Background(), c, account, body)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.False(t, upstream.calledAt.IsZero())
+			require.NotNil(t, result.FirstTokenMs)
+
+			preUpstreamDuration := upstream.calledAt.Sub(forwardStarted)
+			recordedFirstToken := time.Duration(*result.FirstTokenMs) * time.Millisecond
+			require.GreaterOrEqual(t, preUpstreamDuration, preflightDelay-30*time.Millisecond)
+			require.GreaterOrEqual(t, result.Duration, preflightDelay+upstreamDelay-60*time.Millisecond)
+			require.GreaterOrEqual(t, recordedFirstToken, upstreamDelay-30*time.Millisecond,
+				"服务端首字应包含上游等待响应头的耗时")
+			require.Less(t, recordedFirstToken, preUpstreamDuration-150*time.Millisecond,
+				"服务端首字只应统计实际上游发送后的等待，不应包含本地取令牌耗时")
+		})
+	}
+}
+
 func runSyntheticVisibleTTFTStream(t *testing.T, passthrough bool, visibleDelay time.Duration, timeoutSeconds int, visibleEvent string) *openaiStreamingResult {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -152,4 +219,48 @@ func runSyntheticVisibleTTFTStream(t *testing.T, passthrough bool, visibleDelay 
 		t.Fatal("synthetic upstream writer did not exit")
 	}
 	return result
+}
+
+type delayedTTFTTokenCache struct {
+	delay time.Duration
+	token string
+}
+
+func (c *delayedTTFTTokenCache) GetAccessToken(ctx context.Context, _ string) (string, error) {
+	timer := time.NewTimer(c.delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case <-timer.C:
+		return c.token, nil
+	}
+}
+
+func (*delayedTTFTTokenCache) SetAccessToken(context.Context, string, string, time.Duration) error {
+	return nil
+}
+
+func (*delayedTTFTTokenCache) DeleteAccessToken(context.Context, string) error {
+	return nil
+}
+
+func (*delayedTTFTTokenCache) AcquireRefreshLock(context.Context, string, time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (*delayedTTFTTokenCache) ReleaseRefreshLock(context.Context, string) error {
+	return nil
+}
+
+type timedTTFTHTTPUpstream struct {
+	*httpUpstreamRecorder
+	calledAt      time.Time
+	responseDelay time.Duration
+}
+
+func (u *timedTTFTHTTPUpstream) Do(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error) {
+	u.calledAt = time.Now()
+	time.Sleep(u.responseDelay)
+	return u.httpUpstreamRecorder.Do(req, proxyURL, accountID, accountConcurrency)
 }

@@ -298,6 +298,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 
 	agentTaskRecoveryTried := false
 	var resp *http.Response
+	var upstreamStart time.Time
 	for {
 		upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 		upstreamReq, buildErr := s.buildUpstreamRequestOpenAIPassthrough(upstreamCtx, c, account, body, token)
@@ -306,7 +307,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			return nil, buildErr
 		}
 
-		upstreamStart := time.Now()
+		upstreamStart = time.Now()
 		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
 		SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 		if err != nil {
@@ -366,7 +367,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	imageCount := 0
 	var imageOutputSizes []string
 	if reqStream {
-		result, err := s.handleStreamingResponsePassthrough(ctx, resp, c, account, startTime, reqModel, upstreamPassthroughModel)
+		// 透传首字同样从最终成功的 HTTP 尝试开始，排除本地凭据与请求构造耗时。
+		result, err := s.handleStreamingResponsePassthrough(ctx, resp, c, account, upstreamStart, reqModel, upstreamPassthroughModel)
 		if err != nil {
 			return nil, err
 		}
