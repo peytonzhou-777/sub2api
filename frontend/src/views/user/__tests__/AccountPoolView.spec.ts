@@ -282,7 +282,7 @@ describe('AccountPoolView', () => {
             reset_count: null,
             reset_count_state: 'unavailable',
             status: { code: 'active', resume_at: null, models: [] },
-            residents: { active: 0, total: 0, draining_slots: 2, active_conversations: 3, applicable: true },
+            residents: { active: 0, total: 0, draining_slots: 2, active_conversations: 3, contacted_users: 4, applicable: true },
             is_current_residence: false,
             is_seven_day_contact: false,
             is_historical_contact: false,
@@ -316,6 +316,7 @@ describe('AccountPoolView', () => {
     expect(wrapper.get('[data-test="resident-total"]').text()).toContain('0')
     expect(wrapper.find('[data-test="resident-draining"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="resident-conversations"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="resident-contacted"]').exists()).toBe(false)
     expect(wrapper.get('[data-test="resident-not-applicable"]').text()).toBe('--')
     wrapper.unmount()
   })
