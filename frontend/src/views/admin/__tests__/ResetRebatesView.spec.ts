@@ -46,7 +46,7 @@ function mountView() {
   })
 }
 
-describe('ResetRebatesView v2 contract', () => {
+describe('ResetRebatesView v3 contract', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     accountsAPI.list.mockResolvedValue({
@@ -75,15 +75,17 @@ describe('ResetRebatesView v2 contract', () => {
   })
 
   it('exposes independent account and payout ratios', () => {
+    expect(source).toContain('全账号平均受益周期和比例')
+    expect(source).toContain('统一结束时间')
     expect(source).toContain('强制覆盖所有账号统计比例')
     expect(source).toContain("ratio_mode: 'auto'")
     expect(source).toContain('发放比例')
   })
 
   it('supports applying one statistics window to multiple selected accounts', () => {
-    expect(source).toContain('批量设置统计窗口')
+    expect(source).toContain('批量设置开始时间')
     expect(source).toContain('本次将修改已选择的 {{ selectedIds.size }} 个账号')
-    expect(source).toContain('applyWindowToDraft')
+    expect(source).toContain('applyStartToDraft')
     expect(source).toContain('账号原有的统计比例模式和手动比例保持不变')
   })
 
@@ -103,7 +105,7 @@ describe('ResetRebatesView v2 contract', () => {
     await forceLabel.find('input').setValue(true)
     await findByText(wrapper.findAll('label'), '%').find('input[type="number"]').setValue('90.25')
 
-    await wrapper.find('button[title="修改统计窗口和比例"]').trigger('click')
+    await wrapper.find('button[title="修改开始时间和比例"]').trigger('click')
     await findByText(wrapper.findAll('button'), '手动设置').trigger('click')
     await findByText(wrapper.findAll('label'), '手动统计比例').find('input').setValue('80.125')
     await findByText(wrapper.findAll('button'), '保存').trigger('click')
@@ -115,6 +117,9 @@ describe('ResetRebatesView v2 contract', () => {
 
     const payload = resetRebatesAPI.create.mock.calls[0][0]
     expect(payload.force_stat_ratio).toBe('90.25')
+    expect(payload.mechanism_version).toBe(3)
+    expect(payload.period_end).toEqual(expect.any(String))
+    expect(payload.accounts[0]).not.toHaveProperty('period_end')
     expect(payload.accounts[0].manual_ratio).toBe('80.125')
     wrapper.unmount()
   })
@@ -131,7 +136,7 @@ describe('ResetRebatesView v2 contract', () => {
     expect(showError).toHaveBeenCalledWith('强制统计比例必须在 0% 到 100% 之间')
     expect(resetRebatesAPI.create).not.toHaveBeenCalled()
 
-    await wrapper.find('button[title="修改统计窗口和比例"]').trigger('click')
+    await wrapper.find('button[title="修改开始时间和比例"]').trigger('click')
     await findByText(wrapper.findAll('button'), '手动设置').trigger('click')
     await findByText(wrapper.findAll('button'), '保存').trigger('click')
 

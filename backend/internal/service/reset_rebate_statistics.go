@@ -71,7 +71,7 @@ func (s *ResetRebateService) runStatistics(ctx context.Context, batchID int64) e
 	if err = s.db.QueryRowContext(ctx, "SELECT mechanism_version, status FROM reset_rebate_batches WHERE id=$1", batchID).Scan(&version, &status); err != nil {
 		return err
 	}
-	if version != ResetRebateMechanismV2 || status != ResetRebateStatusRunning {
+	if version != ResetRebateMechanismV3 || status != ResetRebateStatusRunning {
 		return nil
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
@@ -118,7 +118,7 @@ func (s *ResetRebateService) runStatistics(ctx context.Context, batchID int64) e
 		 AND usage_log.created_at>=account_item.period_start
 		 AND usage_log.created_at<account_item.period_end
 		JOIN users AS app_user ON app_user.id=usage_log.user_id
-		WHERE account_item.batch_id=$1
+		WHERE account_item.batch_id=$1 AND account_item.included_in_statistics=TRUE
 		GROUP BY account_item.account_id,usage_log.user_id,app_user.email,app_user.username,app_user.status,app_user.deleted_at,app_user.reset_rebate_skip_count
 		HAVING COALESCE(SUM(usage_log.actual_cost),0)>0
 		ORDER BY account_item.account_id,usage_log.user_id`, batchID)
@@ -205,7 +205,7 @@ func (s *ResetRebateService) runStatistics(ctx context.Context, batchID int64) e
 func (s *ResetRebateService) loadStatsAccounts(ctx context.Context, tx *sql.Tx, batchID int64) ([]resetRebateStatsAccount, error) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT id, account_id, account_name, period_start, period_end, effective_stat_ratio::text
-		FROM reset_rebate_account_items WHERE batch_id=$1 ORDER BY account_id
+		FROM reset_rebate_account_items WHERE batch_id=$1 AND included_in_statistics=TRUE ORDER BY account_id
 	`, batchID)
 	if err != nil {
 		return nil, err
@@ -285,7 +285,9 @@ func copyResetRebateUsers(ctx context.Context, tx *sql.Tx, batchID int64, users 
 const resetRebateBatchSelect = `
 	SELECT id, mechanism_version, group_id, group_name, admin_id, admin_email, status, failure_stage,
 	       execution_mode, execution_cursor_user_id, initial_issued_at,
-	       force_stat_ratio_enabled, force_stat_ratio::text, account_count, risk_account_count,
+	       force_stat_ratio_enabled, force_stat_ratio::text, average_benefit_enabled,
+	       average_benefit_duration_us, average_benefit_ratio::text, combined_payout_ratio::text,
+	       account_count, excluded_account_count, risk_account_count,
 	       progress_total, progress_completed, period_start, period_end,
 	       raw_amount::text, weighted_amount::text, expected_amount::text, successful_amount::text,
 	       failed_amount::text, excluded_amount::text, payout_ratio, rebate_reason, preview_version,
@@ -304,8 +306,9 @@ func scanResetRebateBatch(row rowScanner) (*ResetRebateBatchView, error) {
 	if err := row.Scan(
 		&item.ID, &item.MechanismVersion, &groupID, &item.GroupName, &item.AdminID, &item.AdminEmail,
 		&item.Status, &item.FailureStage, &item.ExecutionMode, &item.ExecutionCursorUserID, &initialIssued,
-		&item.ForceStatRatioEnabled, &item.ForceStatRatio,
-		&item.AccountCount, &item.RiskAccountCount, &item.ProgressTotal, &item.ProgressCompleted,
+		&item.ForceStatRatioEnabled, &item.ForceStatRatio, &item.AverageBenefitEnabled,
+		&item.AverageBenefitDurationUS, &item.AverageBenefitRatio, &item.CombinedPayoutRatio,
+		&item.AccountCount, &item.ExcludedAccountCount, &item.RiskAccountCount, &item.ProgressTotal, &item.ProgressCompleted,
 		&periodStart, &periodEnd, &item.RawAmount, &item.WeightedAmount, &item.ExpectedAmount,
 		&item.SuccessfulAmount, &item.FailedAmount, &item.ExcludedAmount, &payout, &item.RebateReason,
 		&item.PreviewVersion, &item.ExpectedUserCount, &item.SuccessfulUserCount, &item.ExcludedUserCount,
@@ -367,7 +370,7 @@ type ResetRebateListFilter struct {
 	CreatedEnd      *time.Time
 }
 
-// ListBatches 分页返回 v1/v2 历史，并支持账号与管理员筛选。
+// ListBatches 分页返回全部机制历史，并支持账号与管理员筛选。
 func (s *ResetRebateService) ListBatches(ctx context.Context, page, pageSize int, filter ResetRebateListFilter) (*ResetRebatePage[ResetRebateBatchView], error) {
 	where, args := []string{"1=1"}, make([]any, 0)
 	add := func(condition string, value any) {
@@ -427,7 +430,8 @@ func (s *ResetRebateService) ListAccounts(ctx context.Context, batchID int64, pa
 		SELECT id,account_id,account_name,platform,account_type,is_shadow,account_status,
 		       account_error_message,schedulable,period_start,period_end,default_window_source,
 		       window_risk,ratio_mode,auto_stat_ratio::text,manual_stat_ratio::text,
-		       effective_stat_ratio::text,raw_amount::text,weighted_amount::text
+		       effective_stat_ratio::text,included_in_statistics,statistics_exclusion_reason,
+		       raw_amount::text,weighted_amount::text
 		FROM reset_rebate_account_items WHERE batch_id=$1 ORDER BY account_id LIMIT $2 OFFSET $3
 	`, batchID, pageSize, (page-1)*pageSize)
 	if err != nil {
@@ -441,7 +445,8 @@ func (s *ResetRebateService) ListAccounts(ctx context.Context, batchID int64, pa
 		if err = rows.Scan(&item.ID, &item.AccountID, &item.AccountName, &item.Platform, &item.AccountType, &item.IsShadow,
 			&item.AccountStatus, &item.AccountErrorMessage, &item.Schedulable, &item.PeriodStart, &item.PeriodEnd,
 			&item.DefaultWindowSource, &item.WindowRisk, &item.RatioMode, &item.AutoStatRatio, &manual,
-			&item.EffectiveStatRatio, &item.RawAmount, &item.WeightedAmount); err != nil {
+			&item.EffectiveStatRatio, &item.IncludedInStatistics, &item.StatisticsExclusionReason,
+			&item.RawAmount, &item.WeightedAmount); err != nil {
 			return nil, err
 		}
 		if manual.Valid {

@@ -217,6 +217,7 @@ func registerResetRebateRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		rebates.GET("/:id/users/:user_id/contributions", h.Admin.ResetRebate.ListContributions)
 		rebates.POST("/:id/preview", h.Admin.ResetRebate.Preview)
 		rebates.GET("/:id/users.csv", h.Admin.ResetRebate.ExportUsers)
+		rebates.GET("/:id/accounts.csv", h.Admin.ResetRebate.ExportAccounts)
 		rebates.GET("/:id/user-account-contributions.csv", h.Admin.ResetRebate.ExportContributions)
 		rebates.GET("/:id/failed-users.csv", h.Admin.ResetRebate.ExportFailedUsers)
 		rebates.POST("/:id/execute", h.Admin.ResetRebate.Execute)

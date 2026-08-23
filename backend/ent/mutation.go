@@ -51439,35 +51439,37 @@ func (m *RedeemCodeMutation) ResetEdge(name string) error {
 // ResetRebateAccountItemMutation represents an operation that mutates the ResetRebateAccountItem nodes in the graph.
 type ResetRebateAccountItemMutation struct {
 	config
-	op                    Op
-	typ                   string
-	id                    *int64
-	batch_id              *int64
-	addbatch_id           *int64
-	account_id            *int64
-	addaccount_id         *int64
-	account_name          *string
-	platform              *string
-	account_type          *string
-	is_shadow             *bool
-	account_status        *string
-	account_error_message *string
-	schedulable           *bool
-	period_start          *time.Time
-	period_end            *time.Time
-	default_window_source *string
-	window_risk           *string
-	ratio_mode            *string
-	auto_stat_ratio       *string
-	manual_stat_ratio     *string
-	effective_stat_ratio  *string
-	raw_amount            *string
-	weighted_amount       *string
-	created_at            *time.Time
-	clearedFields         map[string]struct{}
-	done                  bool
-	oldValue              func(context.Context) (*ResetRebateAccountItem, error)
-	predicates            []predicate.ResetRebateAccountItem
+	op                          Op
+	typ                         string
+	id                          *int64
+	batch_id                    *int64
+	addbatch_id                 *int64
+	account_id                  *int64
+	addaccount_id               *int64
+	account_name                *string
+	platform                    *string
+	account_type                *string
+	is_shadow                   *bool
+	account_status              *string
+	account_error_message       *string
+	schedulable                 *bool
+	period_start                *time.Time
+	period_end                  *time.Time
+	default_window_source       *string
+	window_risk                 *string
+	ratio_mode                  *string
+	auto_stat_ratio             *string
+	manual_stat_ratio           *string
+	effective_stat_ratio        *string
+	included_in_statistics      *bool
+	statistics_exclusion_reason *string
+	raw_amount                  *string
+	weighted_amount             *string
+	created_at                  *time.Time
+	clearedFields               map[string]struct{}
+	done                        bool
+	oldValue                    func(context.Context) (*ResetRebateAccountItem, error)
+	predicates                  []predicate.ResetRebateAccountItem
 }
 
 var _ ent.Mutation = (*ResetRebateAccountItemMutation)(nil)
@@ -52233,6 +52235,78 @@ func (m *ResetRebateAccountItemMutation) ResetEffectiveStatRatio() {
 	m.effective_stat_ratio = nil
 }
 
+// SetIncludedInStatistics sets the "included_in_statistics" field.
+func (m *ResetRebateAccountItemMutation) SetIncludedInStatistics(b bool) {
+	m.included_in_statistics = &b
+}
+
+// IncludedInStatistics returns the value of the "included_in_statistics" field in the mutation.
+func (m *ResetRebateAccountItemMutation) IncludedInStatistics() (r bool, exists bool) {
+	v := m.included_in_statistics
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIncludedInStatistics returns the old "included_in_statistics" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldIncludedInStatistics(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIncludedInStatistics is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIncludedInStatistics requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIncludedInStatistics: %w", err)
+	}
+	return oldValue.IncludedInStatistics, nil
+}
+
+// ResetIncludedInStatistics resets all changes to the "included_in_statistics" field.
+func (m *ResetRebateAccountItemMutation) ResetIncludedInStatistics() {
+	m.included_in_statistics = nil
+}
+
+// SetStatisticsExclusionReason sets the "statistics_exclusion_reason" field.
+func (m *ResetRebateAccountItemMutation) SetStatisticsExclusionReason(s string) {
+	m.statistics_exclusion_reason = &s
+}
+
+// StatisticsExclusionReason returns the value of the "statistics_exclusion_reason" field in the mutation.
+func (m *ResetRebateAccountItemMutation) StatisticsExclusionReason() (r string, exists bool) {
+	v := m.statistics_exclusion_reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatisticsExclusionReason returns the old "statistics_exclusion_reason" field's value of the ResetRebateAccountItem entity.
+// If the ResetRebateAccountItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateAccountItemMutation) OldStatisticsExclusionReason(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatisticsExclusionReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatisticsExclusionReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatisticsExclusionReason: %w", err)
+	}
+	return oldValue.StatisticsExclusionReason, nil
+}
+
+// ResetStatisticsExclusionReason resets all changes to the "statistics_exclusion_reason" field.
+func (m *ResetRebateAccountItemMutation) ResetStatisticsExclusionReason() {
+	m.statistics_exclusion_reason = nil
+}
+
 // SetRawAmount sets the "raw_amount" field.
 func (m *ResetRebateAccountItemMutation) SetRawAmount(s string) {
 	m.raw_amount = &s
@@ -52375,7 +52449,7 @@ func (m *ResetRebateAccountItemMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ResetRebateAccountItemMutation) Fields() []string {
-	fields := make([]string, 0, 20)
+	fields := make([]string, 0, 22)
 	if m.batch_id != nil {
 		fields = append(fields, resetrebateaccountitem.FieldBatchID)
 	}
@@ -52426,6 +52500,12 @@ func (m *ResetRebateAccountItemMutation) Fields() []string {
 	}
 	if m.effective_stat_ratio != nil {
 		fields = append(fields, resetrebateaccountitem.FieldEffectiveStatRatio)
+	}
+	if m.included_in_statistics != nil {
+		fields = append(fields, resetrebateaccountitem.FieldIncludedInStatistics)
+	}
+	if m.statistics_exclusion_reason != nil {
+		fields = append(fields, resetrebateaccountitem.FieldStatisticsExclusionReason)
 	}
 	if m.raw_amount != nil {
 		fields = append(fields, resetrebateaccountitem.FieldRawAmount)
@@ -52478,6 +52558,10 @@ func (m *ResetRebateAccountItemMutation) Field(name string) (ent.Value, bool) {
 		return m.ManualStatRatio()
 	case resetrebateaccountitem.FieldEffectiveStatRatio:
 		return m.EffectiveStatRatio()
+	case resetrebateaccountitem.FieldIncludedInStatistics:
+		return m.IncludedInStatistics()
+	case resetrebateaccountitem.FieldStatisticsExclusionReason:
+		return m.StatisticsExclusionReason()
 	case resetrebateaccountitem.FieldRawAmount:
 		return m.RawAmount()
 	case resetrebateaccountitem.FieldWeightedAmount:
@@ -52527,6 +52611,10 @@ func (m *ResetRebateAccountItemMutation) OldField(ctx context.Context, name stri
 		return m.OldManualStatRatio(ctx)
 	case resetrebateaccountitem.FieldEffectiveStatRatio:
 		return m.OldEffectiveStatRatio(ctx)
+	case resetrebateaccountitem.FieldIncludedInStatistics:
+		return m.OldIncludedInStatistics(ctx)
+	case resetrebateaccountitem.FieldStatisticsExclusionReason:
+		return m.OldStatisticsExclusionReason(ctx)
 	case resetrebateaccountitem.FieldRawAmount:
 		return m.OldRawAmount(ctx)
 	case resetrebateaccountitem.FieldWeightedAmount:
@@ -52660,6 +52748,20 @@ func (m *ResetRebateAccountItemMutation) SetField(name string, value ent.Value) 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEffectiveStatRatio(v)
+		return nil
+	case resetrebateaccountitem.FieldIncludedInStatistics:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIncludedInStatistics(v)
+		return nil
+	case resetrebateaccountitem.FieldStatisticsExclusionReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatisticsExclusionReason(v)
 		return nil
 	case resetrebateaccountitem.FieldRawAmount:
 		v, ok := value.(string)
@@ -52818,6 +52920,12 @@ func (m *ResetRebateAccountItemMutation) ResetField(name string) error {
 	case resetrebateaccountitem.FieldEffectiveStatRatio:
 		m.ResetEffectiveStatRatio()
 		return nil
+	case resetrebateaccountitem.FieldIncludedInStatistics:
+		m.ResetIncludedInStatistics()
+		return nil
+	case resetrebateaccountitem.FieldStatisticsExclusionReason:
+		m.ResetStatisticsExclusionReason()
+		return nil
 	case resetrebateaccountitem.FieldRawAmount:
 		m.ResetRawAmount()
 		return nil
@@ -52882,70 +52990,77 @@ func (m *ResetRebateAccountItemMutation) ResetEdge(name string) error {
 // ResetRebateBatchMutation represents an operation that mutates the ResetRebateBatch nodes in the graph.
 type ResetRebateBatchMutation struct {
 	config
-	op                          Op
-	typ                         string
-	id                          *int64
-	mechanism_version           *int
-	addmechanism_version        *int
-	group_id                    *int64
-	addgroup_id                 *int64
-	group_name                  *string
-	admin_id                    *int64
-	addadmin_id                 *int64
-	admin_email                 *string
-	period_start                *time.Time
-	period_end                  *time.Time
-	status                      *string
-	failure_stage               *string
-	execution_mode              *string
-	execution_cursor_user_id    *int64
-	addexecution_cursor_user_id *int64
-	execution_admin_id          *int64
-	addexecution_admin_id       *int64
-	execution_admin_email       *string
-	initial_issued_at           *time.Time
-	force_stat_ratio_enabled    *bool
-	force_stat_ratio            *string
-	account_count               *int
-	addaccount_count            *int
-	risk_account_count          *int
-	addrisk_account_count       *int
-	progress_total              *int
-	addprogress_total           *int
-	progress_completed          *int
-	addprogress_completed       *int
-	raw_amount                  *string
-	weighted_amount             *string
-	expected_amount             *string
-	successful_amount           *string
-	failed_amount               *string
-	excluded_amount             *string
-	payout_ratio                *int
-	addpayout_ratio             *int
-	rebate_reason               *string
-	preview_version             *int
-	addpreview_version          *int
-	expected_user_count         *int
-	addexpected_user_count      *int
-	successful_user_count       *int
-	addsuccessful_user_count    *int
-	excluded_user_count         *int
-	addexcluded_user_count      *int
-	failed_user_count           *int
-	addfailed_user_count        *int
-	failure_code                *string
-	failure_message             *string
-	executed_by_admin_id        *int64
-	addexecuted_by_admin_id     *int64
-	executed_by_admin_email     *string
-	first_executed_at           *time.Time
-	last_retry_at               *time.Time
-	created_at                  *time.Time
-	updated_at                  *time.Time
-	clearedFields               map[string]struct{}
-	done                        bool
-	oldValue                    func(context.Context) (*ResetRebateBatch, error)
-	predicates                  []predicate.ResetRebateBatch
+	op                             Op
+	typ                            string
+	id                             *int64
+	mechanism_version              *int
+	addmechanism_version           *int
+	group_id                       *int64
+	addgroup_id                    *int64
+	group_name                     *string
+	admin_id                       *int64
+	addadmin_id                    *int64
+	admin_email                    *string
+	period_start                   *time.Time
+	period_end                     *time.Time
+	status                         *string
+	failure_stage                  *string
+	execution_mode                 *string
+	execution_cursor_user_id       *int64
+	addexecution_cursor_user_id    *int64
+	execution_admin_id             *int64
+	addexecution_admin_id          *int64
+	execution_admin_email          *string
+	initial_issued_at              *time.Time
+	force_stat_ratio_enabled       *bool
+	force_stat_ratio               *string
+	average_benefit_enabled        *bool
+	average_benefit_duration_us    *int64
+	addaverage_benefit_duration_us *int64
+	average_benefit_ratio          *string
+	combined_payout_ratio          *string
+	account_count                  *int
+	addaccount_count               *int
+	excluded_account_count         *int
+	addexcluded_account_count      *int
+	risk_account_count             *int
+	addrisk_account_count          *int
+	progress_total                 *int
+	addprogress_total              *int
+	progress_completed             *int
+	addprogress_completed          *int
+	raw_amount                     *string
+	weighted_amount                *string
+	expected_amount                *string
+	successful_amount              *string
+	failed_amount                  *string
+	excluded_amount                *string
+	payout_ratio                   *int
+	addpayout_ratio                *int
+	rebate_reason                  *string
+	preview_version                *int
+	addpreview_version             *int
+	expected_user_count            *int
+	addexpected_user_count         *int
+	successful_user_count          *int
+	addsuccessful_user_count       *int
+	excluded_user_count            *int
+	addexcluded_user_count         *int
+	failed_user_count              *int
+	addfailed_user_count           *int
+	failure_code                   *string
+	failure_message                *string
+	executed_by_admin_id           *int64
+	addexecuted_by_admin_id        *int64
+	executed_by_admin_email        *string
+	first_executed_at              *time.Time
+	last_retry_at                  *time.Time
+	created_at                     *time.Time
+	updated_at                     *time.Time
+	clearedFields                  map[string]struct{}
+	done                           bool
+	oldValue                       func(context.Context) (*ResetRebateBatch, error)
+	predicates                     []predicate.ResetRebateBatch
 }
 
 var _ ent.Mutation = (*ResetRebateBatchMutation)(nil)
@@ -53789,6 +53904,170 @@ func (m *ResetRebateBatchMutation) ResetForceStatRatio() {
 	m.force_stat_ratio = nil
 }
 
+// SetAverageBenefitEnabled sets the "average_benefit_enabled" field.
+func (m *ResetRebateBatchMutation) SetAverageBenefitEnabled(b bool) {
+	m.average_benefit_enabled = &b
+}
+
+// AverageBenefitEnabled returns the value of the "average_benefit_enabled" field in the mutation.
+func (m *ResetRebateBatchMutation) AverageBenefitEnabled() (r bool, exists bool) {
+	v := m.average_benefit_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAverageBenefitEnabled returns the old "average_benefit_enabled" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldAverageBenefitEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAverageBenefitEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAverageBenefitEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAverageBenefitEnabled: %w", err)
+	}
+	return oldValue.AverageBenefitEnabled, nil
+}
+
+// ResetAverageBenefitEnabled resets all changes to the "average_benefit_enabled" field.
+func (m *ResetRebateBatchMutation) ResetAverageBenefitEnabled() {
+	m.average_benefit_enabled = nil
+}
+
+// SetAverageBenefitDurationUs sets the "average_benefit_duration_us" field.
+func (m *ResetRebateBatchMutation) SetAverageBenefitDurationUs(i int64) {
+	m.average_benefit_duration_us = &i
+	m.addaverage_benefit_duration_us = nil
+}
+
+// AverageBenefitDurationUs returns the value of the "average_benefit_duration_us" field in the mutation.
+func (m *ResetRebateBatchMutation) AverageBenefitDurationUs() (r int64, exists bool) {
+	v := m.average_benefit_duration_us
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAverageBenefitDurationUs returns the old "average_benefit_duration_us" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldAverageBenefitDurationUs(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAverageBenefitDurationUs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAverageBenefitDurationUs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAverageBenefitDurationUs: %w", err)
+	}
+	return oldValue.AverageBenefitDurationUs, nil
+}
+
+// AddAverageBenefitDurationUs adds i to the "average_benefit_duration_us" field.
+func (m *ResetRebateBatchMutation) AddAverageBenefitDurationUs(i int64) {
+	if m.addaverage_benefit_duration_us != nil {
+		*m.addaverage_benefit_duration_us += i
+	} else {
+		m.addaverage_benefit_duration_us = &i
+	}
+}
+
+// AddedAverageBenefitDurationUs returns the value that was added to the "average_benefit_duration_us" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedAverageBenefitDurationUs() (r int64, exists bool) {
+	v := m.addaverage_benefit_duration_us
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAverageBenefitDurationUs resets all changes to the "average_benefit_duration_us" field.
+func (m *ResetRebateBatchMutation) ResetAverageBenefitDurationUs() {
+	m.average_benefit_duration_us = nil
+	m.addaverage_benefit_duration_us = nil
+}
+
+// SetAverageBenefitRatio sets the "average_benefit_ratio" field.
+func (m *ResetRebateBatchMutation) SetAverageBenefitRatio(s string) {
+	m.average_benefit_ratio = &s
+}
+
+// AverageBenefitRatio returns the value of the "average_benefit_ratio" field in the mutation.
+func (m *ResetRebateBatchMutation) AverageBenefitRatio() (r string, exists bool) {
+	v := m.average_benefit_ratio
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAverageBenefitRatio returns the old "average_benefit_ratio" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldAverageBenefitRatio(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAverageBenefitRatio is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAverageBenefitRatio requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAverageBenefitRatio: %w", err)
+	}
+	return oldValue.AverageBenefitRatio, nil
+}
+
+// ResetAverageBenefitRatio resets all changes to the "average_benefit_ratio" field.
+func (m *ResetRebateBatchMutation) ResetAverageBenefitRatio() {
+	m.average_benefit_ratio = nil
+}
+
+// SetCombinedPayoutRatio sets the "combined_payout_ratio" field.
+func (m *ResetRebateBatchMutation) SetCombinedPayoutRatio(s string) {
+	m.combined_payout_ratio = &s
+}
+
+// CombinedPayoutRatio returns the value of the "combined_payout_ratio" field in the mutation.
+func (m *ResetRebateBatchMutation) CombinedPayoutRatio() (r string, exists bool) {
+	v := m.combined_payout_ratio
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCombinedPayoutRatio returns the old "combined_payout_ratio" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldCombinedPayoutRatio(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCombinedPayoutRatio is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCombinedPayoutRatio requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCombinedPayoutRatio: %w", err)
+	}
+	return oldValue.CombinedPayoutRatio, nil
+}
+
+// ResetCombinedPayoutRatio resets all changes to the "combined_payout_ratio" field.
+func (m *ResetRebateBatchMutation) ResetCombinedPayoutRatio() {
+	m.combined_payout_ratio = nil
+}
+
 // SetAccountCount sets the "account_count" field.
 func (m *ResetRebateBatchMutation) SetAccountCount(i int) {
 	m.account_count = &i
@@ -53843,6 +54122,62 @@ func (m *ResetRebateBatchMutation) AddedAccountCount() (r int, exists bool) {
 func (m *ResetRebateBatchMutation) ResetAccountCount() {
 	m.account_count = nil
 	m.addaccount_count = nil
+}
+
+// SetExcludedAccountCount sets the "excluded_account_count" field.
+func (m *ResetRebateBatchMutation) SetExcludedAccountCount(i int) {
+	m.excluded_account_count = &i
+	m.addexcluded_account_count = nil
+}
+
+// ExcludedAccountCount returns the value of the "excluded_account_count" field in the mutation.
+func (m *ResetRebateBatchMutation) ExcludedAccountCount() (r int, exists bool) {
+	v := m.excluded_account_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExcludedAccountCount returns the old "excluded_account_count" field's value of the ResetRebateBatch entity.
+// If the ResetRebateBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResetRebateBatchMutation) OldExcludedAccountCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExcludedAccountCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExcludedAccountCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExcludedAccountCount: %w", err)
+	}
+	return oldValue.ExcludedAccountCount, nil
+}
+
+// AddExcludedAccountCount adds i to the "excluded_account_count" field.
+func (m *ResetRebateBatchMutation) AddExcludedAccountCount(i int) {
+	if m.addexcluded_account_count != nil {
+		*m.addexcluded_account_count += i
+	} else {
+		m.addexcluded_account_count = &i
+	}
+}
+
+// AddedExcludedAccountCount returns the value that was added to the "excluded_account_count" field in this mutation.
+func (m *ResetRebateBatchMutation) AddedExcludedAccountCount() (r int, exists bool) {
+	v := m.addexcluded_account_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetExcludedAccountCount resets all changes to the "excluded_account_count" field.
+func (m *ResetRebateBatchMutation) ResetExcludedAccountCount() {
+	m.excluded_account_count = nil
+	m.addexcluded_account_count = nil
 }
 
 // SetRiskAccountCount sets the "risk_account_count" field.
@@ -54997,7 +55332,7 @@ func (m *ResetRebateBatchMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ResetRebateBatchMutation) Fields() []string {
-	fields := make([]string, 0, 41)
+	fields := make([]string, 0, 46)
 	if m.mechanism_version != nil {
 		fields = append(fields, resetrebatebatch.FieldMechanismVersion)
 	}
@@ -55046,8 +55381,23 @@ func (m *ResetRebateBatchMutation) Fields() []string {
 	if m.force_stat_ratio != nil {
 		fields = append(fields, resetrebatebatch.FieldForceStatRatio)
 	}
+	if m.average_benefit_enabled != nil {
+		fields = append(fields, resetrebatebatch.FieldAverageBenefitEnabled)
+	}
+	if m.average_benefit_duration_us != nil {
+		fields = append(fields, resetrebatebatch.FieldAverageBenefitDurationUs)
+	}
+	if m.average_benefit_ratio != nil {
+		fields = append(fields, resetrebatebatch.FieldAverageBenefitRatio)
+	}
+	if m.combined_payout_ratio != nil {
+		fields = append(fields, resetrebatebatch.FieldCombinedPayoutRatio)
+	}
 	if m.account_count != nil {
 		fields = append(fields, resetrebatebatch.FieldAccountCount)
+	}
+	if m.excluded_account_count != nil {
+		fields = append(fields, resetrebatebatch.FieldExcludedAccountCount)
 	}
 	if m.risk_account_count != nil {
 		fields = append(fields, resetrebatebatch.FieldRiskAccountCount)
@@ -55161,8 +55511,18 @@ func (m *ResetRebateBatchMutation) Field(name string) (ent.Value, bool) {
 		return m.ForceStatRatioEnabled()
 	case resetrebatebatch.FieldForceStatRatio:
 		return m.ForceStatRatio()
+	case resetrebatebatch.FieldAverageBenefitEnabled:
+		return m.AverageBenefitEnabled()
+	case resetrebatebatch.FieldAverageBenefitDurationUs:
+		return m.AverageBenefitDurationUs()
+	case resetrebatebatch.FieldAverageBenefitRatio:
+		return m.AverageBenefitRatio()
+	case resetrebatebatch.FieldCombinedPayoutRatio:
+		return m.CombinedPayoutRatio()
 	case resetrebatebatch.FieldAccountCount:
 		return m.AccountCount()
+	case resetrebatebatch.FieldExcludedAccountCount:
+		return m.ExcludedAccountCount()
 	case resetrebatebatch.FieldRiskAccountCount:
 		return m.RiskAccountCount()
 	case resetrebatebatch.FieldProgressTotal:
@@ -55252,8 +55612,18 @@ func (m *ResetRebateBatchMutation) OldField(ctx context.Context, name string) (e
 		return m.OldForceStatRatioEnabled(ctx)
 	case resetrebatebatch.FieldForceStatRatio:
 		return m.OldForceStatRatio(ctx)
+	case resetrebatebatch.FieldAverageBenefitEnabled:
+		return m.OldAverageBenefitEnabled(ctx)
+	case resetrebatebatch.FieldAverageBenefitDurationUs:
+		return m.OldAverageBenefitDurationUs(ctx)
+	case resetrebatebatch.FieldAverageBenefitRatio:
+		return m.OldAverageBenefitRatio(ctx)
+	case resetrebatebatch.FieldCombinedPayoutRatio:
+		return m.OldCombinedPayoutRatio(ctx)
 	case resetrebatebatch.FieldAccountCount:
 		return m.OldAccountCount(ctx)
+	case resetrebatebatch.FieldExcludedAccountCount:
+		return m.OldExcludedAccountCount(ctx)
 	case resetrebatebatch.FieldRiskAccountCount:
 		return m.OldRiskAccountCount(ctx)
 	case resetrebatebatch.FieldProgressTotal:
@@ -55423,12 +55793,47 @@ func (m *ResetRebateBatchMutation) SetField(name string, value ent.Value) error 
 		}
 		m.SetForceStatRatio(v)
 		return nil
+	case resetrebatebatch.FieldAverageBenefitEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAverageBenefitEnabled(v)
+		return nil
+	case resetrebatebatch.FieldAverageBenefitDurationUs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAverageBenefitDurationUs(v)
+		return nil
+	case resetrebatebatch.FieldAverageBenefitRatio:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAverageBenefitRatio(v)
+		return nil
+	case resetrebatebatch.FieldCombinedPayoutRatio:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCombinedPayoutRatio(v)
+		return nil
 	case resetrebatebatch.FieldAccountCount:
 		v, ok := value.(int)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAccountCount(v)
+		return nil
+	case resetrebatebatch.FieldExcludedAccountCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExcludedAccountCount(v)
 		return nil
 	case resetrebatebatch.FieldRiskAccountCount:
 		v, ok := value.(int)
@@ -55621,8 +56026,14 @@ func (m *ResetRebateBatchMutation) AddedFields() []string {
 	if m.addexecution_admin_id != nil {
 		fields = append(fields, resetrebatebatch.FieldExecutionAdminID)
 	}
+	if m.addaverage_benefit_duration_us != nil {
+		fields = append(fields, resetrebatebatch.FieldAverageBenefitDurationUs)
+	}
 	if m.addaccount_count != nil {
 		fields = append(fields, resetrebatebatch.FieldAccountCount)
+	}
+	if m.addexcluded_account_count != nil {
+		fields = append(fields, resetrebatebatch.FieldExcludedAccountCount)
 	}
 	if m.addrisk_account_count != nil {
 		fields = append(fields, resetrebatebatch.FieldRiskAccountCount)
@@ -55672,8 +56083,12 @@ func (m *ResetRebateBatchMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedExecutionCursorUserID()
 	case resetrebatebatch.FieldExecutionAdminID:
 		return m.AddedExecutionAdminID()
+	case resetrebatebatch.FieldAverageBenefitDurationUs:
+		return m.AddedAverageBenefitDurationUs()
 	case resetrebatebatch.FieldAccountCount:
 		return m.AddedAccountCount()
+	case resetrebatebatch.FieldExcludedAccountCount:
+		return m.AddedExcludedAccountCount()
 	case resetrebatebatch.FieldRiskAccountCount:
 		return m.AddedRiskAccountCount()
 	case resetrebatebatch.FieldProgressTotal:
@@ -55738,12 +56153,26 @@ func (m *ResetRebateBatchMutation) AddField(name string, value ent.Value) error 
 		}
 		m.AddExecutionAdminID(v)
 		return nil
+	case resetrebatebatch.FieldAverageBenefitDurationUs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAverageBenefitDurationUs(v)
+		return nil
 	case resetrebatebatch.FieldAccountCount:
 		v, ok := value.(int)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddAccountCount(v)
+		return nil
+	case resetrebatebatch.FieldExcludedAccountCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddExcludedAccountCount(v)
 		return nil
 	case resetrebatebatch.FieldRiskAccountCount:
 		v, ok := value.(int)
@@ -55947,8 +56376,23 @@ func (m *ResetRebateBatchMutation) ResetField(name string) error {
 	case resetrebatebatch.FieldForceStatRatio:
 		m.ResetForceStatRatio()
 		return nil
+	case resetrebatebatch.FieldAverageBenefitEnabled:
+		m.ResetAverageBenefitEnabled()
+		return nil
+	case resetrebatebatch.FieldAverageBenefitDurationUs:
+		m.ResetAverageBenefitDurationUs()
+		return nil
+	case resetrebatebatch.FieldAverageBenefitRatio:
+		m.ResetAverageBenefitRatio()
+		return nil
+	case resetrebatebatch.FieldCombinedPayoutRatio:
+		m.ResetCombinedPayoutRatio()
+		return nil
 	case resetrebatebatch.FieldAccountCount:
 		m.ResetAccountCount()
+		return nil
+	case resetrebatebatch.FieldExcludedAccountCount:
+		m.ResetExcludedAccountCount()
 		return nil
 	case resetrebatebatch.FieldRiskAccountCount:
 		m.ResetRiskAccountCount()

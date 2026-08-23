@@ -17,7 +17,12 @@ export interface ResetRebateBatch {
   initial_issued_at?: string
   force_stat_ratio_enabled: boolean
   force_stat_ratio: string
+  average_benefit_enabled: boolean
+  average_benefit_duration_us: number
+  average_benefit_ratio: string
+  combined_payout_ratio: string
   account_count: number
+  excluded_account_count: number
   risk_account_count: number
   progress_total: number
   progress_completed: number
@@ -62,15 +67,15 @@ export interface ResetRebateWindowDefault {
 export interface ResetRebateAccountDraft {
   account_id: number
   period_start: string
-  period_end: string
   ratio_mode: ResetRebateRatioMode
   manual_ratio?: string
   default_window_version: string
   window_modified: boolean
 }
 
-export interface ResetRebateAccount extends Omit<ResetRebateAccountDraft, 'default_window_version' | 'window_modified'> {
+export interface ResetRebateAccount extends Omit<ResetRebateAccountDraft, 'default_window_version' | 'window_modified' | 'ratio_mode'> {
   id: number
+  period_end: string
   account_name: string
   platform: string
   account_type: string
@@ -82,7 +87,10 @@ export interface ResetRebateAccount extends Omit<ResetRebateAccountDraft, 'defau
   window_risk: string
   auto_stat_ratio: string
   manual_stat_ratio?: string
+  ratio_mode: ResetRebateRatioMode | 'average'
   effective_stat_ratio: string
+  included_in_statistics: boolean
+  statistics_exclusion_reason?: string
   raw_amount: string
   weighted_amount: string
 }
@@ -138,7 +146,9 @@ export async function accountWindowDefaults(accountIds: number[]) {
 }
 
 export async function create(payload: {
-  mechanism_version: 2
+  mechanism_version: 3
+  period_end: string
+  average_benefit_enabled: boolean
   force_stat_ratio_enabled: boolean
   force_stat_ratio: string
   acknowledged_error_account_ids: number[]
@@ -192,7 +202,7 @@ export async function remove(id: number) {
   await apiClient.delete(`/admin/reset-rebates/${id}`)
 }
 
-export async function exportCSV(id: number, kind: 'users' | 'user-account-contributions' | 'failed-users') {
+export async function exportCSV(id: number, kind: 'users' | 'accounts' | 'user-account-contributions' | 'failed-users') {
   const { data } = await apiClient.get<Blob>(`/admin/reset-rebates/${id}/${kind}.csv`, { responseType: 'blob' })
   return data
 }

@@ -204,6 +204,34 @@ func (_c *ResetRebateAccountItemCreate) SetNillableEffectiveStatRatio(v *string)
 	return _c
 }
 
+// SetIncludedInStatistics sets the "included_in_statistics" field.
+func (_c *ResetRebateAccountItemCreate) SetIncludedInStatistics(v bool) *ResetRebateAccountItemCreate {
+	_c.mutation.SetIncludedInStatistics(v)
+	return _c
+}
+
+// SetNillableIncludedInStatistics sets the "included_in_statistics" field if the given value is not nil.
+func (_c *ResetRebateAccountItemCreate) SetNillableIncludedInStatistics(v *bool) *ResetRebateAccountItemCreate {
+	if v != nil {
+		_c.SetIncludedInStatistics(*v)
+	}
+	return _c
+}
+
+// SetStatisticsExclusionReason sets the "statistics_exclusion_reason" field.
+func (_c *ResetRebateAccountItemCreate) SetStatisticsExclusionReason(v string) *ResetRebateAccountItemCreate {
+	_c.mutation.SetStatisticsExclusionReason(v)
+	return _c
+}
+
+// SetNillableStatisticsExclusionReason sets the "statistics_exclusion_reason" field if the given value is not nil.
+func (_c *ResetRebateAccountItemCreate) SetNillableStatisticsExclusionReason(v *string) *ResetRebateAccountItemCreate {
+	if v != nil {
+		_c.SetStatisticsExclusionReason(*v)
+	}
+	return _c
+}
+
 // SetRawAmount sets the "raw_amount" field.
 func (_c *ResetRebateAccountItemCreate) SetRawAmount(v string) *ResetRebateAccountItemCreate {
 	_c.mutation.SetRawAmount(v)
@@ -317,6 +345,14 @@ func (_c *ResetRebateAccountItemCreate) defaults() {
 		v := resetrebateaccountitem.DefaultEffectiveStatRatio
 		_c.mutation.SetEffectiveStatRatio(v)
 	}
+	if _, ok := _c.mutation.IncludedInStatistics(); !ok {
+		v := resetrebateaccountitem.DefaultIncludedInStatistics
+		_c.mutation.SetIncludedInStatistics(v)
+	}
+	if _, ok := _c.mutation.StatisticsExclusionReason(); !ok {
+		v := resetrebateaccountitem.DefaultStatisticsExclusionReason
+		_c.mutation.SetStatisticsExclusionReason(v)
+	}
 	if _, ok := _c.mutation.RawAmount(); !ok {
 		v := resetrebateaccountitem.DefaultRawAmount
 		_c.mutation.SetRawAmount(v)
@@ -415,6 +451,12 @@ func (_c *ResetRebateAccountItemCreate) check() error {
 	}
 	if _, ok := _c.mutation.EffectiveStatRatio(); !ok {
 		return &ValidationError{Name: "effective_stat_ratio", err: errors.New(`ent: missing required field "ResetRebateAccountItem.effective_stat_ratio"`)}
+	}
+	if _, ok := _c.mutation.IncludedInStatistics(); !ok {
+		return &ValidationError{Name: "included_in_statistics", err: errors.New(`ent: missing required field "ResetRebateAccountItem.included_in_statistics"`)}
+	}
+	if _, ok := _c.mutation.StatisticsExclusionReason(); !ok {
+		return &ValidationError{Name: "statistics_exclusion_reason", err: errors.New(`ent: missing required field "ResetRebateAccountItem.statistics_exclusion_reason"`)}
 	}
 	if _, ok := _c.mutation.RawAmount(); !ok {
 		return &ValidationError{Name: "raw_amount", err: errors.New(`ent: missing required field "ResetRebateAccountItem.raw_amount"`)}
@@ -519,6 +561,14 @@ func (_c *ResetRebateAccountItemCreate) createSpec() (*ResetRebateAccountItem, *
 	if value, ok := _c.mutation.EffectiveStatRatio(); ok {
 		_spec.SetField(resetrebateaccountitem.FieldEffectiveStatRatio, field.TypeString, value)
 		_node.EffectiveStatRatio = value
+	}
+	if value, ok := _c.mutation.IncludedInStatistics(); ok {
+		_spec.SetField(resetrebateaccountitem.FieldIncludedInStatistics, field.TypeBool, value)
+		_node.IncludedInStatistics = value
+	}
+	if value, ok := _c.mutation.StatisticsExclusionReason(); ok {
+		_spec.SetField(resetrebateaccountitem.FieldStatisticsExclusionReason, field.TypeString, value)
+		_node.StatisticsExclusionReason = value
 	}
 	if value, ok := _c.mutation.RawAmount(); ok {
 		_spec.SetField(resetrebateaccountitem.FieldRawAmount, field.TypeString, value)
@@ -803,6 +853,30 @@ func (u *ResetRebateAccountItemUpsert) SetEffectiveStatRatio(v string) *ResetReb
 // UpdateEffectiveStatRatio sets the "effective_stat_ratio" field to the value that was provided on create.
 func (u *ResetRebateAccountItemUpsert) UpdateEffectiveStatRatio() *ResetRebateAccountItemUpsert {
 	u.SetExcluded(resetrebateaccountitem.FieldEffectiveStatRatio)
+	return u
+}
+
+// SetIncludedInStatistics sets the "included_in_statistics" field.
+func (u *ResetRebateAccountItemUpsert) SetIncludedInStatistics(v bool) *ResetRebateAccountItemUpsert {
+	u.Set(resetrebateaccountitem.FieldIncludedInStatistics, v)
+	return u
+}
+
+// UpdateIncludedInStatistics sets the "included_in_statistics" field to the value that was provided on create.
+func (u *ResetRebateAccountItemUpsert) UpdateIncludedInStatistics() *ResetRebateAccountItemUpsert {
+	u.SetExcluded(resetrebateaccountitem.FieldIncludedInStatistics)
+	return u
+}
+
+// SetStatisticsExclusionReason sets the "statistics_exclusion_reason" field.
+func (u *ResetRebateAccountItemUpsert) SetStatisticsExclusionReason(v string) *ResetRebateAccountItemUpsert {
+	u.Set(resetrebateaccountitem.FieldStatisticsExclusionReason, v)
+	return u
+}
+
+// UpdateStatisticsExclusionReason sets the "statistics_exclusion_reason" field to the value that was provided on create.
+func (u *ResetRebateAccountItemUpsert) UpdateStatisticsExclusionReason() *ResetRebateAccountItemUpsert {
+	u.SetExcluded(resetrebateaccountitem.FieldStatisticsExclusionReason)
 	return u
 }
 
@@ -1131,6 +1205,34 @@ func (u *ResetRebateAccountItemUpsertOne) SetEffectiveStatRatio(v string) *Reset
 func (u *ResetRebateAccountItemUpsertOne) UpdateEffectiveStatRatio() *ResetRebateAccountItemUpsertOne {
 	return u.Update(func(s *ResetRebateAccountItemUpsert) {
 		s.UpdateEffectiveStatRatio()
+	})
+}
+
+// SetIncludedInStatistics sets the "included_in_statistics" field.
+func (u *ResetRebateAccountItemUpsertOne) SetIncludedInStatistics(v bool) *ResetRebateAccountItemUpsertOne {
+	return u.Update(func(s *ResetRebateAccountItemUpsert) {
+		s.SetIncludedInStatistics(v)
+	})
+}
+
+// UpdateIncludedInStatistics sets the "included_in_statistics" field to the value that was provided on create.
+func (u *ResetRebateAccountItemUpsertOne) UpdateIncludedInStatistics() *ResetRebateAccountItemUpsertOne {
+	return u.Update(func(s *ResetRebateAccountItemUpsert) {
+		s.UpdateIncludedInStatistics()
+	})
+}
+
+// SetStatisticsExclusionReason sets the "statistics_exclusion_reason" field.
+func (u *ResetRebateAccountItemUpsertOne) SetStatisticsExclusionReason(v string) *ResetRebateAccountItemUpsertOne {
+	return u.Update(func(s *ResetRebateAccountItemUpsert) {
+		s.SetStatisticsExclusionReason(v)
+	})
+}
+
+// UpdateStatisticsExclusionReason sets the "statistics_exclusion_reason" field to the value that was provided on create.
+func (u *ResetRebateAccountItemUpsertOne) UpdateStatisticsExclusionReason() *ResetRebateAccountItemUpsertOne {
+	return u.Update(func(s *ResetRebateAccountItemUpsert) {
+		s.UpdateStatisticsExclusionReason()
 	})
 }
 
@@ -1629,6 +1731,34 @@ func (u *ResetRebateAccountItemUpsertBulk) SetEffectiveStatRatio(v string) *Rese
 func (u *ResetRebateAccountItemUpsertBulk) UpdateEffectiveStatRatio() *ResetRebateAccountItemUpsertBulk {
 	return u.Update(func(s *ResetRebateAccountItemUpsert) {
 		s.UpdateEffectiveStatRatio()
+	})
+}
+
+// SetIncludedInStatistics sets the "included_in_statistics" field.
+func (u *ResetRebateAccountItemUpsertBulk) SetIncludedInStatistics(v bool) *ResetRebateAccountItemUpsertBulk {
+	return u.Update(func(s *ResetRebateAccountItemUpsert) {
+		s.SetIncludedInStatistics(v)
+	})
+}
+
+// UpdateIncludedInStatistics sets the "included_in_statistics" field to the value that was provided on create.
+func (u *ResetRebateAccountItemUpsertBulk) UpdateIncludedInStatistics() *ResetRebateAccountItemUpsertBulk {
+	return u.Update(func(s *ResetRebateAccountItemUpsert) {
+		s.UpdateIncludedInStatistics()
+	})
+}
+
+// SetStatisticsExclusionReason sets the "statistics_exclusion_reason" field.
+func (u *ResetRebateAccountItemUpsertBulk) SetStatisticsExclusionReason(v string) *ResetRebateAccountItemUpsertBulk {
+	return u.Update(func(s *ResetRebateAccountItemUpsert) {
+		s.SetStatisticsExclusionReason(v)
+	})
+}
+
+// UpdateStatisticsExclusionReason sets the "statistics_exclusion_reason" field to the value that was provided on create.
+func (u *ResetRebateAccountItemUpsertBulk) UpdateStatisticsExclusionReason() *ResetRebateAccountItemUpsertBulk {
+	return u.Update(func(s *ResetRebateAccountItemUpsert) {
+		s.UpdateStatisticsExclusionReason()
 	})
 }
 

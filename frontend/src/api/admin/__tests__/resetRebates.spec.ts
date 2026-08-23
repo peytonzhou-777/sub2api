@@ -5,7 +5,7 @@ vi.mock('@/api/client', () => ({ apiClient: { get, post, delete: remove } }))
 
 import { accountWindowDefaults, create, execute, preview, retryFailures } from '@/api/admin/resetRebates'
 
-describe('reset rebates v2 api', () => {
+describe('reset rebates v3 api', () => {
   beforeEach(() => {
     for (const fn of [get, post, remove]) {
       fn.mockReset()
@@ -16,16 +16,19 @@ describe('reset rebates v2 api', () => {
   it('creates an account-scoped batch with server window defaults', async () => {
     await accountWindowDefaults([11, 12])
     await create({
-      mechanism_version: 2,
+      mechanism_version: 3,
+      period_end: '2026-08-05T00:00:00Z',
+      average_benefit_enabled: true,
       force_stat_ratio_enabled: true,
       force_stat_ratio: '100',
       acknowledged_error_account_ids: [12],
-      accounts: [{ account_id: 11, period_start: '2026-08-01T00:00:00Z', period_end: '2026-08-05T00:00:00Z', ratio_mode: 'manual', manual_ratio: '80' }]
+      accounts: [{ account_id: 11, period_start: '2026-08-01T00:00:00Z', ratio_mode: 'manual', manual_ratio: '80', default_window_version: 'v1', window_modified: false }]
     })
 
     expect(post).toHaveBeenNthCalledWith(1, '/admin/reset-rebates/account-window-defaults', { account_ids: [11, 12] })
     expect(post.mock.calls[1][0]).toBe('/admin/reset-rebates')
-    expect(post.mock.calls[1][1]).toMatchObject({ mechanism_version: 2, force_stat_ratio: '100', acknowledged_error_account_ids: [12] })
+    expect(post.mock.calls[1][1]).toMatchObject({ mechanism_version: 3, period_end: '2026-08-05T00:00:00Z', average_benefit_enabled: true, force_stat_ratio: '100', acknowledged_error_account_ids: [12] })
+    expect(post.mock.calls[1][1].accounts[0]).not.toHaveProperty('period_end')
   })
 
   it('freezes preview version and retries only failed users', async () => {

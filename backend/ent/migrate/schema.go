@@ -1864,6 +1864,8 @@ var (
 		{Name: "auto_stat_ratio", Type: field.TypeString, Default: "0", SchemaType: map[string]string{"postgres": "decimal(11,8)"}},
 		{Name: "manual_stat_ratio", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(11,8)"}},
 		{Name: "effective_stat_ratio", Type: field.TypeString, Default: "0", SchemaType: map[string]string{"postgres": "decimal(11,8)"}},
+		{Name: "included_in_statistics", Type: field.TypeBool, Default: true},
+		{Name: "statistics_exclusion_reason", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "raw_amount", Type: field.TypeString, Default: "0", SchemaType: map[string]string{"postgres": "decimal(30,16)"}},
 		{Name: "weighted_amount", Type: field.TypeString, Default: "0", SchemaType: map[string]string{"postgres": "decimal(30,16)"}},
 		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
@@ -1889,7 +1891,7 @@ var (
 	// ResetRebateBatchesColumns holds the columns for the "reset_rebate_batches" table.
 	ResetRebateBatchesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
-		{Name: "mechanism_version", Type: field.TypeInt, Default: 2},
+		{Name: "mechanism_version", Type: field.TypeInt, Default: 3},
 		{Name: "group_id", Type: field.TypeInt64, Nullable: true},
 		{Name: "group_name", Type: field.TypeString, Size: 100, Default: ""},
 		{Name: "admin_id", Type: field.TypeInt64},
@@ -1905,7 +1907,12 @@ var (
 		{Name: "initial_issued_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "force_stat_ratio_enabled", Type: field.TypeBool, Default: false},
 		{Name: "force_stat_ratio", Type: field.TypeString, Default: "100", SchemaType: map[string]string{"postgres": "decimal(11,8)"}},
+		{Name: "average_benefit_enabled", Type: field.TypeBool, Default: false},
+		{Name: "average_benefit_duration_us", Type: field.TypeInt64, Default: 0},
+		{Name: "average_benefit_ratio", Type: field.TypeString, Default: "0", SchemaType: map[string]string{"postgres": "decimal(11,8)"}},
+		{Name: "combined_payout_ratio", Type: field.TypeString, Default: "0", SchemaType: map[string]string{"postgres": "decimal(11,8)"}},
 		{Name: "account_count", Type: field.TypeInt, Default: 0},
+		{Name: "excluded_account_count", Type: field.TypeInt, Default: 0},
 		{Name: "risk_account_count", Type: field.TypeInt, Default: 0},
 		{Name: "progress_total", Type: field.TypeInt, Default: 0},
 		{Name: "progress_completed", Type: field.TypeInt, Default: 0},
@@ -1940,17 +1947,17 @@ var (
 			{
 				Name:    "resetrebatebatch_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{ResetRebateBatchesColumns[8], ResetRebateBatchesColumns[40]},
+				Columns: []*schema.Column{ResetRebateBatchesColumns[8], ResetRebateBatchesColumns[45]},
 			},
 			{
 				Name:    "resetrebatebatch_admin_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{ResetRebateBatchesColumns[4], ResetRebateBatchesColumns[40]},
+				Columns: []*schema.Column{ResetRebateBatchesColumns[4], ResetRebateBatchesColumns[45]},
 			},
 			{
 				Name:    "resetrebatebatch_mechanism_version_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{ResetRebateBatchesColumns[1], ResetRebateBatchesColumns[40]},
+				Columns: []*schema.Column{ResetRebateBatchesColumns[1], ResetRebateBatchesColumns[45]},
 			},
 		},
 	}

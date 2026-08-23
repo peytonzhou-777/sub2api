@@ -317,6 +317,69 @@ func (_u *ResetRebateBatchUpdate) SetNillableForceStatRatio(v *string) *ResetReb
 	return _u
 }
 
+// SetAverageBenefitEnabled sets the "average_benefit_enabled" field.
+func (_u *ResetRebateBatchUpdate) SetAverageBenefitEnabled(v bool) *ResetRebateBatchUpdate {
+	_u.mutation.SetAverageBenefitEnabled(v)
+	return _u
+}
+
+// SetNillableAverageBenefitEnabled sets the "average_benefit_enabled" field if the given value is not nil.
+func (_u *ResetRebateBatchUpdate) SetNillableAverageBenefitEnabled(v *bool) *ResetRebateBatchUpdate {
+	if v != nil {
+		_u.SetAverageBenefitEnabled(*v)
+	}
+	return _u
+}
+
+// SetAverageBenefitDurationUs sets the "average_benefit_duration_us" field.
+func (_u *ResetRebateBatchUpdate) SetAverageBenefitDurationUs(v int64) *ResetRebateBatchUpdate {
+	_u.mutation.ResetAverageBenefitDurationUs()
+	_u.mutation.SetAverageBenefitDurationUs(v)
+	return _u
+}
+
+// SetNillableAverageBenefitDurationUs sets the "average_benefit_duration_us" field if the given value is not nil.
+func (_u *ResetRebateBatchUpdate) SetNillableAverageBenefitDurationUs(v *int64) *ResetRebateBatchUpdate {
+	if v != nil {
+		_u.SetAverageBenefitDurationUs(*v)
+	}
+	return _u
+}
+
+// AddAverageBenefitDurationUs adds value to the "average_benefit_duration_us" field.
+func (_u *ResetRebateBatchUpdate) AddAverageBenefitDurationUs(v int64) *ResetRebateBatchUpdate {
+	_u.mutation.AddAverageBenefitDurationUs(v)
+	return _u
+}
+
+// SetAverageBenefitRatio sets the "average_benefit_ratio" field.
+func (_u *ResetRebateBatchUpdate) SetAverageBenefitRatio(v string) *ResetRebateBatchUpdate {
+	_u.mutation.SetAverageBenefitRatio(v)
+	return _u
+}
+
+// SetNillableAverageBenefitRatio sets the "average_benefit_ratio" field if the given value is not nil.
+func (_u *ResetRebateBatchUpdate) SetNillableAverageBenefitRatio(v *string) *ResetRebateBatchUpdate {
+	if v != nil {
+		_u.SetAverageBenefitRatio(*v)
+	}
+	return _u
+}
+
+// SetCombinedPayoutRatio sets the "combined_payout_ratio" field.
+func (_u *ResetRebateBatchUpdate) SetCombinedPayoutRatio(v string) *ResetRebateBatchUpdate {
+	_u.mutation.SetCombinedPayoutRatio(v)
+	return _u
+}
+
+// SetNillableCombinedPayoutRatio sets the "combined_payout_ratio" field if the given value is not nil.
+func (_u *ResetRebateBatchUpdate) SetNillableCombinedPayoutRatio(v *string) *ResetRebateBatchUpdate {
+	if v != nil {
+		_u.SetCombinedPayoutRatio(*v)
+	}
+	return _u
+}
+
 // SetAccountCount sets the "account_count" field.
 func (_u *ResetRebateBatchUpdate) SetAccountCount(v int) *ResetRebateBatchUpdate {
 	_u.mutation.ResetAccountCount()
@@ -335,6 +398,27 @@ func (_u *ResetRebateBatchUpdate) SetNillableAccountCount(v *int) *ResetRebateBa
 // AddAccountCount adds value to the "account_count" field.
 func (_u *ResetRebateBatchUpdate) AddAccountCount(v int) *ResetRebateBatchUpdate {
 	_u.mutation.AddAccountCount(v)
+	return _u
+}
+
+// SetExcludedAccountCount sets the "excluded_account_count" field.
+func (_u *ResetRebateBatchUpdate) SetExcludedAccountCount(v int) *ResetRebateBatchUpdate {
+	_u.mutation.ResetExcludedAccountCount()
+	_u.mutation.SetExcludedAccountCount(v)
+	return _u
+}
+
+// SetNillableExcludedAccountCount sets the "excluded_account_count" field if the given value is not nil.
+func (_u *ResetRebateBatchUpdate) SetNillableExcludedAccountCount(v *int) *ResetRebateBatchUpdate {
+	if v != nil {
+		_u.SetExcludedAccountCount(*v)
+	}
+	return _u
+}
+
+// AddExcludedAccountCount adds value to the "excluded_account_count" field.
+func (_u *ResetRebateBatchUpdate) AddExcludedAccountCount(v int) *ResetRebateBatchUpdate {
+	_u.mutation.AddExcludedAccountCount(v)
 	return _u
 }
 
@@ -927,11 +1011,32 @@ func (_u *ResetRebateBatchUpdate) sqlSave(ctx context.Context) (_node int, err e
 	if value, ok := _u.mutation.ForceStatRatio(); ok {
 		_spec.SetField(resetrebatebatch.FieldForceStatRatio, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.AverageBenefitEnabled(); ok {
+		_spec.SetField(resetrebatebatch.FieldAverageBenefitEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.AverageBenefitDurationUs(); ok {
+		_spec.SetField(resetrebatebatch.FieldAverageBenefitDurationUs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedAverageBenefitDurationUs(); ok {
+		_spec.AddField(resetrebatebatch.FieldAverageBenefitDurationUs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AverageBenefitRatio(); ok {
+		_spec.SetField(resetrebatebatch.FieldAverageBenefitRatio, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CombinedPayoutRatio(); ok {
+		_spec.SetField(resetrebatebatch.FieldCombinedPayoutRatio, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.AccountCount(); ok {
 		_spec.SetField(resetrebatebatch.FieldAccountCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedAccountCount(); ok {
 		_spec.AddField(resetrebatebatch.FieldAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.ExcludedAccountCount(); ok {
+		_spec.SetField(resetrebatebatch.FieldExcludedAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedExcludedAccountCount(); ok {
+		_spec.AddField(resetrebatebatch.FieldExcludedAccountCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.RiskAccountCount(); ok {
 		_spec.SetField(resetrebatebatch.FieldRiskAccountCount, field.TypeInt, value)
@@ -1353,6 +1458,69 @@ func (_u *ResetRebateBatchUpdateOne) SetNillableForceStatRatio(v *string) *Reset
 	return _u
 }
 
+// SetAverageBenefitEnabled sets the "average_benefit_enabled" field.
+func (_u *ResetRebateBatchUpdateOne) SetAverageBenefitEnabled(v bool) *ResetRebateBatchUpdateOne {
+	_u.mutation.SetAverageBenefitEnabled(v)
+	return _u
+}
+
+// SetNillableAverageBenefitEnabled sets the "average_benefit_enabled" field if the given value is not nil.
+func (_u *ResetRebateBatchUpdateOne) SetNillableAverageBenefitEnabled(v *bool) *ResetRebateBatchUpdateOne {
+	if v != nil {
+		_u.SetAverageBenefitEnabled(*v)
+	}
+	return _u
+}
+
+// SetAverageBenefitDurationUs sets the "average_benefit_duration_us" field.
+func (_u *ResetRebateBatchUpdateOne) SetAverageBenefitDurationUs(v int64) *ResetRebateBatchUpdateOne {
+	_u.mutation.ResetAverageBenefitDurationUs()
+	_u.mutation.SetAverageBenefitDurationUs(v)
+	return _u
+}
+
+// SetNillableAverageBenefitDurationUs sets the "average_benefit_duration_us" field if the given value is not nil.
+func (_u *ResetRebateBatchUpdateOne) SetNillableAverageBenefitDurationUs(v *int64) *ResetRebateBatchUpdateOne {
+	if v != nil {
+		_u.SetAverageBenefitDurationUs(*v)
+	}
+	return _u
+}
+
+// AddAverageBenefitDurationUs adds value to the "average_benefit_duration_us" field.
+func (_u *ResetRebateBatchUpdateOne) AddAverageBenefitDurationUs(v int64) *ResetRebateBatchUpdateOne {
+	_u.mutation.AddAverageBenefitDurationUs(v)
+	return _u
+}
+
+// SetAverageBenefitRatio sets the "average_benefit_ratio" field.
+func (_u *ResetRebateBatchUpdateOne) SetAverageBenefitRatio(v string) *ResetRebateBatchUpdateOne {
+	_u.mutation.SetAverageBenefitRatio(v)
+	return _u
+}
+
+// SetNillableAverageBenefitRatio sets the "average_benefit_ratio" field if the given value is not nil.
+func (_u *ResetRebateBatchUpdateOne) SetNillableAverageBenefitRatio(v *string) *ResetRebateBatchUpdateOne {
+	if v != nil {
+		_u.SetAverageBenefitRatio(*v)
+	}
+	return _u
+}
+
+// SetCombinedPayoutRatio sets the "combined_payout_ratio" field.
+func (_u *ResetRebateBatchUpdateOne) SetCombinedPayoutRatio(v string) *ResetRebateBatchUpdateOne {
+	_u.mutation.SetCombinedPayoutRatio(v)
+	return _u
+}
+
+// SetNillableCombinedPayoutRatio sets the "combined_payout_ratio" field if the given value is not nil.
+func (_u *ResetRebateBatchUpdateOne) SetNillableCombinedPayoutRatio(v *string) *ResetRebateBatchUpdateOne {
+	if v != nil {
+		_u.SetCombinedPayoutRatio(*v)
+	}
+	return _u
+}
+
 // SetAccountCount sets the "account_count" field.
 func (_u *ResetRebateBatchUpdateOne) SetAccountCount(v int) *ResetRebateBatchUpdateOne {
 	_u.mutation.ResetAccountCount()
@@ -1371,6 +1539,27 @@ func (_u *ResetRebateBatchUpdateOne) SetNillableAccountCount(v *int) *ResetRebat
 // AddAccountCount adds value to the "account_count" field.
 func (_u *ResetRebateBatchUpdateOne) AddAccountCount(v int) *ResetRebateBatchUpdateOne {
 	_u.mutation.AddAccountCount(v)
+	return _u
+}
+
+// SetExcludedAccountCount sets the "excluded_account_count" field.
+func (_u *ResetRebateBatchUpdateOne) SetExcludedAccountCount(v int) *ResetRebateBatchUpdateOne {
+	_u.mutation.ResetExcludedAccountCount()
+	_u.mutation.SetExcludedAccountCount(v)
+	return _u
+}
+
+// SetNillableExcludedAccountCount sets the "excluded_account_count" field if the given value is not nil.
+func (_u *ResetRebateBatchUpdateOne) SetNillableExcludedAccountCount(v *int) *ResetRebateBatchUpdateOne {
+	if v != nil {
+		_u.SetExcludedAccountCount(*v)
+	}
+	return _u
+}
+
+// AddExcludedAccountCount adds value to the "excluded_account_count" field.
+func (_u *ResetRebateBatchUpdateOne) AddExcludedAccountCount(v int) *ResetRebateBatchUpdateOne {
+	_u.mutation.AddExcludedAccountCount(v)
 	return _u
 }
 
@@ -1993,11 +2182,32 @@ func (_u *ResetRebateBatchUpdateOne) sqlSave(ctx context.Context) (_node *ResetR
 	if value, ok := _u.mutation.ForceStatRatio(); ok {
 		_spec.SetField(resetrebatebatch.FieldForceStatRatio, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.AverageBenefitEnabled(); ok {
+		_spec.SetField(resetrebatebatch.FieldAverageBenefitEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.AverageBenefitDurationUs(); ok {
+		_spec.SetField(resetrebatebatch.FieldAverageBenefitDurationUs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedAverageBenefitDurationUs(); ok {
+		_spec.AddField(resetrebatebatch.FieldAverageBenefitDurationUs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AverageBenefitRatio(); ok {
+		_spec.SetField(resetrebatebatch.FieldAverageBenefitRatio, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CombinedPayoutRatio(); ok {
+		_spec.SetField(resetrebatebatch.FieldCombinedPayoutRatio, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.AccountCount(); ok {
 		_spec.SetField(resetrebatebatch.FieldAccountCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedAccountCount(); ok {
 		_spec.AddField(resetrebatebatch.FieldAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.ExcludedAccountCount(); ok {
+		_spec.SetField(resetrebatebatch.FieldExcludedAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedExcludedAccountCount(); ok {
+		_spec.AddField(resetrebatebatch.FieldExcludedAccountCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.RiskAccountCount(); ok {
 		_spec.SetField(resetrebatebatch.FieldRiskAccountCount, field.TypeInt, value)

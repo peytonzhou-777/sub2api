@@ -7,7 +7,7 @@
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">按账号用量窗口统计并向用户发放限时额度</p>
         </div>
         <div class="grid grid-cols-2 rounded border border-gray-200 p-1 dark:border-dark-600">
-          <button type="button" class="h-9 px-4 text-sm font-medium" :class="viewMode === 'create' ? activeSegmentClass : inactiveSegmentClass" @click="viewMode = 'create'">新建返利</button>
+          <button type="button" class="h-9 px-4 text-sm font-medium" :class="viewMode === 'create' ? activeSegmentClass : inactiveSegmentClass" @click="openCreate">新建返利</button>
           <button type="button" class="h-9 px-4 text-sm font-medium" :class="viewMode === 'history' ? activeSegmentClass : inactiveSegmentClass" @click="openHistory">历史批次</button>
         </div>
       </div>
@@ -17,7 +17,7 @@
           <div class="flex flex-wrap items-center justify-between gap-3 px-4">
             <div>
               <h2 class="text-base font-semibold text-gray-900 dark:text-white">1. 选择统计账号</h2>
-              <p class="mt-1 text-sm text-gray-500">已选择 {{ selectedIds.size }} / {{ accounts.length }} 个账号，其中错误 {{ selectedErrorAccounts.length }} 个、风险窗口 {{ selectedRiskCount }} 个</p>
+              <p class="mt-1 text-sm text-gray-500">已选择 {{ selectedIds.size }} / {{ accounts.length }} 个账号，有效 {{ selectedValidIds.length }} 个、将排除 {{ selectedInvalidAccounts.length }} 个、错误 {{ selectedErrorAccounts.length }} 个</p>
             </div>
             <button class="btn btn-secondary" :disabled="accountsLoading" @click="loadAccounts(true)">
               <Icon name="refresh" size="sm" />刷新账号
@@ -55,7 +55,7 @@
             <button class="btn btn-secondary" @click="selectAllFiltered">选择全部筛选结果</button>
             <button class="btn btn-secondary" @click="clearSelection">清空选择</button>
             <button class="btn btn-secondary" :disabled="selectedIds.size < 2 || defaultsLoading" @click="openBulkWindowEditor">
-              <Icon name="edit" size="sm" />批量设置统计窗口
+              <Icon name="edit" size="sm" />批量设置开始时间
             </button>
             <span v-if="defaultsLoading" class="text-gray-500">正在读取账号窗口...</span>
           </div>
@@ -86,7 +86,8 @@
                     <template v-if="selectedIds.has(account.id)">
                       <p class="whitespace-nowrap text-xs text-gray-700 dark:text-gray-200">{{ windowText(account.id) }}</p>
                       <p class="mt-1 text-xs text-gray-500">{{ windowDurationText(account.id) }}</p>
-                      <p v-if="draftFor(account.id)?.risk" class="mt-1 text-xs text-amber-700 dark:text-amber-300">{{ riskText(draftFor(account.id)?.risk) }}</p>
+                      <p v-if="isInvalidAccount(account.id)" class="mt-1 text-xs text-red-600 dark:text-red-400">开始时间不早于结束时间，将自动排除</p>
+                      <p v-else-if="draftFor(account.id)?.risk" class="mt-1 text-xs text-amber-700 dark:text-amber-300">{{ riskText(draftFor(account.id)?.risk) }}</p>
                     </template>
                     <span v-else class="text-gray-400">选择后加载</span>
                   </td>
@@ -98,7 +99,7 @@
                     <span v-else class="text-gray-400">-</span>
                   </td>
                   <td class="px-4 py-3 text-right">
-                    <button v-if="selectedIds.has(account.id)" class="rounded p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-dark-700 dark:hover:text-white" title="修改统计窗口和比例" @click="openAccountEditor(account)">
+                    <button v-if="selectedIds.has(account.id)" class="rounded p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-dark-700 dark:hover:text-white" title="修改开始时间和比例" @click="openAccountEditor(account)">
                       <Icon name="edit" size="sm" />
                     </button>
                   </td>
@@ -120,7 +121,14 @@
 
         <section class="border-y border-gray-200 bg-white px-4 py-4 dark:border-dark-700 dark:bg-dark-800">
           <h2 class="text-base font-semibold text-gray-900 dark:text-white">2. 配置统计规则</h2>
+          <div class="mt-4 flex flex-wrap items-end gap-3">
+            <label class="block"><span class="input-label">统一结束时间</span><input v-model="batchPeriodEnd" type="datetime-local" class="input w-64" /></label>
+            <button class="btn btn-secondary" type="button" @click="setPeriodEndToNow"><Icon name="refresh" size="sm" />设为当前时间</button>
+          </div>
           <div class="mt-4 flex flex-wrap items-center gap-4">
+            <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+              <input v-model="averageBenefitEnabled" type="checkbox" />全账号平均受益周期和比例
+            </label>
             <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
               <input v-model="forceRatioEnabled" type="checkbox" />强制覆盖所有账号统计比例
             </label>
@@ -130,6 +138,11 @@
             </label>
           </div>
           <p class="mt-2 text-sm text-gray-500">未覆盖时，账号默认统计比例 = (7 天 - 统计窗口时长) / 7 天；可在账号行中单独改为手动比例。</p>
+          <div v-if="averageBenefitEnabled && selectedValidIds.length > 0" class="mt-4 grid gap-3 border-y border-gray-100 bg-gray-50 px-3 py-3 text-sm sm:grid-cols-3 dark:border-dark-700 dark:bg-dark-900/40">
+            <div><p class="text-xs text-gray-500">平均受益周期</p><p class="mt-1 font-medium">{{ averageDurationText }}</p></div>
+            <div><p class="text-xs text-gray-500">实际统计窗口</p><p class="mt-1 text-xs font-medium">{{ averageWindowText }}</p></div>
+            <div><p class="text-xs text-gray-500">平均受益比例</p><p class="mt-1 font-medium">{{ averageRatioText }}%</p></div>
+          </div>
           <div class="mt-5 flex justify-end">
             <button class="btn btn-primary" :disabled="creating || selectedIds.size === 0 || defaultsLoading" @click="requestCreate">
               <Icon name="play" size="sm" />生成统计批次
@@ -144,18 +157,19 @@
             <div class="flex items-center gap-2">
               <h2 class="font-semibold text-gray-900 dark:text-white">批次 #{{ activeBatch.id }}</h2>
               <span :class="statusClass(activeBatch.status)" class="rounded px-2 py-1 text-xs font-medium">{{ statusText(activeBatch) }}</span>
-              <span v-if="activeBatch.mechanism_version === 1" class="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600 dark:bg-dark-700 dark:text-gray-300">旧版只读</span>
+              <span v-if="activeBatch.mechanism_version !== 3" class="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600 dark:bg-dark-700 dark:text-gray-300">旧版只读</span>
             </div>
-            <p class="mt-1 text-sm text-gray-500">创建于 {{ localDate(activeBatch.created_at) }}，{{ activeBatch.account_count }} 个账号</p>
+            <p class="mt-1 text-sm text-gray-500">创建于 {{ localDate(activeBatch.created_at) }}，{{ activeBatch.account_count }} 个账号<span v-if="activeBatch.excluded_account_count">，排除 {{ activeBatch.excluded_account_count }} 个</span></p>
           </div>
           <div class="flex flex-wrap gap-2">
-            <button v-if="activeBatch.mechanism_version === 2" class="btn btn-secondary" @click="downloadExport('users')"><Icon name="download" size="sm" />用户汇总</button>
-            <button v-if="activeBatch.mechanism_version === 2" class="btn btn-secondary" @click="downloadExport('user-account-contributions')"><Icon name="download" size="sm" />账号贡献</button>
+            <button v-if="activeBatch.mechanism_version >= 2" class="btn btn-secondary" @click="downloadExport('users')"><Icon name="download" size="sm" />用户汇总</button>
+            <button v-if="activeBatch.mechanism_version >= 2" class="btn btn-secondary" @click="downloadExport('accounts')"><Icon name="download" size="sm" />账号快照</button>
+            <button v-if="activeBatch.mechanism_version >= 2" class="btn btn-secondary" @click="downloadExport('user-account-contributions')"><Icon name="download" size="sm" />账号贡献</button>
             <button class="btn btn-secondary" @click="closeBatch">返回</button>
           </div>
         </div>
 
-        <div v-if="['running', 'executing'].includes(activeBatch.status)" class="border-y border-gray-200 bg-white px-4 py-10 text-center dark:border-dark-700 dark:bg-dark-800">
+        <div v-if="activeBatch.mechanism_version === 3 && ['running', 'executing'].includes(activeBatch.status)" class="border-y border-gray-200 bg-white px-4 py-10 text-center dark:border-dark-700 dark:bg-dark-800">
           <Icon name="refresh" class="mx-auto animate-spin text-gray-500" />
           <p class="mt-3 font-medium">{{ activeBatch.status === 'running' ? '正在本地统计账号用量' : '正在后台发放返利' }}</p>
           <p v-if="activeBatch.status === 'running'" class="mt-1 text-sm text-gray-500">{{ activeBatch.progress_completed }} / {{ activeBatch.progress_total }}</p>
@@ -163,8 +177,14 @@
         </div>
 
         <template v-else>
-          <div v-if="activeBatch.mechanism_version === 1" class="border-y border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-300">
-            该批次由旧版按分组机制生成，仅供历史审计，不可预览、执行或重试。
+          <div v-if="activeBatch.mechanism_version !== 3" class="border-y border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-300">
+该批次使用旧版机制，仅供历史审计，不可预览、执行、重试或删除。
+          </div>
+
+          <div v-if="activeBatch.mechanism_version === 3 && activeBatch.average_benefit_enabled" class="grid gap-3 border-y border-gray-200 bg-white px-4 py-3 text-sm sm:grid-cols-3 dark:border-dark-700 dark:bg-dark-800">
+            <div><p class="text-xs text-gray-500">实际统计窗口</p><p class="mt-1">{{ activeBatch.period_start ? localDate(activeBatch.period_start) : '-' }} 至 {{ activeBatch.period_end ? localDate(activeBatch.period_end) : '-' }}</p></div>
+            <div><p class="text-xs text-gray-500">平均受益比例</p><p class="mt-1 font-medium">{{ activeBatch.average_benefit_ratio }}%</p></div>
+            <div><p class="text-xs text-gray-500">最终组合比例</p><p class="mt-1 font-medium">{{ activeBatch.payout_ratio ? `${activeBatch.combined_payout_ratio}%` : '待设置平台比例' }}</p></div>
           </div>
 
           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -176,14 +196,14 @@
 
           <section class="border-y border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800">
             <div class="px-4 py-4"><h3 class="font-semibold text-gray-900 dark:text-white">账号统计快照</h3><p class="mt-1 text-sm text-gray-500">账号状态、窗口和比例均为创建批次时冻结的值</p></div>
-            <div class="overflow-x-auto border-t border-gray-100 dark:border-dark-700"><table class="w-full min-w-[980px] text-left text-sm"><thead class="bg-gray-50 text-gray-500 dark:bg-dark-700 dark:text-gray-300"><tr><th class="px-4 py-3">账号</th><th class="px-4 py-3">状态</th><th class="px-4 py-3">统计窗口</th><th class="px-4 py-3">比例模式 / 有效比例</th><th class="px-4 py-3">原始消耗</th><th class="px-4 py-3">计入统计</th></tr></thead><tbody class="divide-y divide-gray-100 dark:divide-dark-700"><tr v-for="account in batchAccounts" :key="account.account_id"><td class="px-4 py-3"><p class="font-medium">{{ account.account_name }}</p><p class="text-xs text-gray-500">#{{ account.account_id }} · {{ account.platform }} / {{ account.account_type }}</p></td><td class="px-4 py-3"><p>{{ account.account_status }}</p><p v-if="account.account_error_message" class="max-w-[260px] break-words text-xs text-red-600">{{ account.account_error_message }}</p></td><td class="px-4 py-3 text-xs"><p>{{ localDate(account.period_start) }} 至 {{ localDate(account.period_end) }}</p><p v-if="account.window_risk" class="mt-1 text-amber-700">{{ riskText(account.window_risk) }}</p></td><td class="px-4 py-3">{{ account.ratio_mode === 'manual' ? '手动' : '自动' }} / {{ account.effective_stat_ratio }}%</td><td class="px-4 py-3">${{ money(account.raw_amount) }}</td><td class="px-4 py-3">${{ money(account.weighted_amount) }}</td></tr><tr v-if="batchAccounts.length === 0"><td colspan="6" class="px-4 py-8 text-center text-gray-500">暂无账号快照</td></tr></tbody></table></div>
+            <div class="overflow-x-auto border-t border-gray-100 dark:border-dark-700"><table class="w-full min-w-[980px] text-left text-sm"><thead class="bg-gray-50 text-gray-500 dark:bg-dark-700 dark:text-gray-300"><tr><th class="px-4 py-3">账号</th><th class="px-4 py-3">状态</th><th class="px-4 py-3">统计窗口</th><th class="px-4 py-3">比例模式 / 有效比例</th><th class="px-4 py-3">原始消耗</th><th class="px-4 py-3">计入统计</th></tr></thead><tbody class="divide-y divide-gray-100 dark:divide-dark-700"><tr v-for="account in batchAccounts" :key="account.account_id"><td class="px-4 py-3"><p class="font-medium">{{ account.account_name }}</p><p class="text-xs text-gray-500">#{{ account.account_id }} · {{ account.platform }} / {{ account.account_type }}</p></td><td class="px-4 py-3"><p>{{ account.account_status }}</p><p v-if="account.account_error_message" class="max-w-[260px] break-words text-xs text-red-600">{{ account.account_error_message }}</p><p v-if="!account.included_in_statistics" class="mt-1 text-xs text-red-600">已排除：{{ account.statistics_exclusion_reason }}</p></td><td class="px-4 py-3 text-xs"><p>{{ localDate(account.period_start) }} 至 {{ localDate(account.period_end) }}</p><p v-if="!account.included_in_statistics" class="mt-1 text-red-600">排除时配置</p><p v-if="account.window_risk" class="mt-1 text-amber-700">{{ riskText(account.window_risk) }}</p></td><td class="px-4 py-3">{{ account.included_in_statistics ? `${ratioModeText(account.ratio_mode)} / ${account.effective_stat_ratio}%` : '-' }}</td><td class="px-4 py-3">${{ money(account.raw_amount) }}</td><td class="px-4 py-3">${{ money(account.weighted_amount) }}</td></tr><tr v-if="batchAccounts.length === 0"><td colspan="6" class="px-4 py-8 text-center text-gray-500">暂无账号快照</td></tr></tbody></table></div>
           </section>
 
           <div v-if="activeBatch.failure_message" class="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
             {{ activeBatch.failure_message }}
           </div>
 
-          <section v-if="activeBatch.mechanism_version === 2 && activeBatch.status === 'ready'" class="border-y border-gray-200 bg-white px-4 py-4 dark:border-dark-700 dark:bg-dark-800">
+          <section v-if="activeBatch.mechanism_version === 3 && activeBatch.status === 'ready'" class="border-y border-gray-200 bg-white px-4 py-4 dark:border-dark-700 dark:bg-dark-800">
             <div class="flex flex-wrap items-end gap-4">
               <label class="block"><span class="input-label">发放比例</span><span class="flex items-center gap-2"><input v-model.number="payoutRatio" class="input w-32" type="number" min="1" max="100" step="1" /><span>%</span></span></label>
               <label class="min-w-[280px] flex-1"><span class="input-label">发放原因</span><input v-model="rebateReason" class="input" maxlength="100" /></label>
@@ -198,7 +218,7 @@
                 <p class="mt-1 text-sm text-gray-500">预计 {{ activeBatch.expected_user_count }} 人，成功 {{ activeBatch.successful_user_count }} 人，失败 {{ activeBatch.failed_user_count }} 人，排除 {{ activeBatch.excluded_user_count }} 人</p>
               </div>
               <div class="flex flex-wrap gap-2">
-                <button v-if="activeBatch.status === 'ready' && previewLoaded" class="btn btn-primary" @click="showExecuteConfirm = true">确认发放</button>
+                <button v-if="activeBatch.mechanism_version === 3 && activeBatch.status === 'ready' && previewLoaded" class="btn btn-primary" @click="showExecuteConfirm = true">确认发放</button>
                 <button v-if="canRetry" class="btn btn-primary" :disabled="executing" @click="showRetryConfirm = true"><Icon name="refresh" size="sm" />重试失败用户</button>
                 <button v-if="activeBatch.failed_user_count > 0" class="btn btn-secondary" @click="downloadExport('failed-users')"><Icon name="download" size="sm" />失败名单</button>
               </div>
@@ -219,7 +239,7 @@
                       <td class="px-4 py-3">${{ money(user.expected_amount) }} / ${{ money(user.actual_issued_amount) }}</td>
                       <td class="px-4 py-3"><span :class="resultClass(user.result)" class="rounded px-2 py-1 text-xs font-medium">{{ resultText(user.result) }}</span></td>
                       <td class="max-w-[300px] break-words px-4 py-3 text-xs text-red-600 dark:text-red-400">{{ user.error_message || user.exclusion_reason || '-' }}</td>
-                      <td class="px-4 py-3 text-right"><button v-if="activeBatch.mechanism_version === 2" class="rounded p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-dark-700" title="查看账号贡献" @click="toggleContributions(user)"><Icon :name="expandedUserId === user.user_id ? 'chevronUp' : 'chevronDown'" size="sm" /></button><span v-else>-</span></td>
+                      <td class="px-4 py-3 text-right"><button v-if="activeBatch.mechanism_version >= 2" class="rounded p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-dark-700" title="查看账号贡献" @click="toggleContributions(user)"><Icon :name="expandedUserId === user.user_id ? 'chevronUp' : 'chevronDown'" size="sm" /></button><span v-else>-</span></td>
                     </tr>
                     <tr v-if="expandedUserId === user.user_id"><td colspan="6" class="bg-gray-50 px-6 py-3 dark:bg-dark-900/40">
                       <div v-if="contributionsLoading" class="text-xs text-gray-500">正在加载贡献明细...</div>
@@ -259,7 +279,7 @@
                 <td class="px-4 py-3"><p>v{{ batch.mechanism_version }}</p><span :class="statusClass(batch.status)" class="mt-1 inline-flex rounded px-2 py-1 text-xs font-medium">{{ statusText(batch) }}</span></td>
                 <td class="px-4 py-3">{{ batch.account_count }} / {{ batch.expected_user_count }}<p class="text-xs text-gray-500">成功 {{ batch.successful_user_count }} · 排除 {{ batch.excluded_user_count }} · 失败 {{ batch.failed_user_count }}</p></td>
                 <td class="px-4 py-3 text-xs">{{ batch.period_start ? localDate(batch.period_start) : '-' }}<br />至 {{ batch.period_end ? localDate(batch.period_end) : '-' }}</td>
-                <td class="px-4 py-3">${{ money(batch.expected_amount) }} / ${{ money(batch.successful_amount) }}<p class="text-xs text-gray-500">发放比例 {{ batch.payout_ratio ?? '-' }}%</p></td>
+                <td class="px-4 py-3">${{ money(batch.expected_amount) }} / ${{ money(batch.successful_amount) }}<p class="text-xs text-gray-500">{{ batch.average_benefit_enabled ? `组合比例 ${batch.payout_ratio ? batch.combined_payout_ratio : '-'}%` : `发放比例 ${batch.payout_ratio ?? '-'}%` }}</p></td>
                 <td class="px-4 py-3 text-xs"><p>创建：{{ batch.admin_email || `#${batch.admin_id}` }}</p><p>执行：{{ batch.executed_by_admin_email || (batch.executed_by_admin_id ? `#${batch.executed_by_admin_id}` : '-') }}</p><p>重试：{{ batch.last_retry_at ? localDate(batch.last_retry_at) : '-' }}</p><p class="text-gray-500">{{ localDate(batch.created_at) }}</p></td>
                 <td class="px-4 py-3"><div class="flex justify-end gap-2"><button class="btn btn-secondary" @click="openBatch(batch.id)">查看</button><button v-if="canDeleteBatch(batch)" class="rounded p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" title="删除批次" @click="deletingBatch = batch"><Icon name="trash" size="sm" /></button></div></td>
               </tr>
@@ -271,12 +291,11 @@
       </section>
     </div>
 
-    <BaseDialog :show="showBulkWindowEditor" title="批量设置统计窗口" width="normal" @close="showBulkWindowEditor = false">
+    <BaseDialog :show="showBulkWindowEditor" title="批量设置开始时间" width="normal" @close="showBulkWindowEditor = false">
       <div class="space-y-4">
         <p class="text-sm text-gray-600 dark:text-gray-300">本次将修改已选择的 {{ selectedIds.size }} 个账号。账号原有的统计比例模式和手动比例保持不变。</p>
-        <p v-if="!bulkWindowDraft.period_start && !bulkWindowDraft.period_end" class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">所选账号当前窗口不一致，请明确设置统一的开始和结束时间。</p>
+        <p v-if="!bulkWindowDraft.period_start" class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">所选账号当前开始时间不一致，请明确设置统一开始时间。</p>
         <label class="block"><span class="input-label">开始时间</span><input v-model="bulkWindowDraft.period_start" type="datetime-local" class="input" /></label>
-        <label class="block"><span class="input-label">结束时间</span><input v-model="bulkWindowDraft.period_end" type="datetime-local" class="input" /></label>
         <p class="text-sm text-gray-500">窗口时长：{{ bulkWindowDuration }}</p>
       </div>
       <template #footer><button class="btn btn-secondary" @click="showBulkWindowEditor = false">取消</button><button class="btn btn-primary" @click="saveBulkWindowEditor">应用到所选账号</button></template>
@@ -286,7 +305,7 @@
       <div v-if="editingAccount && editDraft" class="space-y-4">
         <div><p class="font-medium">{{ editingAccount.name }}</p><p class="text-xs text-gray-500">#{{ editingAccount.id }} · {{ editingAccount.status }}</p></div>
         <label class="block"><span class="input-label">开始时间</span><input v-model="editDraft.period_start" type="datetime-local" class="input" /></label>
-        <label class="block"><span class="input-label">结束时间</span><input v-model="editDraft.period_end" type="datetime-local" class="input" /></label>
+        <p class="text-xs text-gray-500">统一结束时间：{{ batchPeriodEndText }}</p>
         <p class="text-sm text-gray-500">窗口时长：{{ editWindowDuration }}</p>
         <div><span class="input-label">统计比例</span><div class="grid grid-cols-2 rounded border border-gray-200 p-1 dark:border-dark-600"><button type="button" class="h-9 text-sm" :class="editDraft.ratio_mode === 'auto' ? activeSegmentClass : inactiveSegmentClass" @click="editDraft.ratio_mode = 'auto'">自动计算</button><button type="button" class="h-9 text-sm" :class="editDraft.ratio_mode === 'manual' ? activeSegmentClass : inactiveSegmentClass" @click="editDraft.ratio_mode = 'manual'">手动设置</button></div></div>
         <label v-if="editDraft.ratio_mode === 'manual'" class="block"><span class="input-label">手动统计比例（%）</span><input v-model="editDraft.manual_ratio" type="number" min="0" max="100" step="0.00000001" class="input" /></label>
@@ -296,7 +315,7 @@
     </BaseDialog>
 
     <BaseDialog :show="showCreateConfirm" title="确认生成统计批次" width="normal" @close="showCreateConfirm = false">
-      <div class="space-y-4 text-sm"><p>本次将统计 {{ selectedIds.size }} 个账号。账号窗口、统计比例和账号快照在创建后不可修改。</p><div v-if="selectedRiskCount > 0" class="rounded border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">其中 {{ selectedRiskCount }} 个账号使用风险默认窗口，请确认已经人工核对。</div><div class="rounded border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">系统不提供周期防重。重复创建和重复发放风险由管理员负责。</div><label class="flex items-start gap-2"><input v-model="createResponsibilityConfirmed" class="mt-1" type="checkbox" /><span>我已核对账号、时间窗口和比例，并确认自行负责周期防重。</span></label></div>
+      <div class="space-y-4 text-sm"><p>本次选择 {{ selectedIds.size }} 个账号，有效统计 {{ selectedValidIds.length }} 个。账号窗口、统计比例和账号快照在创建后不可修改。</p><div v-if="selectedInvalidAccounts.length > 0" class="rounded border border-red-200 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">{{ selectedInvalidAccounts.length }} 个账号因开始时间不早于统一结束时间将自动排除，并记入批次快照。</div><div v-if="selectedRiskCount > 0" class="rounded border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">其中 {{ selectedRiskCount }} 个账号使用风险默认窗口，请确认已经人工核对。</div><div class="rounded border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">系统不提供周期防重。重复创建和重复发放风险由管理员负责。</div><label class="flex items-start gap-2"><input v-model="createResponsibilityConfirmed" class="mt-1" type="checkbox" /><span>我已核对账号、时间窗口和比例，并确认自行负责周期防重。</span></label></div>
       <template #footer><button class="btn btn-secondary" @click="showCreateConfirm = false">取消</button><button class="btn btn-primary" :disabled="!createResponsibilityConfirmed" @click="continueCreate">继续</button></template>
     </BaseDialog>
 
@@ -343,6 +362,8 @@ const drafts = reactive(new Map<number, EditableDraft>())
 const accountFilters = reactive({ search: '', platform: '', type: '', status: '', runtime: '' })
 const accountPage = ref(1)
 const accountPageSize = 20
+const batchPeriodEnd = ref(localInput(new Date().toISOString()))
+const averageBenefitEnabled = ref(false)
 const forceRatioEnabled = ref(false)
 const forceRatio = ref<RatioFormValue>(100)
 const creating = ref(false)
@@ -372,7 +393,7 @@ const historyStatuses = ['running', 'executing', 'ready', 'not_eligible', 'parti
 const editingAccount = ref<Account | null>(null)
 const editDraft = ref<AccountEditorDraft | null>(null)
 const showBulkWindowEditor = ref(false)
-const bulkWindowDraft = reactive({ period_start: '', period_end: '' })
+const bulkWindowDraft = reactive({ period_start: '' })
 const showCreateConfirm = ref(false)
 const createResponsibilityConfirmed = ref(false)
 const showErrorAccountConfirm = ref(false)
@@ -402,11 +423,47 @@ const pagedAccounts = computed(() => filteredAccounts.value.slice((accountPage.v
 const platformOptions = computed(() => [...new Set(accounts.value.map((item) => item.platform))].sort())
 const typeOptions = computed(() => [...new Set(accounts.value.map((item) => item.type))].sort())
 const currentPageAllSelected = computed(() => pagedAccounts.value.length > 0 && pagedAccounts.value.every((item) => selectedIds.value.has(item.id)))
-const selectedErrorAccounts = computed(() => accounts.value.filter((item) => selectedIds.value.has(item.id) && item.status === 'error'))
-const selectedRiskCount = computed(() => [...selectedIds.value].filter((id) => Boolean(drafts.get(id)?.risk)).length)
-const canRetry = computed(() => Boolean(activeBatch.value && activeBatch.value.failed_user_count > 0 && (activeBatch.value.status === 'partial' || (activeBatch.value.status === 'failed' && activeBatch.value.failure_stage === 'execution'))))
-const editWindowDuration = computed(() => editDraft.value ? durationText(editDraft.value.period_start, editDraft.value.period_end) : '-')
-const bulkWindowDuration = computed(() => bulkWindowDraft.period_start && bulkWindowDraft.period_end ? durationText(bulkWindowDraft.period_start, bulkWindowDraft.period_end) : '-')
+const selectedValidIds = computed(() => {
+  const end = new Date(batchPeriodEnd.value).getTime()
+  if (!Number.isFinite(end)) return []
+  return [...selectedIds.value].filter((id) => {
+    const draft = drafts.get(id)
+    return Boolean(draft && new Date(draft.period_start).getTime() < end)
+  })
+})
+const selectedInvalidAccounts = computed(() => {
+  const valid = new Set(selectedValidIds.value)
+  return accounts.value.filter((item) => selectedIds.value.has(item.id) && drafts.has(item.id) && !valid.has(item.id))
+})
+const selectedErrorAccounts = computed(() => {
+  const valid = new Set(selectedValidIds.value)
+  return accounts.value.filter((item) => valid.has(item.id) && item.status === 'error')
+})
+const selectedRiskCount = computed(() => selectedValidIds.value.filter((id) => Boolean(drafts.get(id)?.risk)).length)
+const canRetry = computed(() => Boolean(activeBatch.value?.mechanism_version === 3 && activeBatch.value.failed_user_count > 0 && (activeBatch.value.status === 'partial' || (activeBatch.value.status === 'failed' && activeBatch.value.failure_stage === 'execution'))))
+const editWindowDuration = computed(() => editDraft.value ? durationText(editDraft.value.period_start, batchPeriodEnd.value) : '-')
+const bulkWindowDuration = computed(() => bulkWindowDraft.period_start ? durationText(bulkWindowDraft.period_start, batchPeriodEnd.value) : '-')
+const averageDurationMs = computed(() => {
+  const end = new Date(batchPeriodEnd.value).getTime()
+  if (!Number.isFinite(end) || selectedValidIds.value.length === 0) return 0
+  const total = selectedValidIds.value.reduce((sum, id) => sum + end - new Date(drafts.get(id)!.period_start).getTime(), 0)
+  return Math.trunc(total / selectedValidIds.value.length)
+})
+const averageRatioText = computed(() => {
+  if (selectedValidIds.value.length === 0) return '0'
+  const total = selectedValidIds.value.reduce((sum, id) => sum + effectiveRatioNumber(id), 0)
+  return String(truncateRatioNumber(total / selectedValidIds.value.length))
+})
+const averageDurationText = computed(() => durationMillisecondsText(averageDurationMs.value))
+const averageWindowText = computed(() => {
+  const end = new Date(batchPeriodEnd.value).getTime()
+  if (!Number.isFinite(end) || averageDurationMs.value <= 0) return '-'
+  return `${new Date(end - averageDurationMs.value).toLocaleString()} 至 ${new Date(end).toLocaleString()}`
+})
+const batchPeriodEndText = computed(() => {
+  const value = new Date(batchPeriodEnd.value)
+  return Number.isFinite(value.getTime()) ? value.toLocaleString() : '无效时间'
+})
 
 function errorMessage(error: unknown): string {
   if (typeof error === 'object' && error && 'message' in error) return String((error as { message?: unknown }).message || '操作失败')
@@ -466,11 +523,10 @@ async function ensureDefaults(ids: number[], refreshUnmodified = false) {
       const nextDraft: EditableDraft = {
         account_id: item.account_id,
         period_start: item.period_start,
-        period_end: item.period_end,
         ratio_mode: 'auto',
         default_window_version: item.window_version,
         window_modified: false,
-        auto_stat_ratio: item.auto_stat_ratio,
+        auto_stat_ratio: calculateAutoRatio(item.period_start),
         window_source: item.window_source,
         risk: item.risk
       }
@@ -525,40 +581,55 @@ function localInput(value: string) {
 function inputToISO(value: string) { return new Date(value).toISOString() }
 function windowText(id: number) {
   const draft = drafts.get(id)
-  return draft ? `${localDate(draft.period_start)} 至 ${localDate(draft.period_end)}` : '正在加载...'
+  return draft ? `${localDate(draft.period_start)} 至 ${batchPeriodEndText.value}` : '正在加载...'
 }
 function durationText(startValue: string, endValue: string) {
   const duration = new Date(endValue).getTime() - new Date(startValue).getTime()
-  if (!Number.isFinite(duration) || duration <= 0) return '无效窗口'
+  if (!Number.isFinite(duration) || duration <= 0) return '将自动排除'
+  return durationMillisecondsText(duration)
+}
+function durationMillisecondsText(duration: number) {
   const hours = duration / 3600000
   const days = Math.floor(hours / 24)
   const remainingHours = Math.round((hours - days * 24) * 100) / 100
   return days > 0 ? `${days} 天 ${remainingHours} 小时` : `${remainingHours} 小时`
 }
+function isInvalidAccount(id: number) { return selectedInvalidAccounts.value.some((item) => item.id === id) }
 function windowDurationText(id: number) {
   const draft = drafts.get(id)
-  return draft ? `时长 ${durationText(draft.period_start, draft.period_end)}` : '-'
+  return draft ? `时长 ${durationText(draft.period_start, batchPeriodEnd.value)}` : '-'
 }
 function riskText(risk?: string) {
-  const labels: Record<string, string> = { no_history: '无窗口历史，需人工核对', single_history: '仅有一条窗口历史，结束时间取服务器当前时间', missing_history: '缺少历史窗口，已使用保守默认值', insufficient_history: '历史窗口不足，默认时间可能不完整', error_account: '错误状态账号' }
+  const labels: Record<string, string> = { no_history: '无窗口历史，需人工核对', single_history: '仅有一条窗口历史，开始时间需人工核对', missing_history: '缺少历史窗口，已使用保守默认值', insufficient_history: '历史窗口不足，默认时间可能不完整', error_account: '错误状态账号' }
   return risk ? labels[risk] || risk : ''
+}
+function truncateRatioNumber(value: number) { return Math.trunc(value * 100000000) / 100000000 }
+function calculateAutoRatio(periodStart: string) {
+  const durationMs = new Date(batchPeriodEnd.value).getTime() - new Date(periodStart).getTime()
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return '0.00000000'
+  return truncateRatioNumber(Math.max(0, Math.min(100, ((7 * 86400000 - durationMs) / (7 * 86400000)) * 100))).toFixed(8)
+}
+function effectiveRatioNumber(id: number) {
+  if (forceRatioEnabled.value && isValidRatio(forceRatio.value)) return forceRatio.value
+  const draft = drafts.get(id)
+  const value = draft?.ratio_mode === 'manual' ? Number(draft.manual_ratio) : Number(draft?.auto_stat_ratio)
+  return Number.isFinite(value) ? value : 0
 }
 function effectiveRatioText(id: number) {
   if (forceRatioEnabled.value) return forceRatio.value === '' ? '0' : serializeRatio(forceRatio.value)
   const draft = drafts.get(id)
   return draft?.ratio_mode === 'manual' ? draft.manual_ratio || '0' : draft?.auto_stat_ratio || '0'
 }
+function ratioModeText(mode: ResetRebateAccount['ratio_mode']) { return mode === 'average' ? '平均' : mode === 'manual' ? '手动' : '自动' }
+function setPeriodEndToNow() { batchPeriodEnd.value = localInput(new Date().toISOString()) }
 
-// applyWindowToDraft 统一更新单账号和批量编辑后的窗口派生字段。
-function applyWindowToDraft(draft: EditableDraft, periodStart: string, periodEnd: string): EditableDraft {
-  const durationMs = new Date(periodEnd).getTime() - new Date(periodStart).getTime()
-  const autoRatio = Math.max(0, Math.min(100, ((7 * 86400000 - durationMs) / (7 * 86400000)) * 100))
-  const windowChanged = draft.period_start !== periodStart || draft.period_end !== periodEnd
+// applyStartToDraft 统一更新单账号和批量编辑后的开始时间派生字段。
+function applyStartToDraft(draft: EditableDraft, periodStart: string): EditableDraft {
+  const windowChanged = draft.period_start !== periodStart
   return {
     ...draft,
     period_start: periodStart,
-    period_end: periodEnd,
-    auto_stat_ratio: autoRatio.toFixed(8),
+    auto_stat_ratio: calculateAutoRatio(periodStart),
     window_source: windowChanged ? 'manual' : draft.window_source,
     risk: windowChanged ? '' : draft.risk,
     window_modified: draft.window_modified || windowChanged
@@ -573,27 +644,24 @@ function openBulkWindowEditor() {
     return
   }
   const first = selectedDrafts[0]!
-  const haveSameWindow = selectedDrafts.every((draft) => draft?.period_start === first.period_start && draft.period_end === first.period_end)
-  bulkWindowDraft.period_start = haveSameWindow ? localInput(first.period_start) : ''
-  bulkWindowDraft.period_end = haveSameWindow ? localInput(first.period_end) : ''
+  const haveSameStart = selectedDrafts.every((draft) => draft?.period_start === first.period_start)
+  bulkWindowDraft.period_start = haveSameStart ? localInput(first.period_start) : ''
   showBulkWindowEditor.value = true
 }
 
 function saveBulkWindowEditor() {
   const start = new Date(bulkWindowDraft.period_start)
-  const end = new Date(bulkWindowDraft.period_end)
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
-    appStore.showError('结束时间必须晚于开始时间')
+  if (!Number.isFinite(start.getTime())) {
+    appStore.showError('请输入有效的开始时间')
     return
   }
   const periodStart = inputToISO(bulkWindowDraft.period_start)
-  const periodEnd = inputToISO(bulkWindowDraft.period_end)
   for (const id of selectedIds.value) {
     const draft = drafts.get(id)
-    if (draft) drafts.set(id, applyWindowToDraft(draft, periodStart, periodEnd))
+    if (draft) drafts.set(id, applyStartToDraft(draft, periodStart))
   }
   showBulkWindowEditor.value = false
-  appStore.showSuccess(`已为 ${selectedIds.value.size} 个账号设置统一统计窗口`)
+  appStore.showSuccess(`已为 ${selectedIds.value.size} 个账号设置统一开始时间`)
 }
 
 function openAccountEditor(account: Account) {
@@ -604,16 +672,14 @@ function openAccountEditor(account: Account) {
   editDraft.value = {
     ...draft,
     period_start: localInput(draft.period_start),
-    period_end: localInput(draft.period_end),
     manual_ratio: Number.isFinite(manualRatio) ? manualRatio : ''
   }
 }
 function saveAccountEditor() {
   if (!editingAccount.value || !editDraft.value) return
   const start = new Date(editDraft.value.period_start)
-  const end = new Date(editDraft.value.period_end)
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
-    appStore.showError('结束时间必须晚于开始时间')
+  if (!Number.isFinite(start.getTime())) {
+    appStore.showError('请输入有效的开始时间')
     return
   }
   const previous = drafts.get(editingAccount.value.id)
@@ -628,11 +694,9 @@ function saveAccountEditor() {
     savedManualRatio = serializeRatio(manual)
   }
   const startChanged = !previous || editDraft.value.period_start !== localInput(previous.period_start)
-  const endChanged = !previous || editDraft.value.period_end !== localInput(previous.period_end)
   const periodStart = startChanged ? inputToISO(editDraft.value.period_start) : previous.period_start
-  const periodEnd = endChanged ? inputToISO(editDraft.value.period_end) : previous.period_end
   drafts.set(editingAccount.value.id, {
-    ...applyWindowToDraft(previous, periodStart, periodEnd),
+    ...applyStartToDraft(previous, periodStart),
     ratio_mode: editDraft.value.ratio_mode,
     manual_ratio: savedManualRatio
   })
@@ -646,6 +710,15 @@ function requestCreate() {
   }
   if ([...selectedIds.value].some((id) => !drafts.has(id))) {
     appStore.showError('仍有账号未加载默认窗口')
+    return
+  }
+  const periodEnd = new Date(batchPeriodEnd.value)
+  if (!Number.isFinite(periodEnd.getTime()) || periodEnd.getTime() > Date.now() + 1000) {
+    appStore.showError('统一结束时间必须有效且不得晚于当前时间')
+    return
+  }
+  if (selectedValidIds.value.length === 0) {
+    appStore.showError('至少需要一个开始时间早于统一结束时间的账号')
     return
   }
   if (selectedErrorAccounts.value.length > 0) {
@@ -668,14 +741,16 @@ async function submitCreate() {
     // API 使用十进制字符串，避免数字输入框的运行时 number 泄漏到后端 DTO。
     const serializedForceRatio = forceRatioEnabled.value && isValidRatio(forceRatio.value) ? serializeRatio(forceRatio.value) : '100'
     const batch = await resetRebatesAPI.create({
-      mechanism_version: 2,
+      mechanism_version: 3,
+      period_end: inputToISO(batchPeriodEnd.value),
+      average_benefit_enabled: averageBenefitEnabled.value,
       force_stat_ratio_enabled: forceRatioEnabled.value,
       force_stat_ratio: serializedForceRatio,
       acknowledged_error_account_ids: selectedErrorAccounts.value.map((item) => item.id),
       accounts: [...selectedIds.value].map((id) => {
         const draft = drafts.get(id)!
         return {
-          account_id: id, period_start: draft.period_start, period_end: draft.period_end, ratio_mode: draft.ratio_mode,
+          account_id: id, period_start: draft.period_start, ratio_mode: draft.ratio_mode,
           default_window_version: draft.default_window_version, window_modified: draft.window_modified,
           ...(draft.ratio_mode === 'manual' ? { manual_ratio: String(draft.manual_ratio) } : {})
         }
@@ -702,7 +777,7 @@ async function submitCreate() {
 }
 
 function schedulePoll() {
-  if (!activeBatch.value || !['running', 'executing'].includes(activeBatch.value.status)) return
+  if (activeBatch.value?.mechanism_version !== 3 || !['running', 'executing'].includes(activeBatch.value.status)) return
   if (pollTimer) clearTimeout(pollTimer)
   const batchID = activeBatch.value.id
   pollTimer = setTimeout(async () => {
@@ -813,6 +888,14 @@ async function loadHistory() {
   finally { historyLoading.value = false }
 }
 function applyHistoryFilters() { historyPage.value = 1; void loadHistory() }
+function openCreate() {
+  const shouldResetTime = viewMode.value !== 'create' || Boolean(activeBatch.value)
+  if (pollTimer) clearTimeout(pollTimer)
+  pollTimer = null
+  viewMode.value = 'create'
+  activeBatch.value = null
+  if (shouldResetTime) setPeriodEndToNow()
+}
 function openHistory() { viewMode.value = 'history'; activeBatch.value = null; void loadHistory() }
 async function changeHistoryPage(page: number) { historyPage.value = page; await loadHistory() }
 async function openBatch(id: number) {
@@ -820,7 +903,7 @@ async function openBatch(id: number) {
     activeBatch.value = await resetRebatesAPI.get(id)
     previewLoaded.value = Boolean(activeBatch.value.preview_version)
     userPage.value = 1
-    if (['running', 'executing'].includes(activeBatch.value.status)) schedulePoll()
+    if (activeBatch.value.mechanism_version === 3 && ['running', 'executing'].includes(activeBatch.value.status)) schedulePoll()
     else await Promise.all([loadBatchAccounts(), loadBatchUsers()])
   } catch (error) { appStore.showError(errorMessage(error)) }
 }
@@ -830,14 +913,15 @@ function closeBatch() {
   activeBatch.value = null
   users.value = []
   batchAccounts.value = []
+  if (viewMode.value === 'create') setPeriodEndToNow()
   if (viewMode.value === 'history') void loadHistory()
 }
-async function downloadExport(kind: 'users' | 'user-account-contributions' | 'failed-users') {
+async function downloadExport(kind: 'users' | 'accounts' | 'user-account-contributions' | 'failed-users') {
   if (!activeBatch.value) return
   try { const blob = await resetRebatesAPI.exportCSV(activeBatch.value.id, kind); saveAs(blob, `reset-rebate-${activeBatch.value.id}-${kind}.csv`) }
   catch (error) { appStore.showError(errorMessage(error)) }
 }
-function canDeleteBatch(batch: ResetRebateBatch) { return batch.status !== 'running' && batch.status !== 'executing' && batch.status !== 'partial' && batch.status !== 'executed' && batch.successful_user_count === 0 }
+function canDeleteBatch(batch: ResetRebateBatch) { return batch.mechanism_version === 3 && batch.status !== 'running' && batch.status !== 'executing' && batch.status !== 'partial' && batch.status !== 'executed' && batch.successful_user_count === 0 }
 async function deleteBatch() {
   if (!deletingBatch.value) return
   try {
@@ -860,6 +944,11 @@ watch([payoutRatio, rebateReason], () => {
   if (activeBatch.value?.status === 'ready' && previewLoaded.value) {
     previewLoaded.value = false
     executeConfirmed.value = false
+  }
+})
+watch(batchPeriodEnd, () => {
+  for (const [id, draft] of drafts) {
+    drafts.set(id, { ...draft, auto_stat_ratio: calculateAutoRatio(draft.period_start) })
   }
 })
 </script>

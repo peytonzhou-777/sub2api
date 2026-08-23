@@ -27,7 +27,6 @@ type resetRebateWindowRequest struct {
 type resetRebateCreateAccountRequest struct {
 	AccountID            int64   `json:"account_id" binding:"required"`
 	PeriodStart          string  `json:"period_start" binding:"required"`
-	PeriodEnd            string  `json:"period_end" binding:"required"`
 	RatioMode            string  `json:"ratio_mode" binding:"required"`
 	ManualRatio          *string `json:"manual_ratio"`
 	DefaultWindowVersion string  `json:"default_window_version"`
@@ -36,6 +35,8 @@ type resetRebateCreateAccountRequest struct {
 
 type resetRebateCreateRequest struct {
 	MechanismVersion            int                               `json:"mechanism_version" binding:"required"`
+	PeriodEnd                   string                            `json:"period_end" binding:"required"`
+	AverageBenefitEnabled       bool                              `json:"average_benefit_enabled"`
 	ForceStatRatioEnabled       bool                              `json:"force_stat_ratio_enabled"`
 	ForceStatRatio              string                            `json:"force_stat_ratio" binding:"required"`
 	AcknowledgedErrorAccountIDs []int64                           `json:"acknowledged_error_account_ids"`
@@ -77,9 +78,15 @@ func (h *ResetRebateHandler) Create(c *gin.Context) {
 	if !ok {
 		return
 	}
+	periodEnd, err := time.Parse(time.RFC3339, req.PeriodEnd)
+	if err != nil {
+		response.BadRequest(c, "period_end must be RFC3339 with timezone")
+		return
+	}
 	input := service.ResetRebateCreateInput{
 		MechanismVersion: req.MechanismVersion, ForceStatRatioEnabled: req.ForceStatRatioEnabled,
 		ForceStatRatio: req.ForceStatRatio, AcknowledgedErrorAccountIDs: req.AcknowledgedErrorAccountIDs,
+		PeriodEnd: periodEnd, AverageBenefitEnabled: req.AverageBenefitEnabled,
 		Accounts: make([]service.ResetRebateAccountInput, 0, len(req.Accounts)),
 	}
 	for _, item := range req.Accounts {
@@ -88,13 +95,8 @@ func (h *ResetRebateHandler) Create(c *gin.Context) {
 			response.BadRequest(c, "period_start must be RFC3339 with timezone")
 			return
 		}
-		end, err := time.Parse(time.RFC3339, item.PeriodEnd)
-		if err != nil {
-			response.BadRequest(c, "period_end must be RFC3339 with timezone")
-			return
-		}
 		input.Accounts = append(input.Accounts, service.ResetRebateAccountInput{
-			AccountID: item.AccountID, PeriodStart: start, PeriodEnd: end, RatioMode: item.RatioMode,
+			AccountID: item.AccountID, PeriodStart: start, RatioMode: item.RatioMode,
 			ManualRatio: item.ManualRatio, DefaultWindowVersion: item.DefaultWindowVersion, WindowModified: item.WindowModified,
 		})
 	}
@@ -306,6 +308,11 @@ func (h *ResetRebateHandler) export(c *gin.Context, suffix string, exporter func
 // ExportUsers 导出用户汇总。
 func (h *ResetRebateHandler) ExportUsers(c *gin.Context) {
 	h.export(c, "users", func(id int64) error { return h.service.ExportUsersCSV(c.Request.Context(), id, c.Writer) })
+}
+
+// ExportAccounts 导出包含自动排除原因的完整账号快照。
+func (h *ResetRebateHandler) ExportAccounts(c *gin.Context) {
+	h.export(c, "accounts", func(id int64) error { return h.service.ExportAccountsCSV(c.Request.Context(), id, c.Writer) })
 }
 
 // ExportContributions 导出用户账号贡献。

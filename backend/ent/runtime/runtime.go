@@ -2246,16 +2246,24 @@ func init() {
 	resetrebateaccountitemDescEffectiveStatRatio := resetrebateaccountitemFields[16].Descriptor()
 	// resetrebateaccountitem.DefaultEffectiveStatRatio holds the default value on creation for the effective_stat_ratio field.
 	resetrebateaccountitem.DefaultEffectiveStatRatio = resetrebateaccountitemDescEffectiveStatRatio.Default.(string)
+	// resetrebateaccountitemDescIncludedInStatistics is the schema descriptor for included_in_statistics field.
+	resetrebateaccountitemDescIncludedInStatistics := resetrebateaccountitemFields[17].Descriptor()
+	// resetrebateaccountitem.DefaultIncludedInStatistics holds the default value on creation for the included_in_statistics field.
+	resetrebateaccountitem.DefaultIncludedInStatistics = resetrebateaccountitemDescIncludedInStatistics.Default.(bool)
+	// resetrebateaccountitemDescStatisticsExclusionReason is the schema descriptor for statistics_exclusion_reason field.
+	resetrebateaccountitemDescStatisticsExclusionReason := resetrebateaccountitemFields[18].Descriptor()
+	// resetrebateaccountitem.DefaultStatisticsExclusionReason holds the default value on creation for the statistics_exclusion_reason field.
+	resetrebateaccountitem.DefaultStatisticsExclusionReason = resetrebateaccountitemDescStatisticsExclusionReason.Default.(string)
 	// resetrebateaccountitemDescRawAmount is the schema descriptor for raw_amount field.
-	resetrebateaccountitemDescRawAmount := resetrebateaccountitemFields[17].Descriptor()
+	resetrebateaccountitemDescRawAmount := resetrebateaccountitemFields[19].Descriptor()
 	// resetrebateaccountitem.DefaultRawAmount holds the default value on creation for the raw_amount field.
 	resetrebateaccountitem.DefaultRawAmount = resetrebateaccountitemDescRawAmount.Default.(string)
 	// resetrebateaccountitemDescWeightedAmount is the schema descriptor for weighted_amount field.
-	resetrebateaccountitemDescWeightedAmount := resetrebateaccountitemFields[18].Descriptor()
+	resetrebateaccountitemDescWeightedAmount := resetrebateaccountitemFields[20].Descriptor()
 	// resetrebateaccountitem.DefaultWeightedAmount holds the default value on creation for the weighted_amount field.
 	resetrebateaccountitem.DefaultWeightedAmount = resetrebateaccountitemDescWeightedAmount.Default.(string)
 	// resetrebateaccountitemDescCreatedAt is the schema descriptor for created_at field.
-	resetrebateaccountitemDescCreatedAt := resetrebateaccountitemFields[19].Descriptor()
+	resetrebateaccountitemDescCreatedAt := resetrebateaccountitemFields[21].Descriptor()
 	// resetrebateaccountitem.DefaultCreatedAt holds the default value on creation for the created_at field.
 	resetrebateaccountitem.DefaultCreatedAt = resetrebateaccountitemDescCreatedAt.Default.(func() time.Time)
 	resetrebatebatchFields := schema.ResetRebateBatch{}.Fields()
@@ -2312,94 +2320,114 @@ func init() {
 	resetrebatebatchDescForceStatRatio := resetrebatebatchFields[15].Descriptor()
 	// resetrebatebatch.DefaultForceStatRatio holds the default value on creation for the force_stat_ratio field.
 	resetrebatebatch.DefaultForceStatRatio = resetrebatebatchDescForceStatRatio.Default.(string)
+	// resetrebatebatchDescAverageBenefitEnabled is the schema descriptor for average_benefit_enabled field.
+	resetrebatebatchDescAverageBenefitEnabled := resetrebatebatchFields[16].Descriptor()
+	// resetrebatebatch.DefaultAverageBenefitEnabled holds the default value on creation for the average_benefit_enabled field.
+	resetrebatebatch.DefaultAverageBenefitEnabled = resetrebatebatchDescAverageBenefitEnabled.Default.(bool)
+	// resetrebatebatchDescAverageBenefitDurationUs is the schema descriptor for average_benefit_duration_us field.
+	resetrebatebatchDescAverageBenefitDurationUs := resetrebatebatchFields[17].Descriptor()
+	// resetrebatebatch.DefaultAverageBenefitDurationUs holds the default value on creation for the average_benefit_duration_us field.
+	resetrebatebatch.DefaultAverageBenefitDurationUs = resetrebatebatchDescAverageBenefitDurationUs.Default.(int64)
+	// resetrebatebatchDescAverageBenefitRatio is the schema descriptor for average_benefit_ratio field.
+	resetrebatebatchDescAverageBenefitRatio := resetrebatebatchFields[18].Descriptor()
+	// resetrebatebatch.DefaultAverageBenefitRatio holds the default value on creation for the average_benefit_ratio field.
+	resetrebatebatch.DefaultAverageBenefitRatio = resetrebatebatchDescAverageBenefitRatio.Default.(string)
+	// resetrebatebatchDescCombinedPayoutRatio is the schema descriptor for combined_payout_ratio field.
+	resetrebatebatchDescCombinedPayoutRatio := resetrebatebatchFields[19].Descriptor()
+	// resetrebatebatch.DefaultCombinedPayoutRatio holds the default value on creation for the combined_payout_ratio field.
+	resetrebatebatch.DefaultCombinedPayoutRatio = resetrebatebatchDescCombinedPayoutRatio.Default.(string)
 	// resetrebatebatchDescAccountCount is the schema descriptor for account_count field.
-	resetrebatebatchDescAccountCount := resetrebatebatchFields[16].Descriptor()
+	resetrebatebatchDescAccountCount := resetrebatebatchFields[20].Descriptor()
 	// resetrebatebatch.DefaultAccountCount holds the default value on creation for the account_count field.
 	resetrebatebatch.DefaultAccountCount = resetrebatebatchDescAccountCount.Default.(int)
+	// resetrebatebatchDescExcludedAccountCount is the schema descriptor for excluded_account_count field.
+	resetrebatebatchDescExcludedAccountCount := resetrebatebatchFields[21].Descriptor()
+	// resetrebatebatch.DefaultExcludedAccountCount holds the default value on creation for the excluded_account_count field.
+	resetrebatebatch.DefaultExcludedAccountCount = resetrebatebatchDescExcludedAccountCount.Default.(int)
 	// resetrebatebatchDescRiskAccountCount is the schema descriptor for risk_account_count field.
-	resetrebatebatchDescRiskAccountCount := resetrebatebatchFields[17].Descriptor()
+	resetrebatebatchDescRiskAccountCount := resetrebatebatchFields[22].Descriptor()
 	// resetrebatebatch.DefaultRiskAccountCount holds the default value on creation for the risk_account_count field.
 	resetrebatebatch.DefaultRiskAccountCount = resetrebatebatchDescRiskAccountCount.Default.(int)
 	// resetrebatebatchDescProgressTotal is the schema descriptor for progress_total field.
-	resetrebatebatchDescProgressTotal := resetrebatebatchFields[18].Descriptor()
+	resetrebatebatchDescProgressTotal := resetrebatebatchFields[23].Descriptor()
 	// resetrebatebatch.DefaultProgressTotal holds the default value on creation for the progress_total field.
 	resetrebatebatch.DefaultProgressTotal = resetrebatebatchDescProgressTotal.Default.(int)
 	// resetrebatebatchDescProgressCompleted is the schema descriptor for progress_completed field.
-	resetrebatebatchDescProgressCompleted := resetrebatebatchFields[19].Descriptor()
+	resetrebatebatchDescProgressCompleted := resetrebatebatchFields[24].Descriptor()
 	// resetrebatebatch.DefaultProgressCompleted holds the default value on creation for the progress_completed field.
 	resetrebatebatch.DefaultProgressCompleted = resetrebatebatchDescProgressCompleted.Default.(int)
 	// resetrebatebatchDescRawAmount is the schema descriptor for raw_amount field.
-	resetrebatebatchDescRawAmount := resetrebatebatchFields[20].Descriptor()
+	resetrebatebatchDescRawAmount := resetrebatebatchFields[25].Descriptor()
 	// resetrebatebatch.DefaultRawAmount holds the default value on creation for the raw_amount field.
 	resetrebatebatch.DefaultRawAmount = resetrebatebatchDescRawAmount.Default.(string)
 	// resetrebatebatchDescWeightedAmount is the schema descriptor for weighted_amount field.
-	resetrebatebatchDescWeightedAmount := resetrebatebatchFields[21].Descriptor()
+	resetrebatebatchDescWeightedAmount := resetrebatebatchFields[26].Descriptor()
 	// resetrebatebatch.DefaultWeightedAmount holds the default value on creation for the weighted_amount field.
 	resetrebatebatch.DefaultWeightedAmount = resetrebatebatchDescWeightedAmount.Default.(string)
 	// resetrebatebatchDescExpectedAmount is the schema descriptor for expected_amount field.
-	resetrebatebatchDescExpectedAmount := resetrebatebatchFields[22].Descriptor()
+	resetrebatebatchDescExpectedAmount := resetrebatebatchFields[27].Descriptor()
 	// resetrebatebatch.DefaultExpectedAmount holds the default value on creation for the expected_amount field.
 	resetrebatebatch.DefaultExpectedAmount = resetrebatebatchDescExpectedAmount.Default.(string)
 	// resetrebatebatchDescSuccessfulAmount is the schema descriptor for successful_amount field.
-	resetrebatebatchDescSuccessfulAmount := resetrebatebatchFields[23].Descriptor()
+	resetrebatebatchDescSuccessfulAmount := resetrebatebatchFields[28].Descriptor()
 	// resetrebatebatch.DefaultSuccessfulAmount holds the default value on creation for the successful_amount field.
 	resetrebatebatch.DefaultSuccessfulAmount = resetrebatebatchDescSuccessfulAmount.Default.(string)
 	// resetrebatebatchDescFailedAmount is the schema descriptor for failed_amount field.
-	resetrebatebatchDescFailedAmount := resetrebatebatchFields[24].Descriptor()
+	resetrebatebatchDescFailedAmount := resetrebatebatchFields[29].Descriptor()
 	// resetrebatebatch.DefaultFailedAmount holds the default value on creation for the failed_amount field.
 	resetrebatebatch.DefaultFailedAmount = resetrebatebatchDescFailedAmount.Default.(string)
 	// resetrebatebatchDescExcludedAmount is the schema descriptor for excluded_amount field.
-	resetrebatebatchDescExcludedAmount := resetrebatebatchFields[25].Descriptor()
+	resetrebatebatchDescExcludedAmount := resetrebatebatchFields[30].Descriptor()
 	// resetrebatebatch.DefaultExcludedAmount holds the default value on creation for the excluded_amount field.
 	resetrebatebatch.DefaultExcludedAmount = resetrebatebatchDescExcludedAmount.Default.(string)
 	// resetrebatebatchDescRebateReason is the schema descriptor for rebate_reason field.
-	resetrebatebatchDescRebateReason := resetrebatebatchFields[27].Descriptor()
+	resetrebatebatchDescRebateReason := resetrebatebatchFields[32].Descriptor()
 	// resetrebatebatch.DefaultRebateReason holds the default value on creation for the rebate_reason field.
 	resetrebatebatch.DefaultRebateReason = resetrebatebatchDescRebateReason.Default.(string)
 	// resetrebatebatch.RebateReasonValidator is a validator for the "rebate_reason" field. It is called by the builders before save.
 	resetrebatebatch.RebateReasonValidator = resetrebatebatchDescRebateReason.Validators[0].(func(string) error)
 	// resetrebatebatchDescPreviewVersion is the schema descriptor for preview_version field.
-	resetrebatebatchDescPreviewVersion := resetrebatebatchFields[28].Descriptor()
+	resetrebatebatchDescPreviewVersion := resetrebatebatchFields[33].Descriptor()
 	// resetrebatebatch.DefaultPreviewVersion holds the default value on creation for the preview_version field.
 	resetrebatebatch.DefaultPreviewVersion = resetrebatebatchDescPreviewVersion.Default.(int)
 	// resetrebatebatchDescExpectedUserCount is the schema descriptor for expected_user_count field.
-	resetrebatebatchDescExpectedUserCount := resetrebatebatchFields[29].Descriptor()
+	resetrebatebatchDescExpectedUserCount := resetrebatebatchFields[34].Descriptor()
 	// resetrebatebatch.DefaultExpectedUserCount holds the default value on creation for the expected_user_count field.
 	resetrebatebatch.DefaultExpectedUserCount = resetrebatebatchDescExpectedUserCount.Default.(int)
 	// resetrebatebatchDescSuccessfulUserCount is the schema descriptor for successful_user_count field.
-	resetrebatebatchDescSuccessfulUserCount := resetrebatebatchFields[30].Descriptor()
+	resetrebatebatchDescSuccessfulUserCount := resetrebatebatchFields[35].Descriptor()
 	// resetrebatebatch.DefaultSuccessfulUserCount holds the default value on creation for the successful_user_count field.
 	resetrebatebatch.DefaultSuccessfulUserCount = resetrebatebatchDescSuccessfulUserCount.Default.(int)
 	// resetrebatebatchDescExcludedUserCount is the schema descriptor for excluded_user_count field.
-	resetrebatebatchDescExcludedUserCount := resetrebatebatchFields[31].Descriptor()
+	resetrebatebatchDescExcludedUserCount := resetrebatebatchFields[36].Descriptor()
 	// resetrebatebatch.DefaultExcludedUserCount holds the default value on creation for the excluded_user_count field.
 	resetrebatebatch.DefaultExcludedUserCount = resetrebatebatchDescExcludedUserCount.Default.(int)
 	// resetrebatebatchDescFailedUserCount is the schema descriptor for failed_user_count field.
-	resetrebatebatchDescFailedUserCount := resetrebatebatchFields[32].Descriptor()
+	resetrebatebatchDescFailedUserCount := resetrebatebatchFields[37].Descriptor()
 	// resetrebatebatch.DefaultFailedUserCount holds the default value on creation for the failed_user_count field.
 	resetrebatebatch.DefaultFailedUserCount = resetrebatebatchDescFailedUserCount.Default.(int)
 	// resetrebatebatchDescFailureCode is the schema descriptor for failure_code field.
-	resetrebatebatchDescFailureCode := resetrebatebatchFields[33].Descriptor()
+	resetrebatebatchDescFailureCode := resetrebatebatchFields[38].Descriptor()
 	// resetrebatebatch.DefaultFailureCode holds the default value on creation for the failure_code field.
 	resetrebatebatch.DefaultFailureCode = resetrebatebatchDescFailureCode.Default.(string)
 	// resetrebatebatch.FailureCodeValidator is a validator for the "failure_code" field. It is called by the builders before save.
 	resetrebatebatch.FailureCodeValidator = resetrebatebatchDescFailureCode.Validators[0].(func(string) error)
 	// resetrebatebatchDescFailureMessage is the schema descriptor for failure_message field.
-	resetrebatebatchDescFailureMessage := resetrebatebatchFields[34].Descriptor()
+	resetrebatebatchDescFailureMessage := resetrebatebatchFields[39].Descriptor()
 	// resetrebatebatch.DefaultFailureMessage holds the default value on creation for the failure_message field.
 	resetrebatebatch.DefaultFailureMessage = resetrebatebatchDescFailureMessage.Default.(string)
 	// resetrebatebatchDescExecutedByAdminEmail is the schema descriptor for executed_by_admin_email field.
-	resetrebatebatchDescExecutedByAdminEmail := resetrebatebatchFields[36].Descriptor()
+	resetrebatebatchDescExecutedByAdminEmail := resetrebatebatchFields[41].Descriptor()
 	// resetrebatebatch.DefaultExecutedByAdminEmail holds the default value on creation for the executed_by_admin_email field.
 	resetrebatebatch.DefaultExecutedByAdminEmail = resetrebatebatchDescExecutedByAdminEmail.Default.(string)
 	// resetrebatebatch.ExecutedByAdminEmailValidator is a validator for the "executed_by_admin_email" field. It is called by the builders before save.
 	resetrebatebatch.ExecutedByAdminEmailValidator = resetrebatebatchDescExecutedByAdminEmail.Validators[0].(func(string) error)
 	// resetrebatebatchDescCreatedAt is the schema descriptor for created_at field.
-	resetrebatebatchDescCreatedAt := resetrebatebatchFields[39].Descriptor()
+	resetrebatebatchDescCreatedAt := resetrebatebatchFields[44].Descriptor()
 	// resetrebatebatch.DefaultCreatedAt holds the default value on creation for the created_at field.
 	resetrebatebatch.DefaultCreatedAt = resetrebatebatchDescCreatedAt.Default.(func() time.Time)
 	// resetrebatebatchDescUpdatedAt is the schema descriptor for updated_at field.
-	resetrebatebatchDescUpdatedAt := resetrebatebatchFields[40].Descriptor()
+	resetrebatebatchDescUpdatedAt := resetrebatebatchFields[45].Descriptor()
 	// resetrebatebatch.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	resetrebatebatch.DefaultUpdatedAt = resetrebatebatchDescUpdatedAt.Default.(func() time.Time)
 	// resetrebatebatch.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

@@ -45,8 +45,18 @@ const (
 	FieldForceStatRatioEnabled = "force_stat_ratio_enabled"
 	// FieldForceStatRatio holds the string denoting the force_stat_ratio field in the database.
 	FieldForceStatRatio = "force_stat_ratio"
+	// FieldAverageBenefitEnabled holds the string denoting the average_benefit_enabled field in the database.
+	FieldAverageBenefitEnabled = "average_benefit_enabled"
+	// FieldAverageBenefitDurationUs holds the string denoting the average_benefit_duration_us field in the database.
+	FieldAverageBenefitDurationUs = "average_benefit_duration_us"
+	// FieldAverageBenefitRatio holds the string denoting the average_benefit_ratio field in the database.
+	FieldAverageBenefitRatio = "average_benefit_ratio"
+	// FieldCombinedPayoutRatio holds the string denoting the combined_payout_ratio field in the database.
+	FieldCombinedPayoutRatio = "combined_payout_ratio"
 	// FieldAccountCount holds the string denoting the account_count field in the database.
 	FieldAccountCount = "account_count"
+	// FieldExcludedAccountCount holds the string denoting the excluded_account_count field in the database.
+	FieldExcludedAccountCount = "excluded_account_count"
 	// FieldRiskAccountCount holds the string denoting the risk_account_count field in the database.
 	FieldRiskAccountCount = "risk_account_count"
 	// FieldProgressTotal holds the string denoting the progress_total field in the database.
@@ -118,7 +128,12 @@ var Columns = []string{
 	FieldInitialIssuedAt,
 	FieldForceStatRatioEnabled,
 	FieldForceStatRatio,
+	FieldAverageBenefitEnabled,
+	FieldAverageBenefitDurationUs,
+	FieldAverageBenefitRatio,
+	FieldCombinedPayoutRatio,
 	FieldAccountCount,
+	FieldExcludedAccountCount,
 	FieldRiskAccountCount,
 	FieldProgressTotal,
 	FieldProgressCompleted,
@@ -188,8 +203,18 @@ var (
 	DefaultForceStatRatioEnabled bool
 	// DefaultForceStatRatio holds the default value on creation for the "force_stat_ratio" field.
 	DefaultForceStatRatio string
+	// DefaultAverageBenefitEnabled holds the default value on creation for the "average_benefit_enabled" field.
+	DefaultAverageBenefitEnabled bool
+	// DefaultAverageBenefitDurationUs holds the default value on creation for the "average_benefit_duration_us" field.
+	DefaultAverageBenefitDurationUs int64
+	// DefaultAverageBenefitRatio holds the default value on creation for the "average_benefit_ratio" field.
+	DefaultAverageBenefitRatio string
+	// DefaultCombinedPayoutRatio holds the default value on creation for the "combined_payout_ratio" field.
+	DefaultCombinedPayoutRatio string
 	// DefaultAccountCount holds the default value on creation for the "account_count" field.
 	DefaultAccountCount int
+	// DefaultExcludedAccountCount holds the default value on creation for the "excluded_account_count" field.
+	DefaultExcludedAccountCount int
 	// DefaultRiskAccountCount holds the default value on creation for the "risk_account_count" field.
 	DefaultRiskAccountCount int
 	// DefaultProgressTotal holds the default value on creation for the "progress_total" field.
@@ -328,9 +353,34 @@ func ByForceStatRatio(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldForceStatRatio, opts...).ToFunc()
 }
 
+// ByAverageBenefitEnabled orders the results by the average_benefit_enabled field.
+func ByAverageBenefitEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAverageBenefitEnabled, opts...).ToFunc()
+}
+
+// ByAverageBenefitDurationUs orders the results by the average_benefit_duration_us field.
+func ByAverageBenefitDurationUs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAverageBenefitDurationUs, opts...).ToFunc()
+}
+
+// ByAverageBenefitRatio orders the results by the average_benefit_ratio field.
+func ByAverageBenefitRatio(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAverageBenefitRatio, opts...).ToFunc()
+}
+
+// ByCombinedPayoutRatio orders the results by the combined_payout_ratio field.
+func ByCombinedPayoutRatio(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCombinedPayoutRatio, opts...).ToFunc()
+}
+
 // ByAccountCount orders the results by the account_count field.
 func ByAccountCount(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAccountCount, opts...).ToFunc()
+}
+
+// ByExcludedAccountCount orders the results by the excluded_account_count field.
+func ByExcludedAccountCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExcludedAccountCount, opts...).ToFunc()
 }
 
 // ByRiskAccountCount orders the results by the risk_account_count field.

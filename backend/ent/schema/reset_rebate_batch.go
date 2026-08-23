@@ -18,10 +18,10 @@ func (ResetRebateBatch) Annotations() []schema.Annotation {
 	return []schema.Annotation{entsql.Annotation{Table: "reset_rebate_batches"}}
 }
 
-// Fields 同时保留 v1 只读字段并定义 v2 账号维度结算字段。
+// Fields 同时保留旧版只读字段并定义 v3 账号维度结算字段。
 func (ResetRebateBatch) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int("mechanism_version").Default(2),
+		field.Int("mechanism_version").Default(3),
 		field.Int64("group_id").Optional().Nillable(),
 		field.String("group_name").MaxLen(100).Default(""),
 		field.Int64("admin_id"),
@@ -37,7 +37,12 @@ func (ResetRebateBatch) Fields() []ent.Field {
 		field.Time("initial_issued_at").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
 		field.Bool("force_stat_ratio_enabled").Default(false),
 		field.String("force_stat_ratio").SchemaType(map[string]string{dialect.Postgres: "decimal(11,8)"}).Default("100"),
+		field.Bool("average_benefit_enabled").Default(false),
+		field.Int64("average_benefit_duration_us").Default(0),
+		field.String("average_benefit_ratio").SchemaType(map[string]string{dialect.Postgres: "decimal(11,8)"}).Default("0"),
+		field.String("combined_payout_ratio").SchemaType(map[string]string{dialect.Postgres: "decimal(11,8)"}).Default("0"),
 		field.Int("account_count").Default(0),
+		field.Int("excluded_account_count").Default(0),
 		field.Int("risk_account_count").Default(0),
 		field.Int("progress_total").Default(0),
 		field.Int("progress_completed").Default(0),

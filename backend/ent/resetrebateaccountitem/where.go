@@ -139,6 +139,16 @@ func EffectiveStatRatio(v string) predicate.ResetRebateAccountItem {
 	return predicate.ResetRebateAccountItem(sql.FieldEQ(FieldEffectiveStatRatio, v))
 }
 
+// IncludedInStatistics applies equality check predicate on the "included_in_statistics" field. It's identical to IncludedInStatisticsEQ.
+func IncludedInStatistics(v bool) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldEQ(FieldIncludedInStatistics, v))
+}
+
+// StatisticsExclusionReason applies equality check predicate on the "statistics_exclusion_reason" field. It's identical to StatisticsExclusionReasonEQ.
+func StatisticsExclusionReason(v string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldEQ(FieldStatisticsExclusionReason, v))
+}
+
 // RawAmount applies equality check predicate on the "raw_amount" field. It's identical to RawAmountEQ.
 func RawAmount(v string) predicate.ResetRebateAccountItem {
 	return predicate.ResetRebateAccountItem(sql.FieldEQ(FieldRawAmount, v))
@@ -1057,6 +1067,81 @@ func EffectiveStatRatioEqualFold(v string) predicate.ResetRebateAccountItem {
 // EffectiveStatRatioContainsFold applies the ContainsFold predicate on the "effective_stat_ratio" field.
 func EffectiveStatRatioContainsFold(v string) predicate.ResetRebateAccountItem {
 	return predicate.ResetRebateAccountItem(sql.FieldContainsFold(FieldEffectiveStatRatio, v))
+}
+
+// IncludedInStatisticsEQ applies the EQ predicate on the "included_in_statistics" field.
+func IncludedInStatisticsEQ(v bool) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldEQ(FieldIncludedInStatistics, v))
+}
+
+// IncludedInStatisticsNEQ applies the NEQ predicate on the "included_in_statistics" field.
+func IncludedInStatisticsNEQ(v bool) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldNEQ(FieldIncludedInStatistics, v))
+}
+
+// StatisticsExclusionReasonEQ applies the EQ predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonEQ(v string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldEQ(FieldStatisticsExclusionReason, v))
+}
+
+// StatisticsExclusionReasonNEQ applies the NEQ predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonNEQ(v string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldNEQ(FieldStatisticsExclusionReason, v))
+}
+
+// StatisticsExclusionReasonIn applies the In predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonIn(vs ...string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldIn(FieldStatisticsExclusionReason, vs...))
+}
+
+// StatisticsExclusionReasonNotIn applies the NotIn predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonNotIn(vs ...string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldNotIn(FieldStatisticsExclusionReason, vs...))
+}
+
+// StatisticsExclusionReasonGT applies the GT predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonGT(v string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldGT(FieldStatisticsExclusionReason, v))
+}
+
+// StatisticsExclusionReasonGTE applies the GTE predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonGTE(v string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldGTE(FieldStatisticsExclusionReason, v))
+}
+
+// StatisticsExclusionReasonLT applies the LT predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonLT(v string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldLT(FieldStatisticsExclusionReason, v))
+}
+
+// StatisticsExclusionReasonLTE applies the LTE predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonLTE(v string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldLTE(FieldStatisticsExclusionReason, v))
+}
+
+// StatisticsExclusionReasonContains applies the Contains predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonContains(v string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldContains(FieldStatisticsExclusionReason, v))
+}
+
+// StatisticsExclusionReasonHasPrefix applies the HasPrefix predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonHasPrefix(v string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldHasPrefix(FieldStatisticsExclusionReason, v))
+}
+
+// StatisticsExclusionReasonHasSuffix applies the HasSuffix predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonHasSuffix(v string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldHasSuffix(FieldStatisticsExclusionReason, v))
+}
+
+// StatisticsExclusionReasonEqualFold applies the EqualFold predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonEqualFold(v string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldEqualFold(FieldStatisticsExclusionReason, v))
+}
+
+// StatisticsExclusionReasonContainsFold applies the ContainsFold predicate on the "statistics_exclusion_reason" field.
+func StatisticsExclusionReasonContainsFold(v string) predicate.ResetRebateAccountItem {
+	return predicate.ResetRebateAccountItem(sql.FieldContainsFold(FieldStatisticsExclusionReason, v))
 }
 
 // RawAmountEQ applies the EQ predicate on the "raw_amount" field.

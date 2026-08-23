@@ -38,6 +38,8 @@ func (ResetRebateAccountItem) Fields() []ent.Field {
 		field.String("auto_stat_ratio").SchemaType(map[string]string{dialect.Postgres: "decimal(11,8)"}).Default("0"),
 		field.String("manual_stat_ratio").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "decimal(11,8)"}),
 		field.String("effective_stat_ratio").SchemaType(map[string]string{dialect.Postgres: "decimal(11,8)"}).Default("0"),
+		field.Bool("included_in_statistics").Default(true),
+		field.String("statistics_exclusion_reason").SchemaType(map[string]string{dialect.Postgres: "text"}).Default(""),
 		field.String("raw_amount").SchemaType(map[string]string{dialect.Postgres: "decimal(30,16)"}).Default("0"),
 		field.String("weighted_amount").SchemaType(map[string]string{dialect.Postgres: "decimal(30,16)"}).Default("0"),
 		field.Time("created_at").Immutable().Default(time.Now).SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),

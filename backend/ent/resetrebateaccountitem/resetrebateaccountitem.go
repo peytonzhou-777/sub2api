@@ -47,6 +47,10 @@ const (
 	FieldManualStatRatio = "manual_stat_ratio"
 	// FieldEffectiveStatRatio holds the string denoting the effective_stat_ratio field in the database.
 	FieldEffectiveStatRatio = "effective_stat_ratio"
+	// FieldIncludedInStatistics holds the string denoting the included_in_statistics field in the database.
+	FieldIncludedInStatistics = "included_in_statistics"
+	// FieldStatisticsExclusionReason holds the string denoting the statistics_exclusion_reason field in the database.
+	FieldStatisticsExclusionReason = "statistics_exclusion_reason"
 	// FieldRawAmount holds the string denoting the raw_amount field in the database.
 	FieldRawAmount = "raw_amount"
 	// FieldWeightedAmount holds the string denoting the weighted_amount field in the database.
@@ -77,6 +81,8 @@ var Columns = []string{
 	FieldAutoStatRatio,
 	FieldManualStatRatio,
 	FieldEffectiveStatRatio,
+	FieldIncludedInStatistics,
+	FieldStatisticsExclusionReason,
 	FieldRawAmount,
 	FieldWeightedAmount,
 	FieldCreatedAt,
@@ -125,6 +131,10 @@ var (
 	DefaultAutoStatRatio string
 	// DefaultEffectiveStatRatio holds the default value on creation for the "effective_stat_ratio" field.
 	DefaultEffectiveStatRatio string
+	// DefaultIncludedInStatistics holds the default value on creation for the "included_in_statistics" field.
+	DefaultIncludedInStatistics bool
+	// DefaultStatisticsExclusionReason holds the default value on creation for the "statistics_exclusion_reason" field.
+	DefaultStatisticsExclusionReason string
 	// DefaultRawAmount holds the default value on creation for the "raw_amount" field.
 	DefaultRawAmount string
 	// DefaultWeightedAmount holds the default value on creation for the "weighted_amount" field.
@@ -224,6 +234,16 @@ func ByManualStatRatio(opts ...sql.OrderTermOption) OrderOption {
 // ByEffectiveStatRatio orders the results by the effective_stat_ratio field.
 func ByEffectiveStatRatio(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEffectiveStatRatio, opts...).ToFunc()
+}
+
+// ByIncludedInStatistics orders the results by the included_in_statistics field.
+func ByIncludedInStatistics(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIncludedInStatistics, opts...).ToFunc()
+}
+
+// ByStatisticsExclusionReason orders the results by the statistics_exclusion_reason field.
+func ByStatisticsExclusionReason(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStatisticsExclusionReason, opts...).ToFunc()
 }
 
 // ByRawAmount orders the results by the raw_amount field.

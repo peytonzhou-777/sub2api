@@ -238,6 +238,62 @@ func (_c *ResetRebateBatchCreate) SetNillableForceStatRatio(v *string) *ResetReb
 	return _c
 }
 
+// SetAverageBenefitEnabled sets the "average_benefit_enabled" field.
+func (_c *ResetRebateBatchCreate) SetAverageBenefitEnabled(v bool) *ResetRebateBatchCreate {
+	_c.mutation.SetAverageBenefitEnabled(v)
+	return _c
+}
+
+// SetNillableAverageBenefitEnabled sets the "average_benefit_enabled" field if the given value is not nil.
+func (_c *ResetRebateBatchCreate) SetNillableAverageBenefitEnabled(v *bool) *ResetRebateBatchCreate {
+	if v != nil {
+		_c.SetAverageBenefitEnabled(*v)
+	}
+	return _c
+}
+
+// SetAverageBenefitDurationUs sets the "average_benefit_duration_us" field.
+func (_c *ResetRebateBatchCreate) SetAverageBenefitDurationUs(v int64) *ResetRebateBatchCreate {
+	_c.mutation.SetAverageBenefitDurationUs(v)
+	return _c
+}
+
+// SetNillableAverageBenefitDurationUs sets the "average_benefit_duration_us" field if the given value is not nil.
+func (_c *ResetRebateBatchCreate) SetNillableAverageBenefitDurationUs(v *int64) *ResetRebateBatchCreate {
+	if v != nil {
+		_c.SetAverageBenefitDurationUs(*v)
+	}
+	return _c
+}
+
+// SetAverageBenefitRatio sets the "average_benefit_ratio" field.
+func (_c *ResetRebateBatchCreate) SetAverageBenefitRatio(v string) *ResetRebateBatchCreate {
+	_c.mutation.SetAverageBenefitRatio(v)
+	return _c
+}
+
+// SetNillableAverageBenefitRatio sets the "average_benefit_ratio" field if the given value is not nil.
+func (_c *ResetRebateBatchCreate) SetNillableAverageBenefitRatio(v *string) *ResetRebateBatchCreate {
+	if v != nil {
+		_c.SetAverageBenefitRatio(*v)
+	}
+	return _c
+}
+
+// SetCombinedPayoutRatio sets the "combined_payout_ratio" field.
+func (_c *ResetRebateBatchCreate) SetCombinedPayoutRatio(v string) *ResetRebateBatchCreate {
+	_c.mutation.SetCombinedPayoutRatio(v)
+	return _c
+}
+
+// SetNillableCombinedPayoutRatio sets the "combined_payout_ratio" field if the given value is not nil.
+func (_c *ResetRebateBatchCreate) SetNillableCombinedPayoutRatio(v *string) *ResetRebateBatchCreate {
+	if v != nil {
+		_c.SetCombinedPayoutRatio(*v)
+	}
+	return _c
+}
+
 // SetAccountCount sets the "account_count" field.
 func (_c *ResetRebateBatchCreate) SetAccountCount(v int) *ResetRebateBatchCreate {
 	_c.mutation.SetAccountCount(v)
@@ -248,6 +304,20 @@ func (_c *ResetRebateBatchCreate) SetAccountCount(v int) *ResetRebateBatchCreate
 func (_c *ResetRebateBatchCreate) SetNillableAccountCount(v *int) *ResetRebateBatchCreate {
 	if v != nil {
 		_c.SetAccountCount(*v)
+	}
+	return _c
+}
+
+// SetExcludedAccountCount sets the "excluded_account_count" field.
+func (_c *ResetRebateBatchCreate) SetExcludedAccountCount(v int) *ResetRebateBatchCreate {
+	_c.mutation.SetExcludedAccountCount(v)
+	return _c
+}
+
+// SetNillableExcludedAccountCount sets the "excluded_account_count" field if the given value is not nil.
+func (_c *ResetRebateBatchCreate) SetNillableExcludedAccountCount(v *int) *ResetRebateBatchCreate {
+	if v != nil {
+		_c.SetExcludedAccountCount(*v)
 	}
 	return _c
 }
@@ -663,9 +733,29 @@ func (_c *ResetRebateBatchCreate) defaults() {
 		v := resetrebatebatch.DefaultForceStatRatio
 		_c.mutation.SetForceStatRatio(v)
 	}
+	if _, ok := _c.mutation.AverageBenefitEnabled(); !ok {
+		v := resetrebatebatch.DefaultAverageBenefitEnabled
+		_c.mutation.SetAverageBenefitEnabled(v)
+	}
+	if _, ok := _c.mutation.AverageBenefitDurationUs(); !ok {
+		v := resetrebatebatch.DefaultAverageBenefitDurationUs
+		_c.mutation.SetAverageBenefitDurationUs(v)
+	}
+	if _, ok := _c.mutation.AverageBenefitRatio(); !ok {
+		v := resetrebatebatch.DefaultAverageBenefitRatio
+		_c.mutation.SetAverageBenefitRatio(v)
+	}
+	if _, ok := _c.mutation.CombinedPayoutRatio(); !ok {
+		v := resetrebatebatch.DefaultCombinedPayoutRatio
+		_c.mutation.SetCombinedPayoutRatio(v)
+	}
 	if _, ok := _c.mutation.AccountCount(); !ok {
 		v := resetrebatebatch.DefaultAccountCount
 		_c.mutation.SetAccountCount(v)
+	}
+	if _, ok := _c.mutation.ExcludedAccountCount(); !ok {
+		v := resetrebatebatch.DefaultExcludedAccountCount
+		_c.mutation.SetExcludedAccountCount(v)
 	}
 	if _, ok := _c.mutation.RiskAccountCount(); !ok {
 		v := resetrebatebatch.DefaultRiskAccountCount
@@ -814,8 +904,23 @@ func (_c *ResetRebateBatchCreate) check() error {
 	if _, ok := _c.mutation.ForceStatRatio(); !ok {
 		return &ValidationError{Name: "force_stat_ratio", err: errors.New(`ent: missing required field "ResetRebateBatch.force_stat_ratio"`)}
 	}
+	if _, ok := _c.mutation.AverageBenefitEnabled(); !ok {
+		return &ValidationError{Name: "average_benefit_enabled", err: errors.New(`ent: missing required field "ResetRebateBatch.average_benefit_enabled"`)}
+	}
+	if _, ok := _c.mutation.AverageBenefitDurationUs(); !ok {
+		return &ValidationError{Name: "average_benefit_duration_us", err: errors.New(`ent: missing required field "ResetRebateBatch.average_benefit_duration_us"`)}
+	}
+	if _, ok := _c.mutation.AverageBenefitRatio(); !ok {
+		return &ValidationError{Name: "average_benefit_ratio", err: errors.New(`ent: missing required field "ResetRebateBatch.average_benefit_ratio"`)}
+	}
+	if _, ok := _c.mutation.CombinedPayoutRatio(); !ok {
+		return &ValidationError{Name: "combined_payout_ratio", err: errors.New(`ent: missing required field "ResetRebateBatch.combined_payout_ratio"`)}
+	}
 	if _, ok := _c.mutation.AccountCount(); !ok {
 		return &ValidationError{Name: "account_count", err: errors.New(`ent: missing required field "ResetRebateBatch.account_count"`)}
+	}
+	if _, ok := _c.mutation.ExcludedAccountCount(); !ok {
+		return &ValidationError{Name: "excluded_account_count", err: errors.New(`ent: missing required field "ResetRebateBatch.excluded_account_count"`)}
 	}
 	if _, ok := _c.mutation.RiskAccountCount(); !ok {
 		return &ValidationError{Name: "risk_account_count", err: errors.New(`ent: missing required field "ResetRebateBatch.risk_account_count"`)}
@@ -983,9 +1088,29 @@ func (_c *ResetRebateBatchCreate) createSpec() (*ResetRebateBatch, *sqlgraph.Cre
 		_spec.SetField(resetrebatebatch.FieldForceStatRatio, field.TypeString, value)
 		_node.ForceStatRatio = value
 	}
+	if value, ok := _c.mutation.AverageBenefitEnabled(); ok {
+		_spec.SetField(resetrebatebatch.FieldAverageBenefitEnabled, field.TypeBool, value)
+		_node.AverageBenefitEnabled = value
+	}
+	if value, ok := _c.mutation.AverageBenefitDurationUs(); ok {
+		_spec.SetField(resetrebatebatch.FieldAverageBenefitDurationUs, field.TypeInt64, value)
+		_node.AverageBenefitDurationUs = value
+	}
+	if value, ok := _c.mutation.AverageBenefitRatio(); ok {
+		_spec.SetField(resetrebatebatch.FieldAverageBenefitRatio, field.TypeString, value)
+		_node.AverageBenefitRatio = value
+	}
+	if value, ok := _c.mutation.CombinedPayoutRatio(); ok {
+		_spec.SetField(resetrebatebatch.FieldCombinedPayoutRatio, field.TypeString, value)
+		_node.CombinedPayoutRatio = value
+	}
 	if value, ok := _c.mutation.AccountCount(); ok {
 		_spec.SetField(resetrebatebatch.FieldAccountCount, field.TypeInt, value)
 		_node.AccountCount = value
+	}
+	if value, ok := _c.mutation.ExcludedAccountCount(); ok {
+		_spec.SetField(resetrebatebatch.FieldExcludedAccountCount, field.TypeInt, value)
+		_node.ExcludedAccountCount = value
 	}
 	if value, ok := _c.mutation.RiskAccountCount(); ok {
 		_spec.SetField(resetrebatebatch.FieldRiskAccountCount, field.TypeInt, value)
@@ -1387,6 +1512,60 @@ func (u *ResetRebateBatchUpsert) UpdateForceStatRatio() *ResetRebateBatchUpsert 
 	return u
 }
 
+// SetAverageBenefitEnabled sets the "average_benefit_enabled" field.
+func (u *ResetRebateBatchUpsert) SetAverageBenefitEnabled(v bool) *ResetRebateBatchUpsert {
+	u.Set(resetrebatebatch.FieldAverageBenefitEnabled, v)
+	return u
+}
+
+// UpdateAverageBenefitEnabled sets the "average_benefit_enabled" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsert) UpdateAverageBenefitEnabled() *ResetRebateBatchUpsert {
+	u.SetExcluded(resetrebatebatch.FieldAverageBenefitEnabled)
+	return u
+}
+
+// SetAverageBenefitDurationUs sets the "average_benefit_duration_us" field.
+func (u *ResetRebateBatchUpsert) SetAverageBenefitDurationUs(v int64) *ResetRebateBatchUpsert {
+	u.Set(resetrebatebatch.FieldAverageBenefitDurationUs, v)
+	return u
+}
+
+// UpdateAverageBenefitDurationUs sets the "average_benefit_duration_us" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsert) UpdateAverageBenefitDurationUs() *ResetRebateBatchUpsert {
+	u.SetExcluded(resetrebatebatch.FieldAverageBenefitDurationUs)
+	return u
+}
+
+// AddAverageBenefitDurationUs adds v to the "average_benefit_duration_us" field.
+func (u *ResetRebateBatchUpsert) AddAverageBenefitDurationUs(v int64) *ResetRebateBatchUpsert {
+	u.Add(resetrebatebatch.FieldAverageBenefitDurationUs, v)
+	return u
+}
+
+// SetAverageBenefitRatio sets the "average_benefit_ratio" field.
+func (u *ResetRebateBatchUpsert) SetAverageBenefitRatio(v string) *ResetRebateBatchUpsert {
+	u.Set(resetrebatebatch.FieldAverageBenefitRatio, v)
+	return u
+}
+
+// UpdateAverageBenefitRatio sets the "average_benefit_ratio" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsert) UpdateAverageBenefitRatio() *ResetRebateBatchUpsert {
+	u.SetExcluded(resetrebatebatch.FieldAverageBenefitRatio)
+	return u
+}
+
+// SetCombinedPayoutRatio sets the "combined_payout_ratio" field.
+func (u *ResetRebateBatchUpsert) SetCombinedPayoutRatio(v string) *ResetRebateBatchUpsert {
+	u.Set(resetrebatebatch.FieldCombinedPayoutRatio, v)
+	return u
+}
+
+// UpdateCombinedPayoutRatio sets the "combined_payout_ratio" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsert) UpdateCombinedPayoutRatio() *ResetRebateBatchUpsert {
+	u.SetExcluded(resetrebatebatch.FieldCombinedPayoutRatio)
+	return u
+}
+
 // SetAccountCount sets the "account_count" field.
 func (u *ResetRebateBatchUpsert) SetAccountCount(v int) *ResetRebateBatchUpsert {
 	u.Set(resetrebatebatch.FieldAccountCount, v)
@@ -1402,6 +1581,24 @@ func (u *ResetRebateBatchUpsert) UpdateAccountCount() *ResetRebateBatchUpsert {
 // AddAccountCount adds v to the "account_count" field.
 func (u *ResetRebateBatchUpsert) AddAccountCount(v int) *ResetRebateBatchUpsert {
 	u.Add(resetrebatebatch.FieldAccountCount, v)
+	return u
+}
+
+// SetExcludedAccountCount sets the "excluded_account_count" field.
+func (u *ResetRebateBatchUpsert) SetExcludedAccountCount(v int) *ResetRebateBatchUpsert {
+	u.Set(resetrebatebatch.FieldExcludedAccountCount, v)
+	return u
+}
+
+// UpdateExcludedAccountCount sets the "excluded_account_count" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsert) UpdateExcludedAccountCount() *ResetRebateBatchUpsert {
+	u.SetExcluded(resetrebatebatch.FieldExcludedAccountCount)
+	return u
+}
+
+// AddExcludedAccountCount adds v to the "excluded_account_count" field.
+func (u *ResetRebateBatchUpsert) AddExcludedAccountCount(v int) *ResetRebateBatchUpsert {
+	u.Add(resetrebatebatch.FieldExcludedAccountCount, v)
 	return u
 }
 
@@ -2104,6 +2301,69 @@ func (u *ResetRebateBatchUpsertOne) UpdateForceStatRatio() *ResetRebateBatchUpse
 	})
 }
 
+// SetAverageBenefitEnabled sets the "average_benefit_enabled" field.
+func (u *ResetRebateBatchUpsertOne) SetAverageBenefitEnabled(v bool) *ResetRebateBatchUpsertOne {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.SetAverageBenefitEnabled(v)
+	})
+}
+
+// UpdateAverageBenefitEnabled sets the "average_benefit_enabled" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsertOne) UpdateAverageBenefitEnabled() *ResetRebateBatchUpsertOne {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.UpdateAverageBenefitEnabled()
+	})
+}
+
+// SetAverageBenefitDurationUs sets the "average_benefit_duration_us" field.
+func (u *ResetRebateBatchUpsertOne) SetAverageBenefitDurationUs(v int64) *ResetRebateBatchUpsertOne {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.SetAverageBenefitDurationUs(v)
+	})
+}
+
+// AddAverageBenefitDurationUs adds v to the "average_benefit_duration_us" field.
+func (u *ResetRebateBatchUpsertOne) AddAverageBenefitDurationUs(v int64) *ResetRebateBatchUpsertOne {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.AddAverageBenefitDurationUs(v)
+	})
+}
+
+// UpdateAverageBenefitDurationUs sets the "average_benefit_duration_us" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsertOne) UpdateAverageBenefitDurationUs() *ResetRebateBatchUpsertOne {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.UpdateAverageBenefitDurationUs()
+	})
+}
+
+// SetAverageBenefitRatio sets the "average_benefit_ratio" field.
+func (u *ResetRebateBatchUpsertOne) SetAverageBenefitRatio(v string) *ResetRebateBatchUpsertOne {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.SetAverageBenefitRatio(v)
+	})
+}
+
+// UpdateAverageBenefitRatio sets the "average_benefit_ratio" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsertOne) UpdateAverageBenefitRatio() *ResetRebateBatchUpsertOne {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.UpdateAverageBenefitRatio()
+	})
+}
+
+// SetCombinedPayoutRatio sets the "combined_payout_ratio" field.
+func (u *ResetRebateBatchUpsertOne) SetCombinedPayoutRatio(v string) *ResetRebateBatchUpsertOne {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.SetCombinedPayoutRatio(v)
+	})
+}
+
+// UpdateCombinedPayoutRatio sets the "combined_payout_ratio" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsertOne) UpdateCombinedPayoutRatio() *ResetRebateBatchUpsertOne {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.UpdateCombinedPayoutRatio()
+	})
+}
+
 // SetAccountCount sets the "account_count" field.
 func (u *ResetRebateBatchUpsertOne) SetAccountCount(v int) *ResetRebateBatchUpsertOne {
 	return u.Update(func(s *ResetRebateBatchUpsert) {
@@ -2122,6 +2382,27 @@ func (u *ResetRebateBatchUpsertOne) AddAccountCount(v int) *ResetRebateBatchUpse
 func (u *ResetRebateBatchUpsertOne) UpdateAccountCount() *ResetRebateBatchUpsertOne {
 	return u.Update(func(s *ResetRebateBatchUpsert) {
 		s.UpdateAccountCount()
+	})
+}
+
+// SetExcludedAccountCount sets the "excluded_account_count" field.
+func (u *ResetRebateBatchUpsertOne) SetExcludedAccountCount(v int) *ResetRebateBatchUpsertOne {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.SetExcludedAccountCount(v)
+	})
+}
+
+// AddExcludedAccountCount adds v to the "excluded_account_count" field.
+func (u *ResetRebateBatchUpsertOne) AddExcludedAccountCount(v int) *ResetRebateBatchUpsertOne {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.AddExcludedAccountCount(v)
+	})
+}
+
+// UpdateExcludedAccountCount sets the "excluded_account_count" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsertOne) UpdateExcludedAccountCount() *ResetRebateBatchUpsertOne {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.UpdateExcludedAccountCount()
 	})
 }
 
@@ -3050,6 +3331,69 @@ func (u *ResetRebateBatchUpsertBulk) UpdateForceStatRatio() *ResetRebateBatchUps
 	})
 }
 
+// SetAverageBenefitEnabled sets the "average_benefit_enabled" field.
+func (u *ResetRebateBatchUpsertBulk) SetAverageBenefitEnabled(v bool) *ResetRebateBatchUpsertBulk {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.SetAverageBenefitEnabled(v)
+	})
+}
+
+// UpdateAverageBenefitEnabled sets the "average_benefit_enabled" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsertBulk) UpdateAverageBenefitEnabled() *ResetRebateBatchUpsertBulk {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.UpdateAverageBenefitEnabled()
+	})
+}
+
+// SetAverageBenefitDurationUs sets the "average_benefit_duration_us" field.
+func (u *ResetRebateBatchUpsertBulk) SetAverageBenefitDurationUs(v int64) *ResetRebateBatchUpsertBulk {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.SetAverageBenefitDurationUs(v)
+	})
+}
+
+// AddAverageBenefitDurationUs adds v to the "average_benefit_duration_us" field.
+func (u *ResetRebateBatchUpsertBulk) AddAverageBenefitDurationUs(v int64) *ResetRebateBatchUpsertBulk {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.AddAverageBenefitDurationUs(v)
+	})
+}
+
+// UpdateAverageBenefitDurationUs sets the "average_benefit_duration_us" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsertBulk) UpdateAverageBenefitDurationUs() *ResetRebateBatchUpsertBulk {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.UpdateAverageBenefitDurationUs()
+	})
+}
+
+// SetAverageBenefitRatio sets the "average_benefit_ratio" field.
+func (u *ResetRebateBatchUpsertBulk) SetAverageBenefitRatio(v string) *ResetRebateBatchUpsertBulk {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.SetAverageBenefitRatio(v)
+	})
+}
+
+// UpdateAverageBenefitRatio sets the "average_benefit_ratio" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsertBulk) UpdateAverageBenefitRatio() *ResetRebateBatchUpsertBulk {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.UpdateAverageBenefitRatio()
+	})
+}
+
+// SetCombinedPayoutRatio sets the "combined_payout_ratio" field.
+func (u *ResetRebateBatchUpsertBulk) SetCombinedPayoutRatio(v string) *ResetRebateBatchUpsertBulk {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.SetCombinedPayoutRatio(v)
+	})
+}
+
+// UpdateCombinedPayoutRatio sets the "combined_payout_ratio" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsertBulk) UpdateCombinedPayoutRatio() *ResetRebateBatchUpsertBulk {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.UpdateCombinedPayoutRatio()
+	})
+}
+
 // SetAccountCount sets the "account_count" field.
 func (u *ResetRebateBatchUpsertBulk) SetAccountCount(v int) *ResetRebateBatchUpsertBulk {
 	return u.Update(func(s *ResetRebateBatchUpsert) {
@@ -3068,6 +3412,27 @@ func (u *ResetRebateBatchUpsertBulk) AddAccountCount(v int) *ResetRebateBatchUps
 func (u *ResetRebateBatchUpsertBulk) UpdateAccountCount() *ResetRebateBatchUpsertBulk {
 	return u.Update(func(s *ResetRebateBatchUpsert) {
 		s.UpdateAccountCount()
+	})
+}
+
+// SetExcludedAccountCount sets the "excluded_account_count" field.
+func (u *ResetRebateBatchUpsertBulk) SetExcludedAccountCount(v int) *ResetRebateBatchUpsertBulk {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.SetExcludedAccountCount(v)
+	})
+}
+
+// AddExcludedAccountCount adds v to the "excluded_account_count" field.
+func (u *ResetRebateBatchUpsertBulk) AddExcludedAccountCount(v int) *ResetRebateBatchUpsertBulk {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.AddExcludedAccountCount(v)
+	})
+}
+
+// UpdateExcludedAccountCount sets the "excluded_account_count" field to the value that was provided on create.
+func (u *ResetRebateBatchUpsertBulk) UpdateExcludedAccountCount() *ResetRebateBatchUpsertBulk {
+	return u.Update(func(s *ResetRebateBatchUpsert) {
+		s.UpdateExcludedAccountCount()
 	})
 }
 

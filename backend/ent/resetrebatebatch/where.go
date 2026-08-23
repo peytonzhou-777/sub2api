@@ -134,9 +134,34 @@ func ForceStatRatio(v string) predicate.ResetRebateBatch {
 	return predicate.ResetRebateBatch(sql.FieldEQ(FieldForceStatRatio, v))
 }
 
+// AverageBenefitEnabled applies equality check predicate on the "average_benefit_enabled" field. It's identical to AverageBenefitEnabledEQ.
+func AverageBenefitEnabled(v bool) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldEQ(FieldAverageBenefitEnabled, v))
+}
+
+// AverageBenefitDurationUs applies equality check predicate on the "average_benefit_duration_us" field. It's identical to AverageBenefitDurationUsEQ.
+func AverageBenefitDurationUs(v int64) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldEQ(FieldAverageBenefitDurationUs, v))
+}
+
+// AverageBenefitRatio applies equality check predicate on the "average_benefit_ratio" field. It's identical to AverageBenefitRatioEQ.
+func AverageBenefitRatio(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldEQ(FieldAverageBenefitRatio, v))
+}
+
+// CombinedPayoutRatio applies equality check predicate on the "combined_payout_ratio" field. It's identical to CombinedPayoutRatioEQ.
+func CombinedPayoutRatio(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldEQ(FieldCombinedPayoutRatio, v))
+}
+
 // AccountCount applies equality check predicate on the "account_count" field. It's identical to AccountCountEQ.
 func AccountCount(v int) predicate.ResetRebateBatch {
 	return predicate.ResetRebateBatch(sql.FieldEQ(FieldAccountCount, v))
+}
+
+// ExcludedAccountCount applies equality check predicate on the "excluded_account_count" field. It's identical to ExcludedAccountCountEQ.
+func ExcludedAccountCount(v int) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldEQ(FieldExcludedAccountCount, v))
 }
 
 // RiskAccountCount applies equality check predicate on the "risk_account_count" field. It's identical to RiskAccountCountEQ.
@@ -1094,6 +1119,186 @@ func ForceStatRatioContainsFold(v string) predicate.ResetRebateBatch {
 	return predicate.ResetRebateBatch(sql.FieldContainsFold(FieldForceStatRatio, v))
 }
 
+// AverageBenefitEnabledEQ applies the EQ predicate on the "average_benefit_enabled" field.
+func AverageBenefitEnabledEQ(v bool) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldEQ(FieldAverageBenefitEnabled, v))
+}
+
+// AverageBenefitEnabledNEQ applies the NEQ predicate on the "average_benefit_enabled" field.
+func AverageBenefitEnabledNEQ(v bool) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldNEQ(FieldAverageBenefitEnabled, v))
+}
+
+// AverageBenefitDurationUsEQ applies the EQ predicate on the "average_benefit_duration_us" field.
+func AverageBenefitDurationUsEQ(v int64) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldEQ(FieldAverageBenefitDurationUs, v))
+}
+
+// AverageBenefitDurationUsNEQ applies the NEQ predicate on the "average_benefit_duration_us" field.
+func AverageBenefitDurationUsNEQ(v int64) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldNEQ(FieldAverageBenefitDurationUs, v))
+}
+
+// AverageBenefitDurationUsIn applies the In predicate on the "average_benefit_duration_us" field.
+func AverageBenefitDurationUsIn(vs ...int64) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldIn(FieldAverageBenefitDurationUs, vs...))
+}
+
+// AverageBenefitDurationUsNotIn applies the NotIn predicate on the "average_benefit_duration_us" field.
+func AverageBenefitDurationUsNotIn(vs ...int64) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldNotIn(FieldAverageBenefitDurationUs, vs...))
+}
+
+// AverageBenefitDurationUsGT applies the GT predicate on the "average_benefit_duration_us" field.
+func AverageBenefitDurationUsGT(v int64) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldGT(FieldAverageBenefitDurationUs, v))
+}
+
+// AverageBenefitDurationUsGTE applies the GTE predicate on the "average_benefit_duration_us" field.
+func AverageBenefitDurationUsGTE(v int64) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldGTE(FieldAverageBenefitDurationUs, v))
+}
+
+// AverageBenefitDurationUsLT applies the LT predicate on the "average_benefit_duration_us" field.
+func AverageBenefitDurationUsLT(v int64) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldLT(FieldAverageBenefitDurationUs, v))
+}
+
+// AverageBenefitDurationUsLTE applies the LTE predicate on the "average_benefit_duration_us" field.
+func AverageBenefitDurationUsLTE(v int64) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldLTE(FieldAverageBenefitDurationUs, v))
+}
+
+// AverageBenefitRatioEQ applies the EQ predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioEQ(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldEQ(FieldAverageBenefitRatio, v))
+}
+
+// AverageBenefitRatioNEQ applies the NEQ predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioNEQ(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldNEQ(FieldAverageBenefitRatio, v))
+}
+
+// AverageBenefitRatioIn applies the In predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioIn(vs ...string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldIn(FieldAverageBenefitRatio, vs...))
+}
+
+// AverageBenefitRatioNotIn applies the NotIn predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioNotIn(vs ...string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldNotIn(FieldAverageBenefitRatio, vs...))
+}
+
+// AverageBenefitRatioGT applies the GT predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioGT(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldGT(FieldAverageBenefitRatio, v))
+}
+
+// AverageBenefitRatioGTE applies the GTE predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioGTE(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldGTE(FieldAverageBenefitRatio, v))
+}
+
+// AverageBenefitRatioLT applies the LT predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioLT(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldLT(FieldAverageBenefitRatio, v))
+}
+
+// AverageBenefitRatioLTE applies the LTE predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioLTE(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldLTE(FieldAverageBenefitRatio, v))
+}
+
+// AverageBenefitRatioContains applies the Contains predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioContains(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldContains(FieldAverageBenefitRatio, v))
+}
+
+// AverageBenefitRatioHasPrefix applies the HasPrefix predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioHasPrefix(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldHasPrefix(FieldAverageBenefitRatio, v))
+}
+
+// AverageBenefitRatioHasSuffix applies the HasSuffix predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioHasSuffix(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldHasSuffix(FieldAverageBenefitRatio, v))
+}
+
+// AverageBenefitRatioEqualFold applies the EqualFold predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioEqualFold(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldEqualFold(FieldAverageBenefitRatio, v))
+}
+
+// AverageBenefitRatioContainsFold applies the ContainsFold predicate on the "average_benefit_ratio" field.
+func AverageBenefitRatioContainsFold(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldContainsFold(FieldAverageBenefitRatio, v))
+}
+
+// CombinedPayoutRatioEQ applies the EQ predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioEQ(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldEQ(FieldCombinedPayoutRatio, v))
+}
+
+// CombinedPayoutRatioNEQ applies the NEQ predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioNEQ(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldNEQ(FieldCombinedPayoutRatio, v))
+}
+
+// CombinedPayoutRatioIn applies the In predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioIn(vs ...string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldIn(FieldCombinedPayoutRatio, vs...))
+}
+
+// CombinedPayoutRatioNotIn applies the NotIn predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioNotIn(vs ...string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldNotIn(FieldCombinedPayoutRatio, vs...))
+}
+
+// CombinedPayoutRatioGT applies the GT predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioGT(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldGT(FieldCombinedPayoutRatio, v))
+}
+
+// CombinedPayoutRatioGTE applies the GTE predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioGTE(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldGTE(FieldCombinedPayoutRatio, v))
+}
+
+// CombinedPayoutRatioLT applies the LT predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioLT(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldLT(FieldCombinedPayoutRatio, v))
+}
+
+// CombinedPayoutRatioLTE applies the LTE predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioLTE(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldLTE(FieldCombinedPayoutRatio, v))
+}
+
+// CombinedPayoutRatioContains applies the Contains predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioContains(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldContains(FieldCombinedPayoutRatio, v))
+}
+
+// CombinedPayoutRatioHasPrefix applies the HasPrefix predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioHasPrefix(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldHasPrefix(FieldCombinedPayoutRatio, v))
+}
+
+// CombinedPayoutRatioHasSuffix applies the HasSuffix predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioHasSuffix(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldHasSuffix(FieldCombinedPayoutRatio, v))
+}
+
+// CombinedPayoutRatioEqualFold applies the EqualFold predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioEqualFold(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldEqualFold(FieldCombinedPayoutRatio, v))
+}
+
+// CombinedPayoutRatioContainsFold applies the ContainsFold predicate on the "combined_payout_ratio" field.
+func CombinedPayoutRatioContainsFold(v string) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldContainsFold(FieldCombinedPayoutRatio, v))
+}
+
 // AccountCountEQ applies the EQ predicate on the "account_count" field.
 func AccountCountEQ(v int) predicate.ResetRebateBatch {
 	return predicate.ResetRebateBatch(sql.FieldEQ(FieldAccountCount, v))
@@ -1132,6 +1337,46 @@ func AccountCountLT(v int) predicate.ResetRebateBatch {
 // AccountCountLTE applies the LTE predicate on the "account_count" field.
 func AccountCountLTE(v int) predicate.ResetRebateBatch {
 	return predicate.ResetRebateBatch(sql.FieldLTE(FieldAccountCount, v))
+}
+
+// ExcludedAccountCountEQ applies the EQ predicate on the "excluded_account_count" field.
+func ExcludedAccountCountEQ(v int) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldEQ(FieldExcludedAccountCount, v))
+}
+
+// ExcludedAccountCountNEQ applies the NEQ predicate on the "excluded_account_count" field.
+func ExcludedAccountCountNEQ(v int) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldNEQ(FieldExcludedAccountCount, v))
+}
+
+// ExcludedAccountCountIn applies the In predicate on the "excluded_account_count" field.
+func ExcludedAccountCountIn(vs ...int) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldIn(FieldExcludedAccountCount, vs...))
+}
+
+// ExcludedAccountCountNotIn applies the NotIn predicate on the "excluded_account_count" field.
+func ExcludedAccountCountNotIn(vs ...int) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldNotIn(FieldExcludedAccountCount, vs...))
+}
+
+// ExcludedAccountCountGT applies the GT predicate on the "excluded_account_count" field.
+func ExcludedAccountCountGT(v int) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldGT(FieldExcludedAccountCount, v))
+}
+
+// ExcludedAccountCountGTE applies the GTE predicate on the "excluded_account_count" field.
+func ExcludedAccountCountGTE(v int) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldGTE(FieldExcludedAccountCount, v))
+}
+
+// ExcludedAccountCountLT applies the LT predicate on the "excluded_account_count" field.
+func ExcludedAccountCountLT(v int) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldLT(FieldExcludedAccountCount, v))
+}
+
+// ExcludedAccountCountLTE applies the LTE predicate on the "excluded_account_count" field.
+func ExcludedAccountCountLTE(v int) predicate.ResetRebateBatch {
+	return predicate.ResetRebateBatch(sql.FieldLTE(FieldExcludedAccountCount, v))
 }
 
 // RiskAccountCountEQ applies the EQ predicate on the "risk_account_count" field.

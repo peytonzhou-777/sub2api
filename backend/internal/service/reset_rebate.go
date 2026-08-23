@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	ResetRebateMechanismV2        = 2
+	ResetRebateMechanismV3        = 3
 	ResetRebateDefaultPayout      = 90
 	ResetRebateDefaultReason      = "官方重置！按账号重置天数返还消耗额度！"
 	ResetRebateStatusRunning      = "running"
@@ -34,6 +34,7 @@ const (
 	ResetRebateRatioAuto          = "auto"
 	ResetRebateRatioManual        = "manual"
 	ResetRebateExclusionSkipCount = "用户存在不参与重置返额计次"
+	ResetRebateExclusionWindow    = "账号开始时间不早于统一结束时间"
 	resetRebateExecutionInitial   = "initial"
 	resetRebateExecutionRetry     = "retry"
 	resetRebateValidity           = 168 * time.Hour
@@ -61,7 +62,6 @@ func NewResetRebateService(db *sql.DB, authCacheInvalidator APIKeyAuthCacheInval
 type ResetRebateAccountInput struct {
 	AccountID            int64     `json:"account_id"`
 	PeriodStart          time.Time `json:"period_start"`
-	PeriodEnd            time.Time `json:"period_end"`
 	RatioMode            string    `json:"ratio_mode"`
 	ManualRatio          *string   `json:"manual_ratio,omitempty"`
 	DefaultWindowVersion string    `json:"default_window_version"`
@@ -70,6 +70,8 @@ type ResetRebateAccountInput struct {
 
 type ResetRebateCreateInput struct {
 	MechanismVersion            int                       `json:"mechanism_version"`
+	PeriodEnd                   time.Time                 `json:"period_end"`
+	AverageBenefitEnabled       bool                      `json:"average_benefit_enabled"`
 	ForceStatRatioEnabled       bool                      `json:"force_stat_ratio_enabled"`
 	ForceStatRatio              string                    `json:"force_stat_ratio"`
 	AcknowledgedErrorAccountIDs []int64                   `json:"acknowledged_error_account_ids"`
@@ -95,68 +97,75 @@ type ResetRebateWindowDefault struct {
 }
 
 type ResetRebateBatchView struct {
-	ID                    int64      `json:"id"`
-	MechanismVersion      int        `json:"mechanism_version"`
-	GroupID               *int64     `json:"group_id,omitempty"`
-	GroupName             string     `json:"group_name,omitempty"`
-	AdminID               int64      `json:"admin_id"`
-	AdminEmail            string     `json:"admin_email"`
-	Status                string     `json:"status"`
-	FailureStage          string     `json:"failure_stage,omitempty"`
-	ExecutionMode         string     `json:"execution_mode,omitempty"`
-	ExecutionCursorUserID int64      `json:"execution_cursor_user_id"`
-	InitialIssuedAt       *time.Time `json:"initial_issued_at,omitempty"`
-	ForceStatRatioEnabled bool       `json:"force_stat_ratio_enabled"`
-	ForceStatRatio        string     `json:"force_stat_ratio"`
-	AccountCount          int        `json:"account_count"`
-	RiskAccountCount      int        `json:"risk_account_count"`
-	ProgressTotal         int        `json:"progress_total"`
-	ProgressCompleted     int        `json:"progress_completed"`
-	PeriodStart           *time.Time `json:"period_start,omitempty"`
-	PeriodEnd             *time.Time `json:"period_end,omitempty"`
-	RawAmount             string     `json:"raw_amount"`
-	WeightedAmount        string     `json:"weighted_amount"`
-	ExpectedAmount        string     `json:"expected_amount"`
-	SuccessfulAmount      string     `json:"successful_amount"`
-	FailedAmount          string     `json:"failed_amount"`
-	ExcludedAmount        string     `json:"excluded_amount"`
-	PayoutRatio           *int       `json:"payout_ratio,omitempty"`
-	RebateReason          string     `json:"rebate_reason"`
-	PreviewVersion        int        `json:"preview_version"`
-	ExpectedUserCount     int        `json:"expected_user_count"`
-	SuccessfulUserCount   int        `json:"successful_user_count"`
-	ExcludedUserCount     int        `json:"excluded_user_count"`
-	FailedUserCount       int        `json:"failed_user_count"`
-	FailureCode           string     `json:"failure_code,omitempty"`
-	FailureMessage        string     `json:"failure_message,omitempty"`
-	ExecutedByAdminID     *int64     `json:"executed_by_admin_id,omitempty"`
-	ExecutedByAdminEmail  string     `json:"executed_by_admin_email,omitempty"`
-	FirstExecutedAt       *time.Time `json:"first_executed_at,omitempty"`
-	LastRetryAt           *time.Time `json:"last_retry_at,omitempty"`
-	CreatedAt             time.Time  `json:"created_at"`
-	UpdatedAt             time.Time  `json:"updated_at"`
+	ID                       int64      `json:"id"`
+	MechanismVersion         int        `json:"mechanism_version"`
+	GroupID                  *int64     `json:"group_id,omitempty"`
+	GroupName                string     `json:"group_name,omitempty"`
+	AdminID                  int64      `json:"admin_id"`
+	AdminEmail               string     `json:"admin_email"`
+	Status                   string     `json:"status"`
+	FailureStage             string     `json:"failure_stage,omitempty"`
+	ExecutionMode            string     `json:"execution_mode,omitempty"`
+	ExecutionCursorUserID    int64      `json:"execution_cursor_user_id"`
+	InitialIssuedAt          *time.Time `json:"initial_issued_at,omitempty"`
+	ForceStatRatioEnabled    bool       `json:"force_stat_ratio_enabled"`
+	ForceStatRatio           string     `json:"force_stat_ratio"`
+	AverageBenefitEnabled    bool       `json:"average_benefit_enabled"`
+	AverageBenefitDurationUS int64      `json:"average_benefit_duration_us"`
+	AverageBenefitRatio      string     `json:"average_benefit_ratio"`
+	CombinedPayoutRatio      string     `json:"combined_payout_ratio"`
+	AccountCount             int        `json:"account_count"`
+	ExcludedAccountCount     int        `json:"excluded_account_count"`
+	RiskAccountCount         int        `json:"risk_account_count"`
+	ProgressTotal            int        `json:"progress_total"`
+	ProgressCompleted        int        `json:"progress_completed"`
+	PeriodStart              *time.Time `json:"period_start,omitempty"`
+	PeriodEnd                *time.Time `json:"period_end,omitempty"`
+	RawAmount                string     `json:"raw_amount"`
+	WeightedAmount           string     `json:"weighted_amount"`
+	ExpectedAmount           string     `json:"expected_amount"`
+	SuccessfulAmount         string     `json:"successful_amount"`
+	FailedAmount             string     `json:"failed_amount"`
+	ExcludedAmount           string     `json:"excluded_amount"`
+	PayoutRatio              *int       `json:"payout_ratio,omitempty"`
+	RebateReason             string     `json:"rebate_reason"`
+	PreviewVersion           int        `json:"preview_version"`
+	ExpectedUserCount        int        `json:"expected_user_count"`
+	SuccessfulUserCount      int        `json:"successful_user_count"`
+	ExcludedUserCount        int        `json:"excluded_user_count"`
+	FailedUserCount          int        `json:"failed_user_count"`
+	FailureCode              string     `json:"failure_code,omitempty"`
+	FailureMessage           string     `json:"failure_message,omitempty"`
+	ExecutedByAdminID        *int64     `json:"executed_by_admin_id,omitempty"`
+	ExecutedByAdminEmail     string     `json:"executed_by_admin_email,omitempty"`
+	FirstExecutedAt          *time.Time `json:"first_executed_at,omitempty"`
+	LastRetryAt              *time.Time `json:"last_retry_at,omitempty"`
+	CreatedAt                time.Time  `json:"created_at"`
+	UpdatedAt                time.Time  `json:"updated_at"`
 }
 
 type ResetRebateAccountView struct {
-	ID                  int64     `json:"id"`
-	AccountID           int64     `json:"account_id"`
-	AccountName         string    `json:"account_name"`
-	Platform            string    `json:"platform"`
-	AccountType         string    `json:"account_type"`
-	IsShadow            bool      `json:"is_shadow"`
-	AccountStatus       string    `json:"account_status"`
-	AccountErrorMessage string    `json:"account_error_message"`
-	Schedulable         bool      `json:"schedulable"`
-	PeriodStart         time.Time `json:"period_start"`
-	PeriodEnd           time.Time `json:"period_end"`
-	DefaultWindowSource string    `json:"default_window_source"`
-	WindowRisk          string    `json:"window_risk"`
-	RatioMode           string    `json:"ratio_mode"`
-	AutoStatRatio       string    `json:"auto_stat_ratio"`
-	ManualStatRatio     *string   `json:"manual_stat_ratio,omitempty"`
-	EffectiveStatRatio  string    `json:"effective_stat_ratio"`
-	RawAmount           string    `json:"raw_amount"`
-	WeightedAmount      string    `json:"weighted_amount"`
+	ID                        int64     `json:"id"`
+	AccountID                 int64     `json:"account_id"`
+	AccountName               string    `json:"account_name"`
+	Platform                  string    `json:"platform"`
+	AccountType               string    `json:"account_type"`
+	IsShadow                  bool      `json:"is_shadow"`
+	AccountStatus             string    `json:"account_status"`
+	AccountErrorMessage       string    `json:"account_error_message"`
+	Schedulable               bool      `json:"schedulable"`
+	PeriodStart               time.Time `json:"period_start"`
+	PeriodEnd                 time.Time `json:"period_end"`
+	DefaultWindowSource       string    `json:"default_window_source"`
+	WindowRisk                string    `json:"window_risk"`
+	RatioMode                 string    `json:"ratio_mode"`
+	AutoStatRatio             string    `json:"auto_stat_ratio"`
+	ManualStatRatio           *string   `json:"manual_stat_ratio,omitempty"`
+	EffectiveStatRatio        string    `json:"effective_stat_ratio"`
+	IncludedInStatistics      bool      `json:"included_in_statistics"`
+	StatisticsExclusionReason string    `json:"statistics_exclusion_reason,omitempty"`
+	RawAmount                 string    `json:"raw_amount"`
+	WeightedAmount            string    `json:"weighted_amount"`
 }
 
 type ResetRebateUserView struct {
@@ -227,6 +236,27 @@ func CalculateResetRebateAutoRatio(start, end time.Time) (decimal.Decimal, error
 	return ratio.Truncate(8), nil
 }
 
+// calculateResetRebateAverages 以统一结束时间计算等权平均周期和最终有效比例。
+func calculateResetRebateAverages(end time.Time, starts []time.Time, ratios []decimal.Decimal) (time.Time, int64, decimal.Decimal, error) {
+	if len(starts) == 0 || len(starts) != len(ratios) {
+		return time.Time{}, 0, decimal.Zero, infraerrors.New(http.StatusBadRequest, "RESET_REBATE_VALID_ACCOUNTS_REQUIRED", "at least one valid account is required")
+	}
+	totalDurationUS, totalRatio := decimal.Zero, decimal.Zero
+	for index, start := range starts {
+		if !start.Before(end) {
+			return time.Time{}, 0, decimal.Zero, infraerrors.New(http.StatusBadRequest, "INVALID_RESET_REBATE_WINDOW", "period_start must be before period_end")
+		}
+		durationUS := end.UnixMicro() - start.UnixMicro()
+		totalDurationUS = totalDurationUS.Add(decimal.NewFromInt(durationUS))
+		totalRatio = totalRatio.Add(ratios[index])
+	}
+	count := decimal.NewFromInt(int64(len(starts)))
+	averageDurationUS := totalDurationUS.Div(count).Truncate(0).IntPart()
+	averageRatio := totalRatio.Div(count).Truncate(8)
+	averageStart := time.UnixMicro(end.UnixMicro() - averageDurationUS).UTC()
+	return averageStart, averageDurationUS, averageRatio, nil
+}
+
 func parseResetRebateRatio(raw string, field string) (decimal.Decimal, error) {
 	value, err := decimal.NewFromString(strings.TrimSpace(raw))
 	if err != nil || value.IsNegative() || value.GreaterThan(resetRebateHundred) || value.Exponent() < -8 {
@@ -248,6 +278,11 @@ func normalizeResetRebateReason(reason string) (string, error) {
 
 func decimalString(value decimal.Decimal, places int32) string {
 	return value.Truncate(places).StringFixed(places)
+}
+
+// resetRebateMicroTime 将请求时间归一到 PostgreSQL 可持久化的微秒精度。
+func resetRebateMicroTime(value time.Time) time.Time {
+	return time.UnixMicro(value.UTC().UnixMicro()).UTC()
 }
 
 // AccountWindowDefaults 返回服务端权威默认窗口，前端不得自行推测。
@@ -373,8 +408,8 @@ func resetRebateWindowVersion(windows []time.Time) string {
 
 // CreateStats 冻结账号配置并启动纯本地消费聚合任务。
 func (s *ResetRebateService) CreateStats(ctx context.Context, actor ResetRebateActor, input ResetRebateCreateInput) (*ResetRebateBatchView, error) {
-	if input.MechanismVersion != ResetRebateMechanismV2 {
-		return nil, infraerrors.New(http.StatusBadRequest, "INVALID_RESET_REBATE_MECHANISM", "mechanism_version must be 2")
+	if input.MechanismVersion != ResetRebateMechanismV3 {
+		return nil, infraerrors.New(http.StatusBadRequest, "INVALID_RESET_REBATE_MECHANISM", "mechanism_version must be 3")
 	}
 	ids := make([]int64, len(input.Accounts))
 	for i := range input.Accounts {
@@ -388,25 +423,17 @@ func (s *ResetRebateService) CreateStats(ctx context.Context, actor ResetRebateA
 	if err != nil {
 		return nil, err
 	}
+	periodEnd := resetRebateMicroTime(input.PeriodEnd)
+	now := time.Now().UTC()
+	if periodEnd.IsZero() || periodEnd.After(now.Add(time.Second)) {
+		return nil, infraerrors.New(http.StatusBadRequest, "INVALID_RESET_REBATE_END_TIME", "period_end must not be in the future")
+	}
 	accounts, err := s.loadAccountSnapshots(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	if len(accounts) != len(ids) {
 		return nil, infraerrors.New(http.StatusNotFound, "RESET_REBATE_ACCOUNT_NOT_FOUND", "one or more accounts do not exist")
-	}
-	errorIDs := make([]int64, 0)
-	for _, id := range ids {
-		if accounts[id].Status == StatusError {
-			errorIDs = append(errorIDs, id)
-		}
-	}
-	sort.Slice(errorIDs, func(i, j int) bool { return errorIDs[i] < errorIDs[j] })
-	acknowledged, ackErr := normalizeOptionalResetRebateIDs(input.AcknowledgedErrorAccountIDs)
-	if ackErr != nil || !equalInt64Slices(errorIDs, acknowledged) {
-		return nil, infraerrors.New(http.StatusConflict, "RESET_REBATE_ERROR_ACCOUNTS_CHANGED", "error account confirmation is required").WithMetadata(map[string]string{
-			"error_account_ids": joinInt64s(errorIDs),
-		})
 	}
 	defaults, err := s.AccountWindowDefaults(ctx, ids)
 	if err != nil {
@@ -416,25 +443,35 @@ func (s *ResetRebateService) CreateStats(ctx context.Context, actor ResetRebateA
 	for _, item := range defaults {
 		defaultByID[item.AccountID] = item
 	}
-	now := time.Now().UTC()
 	type preparedAccount struct {
-		input     ResetRebateAccountInput
-		auto      decimal.Decimal
-		manual    *decimal.Decimal
-		effective decimal.Decimal
-		source    string
-		risk      string
+		input           ResetRebateAccountInput
+		periodStart     time.Time
+		ratioMode       string
+		auto            decimal.Decimal
+		manual          *decimal.Decimal
+		effective       decimal.Decimal
+		source          string
+		risk            string
+		included        bool
+		exclusionReason string
 	}
 	prepared := make([]preparedAccount, 0, len(input.Accounts))
-	var earliest, latest time.Time
+	validStarts := make([]time.Time, 0, len(input.Accounts))
+	validRatios := make([]decimal.Decimal, 0, len(input.Accounts))
+	validIndexes := make([]int, 0, len(input.Accounts))
+	errorIDs := make([]int64, 0)
 	riskCount := 0
 	for _, accountInput := range input.Accounts {
-		accountInput.PeriodStart = accountInput.PeriodStart.UTC()
-		accountInput.PeriodEnd = accountInput.PeriodEnd.UTC()
-		if !accountInput.PeriodStart.Before(accountInput.PeriodEnd) || accountInput.PeriodEnd.After(now.Add(time.Second)) {
-			return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_RESET_REBATE_WINDOW", "invalid time window for account %d", accountInput.AccountID)
+		accountInput.PeriodStart = resetRebateMicroTime(accountInput.PeriodStart)
+		item := preparedAccount{
+			input: accountInput, periodStart: accountInput.PeriodStart, ratioMode: accountInput.RatioMode,
+			source: "excluded", included: false, exclusionReason: ResetRebateExclusionWindow,
 		}
-		auto, calcErr := CalculateResetRebateAutoRatio(accountInput.PeriodStart, accountInput.PeriodEnd)
+		if !accountInput.PeriodStart.Before(periodEnd) {
+			prepared = append(prepared, item)
+			continue
+		}
+		auto, calcErr := CalculateResetRebateAutoRatio(accountInput.PeriodStart, periodEnd)
 		if calcErr != nil {
 			return nil, calcErr
 		}
@@ -466,12 +503,49 @@ func (s *ResetRebateService) CreateStats(ctx context.Context, actor ResetRebateA
 				riskCount++
 			}
 		}
-		prepared = append(prepared, preparedAccount{accountInput, auto, manual, effective, source, risk})
-		if earliest.IsZero() || accountInput.PeriodStart.Before(earliest) {
-			earliest = accountInput.PeriodStart
+		item.auto, item.manual, item.effective = auto, manual, effective
+		item.source, item.risk, item.included, item.exclusionReason = source, risk, true, ""
+		prepared = append(prepared, item)
+		validIndexes = append(validIndexes, len(prepared)-1)
+		validStarts = append(validStarts, accountInput.PeriodStart)
+		validRatios = append(validRatios, effective)
+		if accounts[accountInput.AccountID].Status == StatusError {
+			errorIDs = append(errorIDs, accountInput.AccountID)
 		}
-		if latest.IsZero() || accountInput.PeriodEnd.After(latest) {
-			latest = accountInput.PeriodEnd
+	}
+	if len(validIndexes) == 0 {
+		return nil, infraerrors.New(http.StatusBadRequest, "RESET_REBATE_VALID_ACCOUNTS_REQUIRED", "at least one account must start before period_end")
+	}
+	sort.Slice(errorIDs, func(i, j int) bool { return errorIDs[i] < errorIDs[j] })
+	acknowledged, ackErr := normalizeOptionalResetRebateIDs(input.AcknowledgedErrorAccountIDs)
+	if ackErr != nil || !equalInt64Slices(errorIDs, acknowledged) {
+		return nil, infraerrors.New(http.StatusConflict, "RESET_REBATE_ERROR_ACCOUNTS_CHANGED", "error account confirmation is required").WithMetadata(map[string]string{
+			"error_account_ids": joinInt64s(errorIDs),
+		})
+	}
+
+	var periodStart time.Time
+	averageDurationUS := int64(0)
+	averageRatio := decimal.Zero
+	if input.AverageBenefitEnabled {
+		periodStart, averageDurationUS, averageRatio, err = calculateResetRebateAverages(periodEnd, validStarts, validRatios)
+		if err != nil {
+			return nil, err
+		}
+		for _, index := range validIndexes {
+			prepared[index].periodStart = periodStart
+			prepared[index].ratioMode = "average"
+			prepared[index].auto = averageRatio
+			prepared[index].manual = nil
+			prepared[index].effective = averageRatio
+			prepared[index].source = "average"
+		}
+	} else {
+		for _, index := range validIndexes {
+			start := prepared[index].periodStart
+			if periodStart.IsZero() || start.Before(periodStart) {
+				periodStart = start
+			}
 		}
 	}
 
@@ -487,12 +561,15 @@ func (s *ResetRebateService) CreateStats(ctx context.Context, actor ResetRebateA
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO reset_rebate_batches(
 			mechanism_version, admin_id, admin_email, period_start, period_end, status,
-			force_stat_ratio_enabled, force_stat_ratio, account_count, risk_account_count,
-			progress_total, progress_completed, rebate_reason
-		) VALUES(2, $1, $2, $3, $4, 'running', $5, $6, $7, $8, $7, 0, $9)
+			force_stat_ratio_enabled, force_stat_ratio, average_benefit_enabled,
+			average_benefit_duration_us, average_benefit_ratio, account_count,
+			excluded_account_count, risk_account_count, progress_total, progress_completed, rebate_reason
+		) VALUES(3, $1, $2, $3, $4, 'running', $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, $14)
 		RETURNING id
-	`, actor.AdminID, actor.AdminEmail, earliest, latest, input.ForceStatRatioEnabled,
-		decimalString(forceRatio, 8), len(prepared), riskCount, ResetRebateDefaultReason).Scan(&batchID)
+	`, actor.AdminID, actor.AdminEmail, periodStart, periodEnd, input.ForceStatRatioEnabled,
+		decimalString(forceRatio, 8), input.AverageBenefitEnabled, averageDurationUS,
+		decimalString(averageRatio, 8), len(prepared), len(prepared)-len(validIndexes), riskCount,
+		len(validIndexes), ResetRebateDefaultReason).Scan(&batchID)
 	if err != nil {
 		return nil, err
 	}
@@ -507,11 +584,12 @@ func (s *ResetRebateService) CreateStats(ctx context.Context, actor ResetRebateA
 				batch_id, account_id, account_name, platform, account_type, is_shadow,
 				account_status, account_error_message, schedulable, period_start, period_end,
 				default_window_source, window_risk, ratio_mode, auto_stat_ratio,
-				manual_stat_ratio, effective_stat_ratio
-			) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+				manual_stat_ratio, effective_stat_ratio, included_in_statistics, statistics_exclusion_reason
+			) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 		`, batchID, account.ID, account.Name, account.Platform, account.Type, account.IsShadow,
-			account.Status, account.ErrorMessage, account.Schedulable, item.input.PeriodStart, item.input.PeriodEnd,
-			item.source, item.risk, item.input.RatioMode, decimalString(item.auto, 8), manual, decimalString(item.effective, 8))
+			account.Status, account.ErrorMessage, account.Schedulable, item.periodStart, periodEnd,
+			item.source, item.risk, item.ratioMode, decimalString(item.auto, 8), manual,
+			decimalString(item.effective, 8), item.included, item.exclusionReason)
 		if err != nil {
 			return nil, err
 		}
@@ -592,7 +670,7 @@ func (s *ResetRebateService) recoverRunningBatches() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, "SELECT id FROM reset_rebate_batches WHERE mechanism_version=2 AND status='running'")
+	rows, err := s.db.QueryContext(ctx, "SELECT id FROM reset_rebate_batches WHERE mechanism_version=3 AND status='running'")
 	if err != nil {
 		return
 	}
@@ -607,7 +685,7 @@ func (s *ResetRebateService) recoverRunningBatches() {
 	for _, id := range ids {
 		go s.runStatisticsBackground(id)
 	}
-	executionRows, err := s.db.QueryContext(ctx, "SELECT id FROM reset_rebate_batches WHERE mechanism_version=2 AND status='executing'")
+	executionRows, err := s.db.QueryContext(ctx, "SELECT id FROM reset_rebate_batches WHERE mechanism_version=3 AND status='executing'")
 	if err != nil {
 		return
 	}

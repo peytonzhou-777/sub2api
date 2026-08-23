@@ -51,6 +51,10 @@ type ResetRebateAccountItem struct {
 	ManualStatRatio *string `json:"manual_stat_ratio,omitempty"`
 	// EffectiveStatRatio holds the value of the "effective_stat_ratio" field.
 	EffectiveStatRatio string `json:"effective_stat_ratio,omitempty"`
+	// IncludedInStatistics holds the value of the "included_in_statistics" field.
+	IncludedInStatistics bool `json:"included_in_statistics,omitempty"`
+	// StatisticsExclusionReason holds the value of the "statistics_exclusion_reason" field.
+	StatisticsExclusionReason string `json:"statistics_exclusion_reason,omitempty"`
 	// RawAmount holds the value of the "raw_amount" field.
 	RawAmount string `json:"raw_amount,omitempty"`
 	// WeightedAmount holds the value of the "weighted_amount" field.
@@ -65,11 +69,11 @@ func (*ResetRebateAccountItem) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case resetrebateaccountitem.FieldIsShadow, resetrebateaccountitem.FieldSchedulable:
+		case resetrebateaccountitem.FieldIsShadow, resetrebateaccountitem.FieldSchedulable, resetrebateaccountitem.FieldIncludedInStatistics:
 			values[i] = new(sql.NullBool)
 		case resetrebateaccountitem.FieldID, resetrebateaccountitem.FieldBatchID, resetrebateaccountitem.FieldAccountID:
 			values[i] = new(sql.NullInt64)
-		case resetrebateaccountitem.FieldAccountName, resetrebateaccountitem.FieldPlatform, resetrebateaccountitem.FieldAccountType, resetrebateaccountitem.FieldAccountStatus, resetrebateaccountitem.FieldAccountErrorMessage, resetrebateaccountitem.FieldDefaultWindowSource, resetrebateaccountitem.FieldWindowRisk, resetrebateaccountitem.FieldRatioMode, resetrebateaccountitem.FieldAutoStatRatio, resetrebateaccountitem.FieldManualStatRatio, resetrebateaccountitem.FieldEffectiveStatRatio, resetrebateaccountitem.FieldRawAmount, resetrebateaccountitem.FieldWeightedAmount:
+		case resetrebateaccountitem.FieldAccountName, resetrebateaccountitem.FieldPlatform, resetrebateaccountitem.FieldAccountType, resetrebateaccountitem.FieldAccountStatus, resetrebateaccountitem.FieldAccountErrorMessage, resetrebateaccountitem.FieldDefaultWindowSource, resetrebateaccountitem.FieldWindowRisk, resetrebateaccountitem.FieldRatioMode, resetrebateaccountitem.FieldAutoStatRatio, resetrebateaccountitem.FieldManualStatRatio, resetrebateaccountitem.FieldEffectiveStatRatio, resetrebateaccountitem.FieldStatisticsExclusionReason, resetrebateaccountitem.FieldRawAmount, resetrebateaccountitem.FieldWeightedAmount:
 			values[i] = new(sql.NullString)
 		case resetrebateaccountitem.FieldPeriodStart, resetrebateaccountitem.FieldPeriodEnd, resetrebateaccountitem.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -197,6 +201,18 @@ func (_m *ResetRebateAccountItem) assignValues(columns []string, values []any) e
 			} else if value.Valid {
 				_m.EffectiveStatRatio = value.String
 			}
+		case resetrebateaccountitem.FieldIncludedInStatistics:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field included_in_statistics", values[i])
+			} else if value.Valid {
+				_m.IncludedInStatistics = value.Bool
+			}
+		case resetrebateaccountitem.FieldStatisticsExclusionReason:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field statistics_exclusion_reason", values[i])
+			} else if value.Valid {
+				_m.StatisticsExclusionReason = value.String
+			}
 		case resetrebateaccountitem.FieldRawAmount:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field raw_amount", values[i])
@@ -303,6 +319,12 @@ func (_m *ResetRebateAccountItem) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("effective_stat_ratio=")
 	builder.WriteString(_m.EffectiveStatRatio)
+	builder.WriteString(", ")
+	builder.WriteString("included_in_statistics=")
+	builder.WriteString(fmt.Sprintf("%v", _m.IncludedInStatistics))
+	builder.WriteString(", ")
+	builder.WriteString("statistics_exclusion_reason=")
+	builder.WriteString(_m.StatisticsExclusionReason)
 	builder.WriteString(", ")
 	builder.WriteString("raw_amount=")
 	builder.WriteString(_m.RawAmount)

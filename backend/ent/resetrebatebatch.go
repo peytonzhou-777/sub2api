@@ -49,8 +49,18 @@ type ResetRebateBatch struct {
 	ForceStatRatioEnabled bool `json:"force_stat_ratio_enabled,omitempty"`
 	// ForceStatRatio holds the value of the "force_stat_ratio" field.
 	ForceStatRatio string `json:"force_stat_ratio,omitempty"`
+	// AverageBenefitEnabled holds the value of the "average_benefit_enabled" field.
+	AverageBenefitEnabled bool `json:"average_benefit_enabled,omitempty"`
+	// AverageBenefitDurationUs holds the value of the "average_benefit_duration_us" field.
+	AverageBenefitDurationUs int64 `json:"average_benefit_duration_us,omitempty"`
+	// AverageBenefitRatio holds the value of the "average_benefit_ratio" field.
+	AverageBenefitRatio string `json:"average_benefit_ratio,omitempty"`
+	// CombinedPayoutRatio holds the value of the "combined_payout_ratio" field.
+	CombinedPayoutRatio string `json:"combined_payout_ratio,omitempty"`
 	// AccountCount holds the value of the "account_count" field.
 	AccountCount int `json:"account_count,omitempty"`
+	// ExcludedAccountCount holds the value of the "excluded_account_count" field.
+	ExcludedAccountCount int `json:"excluded_account_count,omitempty"`
 	// RiskAccountCount holds the value of the "risk_account_count" field.
 	RiskAccountCount int `json:"risk_account_count,omitempty"`
 	// ProgressTotal holds the value of the "progress_total" field.
@@ -107,11 +117,11 @@ func (*ResetRebateBatch) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case resetrebatebatch.FieldForceStatRatioEnabled:
+		case resetrebatebatch.FieldForceStatRatioEnabled, resetrebatebatch.FieldAverageBenefitEnabled:
 			values[i] = new(sql.NullBool)
-		case resetrebatebatch.FieldID, resetrebatebatch.FieldMechanismVersion, resetrebatebatch.FieldGroupID, resetrebatebatch.FieldAdminID, resetrebatebatch.FieldExecutionCursorUserID, resetrebatebatch.FieldExecutionAdminID, resetrebatebatch.FieldAccountCount, resetrebatebatch.FieldRiskAccountCount, resetrebatebatch.FieldProgressTotal, resetrebatebatch.FieldProgressCompleted, resetrebatebatch.FieldPayoutRatio, resetrebatebatch.FieldPreviewVersion, resetrebatebatch.FieldExpectedUserCount, resetrebatebatch.FieldSuccessfulUserCount, resetrebatebatch.FieldExcludedUserCount, resetrebatebatch.FieldFailedUserCount, resetrebatebatch.FieldExecutedByAdminID:
+		case resetrebatebatch.FieldID, resetrebatebatch.FieldMechanismVersion, resetrebatebatch.FieldGroupID, resetrebatebatch.FieldAdminID, resetrebatebatch.FieldExecutionCursorUserID, resetrebatebatch.FieldExecutionAdminID, resetrebatebatch.FieldAverageBenefitDurationUs, resetrebatebatch.FieldAccountCount, resetrebatebatch.FieldExcludedAccountCount, resetrebatebatch.FieldRiskAccountCount, resetrebatebatch.FieldProgressTotal, resetrebatebatch.FieldProgressCompleted, resetrebatebatch.FieldPayoutRatio, resetrebatebatch.FieldPreviewVersion, resetrebatebatch.FieldExpectedUserCount, resetrebatebatch.FieldSuccessfulUserCount, resetrebatebatch.FieldExcludedUserCount, resetrebatebatch.FieldFailedUserCount, resetrebatebatch.FieldExecutedByAdminID:
 			values[i] = new(sql.NullInt64)
-		case resetrebatebatch.FieldGroupName, resetrebatebatch.FieldAdminEmail, resetrebatebatch.FieldStatus, resetrebatebatch.FieldFailureStage, resetrebatebatch.FieldExecutionMode, resetrebatebatch.FieldExecutionAdminEmail, resetrebatebatch.FieldForceStatRatio, resetrebatebatch.FieldRawAmount, resetrebatebatch.FieldWeightedAmount, resetrebatebatch.FieldExpectedAmount, resetrebatebatch.FieldSuccessfulAmount, resetrebatebatch.FieldFailedAmount, resetrebatebatch.FieldExcludedAmount, resetrebatebatch.FieldRebateReason, resetrebatebatch.FieldFailureCode, resetrebatebatch.FieldFailureMessage, resetrebatebatch.FieldExecutedByAdminEmail:
+		case resetrebatebatch.FieldGroupName, resetrebatebatch.FieldAdminEmail, resetrebatebatch.FieldStatus, resetrebatebatch.FieldFailureStage, resetrebatebatch.FieldExecutionMode, resetrebatebatch.FieldExecutionAdminEmail, resetrebatebatch.FieldForceStatRatio, resetrebatebatch.FieldAverageBenefitRatio, resetrebatebatch.FieldCombinedPayoutRatio, resetrebatebatch.FieldRawAmount, resetrebatebatch.FieldWeightedAmount, resetrebatebatch.FieldExpectedAmount, resetrebatebatch.FieldSuccessfulAmount, resetrebatebatch.FieldFailedAmount, resetrebatebatch.FieldExcludedAmount, resetrebatebatch.FieldRebateReason, resetrebatebatch.FieldFailureCode, resetrebatebatch.FieldFailureMessage, resetrebatebatch.FieldExecutedByAdminEmail:
 			values[i] = new(sql.NullString)
 		case resetrebatebatch.FieldPeriodStart, resetrebatebatch.FieldPeriodEnd, resetrebatebatch.FieldInitialIssuedAt, resetrebatebatch.FieldFirstExecutedAt, resetrebatebatch.FieldLastRetryAt, resetrebatebatch.FieldCreatedAt, resetrebatebatch.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -237,11 +247,41 @@ func (_m *ResetRebateBatch) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ForceStatRatio = value.String
 			}
+		case resetrebatebatch.FieldAverageBenefitEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field average_benefit_enabled", values[i])
+			} else if value.Valid {
+				_m.AverageBenefitEnabled = value.Bool
+			}
+		case resetrebatebatch.FieldAverageBenefitDurationUs:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field average_benefit_duration_us", values[i])
+			} else if value.Valid {
+				_m.AverageBenefitDurationUs = value.Int64
+			}
+		case resetrebatebatch.FieldAverageBenefitRatio:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field average_benefit_ratio", values[i])
+			} else if value.Valid {
+				_m.AverageBenefitRatio = value.String
+			}
+		case resetrebatebatch.FieldCombinedPayoutRatio:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field combined_payout_ratio", values[i])
+			} else if value.Valid {
+				_m.CombinedPayoutRatio = value.String
+			}
 		case resetrebatebatch.FieldAccountCount:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field account_count", values[i])
 			} else if value.Valid {
 				_m.AccountCount = int(value.Int64)
+			}
+		case resetrebatebatch.FieldExcludedAccountCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field excluded_account_count", values[i])
+			} else if value.Valid {
+				_m.ExcludedAccountCount = int(value.Int64)
 			}
 		case resetrebatebatch.FieldRiskAccountCount:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -485,8 +525,23 @@ func (_m *ResetRebateBatch) String() string {
 	builder.WriteString("force_stat_ratio=")
 	builder.WriteString(_m.ForceStatRatio)
 	builder.WriteString(", ")
+	builder.WriteString("average_benefit_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AverageBenefitEnabled))
+	builder.WriteString(", ")
+	builder.WriteString("average_benefit_duration_us=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AverageBenefitDurationUs))
+	builder.WriteString(", ")
+	builder.WriteString("average_benefit_ratio=")
+	builder.WriteString(_m.AverageBenefitRatio)
+	builder.WriteString(", ")
+	builder.WriteString("combined_payout_ratio=")
+	builder.WriteString(_m.CombinedPayoutRatio)
+	builder.WriteString(", ")
 	builder.WriteString("account_count=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AccountCount))
+	builder.WriteString(", ")
+	builder.WriteString("excluded_account_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ExcludedAccountCount))
 	builder.WriteString(", ")
 	builder.WriteString("risk_account_count=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RiskAccountCount))

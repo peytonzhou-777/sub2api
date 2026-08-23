@@ -286,6 +286,34 @@ func (_u *ResetRebateAccountItemUpdate) SetNillableEffectiveStatRatio(v *string)
 	return _u
 }
 
+// SetIncludedInStatistics sets the "included_in_statistics" field.
+func (_u *ResetRebateAccountItemUpdate) SetIncludedInStatistics(v bool) *ResetRebateAccountItemUpdate {
+	_u.mutation.SetIncludedInStatistics(v)
+	return _u
+}
+
+// SetNillableIncludedInStatistics sets the "included_in_statistics" field if the given value is not nil.
+func (_u *ResetRebateAccountItemUpdate) SetNillableIncludedInStatistics(v *bool) *ResetRebateAccountItemUpdate {
+	if v != nil {
+		_u.SetIncludedInStatistics(*v)
+	}
+	return _u
+}
+
+// SetStatisticsExclusionReason sets the "statistics_exclusion_reason" field.
+func (_u *ResetRebateAccountItemUpdate) SetStatisticsExclusionReason(v string) *ResetRebateAccountItemUpdate {
+	_u.mutation.SetStatisticsExclusionReason(v)
+	return _u
+}
+
+// SetNillableStatisticsExclusionReason sets the "statistics_exclusion_reason" field if the given value is not nil.
+func (_u *ResetRebateAccountItemUpdate) SetNillableStatisticsExclusionReason(v *string) *ResetRebateAccountItemUpdate {
+	if v != nil {
+		_u.SetStatisticsExclusionReason(*v)
+	}
+	return _u
+}
+
 // SetRawAmount sets the "raw_amount" field.
 func (_u *ResetRebateAccountItemUpdate) SetRawAmount(v string) *ResetRebateAccountItemUpdate {
 	_u.mutation.SetRawAmount(v)
@@ -457,6 +485,12 @@ func (_u *ResetRebateAccountItemUpdate) sqlSave(ctx context.Context) (_node int,
 	}
 	if value, ok := _u.mutation.EffectiveStatRatio(); ok {
 		_spec.SetField(resetrebateaccountitem.FieldEffectiveStatRatio, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.IncludedInStatistics(); ok {
+		_spec.SetField(resetrebateaccountitem.FieldIncludedInStatistics, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.StatisticsExclusionReason(); ok {
+		_spec.SetField(resetrebateaccountitem.FieldStatisticsExclusionReason, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.RawAmount(); ok {
 		_spec.SetField(resetrebateaccountitem.FieldRawAmount, field.TypeString, value)
@@ -742,6 +776,34 @@ func (_u *ResetRebateAccountItemUpdateOne) SetNillableEffectiveStatRatio(v *stri
 	return _u
 }
 
+// SetIncludedInStatistics sets the "included_in_statistics" field.
+func (_u *ResetRebateAccountItemUpdateOne) SetIncludedInStatistics(v bool) *ResetRebateAccountItemUpdateOne {
+	_u.mutation.SetIncludedInStatistics(v)
+	return _u
+}
+
+// SetNillableIncludedInStatistics sets the "included_in_statistics" field if the given value is not nil.
+func (_u *ResetRebateAccountItemUpdateOne) SetNillableIncludedInStatistics(v *bool) *ResetRebateAccountItemUpdateOne {
+	if v != nil {
+		_u.SetIncludedInStatistics(*v)
+	}
+	return _u
+}
+
+// SetStatisticsExclusionReason sets the "statistics_exclusion_reason" field.
+func (_u *ResetRebateAccountItemUpdateOne) SetStatisticsExclusionReason(v string) *ResetRebateAccountItemUpdateOne {
+	_u.mutation.SetStatisticsExclusionReason(v)
+	return _u
+}
+
+// SetNillableStatisticsExclusionReason sets the "statistics_exclusion_reason" field if the given value is not nil.
+func (_u *ResetRebateAccountItemUpdateOne) SetNillableStatisticsExclusionReason(v *string) *ResetRebateAccountItemUpdateOne {
+	if v != nil {
+		_u.SetStatisticsExclusionReason(*v)
+	}
+	return _u
+}
+
 // SetRawAmount sets the "raw_amount" field.
 func (_u *ResetRebateAccountItemUpdateOne) SetRawAmount(v string) *ResetRebateAccountItemUpdateOne {
 	_u.mutation.SetRawAmount(v)
@@ -943,6 +1005,12 @@ func (_u *ResetRebateAccountItemUpdateOne) sqlSave(ctx context.Context) (_node *
 	}
 	if value, ok := _u.mutation.EffectiveStatRatio(); ok {
 		_spec.SetField(resetrebateaccountitem.FieldEffectiveStatRatio, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.IncludedInStatistics(); ok {
+		_spec.SetField(resetrebateaccountitem.FieldIncludedInStatistics, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.StatisticsExclusionReason(); ok {
+		_spec.SetField(resetrebateaccountitem.FieldStatisticsExclusionReason, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.RawAmount(); ok {
 		_spec.SetField(resetrebateaccountitem.FieldRawAmount, field.TypeString, value)

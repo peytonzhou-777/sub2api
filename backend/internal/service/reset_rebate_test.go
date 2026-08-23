@@ -32,6 +32,30 @@ func TestCalculateResetRebateAutoRatio(t *testing.T) {
 	}
 }
 
+func TestCalculateResetRebateAveragesUsesMicrosecondTruncation(t *testing.T) {
+	end := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
+	start, durationUS, ratio, err := calculateResetRebateAverages(end,
+		[]time.Time{end.Add(-2 * time.Microsecond), end.Add(-1 * time.Microsecond)},
+		[]decimal.Decimal{decimal.RequireFromString("80.123456789"), decimal.RequireFromString("60.123456789")},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), durationUS)
+	require.Equal(t, end.Add(-time.Microsecond), start)
+	require.Equal(t, "70.12345678", decimalString(ratio, 8))
+}
+
+func TestCalculateResetRebateAveragesUsesSharedEndTime(t *testing.T) {
+	end := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	start, durationUS, ratio, err := calculateResetRebateAverages(end,
+		[]time.Time{end.Add(-2 * 24 * time.Hour), end.Add(-4 * 24 * time.Hour)},
+		[]decimal.Decimal{decimal.NewFromInt(80), decimal.NewFromInt(60)},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64((3 * 24 * time.Hour).Microseconds()), durationUS)
+	require.Equal(t, end.Add(-3*24*time.Hour), start)
+	require.Equal(t, "70.00000000", decimalString(ratio, 8))
+}
+
 func TestResetRebateCalculationAggregatesBeforeFinalTruncation(t *testing.T) {
 	accountA := decimal.RequireFromString("100").Mul(decimal.RequireFromString("80")).Div(resetRebateHundred)
 	accountB := decimal.RequireFromString("50").Mul(decimal.RequireFromString("60")).Div(resetRebateHundred)

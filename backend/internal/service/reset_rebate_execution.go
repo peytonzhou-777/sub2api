@@ -56,14 +56,16 @@ func (s *ResetRebateService) Preview(ctx context.Context, batchID int64, payoutR
 	}
 	defer func() { _ = tx.Rollback() }()
 	var version int
-	var status string
-	if err = tx.QueryRowContext(ctx, `SELECT mechanism_version,status FROM reset_rebate_batches WHERE id=$1 FOR UPDATE`, batchID).Scan(&version, &status); err != nil {
+	var status, averageRatioText string
+	var averageEnabled bool
+	if err = tx.QueryRowContext(ctx, `SELECT mechanism_version,status,average_benefit_enabled,average_benefit_ratio::text
+		FROM reset_rebate_batches WHERE id=$1 FOR UPDATE`, batchID).Scan(&version, &status, &averageEnabled, &averageRatioText); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, infraerrors.New(http.StatusNotFound, "RESET_REBATE_NOT_FOUND", "reset rebate batch not found")
 		}
 		return nil, err
 	}
-	if version != ResetRebateMechanismV2 {
+	if version != ResetRebateMechanismV3 {
 		return nil, infraerrors.New(http.StatusConflict, "LEGACY_RESET_REBATE_READ_ONLY", "legacy reset rebate batches are read-only")
 	}
 	if status != ResetRebateStatusReady {
@@ -96,6 +98,14 @@ func (s *ResetRebateService) Preview(ctx context.Context, batchID int64, payoutR
 	}
 	_ = rows.Close()
 	ratio := decimal.NewFromInt(int64(payoutRatio))
+	combinedRatio := decimal.Zero
+	if averageEnabled {
+		averageRatio, parseErr := parseDecimalDB(averageRatioText)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		combinedRatio = averageRatio.Mul(ratio).Div(resetRebateHundred).Truncate(8)
+	}
 	expectedTotal, excludedTotal := decimal.Zero, decimal.Zero
 	expectedCount, excludedCount := 0, 0
 	for _, value := range values {
@@ -120,8 +130,9 @@ func (s *ResetRebateService) Preview(ctx context.Context, batchID int64, payoutR
 	var previewVersion int
 	err = tx.QueryRowContext(ctx, `UPDATE reset_rebate_batches SET payout_ratio=$2,rebate_reason=$3,
 		preview_version=preview_version+1,expected_amount=$4,excluded_amount=$5,
-		expected_user_count=$6,excluded_user_count=$7,updated_at=NOW() WHERE id=$1 RETURNING preview_version`,
-		batchID, payoutRatio, reason, decimalString(expectedTotal, 8), decimalString(excludedTotal, 8), expectedCount, excludedCount).Scan(&previewVersion)
+		expected_user_count=$6,excluded_user_count=$7,combined_payout_ratio=$8,updated_at=NOW()
+		WHERE id=$1 RETURNING preview_version`, batchID, payoutRatio, reason, decimalString(expectedTotal, 8),
+		decimalString(excludedTotal, 8), expectedCount, excludedCount, decimalString(combinedRatio, 8)).Scan(&previewVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +188,7 @@ func (s *ResetRebateService) claimResetRebateExecution(ctx context.Context, batc
 	if err != nil {
 		return nil, err
 	}
-	if version != ResetRebateMechanismV2 {
+	if version != ResetRebateMechanismV3 {
 		return nil, infraerrors.New(http.StatusConflict, "LEGACY_RESET_REBATE_READ_ONLY", "legacy reset rebate batches are read-only")
 	}
 	if retry {
@@ -243,16 +254,17 @@ func (s *ResetRebateService) runExecution(ctx context.Context, batchID int64) er
 		return err
 	}
 	defer unlock()
+	var version int
 	var status, mode, adminEmail string
 	var cursor, adminID int64
 	var initialIssued sql.NullTime
-	err = s.db.QueryRowContext(ctx, `SELECT status,execution_mode,execution_cursor_user_id,
+	err = s.db.QueryRowContext(ctx, `SELECT mechanism_version,status,execution_mode,execution_cursor_user_id,
 		COALESCE(execution_admin_id,0),execution_admin_email,initial_issued_at
-		FROM reset_rebate_batches WHERE id=$1`, batchID).Scan(&status, &mode, &cursor, &adminID, &adminEmail, &initialIssued)
+		FROM reset_rebate_batches WHERE id=$1`, batchID).Scan(&version, &status, &mode, &cursor, &adminID, &adminEmail, &initialIssued)
 	if err != nil {
 		return err
 	}
-	if status != ResetRebateStatusExecuting || (mode != resetRebateExecutionInitial && mode != resetRebateExecutionRetry) {
+	if version != ResetRebateMechanismV3 || status != ResetRebateStatusExecuting || (mode != resetRebateExecutionInitial && mode != resetRebateExecutionRetry) {
 		return nil
 	}
 	resultFilter := "pending"
@@ -548,7 +560,8 @@ func (s *ResetRebateService) DeleteBatch(ctx context.Context, batchID int64) err
 	}
 	defer unlock()
 	result, err := s.db.ExecContext(ctx, `DELETE FROM reset_rebate_batches AS batch
-		WHERE batch.id=$1 AND batch.status NOT IN ('running','executing','partial','executed')
+		WHERE batch.id=$1 AND batch.mechanism_version=3
+		AND batch.status NOT IN ('running','executing','partial','executed')
 		AND batch.successful_user_count=0
 		AND NOT EXISTS(SELECT 1 FROM user_limited_credit_grants grant
 			WHERE grant.source_type='reset_rebate' AND grant.source_id=batch.id)`, batchID)
@@ -570,16 +583,34 @@ func (s *ResetRebateService) DeleteBatch(ctx context.Context, batchID int64) err
 
 // ExportUsersCSV 导出完整用户汇总与发放结果。
 func (s *ResetRebateService) ExportUsersCSV(ctx context.Context, batchID int64, writer io.Writer) error {
-	return s.exportResetRebateRows(ctx, writer, []string{"用户ID", "邮箱", "用户名", "原始消耗", "计入统计消耗", "预计金额", "实际发放", "结果", "排除原因", "错误码", "错误原因"},
-		`SELECT user_id::text,email,username,raw_amount::text,weighted_amount::text,expected_amount::text,
-		actual_issued_amount::text,result,exclusion_reason,error_code,error_message FROM reset_rebate_user_items WHERE batch_id=$1 ORDER BY user_id`, batchID, 11)
+	return s.exportResetRebateRows(ctx, writer, []string{"用户ID", "邮箱", "用户名", "原始消耗", "计入统计消耗", "平均受益比例", "最终组合比例", "预计金额", "实际发放", "结果", "排除原因", "错误码", "错误原因"},
+		`SELECT item.user_id::text,item.email,item.username,item.raw_amount::text,item.weighted_amount::text,
+		batch.average_benefit_ratio::text,batch.combined_payout_ratio::text,item.expected_amount::text,
+		item.actual_issued_amount::text,item.result,item.exclusion_reason,item.error_code,item.error_message
+		FROM reset_rebate_user_items AS item JOIN reset_rebate_batches AS batch ON batch.id=item.batch_id
+		WHERE item.batch_id=$1 ORDER BY item.user_id`, batchID, 13)
+}
+
+// ExportAccountsCSV 导出完整账号快照，包括未参与统计的自动排除账号。
+func (s *ResetRebateService) ExportAccountsCSV(ctx context.Context, batchID int64, writer io.Writer) error {
+	return s.exportResetRebateRows(ctx, writer, []string{"账号ID", "账号名称", "平台", "类型", "账号状态", "错误信息", "参与统计", "排除原因", "开始时间", "结束时间", "有效统计比例", "平均受益比例", "最终组合比例", "原始消耗", "计入统计消耗"},
+		`SELECT item.account_id::text,item.account_name,item.platform,item.account_type,item.account_status,
+		item.account_error_message,item.included_in_statistics::text,item.statistics_exclusion_reason,
+		item.period_start::text,item.period_end::text,
+		item.effective_stat_ratio::text,batch.average_benefit_ratio::text,batch.combined_payout_ratio::text,
+		item.raw_amount::text,item.weighted_amount::text
+		FROM reset_rebate_account_items AS item JOIN reset_rebate_batches AS batch ON batch.id=item.batch_id
+		WHERE item.batch_id=$1 ORDER BY item.account_id`, batchID, 15)
 }
 
 // ExportContributionsCSV 导出完整逐用户逐账号贡献。
 func (s *ResetRebateService) ExportContributionsCSV(ctx context.Context, batchID int64, writer io.Writer) error {
-	return s.exportResetRebateRows(ctx, writer, []string{"用户ID", "账号ID", "账号名称", "开始时间", "结束时间", "原始消耗", "有效统计比例", "计入统计消耗"},
-		`SELECT user_id::text,account_id::text,account_name,period_start::text,period_end::text,raw_amount::text,
-		effective_stat_ratio::text,weighted_amount::text FROM reset_rebate_user_account_items WHERE batch_id=$1 ORDER BY user_id,account_id`, batchID, 8)
+	return s.exportResetRebateRows(ctx, writer, []string{"用户ID", "账号ID", "账号名称", "开始时间", "结束时间", "原始消耗", "有效统计比例", "平均受益比例", "最终组合比例", "计入统计消耗"},
+		`SELECT item.user_id::text,item.account_id::text,item.account_name,item.period_start::text,item.period_end::text,
+		item.raw_amount::text,item.effective_stat_ratio::text,batch.average_benefit_ratio::text,
+		batch.combined_payout_ratio::text,item.weighted_amount::text
+		FROM reset_rebate_user_account_items AS item JOIN reset_rebate_batches AS batch ON batch.id=item.batch_id
+		WHERE item.batch_id=$1 ORDER BY item.user_id,item.account_id`, batchID, 10)
 }
 
 // ExportFailedUsersCSV 导出当前失败用户及最近错误。
