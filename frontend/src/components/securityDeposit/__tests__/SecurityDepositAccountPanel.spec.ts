@@ -20,7 +20,15 @@ const account: SecurityDepositAccount = {
   total_balance_cents: 17345, effective_balance_cents: 17345, timed_locked_cents: 2345,
   permanent_locked_cents: 5000, refundable_cents: 10000, paid_refund_reserved_cents: 0,
   cyber_strike_count: 0, risk_multiplier: 1, max_risk_multiplier: 8, next_unlock_at: null,
-  enforcement_enabled: false, self_refund_enabled: false, lots: [],
+  enforcement_enabled: true, self_refund_enabled: false,
+  bonus: {
+    enabled: true, qualified: true, reason: 'eligible', daily_amount: 5,
+    cap_ratio: 100, current_amount: 12.5, cap_amount: 173.45,
+    estimated_grant_amount: 5, next_grant_at: '2026-08-24T00:00:00+08:00',
+    expires_at: '2026-08-30T00:00:00+08:00', qualifying_group_id: 9,
+    qualifying_group_name: '安全分组', required_cents: 10000,
+  },
+  lots: [],
 }
 
 describe('SecurityDepositAccountPanel', () => {
@@ -44,6 +52,9 @@ describe('SecurityDepositAccountPanel', () => {
     expect(wrapper.get('[data-test="security-deposit-admin-grant"]').text()).toBe('¥50.00')
     expect(wrapper.text()).toContain('限时冻结 ¥23.45')
     expect(wrapper.text()).toContain('永久冻结 ¥50.00')
+    expect(wrapper.get('[data-test="security-deposit-bonus-current"]').text()).toBe('$12.50')
+    expect(wrapper.get('[data-test="security-deposit-bonus-estimated"]').text()).toBe('$5.00')
+    expect(wrapper.get('[data-test="security-deposit-bonus-status"]').text()).toContain('payment.securityDeposit.bonusEligible')
 
     await toggle.trigger('click')
     expect(toggle.attributes('aria-expanded')).toBe('false')

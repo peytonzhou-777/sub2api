@@ -74,6 +74,8 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeySecurityDepositEnforcementEnabled:         "false",
 		SettingKeySecurityDepositSelfRefundEnabled:          "false",
 		SettingKeySecurityDepositPenaltyMode:                SecurityDepositPenaltyModeOff,
+		SettingKeySecurityDepositBonusDailyAmount:           strconv.FormatFloat(defaultSecurityDepositBonusDaily, 'f', -1, 64),
+		SettingKeySecurityDepositBonusCapRatio:              strconv.FormatFloat(defaultSecurityDepositBonusCapRatio, 'f', -1, 64),
 		SettingKeyAPIKeyACLTrustForwardedIP:                 "true",
 		SettingKeyForwardedClientIPHeaders:                  string(forwardedClientIPHeadersJSON),
 		settingKeyForwardedClientIPModeV2:                   "true",
@@ -873,6 +875,8 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.SecurityDepositPolicyVersion = depositPolicy.Version
 	result.SecurityDepositAgreementContentZH = depositPolicy.ContentZH
 	result.SecurityDepositAgreementContentEN = depositPolicy.ContentEN
+	result.SecurityDepositBonusDailyAmount = depositPolicy.BonusDailyAmount
+	result.SecurityDepositBonusCapRatio = depositPolicy.BonusCapRatio
 
 	// cyber 会话屏蔽（默认关闭，TTL 默认 3600s）
 	result.CyberSessionBlockEnabled = settings[SettingKeyCyberSessionBlockEnabled] == "true"

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -17,6 +18,8 @@ const (
 	defaultSecurityDepositPolicyVersion = "2026-08-16-v1"
 	defaultSecurityDepositFreezeHours   = 24
 	maxSecurityDepositFreezeHours       = 24 * 365
+	defaultSecurityDepositBonusDaily    = 0
+	defaultSecurityDepositBonusCapRatio = 100
 
 	defaultSecurityDepositAgreementContentZH = `# 网络安全保证金约定
 
@@ -41,15 +44,17 @@ const (
 
 // SecurityDepositPolicyConfig 是保证金协议和运行时安全默认值的权威配置。
 type SecurityDepositPolicyConfig struct {
-	Version            string `json:"version"`
-	ContentHash        string `json:"content_hash"`
-	ContentZH          string `json:"content_zh"`
-	ContentEN          string `json:"content_en"`
-	FreezeHours        int    `json:"freeze_hours"`
-	MaxRiskMultiplier  int64  `json:"max_risk_multiplier"`
-	EnforcementEnabled bool   `json:"enforcement_enabled"`
-	SelfRefundEnabled  bool   `json:"self_refund_enabled"`
-	PenaltyMode        string `json:"penalty_mode"`
+	Version            string  `json:"version"`
+	ContentHash        string  `json:"content_hash"`
+	ContentZH          string  `json:"content_zh"`
+	ContentEN          string  `json:"content_en"`
+	FreezeHours        int     `json:"freeze_hours"`
+	MaxRiskMultiplier  int64   `json:"max_risk_multiplier"`
+	EnforcementEnabled bool    `json:"enforcement_enabled"`
+	SelfRefundEnabled  bool    `json:"self_refund_enabled"`
+	PenaltyMode        string  `json:"penalty_mode"`
+	BonusDailyAmount   float64 `json:"bonus_daily_amount"`
+	BonusCapRatio      float64 `json:"bonus_cap_ratio"`
 }
 
 // GetSecurityDepositPolicyConfig 读取保证金配置；缺失或非法值回退到保守默认值。
@@ -71,6 +76,8 @@ func (s *SettingService) GetSecurityDepositPolicyConfigStrict(ctx context.Contex
 			SettingKeySecurityDepositEnforcementEnabled,
 			SettingKeySecurityDepositSelfRefundEnabled,
 			SettingKeySecurityDepositPenaltyMode,
+			SettingKeySecurityDepositBonusDailyAmount,
+			SettingKeySecurityDepositBonusCapRatio,
 		}
 		loaded, err := s.settingRepo.GetMultiple(ctx, keys)
 		if err != nil {
@@ -94,7 +101,17 @@ func buildSecurityDepositPolicyConfig(values map[string]string) SecurityDepositP
 		EnforcementEnabled: strings.EqualFold(strings.TrimSpace(values[SettingKeySecurityDepositEnforcementEnabled]), "true"),
 		SelfRefundEnabled:  strings.EqualFold(strings.TrimSpace(values[SettingKeySecurityDepositSelfRefundEnabled]), "true"),
 		PenaltyMode:        normalizeSecurityDepositPenaltyMode(values[SettingKeySecurityDepositPenaltyMode]),
+		BonusDailyAmount:   parseSecurityDepositNonnegativeFloat(values[SettingKeySecurityDepositBonusDailyAmount], defaultSecurityDepositBonusDaily),
+		BonusCapRatio:      parseSecurityDepositNonnegativeFloat(values[SettingKeySecurityDepositBonusCapRatio], defaultSecurityDepositBonusCapRatio),
 	}
+}
+
+func parseSecurityDepositNonnegativeFloat(raw string, fallback float64) float64 {
+	value, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+		return fallback
+	}
+	return value
 }
 
 func normalizeSecurityDepositPenaltyMode(value string) string {

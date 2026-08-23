@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -14,6 +15,8 @@ import (
 func TestSecurityDepositSettings_RoundTripStoredValues(t *testing.T) {
 	repo := newMockSettingRepo()
 	repo.data[SettingKeySecurityDepositEnforcementEnabled] = "true"
+	repo.data[SettingKeySecurityDepositBonusDailyAmount] = "2.5"
+	repo.data[SettingKeySecurityDepositBonusCapRatio] = "125"
 	repo.data[SettingKeySecurityDepositSelfRefundEnabled] = "true"
 	repo.data[SettingKeySecurityDepositPenaltyMode] = SecurityDepositPenaltyModeShadow
 	repo.data[SettingKeySecurityDepositFreezeHours] = "48"
@@ -26,6 +29,8 @@ func TestSecurityDepositSettings_RoundTripStoredValues(t *testing.T) {
 	settings, err := svc.GetAllSettings(context.Background())
 	require.NoError(t, err)
 	require.True(t, settings.SecurityDepositEnforcementEnabled)
+	require.Equal(t, 2.5, settings.SecurityDepositBonusDailyAmount)
+	require.Equal(t, 125.0, settings.SecurityDepositBonusCapRatio)
 	require.True(t, settings.SecurityDepositSelfRefundEnabled)
 	require.Equal(t, SecurityDepositPenaltyModeShadow, settings.SecurityDepositPenaltyMode)
 	require.Equal(t, 48, settings.SecurityDepositFreezeHours)
@@ -41,6 +46,8 @@ func TestSecurityDepositSettings_UpdatePersistsAllFields(t *testing.T) {
 
 	err := svc.UpdateSettings(context.Background(), &SystemSettings{
 		SecurityDepositEnforcementEnabled: true,
+		SecurityDepositBonusDailyAmount:   3.25,
+		SecurityDepositBonusCapRatio:      150,
 		SecurityDepositSelfRefundEnabled:  true,
 		SecurityDepositPenaltyMode:        SecurityDepositPenaltyModeEnforce,
 		SecurityDepositFreezeHours:        72,
@@ -51,6 +58,8 @@ func TestSecurityDepositSettings_UpdatePersistsAllFields(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "true", repo.updates[SettingKeySecurityDepositEnforcementEnabled])
+	require.Equal(t, "3.25", repo.updates[SettingKeySecurityDepositBonusDailyAmount])
+	require.Equal(t, "150", repo.updates[SettingKeySecurityDepositBonusCapRatio])
 	require.Equal(t, "true", repo.updates[SettingKeySecurityDepositSelfRefundEnabled])
 	require.Equal(t, SecurityDepositPenaltyModeEnforce, repo.updates[SettingKeySecurityDepositPenaltyMode])
 	require.Equal(t, "72", repo.updates[SettingKeySecurityDepositFreezeHours])
@@ -62,6 +71,8 @@ func TestSecurityDepositSettings_UpdatePersistsAllFields(t *testing.T) {
 
 func TestSecurityDepositSettings_DefaultAgreementStatesPenaltyAndRefundRules(t *testing.T) {
 	policy := buildSecurityDepositPolicyConfig(nil)
+	require.Zero(t, policy.BonusDailyAmount)
+	require.Equal(t, 100.0, policy.BonusCapRatio)
 
 	require.Contains(t, policy.ContentZH, "首次触发按 1 倍门槛")
 	require.Contains(t, policy.ContentZH, "第二次按 2 倍")
@@ -86,6 +97,16 @@ func TestSecurityDepositSettings_RejectsInvalidBounds(t *testing.T) {
 		settings   *SystemSettings
 		wantReason string
 	}{
+		{
+			name:       "每日赠额小于零",
+			settings:   &SystemSettings{SecurityDepositBonusDailyAmount: -1},
+			wantReason: "INVALID_SECURITY_DEPOSIT_BONUS_DAILY_AMOUNT",
+		},
+		{
+			name:       "赠额上限比例不是有限数",
+			settings:   &SystemSettings{SecurityDepositBonusCapRatio: math.Inf(1)},
+			wantReason: "INVALID_SECURITY_DEPOSIT_BONUS_CAP_RATIO",
+		},
 		{
 			name:       "冻结时长小于零",
 			settings:   &SystemSettings{SecurityDepositFreezeHours: -1},

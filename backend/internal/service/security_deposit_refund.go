@@ -545,6 +545,11 @@ func (s *SecurityDepositService) finishSecurityDepositRefundChange(ctx context.C
 		return nil, fmt.Errorf("reconcile security deposit keys after refund change: %w", err)
 	}
 	result.DisabledKeyIDs = disabled
+	if result.State == SecurityDepositRefundStateSucceeded {
+		if err = s.reconcileBonusAfterBalanceDecrease(ctx, result.UserID, eventType, result.ID); err != nil {
+			return nil, fmt.Errorf("reconcile security deposit bonus after refund success: %w", err)
+		}
+	}
 	s.invalidateSecurityDepositUser(ctx, result.UserID)
 	return result, nil
 }

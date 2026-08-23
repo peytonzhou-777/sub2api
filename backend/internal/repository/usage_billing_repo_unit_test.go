@@ -259,3 +259,58 @@ func TestReleaseUsageBillingBatchImageBalance_SkipsWhenHoldNeverReserved(t *test
 	require.NoError(t, tx.Commit())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestCaptureLimitedCreditGrant_ConsumesPendingDepositBonusRevocation(t *testing.T) {
+	ctx := context.Background()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectBegin()
+	tx, err := db.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	mock.ExpectExec(`(?s)UPDATE user_limited_credit_grants.*security_deposit_bonus_pending_revoke_amount = GREATEST`).
+		WithArgs(2.0, billingAmountEpsilon, service.LimitedCreditStatusDepleted, int64(8), int64(42)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`(?s)INSERT INTO user_limited_credit_ledger`).
+		WithArgs(int64(42), int64(8), "capture", 2.0, "req-1", int64(7), "batch-1").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	err = captureLimitedCreditGrant(ctx, tx, &service.BatchImageBalanceHoldCommand{
+		UserID: 42, APIKeyID: 7, RequestID: "req-1", BatchID: "batch-1",
+	}, 8, 2)
+
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestReleaseLimitedCreditGrant_RevokesReleasedPendingDepositBonus(t *testing.T) {
+	ctx := context.Background()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectBegin()
+	tx, err := db.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	mock.ExpectQuery(`(?s)WITH current AS \(.*security_deposit_bonus_pending_revoke_amount.*RETURNING current.revoked`).
+		WithArgs(2.0, int64(8), int64(42), billingAmountEpsilon, service.LimitedCreditStatusDepleted).
+		WillReturnRows(sqlmock.NewRows([]string{"revoked"}).AddRow(1.5))
+	mock.ExpectExec(`(?s)INSERT INTO user_limited_credit_ledger`).
+		WithArgs(int64(42), int64(8), "release", 2.0, "req-1", int64(7), "batch-1").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(`(?s)INSERT INTO user_limited_credit_ledger`).
+		WithArgs(int64(42), int64(8), "security_deposit_bonus_revoke", 1.5, "req-1", int64(7), "batch-1").
+		WillReturnResult(sqlmock.NewResult(2, 1))
+	mock.ExpectCommit()
+
+	err = releaseLimitedCreditGrant(ctx, tx, &service.BatchImageBalanceHoldCommand{
+		UserID: 42, APIKeyID: 7, RequestID: "req-1", BatchID: "batch-1",
+	}, 8, 2)
+
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+	require.NoError(t, mock.ExpectationsWereMet())
+}

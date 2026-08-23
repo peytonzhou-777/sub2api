@@ -8615,6 +8615,36 @@
                 </div>
                 <div>
                   <label class="input-label">{{
+                    t("admin.settings.payment.securityDepositBonusDailyAmount")
+                  }}</label>
+                  <input
+                    v-model.number="form.security_deposit_bonus_daily_amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    class="input"
+                  />
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.payment.securityDepositBonusDailyAmountHint") }}
+                  </p>
+                </div>
+                <div>
+                  <label class="input-label">{{
+                    t("admin.settings.payment.securityDepositBonusCapRatio")
+                  }}</label>
+                  <input
+                    v-model.number="form.security_deposit_bonus_cap_ratio"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    class="input"
+                  />
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.payment.securityDepositBonusCapRatioHint") }}
+                  </p>
+                </div>
+                <div>
+                  <label class="input-label">{{
                     t("admin.settings.payment.securityDepositPenaltyMode")
                   }}</label>
                   <select v-model="form.security_deposit_penalty_mode" class="input">
@@ -10011,6 +10041,8 @@ const form = reactive<SettingsForm>({
   payment_subscription_usd_to_cny_rate: 0,
   payment_recharge_fee_rate: 0,
   security_deposit_enforcement_enabled: false,
+  security_deposit_bonus_daily_amount: 0,
+  security_deposit_bonus_cap_ratio: 100,
   security_deposit_self_refund_enabled: false,
   security_deposit_penalty_mode: "off",
   security_deposit_freeze_hours: 24,
@@ -11920,6 +11952,14 @@ async function saveSettings() {
       payment_recharge_fee_rate: Number(form.payment_recharge_fee_rate) || 0,
       security_deposit_enforcement_enabled:
         form.security_deposit_enforcement_enabled,
+      security_deposit_bonus_daily_amount: Math.max(
+        0,
+        Number(form.security_deposit_bonus_daily_amount) || 0,
+      ),
+      security_deposit_bonus_cap_ratio: Math.max(
+        0,
+        Number(form.security_deposit_bonus_cap_ratio) || 0,
+      ),
       security_deposit_self_refund_enabled:
         form.security_deposit_self_refund_enabled,
       security_deposit_penalty_mode: form.security_deposit_penalty_mode,

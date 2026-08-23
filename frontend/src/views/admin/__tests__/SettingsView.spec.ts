@@ -506,6 +506,8 @@ const baseSettingsResponse = {
   payment_subscription_usd_to_cny_rate: 0,
   payment_recharge_fee_rate: 0,
   security_deposit_enforcement_enabled: false,
+  security_deposit_bonus_daily_amount: 0,
+  security_deposit_bonus_cap_ratio: 100,
   security_deposit_self_refund_enabled: false,
   security_deposit_penalty_mode: "off",
   security_deposit_freeze_hours: 24,
@@ -1296,6 +1298,8 @@ describe("admin SettingsView payment visible method controls", () => {
     getSettings.mockResolvedValueOnce({
       ...baseSettingsResponse,
       security_deposit_enforcement_enabled: true,
+      security_deposit_bonus_daily_amount: 2.5,
+      security_deposit_bonus_cap_ratio: 125,
       security_deposit_self_refund_enabled: true,
       security_deposit_penalty_mode: "shadow",
       security_deposit_freeze_hours: 48,
@@ -1311,6 +1315,8 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({
         security_deposit_enforcement_enabled: true,
+        security_deposit_bonus_daily_amount: 2.5,
+        security_deposit_bonus_cap_ratio: 125,
         security_deposit_self_refund_enabled: true,
         security_deposit_penalty_mode: "shadow",
         security_deposit_freeze_hours: 48,

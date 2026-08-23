@@ -840,6 +840,7 @@ var ProviderSet = wire.NewSet(
 	NewProxyService,
 	ProvideRedeemService,
 	NewLimitedCreditService,
+	ProvideSecurityDepositBonusService,
 	ProvideSecurityDepositService,
 	wire.Bind(new(SecurityDepositGroupKeyReconciler), new(*SecurityDepositService)),
 	NewResetRebateService,
@@ -953,6 +954,7 @@ var ProviderSet = wire.NewSet(
 	ProvidePaymentService,
 	ProvidePaymentOrderExpiryService,
 	ProvideRecurringCreditRunner,
+	ProvideSecurityDepositBonusRunner,
 	ProvideBalanceNotifyService,
 	ProvideChannelMonitorService,
 	ProvideChannelMonitorRunner,
@@ -1020,7 +1022,12 @@ func ProvidePaymentService(entClient *dbent.Client, registry *payment.Registry, 
 }
 
 // ProvideSecurityDepositService 接入现有分组授权、支付和配置能力。
-func ProvideSecurityDepositService(repo SecurityDepositRepository, eligibilityRepo SecurityDepositKeyEligibilityRepository, apiKeyService *APIKeyService, paymentService *PaymentService, settingService *SettingService) *SecurityDepositService {
+func ProvideSecurityDepositBonusService(db *sql.DB, settingService *SettingService, repo SecurityDepositRepository, apiKeyService *APIKeyService, billingCache *BillingCacheService) *SecurityDepositBonusService {
+	return NewSecurityDepositBonusService(db, settingService, repo, apiKeyService, apiKeyService, billingCache)
+}
+
+// ProvideSecurityDepositService 接入现有分组授权、支付、配置和保证金赠额能力。
+func ProvideSecurityDepositService(repo SecurityDepositRepository, eligibilityRepo SecurityDepositKeyEligibilityRepository, apiKeyService *APIKeyService, paymentService *PaymentService, settingService *SettingService, bonusService *SecurityDepositBonusService) *SecurityDepositService {
 	svc := NewSecurityDepositService(repo)
 	svc.SetOrderDependencies(apiKeyService, paymentService, settingService)
 	svc.SetPenaltyDependencies(apiKeyService)
@@ -1028,6 +1035,7 @@ func ProvideSecurityDepositService(repo SecurityDepositRepository, eligibilityRe
 	reconciler := NewKeyEligibilityReconciler(svc, eligibilityRepo, apiKeyService)
 	svc.SetKeyEligibilityReconciler(reconciler)
 	svc.SetGroupKeyEligibilityReconciler(reconciler)
+	svc.SetBonusDependencies(bonusService, bonusService)
 	paymentService.SetSecurityDepositKeyChangeReconciler(svc)
 	return svc
 }
@@ -1043,6 +1051,13 @@ func ProvidePaymentOrderExpiryService(paymentSvc *PaymentService, lockCache Lead
 // ProvideRecurringCreditRunner 创建并启动数据库驱动的循环赠额执行器。
 func ProvideRecurringCreditRunner(recurringService *RecurringCreditService, db *sql.DB) *RecurringCreditRunner {
 	runner := NewRecurringCreditRunner(recurringService, db)
+	runner.Start()
+	return runner
+}
+
+// ProvideSecurityDepositBonusRunner 创建并启动保证金赠额日批次执行器。
+func ProvideSecurityDepositBonusRunner(bonusService *SecurityDepositBonusService, db *sql.DB) *SecurityDepositBonusRunner {
+	runner := NewSecurityDepositBonusRunner(bonusService, db)
 	runner.Start()
 	return runner
 }

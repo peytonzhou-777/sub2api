@@ -727,6 +727,8 @@ export interface SystemSettings {
   payment_subscription_usd_to_cny_rate: number;
   payment_recharge_fee_rate: number;
   security_deposit_enforcement_enabled: boolean;
+  security_deposit_bonus_daily_amount: number;
+  security_deposit_bonus_cap_ratio: number;
   security_deposit_self_refund_enabled: boolean;
   security_deposit_penalty_mode: 'off' | 'shadow' | 'enforce';
   security_deposit_freeze_hours: number;
@@ -1063,6 +1065,8 @@ export interface UpdateSettingsRequest {
   payment_subscription_usd_to_cny_rate?: number;
   payment_recharge_fee_rate?: number;
   security_deposit_enforcement_enabled?: boolean;
+  security_deposit_bonus_daily_amount?: number;
+  security_deposit_bonus_cap_ratio?: number;
   security_deposit_self_refund_enabled?: boolean;
   security_deposit_penalty_mode?: 'off' | 'shadow' | 'enforce';
   security_deposit_freeze_hours?: number;

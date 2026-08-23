@@ -184,6 +184,8 @@ type SystemSettings struct {
 	SecurityDepositPolicyVersion      string
 	SecurityDepositAgreementContentZH string
 	SecurityDepositAgreementContentEN string
+	SecurityDepositBonusDailyAmount   float64
+	SecurityDepositBonusCapRatio      float64
 	AffiliateEnabled                  bool
 	AffiliateRebateRate               float64
 	AffiliateRebateFreezeHours        int

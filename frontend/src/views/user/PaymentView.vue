@@ -508,6 +508,9 @@ function limitedCreditSourceReason(credit: LimitedCreditGrant): string {
   if (credit.source_type === 'default_user_setting') {
     return t('payment.account.defaultUserCreditReason')
   }
+  if (credit.source_type === 'security_deposit_bonus') {
+    return t('payment.account.securityDepositBonusCreditReason')
+  }
   return credit.source_reason?.trim() || ''
 }
 

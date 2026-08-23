@@ -304,6 +304,8 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		SecurityDepositPolicyVersion:                           settings.SecurityDepositPolicyVersion,
 		SecurityDepositAgreementContentZH:                      settings.SecurityDepositAgreementContentZH,
 		SecurityDepositAgreementContentEN:                      settings.SecurityDepositAgreementContentEN,
+		SecurityDepositBonusDailyAmount:                        settings.SecurityDepositBonusDailyAmount,
+		SecurityDepositBonusCapRatio:                           settings.SecurityDepositBonusCapRatio,
 		CyberSessionBlockEnabled:                               settings.CyberSessionBlockEnabled,
 		CyberSessionBlockTTLSeconds:                            settings.CyberSessionBlockTTLSeconds,
 		AffiliateRebateRate:                                    settings.AffiliateRebateRate,

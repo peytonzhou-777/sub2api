@@ -93,6 +93,9 @@ vi.mock('vue-i18n', async () => {
         if (key === 'payment.account.defaultUserCreditReason') {
           return '新用户体验额度'
         }
+        if (key === 'payment.account.securityDepositBonusCreditReason') {
+          return '保证金赠额'
+        }
         return key
       },
     }),
@@ -723,7 +726,7 @@ describe('PaymentView account tab', () => {
     expect(wrapper.get('[data-test="limited-credit-item"] h3').text()).toBe('限时额度 #3 （暑期充值活动）')
   })
 
-  it('shows fixed title reasons for redeem code and default user credits', async () => {
+  it('shows fixed title reasons for redeem code, default user, and deposit bonus credits', async () => {
     limitedCreditState.activeCredits = [
       {
         id: 5, source_type: 'redeem_code', source_id: 22,
@@ -739,6 +742,13 @@ describe('PaymentView account tab', () => {
         expires_at: '2099-02-01T00:00:00Z', status: 'active',
         created_at: '2026-01-01T00:00:00Z',
       },
+      {
+        id: 7, source_type: 'security_deposit_bonus',
+        initial_amount: 5, used_amount: 0, frozen_amount: 0,
+        remaining_amount: 5, available_amount: 5,
+        expires_at: '2099-03-01T00:00:00Z', status: 'active',
+        created_at: '2026-01-01T00:00:00Z',
+      },
     ]
 
     const wrapper = await mountAccount()
@@ -747,6 +757,7 @@ describe('PaymentView account tab', () => {
     expect(titles).toEqual([
       '限时额度 #5 （兑换码兑换额度）',
       '限时额度 #6 （新用户体验额度）',
+      '限时额度 #7 （保证金赠额）',
     ])
   })
 

@@ -233,6 +233,8 @@ const (
 	SettingKeySecurityDepositEnforcementEnabled   = "security_deposit_enforcement_enabled"
 	SettingKeySecurityDepositSelfRefundEnabled    = "security_deposit_self_refund_enabled"
 	SettingKeySecurityDepositPenaltyMode          = "security_deposit_penalty_mode"
+	SettingKeySecurityDepositBonusDailyAmount     = "security_deposit_bonus_daily_amount"
+	SettingKeySecurityDepositBonusCapRatio        = "security_deposit_bonus_cap_ratio"
 
 	// 邮件服务设置
 	SettingKeySMTPHost     = "smtp_host"      // SMTP服务器地址

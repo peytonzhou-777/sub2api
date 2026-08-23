@@ -68,3 +68,17 @@ func TestMigration227AllowsCompleteExternalRefundFactsForAutomaticReview(t *test
 	require.Contains(t, sql, "external_refund_id IS NOT NULL AND external_refunded_at IS NOT NULL AND external_evidence IS NOT NULL")
 	require.NotContains(t, sql, "mode <> 'automatic_original_channel'")
 }
+
+func TestMigration240AddsSecurityDepositBonusAccounting(t *testing.T) {
+	content, err := FS.ReadFile("240_security_deposit_bonus.sql")
+	require.NoError(t, err)
+
+	sql := strings.Join(strings.Fields(string(content)), " ")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS security_deposit_bonus_pending_revoke_amount DECIMAL(20, 8) NOT NULL DEFAULT 0")
+	require.Contains(t, sql, "WHERE source_type = 'security_deposit_bonus'")
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS security_deposit_bonus_batches")
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS security_deposit_bonus_batch_items")
+	require.Contains(t, sql, "UNIQUE (batch_id, user_id)")
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS security_deposit_bonus_reconciliations")
+	require.Contains(t, sql, "UNIQUE (user_id, event_type, event_id)")
+}

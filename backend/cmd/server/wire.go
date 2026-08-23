@@ -111,6 +111,7 @@ func provideCleanup(
 	backupSvc *service.BackupService,
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	recurringCreditRunner *service.RecurringCreditRunner,
+	securityDepositBonusRunner *service.SecurityDepositBonusRunner,
 	channelMonitorRunner *service.ChannelMonitorRunner,
 	channelMonitorV2Aggregator *service.ChannelMonitorV2Aggregator,
 	quotaFlusher *service.UserPlatformQuotaUsageFlusher,
@@ -338,6 +339,12 @@ func provideCleanup(
 			{"RecurringCreditRunner", func() error {
 				if recurringCreditRunner != nil {
 					recurringCreditRunner.Stop()
+				}
+				return nil
+			}},
+			{"SecurityDepositBonusRunner", func() error {
+				if securityDepositBonusRunner != nil {
+					securityDepositBonusRunner.Stop()
 				}
 				return nil
 			}},

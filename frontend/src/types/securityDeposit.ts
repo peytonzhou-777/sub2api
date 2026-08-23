@@ -43,7 +43,24 @@ export interface SecurityDepositAccount {
   next_unlock_at: string | null
   enforcement_enabled: boolean
   self_refund_enabled: boolean
+  bonus?: SecurityDepositBonusEstimate
   lots: SecurityDepositLot[]
+}
+
+export interface SecurityDepositBonusEstimate {
+  enabled: boolean
+  qualified: boolean
+  reason: 'eligible' | 'enforcement_disabled' | 'daily_amount_disabled' | 'threshold_not_met' | 'cap_reached'
+  daily_amount: number
+  cap_ratio: number
+  current_amount: number
+  cap_amount: number
+  estimated_grant_amount: number
+  next_grant_at: string
+  expires_at?: string
+  qualifying_group_id?: number
+  qualifying_group_name?: string
+  required_cents: number
 }
 
 export interface SecurityDepositEligibility {

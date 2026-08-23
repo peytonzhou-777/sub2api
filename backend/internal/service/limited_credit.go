@@ -9,17 +9,18 @@ import (
 )
 
 const (
-	LimitedCreditSourceRedeemCode         = "redeem_code"
-	LimitedCreditSourceDefaultUserSetting = "default_user_setting"
-	LimitedCreditSourceAuthSourceDefault  = "auth_source_default"
-	LimitedCreditSourceAffiliateRebate    = "affiliate_rebate"
-	LimitedCreditSourceRechargeBonus      = "recharge_bonus"
-	LimitedCreditSourceCreditGrantEvent   = "credit_grant_event"
-	LimitedCreditSourceResetRebate        = "reset_rebate"
-	LimitedCreditStatusActive             = "active"
-	LimitedCreditSourcePromoCode          = "promo_code"
-	LimitedCreditStatusDepleted           = "depleted"
-	LimitedCreditStatusExpired            = "expired"
+	LimitedCreditSourceRedeemCode           = "redeem_code"
+	LimitedCreditSourceDefaultUserSetting   = "default_user_setting"
+	LimitedCreditSourceAuthSourceDefault    = "auth_source_default"
+	LimitedCreditSourceAffiliateRebate      = "affiliate_rebate"
+	LimitedCreditSourceRechargeBonus        = "recharge_bonus"
+	LimitedCreditSourceCreditGrantEvent     = "credit_grant_event"
+	LimitedCreditSourceResetRebate          = "reset_rebate"
+	LimitedCreditSourceSecurityDepositBonus = "security_deposit_bonus"
+	LimitedCreditStatusActive               = "active"
+	LimitedCreditSourcePromoCode            = "promo_code"
+	LimitedCreditStatusDepleted             = "depleted"
+	LimitedCreditStatusExpired              = "expired"
 )
 
 // LimitedCreditGrant 表示用户持有的一份限时额度。

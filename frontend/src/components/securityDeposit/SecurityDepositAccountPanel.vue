@@ -101,6 +101,57 @@
           {{ t('payment.securityDeposit.lockExplanation') }}
         </p>
 
+        <div
+          v-if="account.bonus"
+          data-test="security-deposit-bonus"
+          class="mt-5 border-y border-gray-100 py-4 dark:border-dark-700"
+        >
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p class="text-sm font-medium text-gray-900 dark:text-white">
+                {{ t('payment.securityDeposit.bonusTitle') }}
+              </p>
+              <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                {{ t('payment.securityDeposit.bonusDescription') }}
+              </p>
+            </div>
+            <span v-if="account.bonus.expires_at" class="text-xs text-gray-500 dark:text-gray-400">
+              {{ t('payment.securityDeposit.bonusExpiresAt', { time: formatDateTime(account.bonus.expires_at) }) }}
+            </span>
+          </div>
+          <div class="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.securityDeposit.bonusCurrent') }}</p>
+              <p data-test="security-deposit-bonus-current" class="mt-1 font-semibold text-gray-900 dark:text-white">
+                {{ formatBonusAmount(account.bonus.current_amount) }}
+              </p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.securityDeposit.bonusDaily') }}</p>
+              <p class="mt-1 font-semibold text-gray-900 dark:text-white">
+                {{ formatBonusAmount(account.bonus.daily_amount) }}
+              </p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {{ t('payment.securityDeposit.bonusCap', { ratio: account.bonus.cap_ratio }) }}
+              </p>
+              <p class="mt-1 font-semibold text-gray-900 dark:text-white">
+                {{ formatBonusAmount(account.bonus.cap_amount) }}
+              </p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.securityDeposit.bonusEstimated') }}</p>
+              <p data-test="security-deposit-bonus-estimated" class="mt-1 font-semibold text-emerald-700 dark:text-emerald-400">
+                {{ formatBonusAmount(account.bonus.estimated_grant_amount) }}
+              </p>
+            </div>
+          </div>
+          <p data-test="security-deposit-bonus-status" class="mt-4 text-xs leading-5 text-gray-500 dark:text-gray-400">
+            {{ bonusStatus(account.bonus) }}
+          </p>
+        </div>
+
         <div v-if="account.lots.length" class="mt-5 border-t border-gray-100 pt-4 dark:border-dark-700">
           <button
             type="button"
@@ -204,7 +255,12 @@ import securityDepositsAPI from '@/api/securityDeposits'
 import { useAppStore } from '@/stores/app'
 import { isStepUpCancelled, useStepUp } from '@/composables/useStepUp'
 import { formatDateTime } from '@/utils/format'
-import type { SecurityDepositAccount, SecurityDepositLot, SecurityDepositRefundPreview } from '@/types/securityDeposit'
+import type {
+  SecurityDepositAccount,
+  SecurityDepositBonusEstimate,
+  SecurityDepositLot,
+  SecurityDepositRefundPreview
+} from '@/types/securityDeposit'
 
 defineProps<{
   account: SecurityDepositAccount | null
@@ -227,6 +283,22 @@ const refundStepUp = useStepUp()
 // 保证金统一以人民币分记账，展示层固定转换为元。
 function formatCents(cents: number): string {
   return `¥${(Number(cents || 0) / 100).toFixed(2)}`
+}
+
+function formatBonusAmount(amount: number): string {
+  return `$${Number(amount || 0).toFixed(2)}`
+}
+
+// bonusStatus 解释下一次赠额预估，避免把配置值误认为一定到账金额。
+function bonusStatus(bonus: SecurityDepositBonusEstimate): string {
+  if (bonus.reason === 'eligible') {
+    return t('payment.securityDeposit.bonusEligible', {
+      amount: formatBonusAmount(bonus.estimated_grant_amount),
+      time: formatDateTime(bonus.next_grant_at),
+      group: bonus.qualifying_group_name || '-'
+    })
+  }
+  return t(`payment.securityDeposit.bonusReasons.${bonus.reason}`)
 }
 
 function lotStatus(lot: SecurityDepositLot): string {

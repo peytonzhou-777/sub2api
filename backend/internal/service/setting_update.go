@@ -525,6 +525,14 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeySecurityDepositPolicyVersion] = strings.TrimSpace(settings.SecurityDepositPolicyVersion)
 	updates[SettingKeySecurityDepositAgreementContentZH] = strings.TrimSpace(settings.SecurityDepositAgreementContentZH)
 	updates[SettingKeySecurityDepositAgreementContentEN] = strings.TrimSpace(settings.SecurityDepositAgreementContentEN)
+	if math.IsNaN(settings.SecurityDepositBonusDailyAmount) || math.IsInf(settings.SecurityDepositBonusDailyAmount, 0) || settings.SecurityDepositBonusDailyAmount < 0 {
+		return nil, infraerrors.BadRequest("INVALID_SECURITY_DEPOSIT_BONUS_DAILY_AMOUNT", "security deposit bonus daily amount must be a finite non-negative number")
+	}
+	if math.IsNaN(settings.SecurityDepositBonusCapRatio) || math.IsInf(settings.SecurityDepositBonusCapRatio, 0) || settings.SecurityDepositBonusCapRatio < 0 {
+		return nil, infraerrors.BadRequest("INVALID_SECURITY_DEPOSIT_BONUS_CAP_RATIO", "security deposit bonus cap ratio must be a finite non-negative number")
+	}
+	updates[SettingKeySecurityDepositBonusDailyAmount] = strconv.FormatFloat(settings.SecurityDepositBonusDailyAmount, 'f', -1, 64)
+	updates[SettingKeySecurityDepositBonusCapRatio] = strconv.FormatFloat(settings.SecurityDepositBonusCapRatio, 'f', -1, 64)
 
 	// cyber 会话屏蔽开关 + TTL
 	updates[SettingKeyCyberSessionBlockEnabled] = strconv.FormatBool(settings.CyberSessionBlockEnabled)

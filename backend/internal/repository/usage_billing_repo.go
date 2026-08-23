@@ -751,6 +751,9 @@ func captureLimitedCreditGrant(ctx context.Context, tx *sql.Tx, cmd *service.Bat
 		UPDATE user_limited_credit_grants
 		SET used_amount = used_amount + $1,
 			frozen_amount = frozen_amount - $1,
+			security_deposit_bonus_pending_revoke_amount = GREATEST(
+				security_deposit_bonus_pending_revoke_amount - $1, 0
+			),
 			status = CASE
 				WHEN initial_amount - (used_amount + $1) - (frozen_amount - $1) <= $2
 					AND frozen_amount - $1 <= $2 THEN $3
@@ -776,23 +779,41 @@ func releaseLimitedCreditGrant(ctx context.Context, tx *sql.Tx, cmd *service.Bat
 	if amount <= 0 {
 		return nil
 	}
-	res, err := tx.ExecContext(ctx, `
-		UPDATE user_limited_credit_grants
-		SET frozen_amount = frozen_amount - $1,
+	var revoked float64
+	err := tx.QueryRowContext(ctx, `
+		WITH current AS (
+			SELECT id, LEAST(security_deposit_bonus_pending_revoke_amount, $1) AS revoked
+			FROM user_limited_credit_grants
+			WHERE id = $2 AND user_id = $3 AND frozen_amount + $4 >= $1
+			FOR UPDATE
+		)
+		UPDATE user_limited_credit_grants AS grant
+		SET frozen_amount = grant.frozen_amount - $1,
+			used_amount = grant.used_amount + current.revoked,
+			security_deposit_bonus_pending_revoke_amount = grant.security_deposit_bonus_pending_revoke_amount - current.revoked,
+			status = CASE
+				WHEN grant.initial_amount - (grant.used_amount + current.revoked) - (grant.frozen_amount - $1) <= $4
+					AND grant.frozen_amount - $1 <= $4 THEN $5
+				ELSE grant.status
+			END,
 			updated_at = NOW()
-		WHERE id = $2 AND user_id = $3 AND frozen_amount + $4 >= $1
-	`, amount, grantID, cmd.UserID, billingAmountEpsilon)
-	if err != nil {
-		return err
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if affected == 0 {
+		FROM current
+		WHERE grant.id = current.id
+		RETURNING current.revoked
+	`, amount, grantID, cmd.UserID, billingAmountEpsilon, service.LimitedCreditStatusDepleted).Scan(&revoked)
+	if errors.Is(err, sql.ErrNoRows) {
 		return errors.New("limited credit frozen amount is insufficient")
 	}
-	return insertLimitedCreditLedger(ctx, tx, cmd.UserID, grantID, "release", amount, cmd.RequestID, cmd.APIKeyID, cmd.BatchID)
+	if err != nil {
+		return err
+	}
+	if err := insertLimitedCreditLedger(ctx, tx, cmd.UserID, grantID, "release", amount, cmd.RequestID, cmd.APIKeyID, cmd.BatchID); err != nil {
+		return err
+	}
+	if revoked > billingAmountEpsilon {
+		return insertLimitedCreditLedger(ctx, tx, cmd.UserID, grantID, "security_deposit_bonus_revoke", revoked, cmd.RequestID, cmd.APIKeyID, cmd.BatchID)
+	}
+	return nil
 }
 
 func insertLimitedCreditLedger(ctx context.Context, tx *sql.Tx, userID, grantID int64, eventType string, amount float64, requestID string, apiKeyID int64, batchID string) error {

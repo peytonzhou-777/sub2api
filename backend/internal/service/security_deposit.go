@@ -107,22 +107,23 @@ type SecurityDepositUserData struct {
 
 // SecurityDepositAccountSummary 是用户和管理员共享的保证金汇总口径。
 type SecurityDepositAccountSummary struct {
-	Currency                string               `json:"currency"`
-	PaidBalanceCents        int64                `json:"paid_balance_cents"`
-	AdminGrantBalanceCents  int64                `json:"admin_grant_balance_cents"`
-	TotalBalanceCents       int64                `json:"total_balance_cents"`
-	EffectiveBalanceCents   int64                `json:"effective_balance_cents"`
-	TimedLockedCents        int64                `json:"timed_locked_cents"`
-	PermanentLockedCents    int64                `json:"permanent_locked_cents"`
-	RefundableCents         int64                `json:"refundable_cents"`
-	PaidRefundReservedCents int64                `json:"paid_refund_reserved_cents"`
-	CyberStrikeCount        int64                `json:"cyber_strike_count"`
-	RiskMultiplier          int64                `json:"risk_multiplier"`
-	MaxRiskMultiplier       int64                `json:"max_risk_multiplier"`
-	NextUnlockAt            *time.Time           `json:"next_unlock_at"`
-	EnforcementEnabled      bool                 `json:"enforcement_enabled"`
-	SelfRefundEnabled       bool                 `json:"self_refund_enabled"`
-	Lots                    []SecurityDepositLot `json:"lots"`
+	Currency                string                        `json:"currency"`
+	PaidBalanceCents        int64                         `json:"paid_balance_cents"`
+	AdminGrantBalanceCents  int64                         `json:"admin_grant_balance_cents"`
+	TotalBalanceCents       int64                         `json:"total_balance_cents"`
+	EffectiveBalanceCents   int64                         `json:"effective_balance_cents"`
+	TimedLockedCents        int64                         `json:"timed_locked_cents"`
+	PermanentLockedCents    int64                         `json:"permanent_locked_cents"`
+	RefundableCents         int64                         `json:"refundable_cents"`
+	PaidRefundReservedCents int64                         `json:"paid_refund_reserved_cents"`
+	CyberStrikeCount        int64                         `json:"cyber_strike_count"`
+	RiskMultiplier          int64                         `json:"risk_multiplier"`
+	MaxRiskMultiplier       int64                         `json:"max_risk_multiplier"`
+	NextUnlockAt            *time.Time                    `json:"next_unlock_at"`
+	EnforcementEnabled      bool                          `json:"enforcement_enabled"`
+	SelfRefundEnabled       bool                          `json:"self_refund_enabled"`
+	Bonus                   *SecurityDepositBonusEstimate `json:"bonus,omitempty"`
+	Lots                    []SecurityDepositLot          `json:"lots"`
 }
 
 // SecurityDepositAgreement 是客户端展示的当前版本化保证金约定。
@@ -267,6 +268,8 @@ type SecurityDepositService struct {
 	keyEligibility       SecurityDepositKeyChangeReconciler
 	groupKeyEligibility  SecurityDepositGroupKeyReconciler
 	authCacheInvalidator APIKeyAuthCacheInvalidator
+	bonusReader          SecurityDepositBonusReader
+	bonusReconciler      SecurityDepositBonusReconciler
 }
 
 // SetKeyEligibilityReconciler 注入资金事件后的统一密钥资格重算器。
@@ -313,6 +316,19 @@ func (s *SecurityDepositService) SetPenaltyDependencies(invalidator APIKeyAuthCa
 	s.authCacheInvalidator = invalidator
 }
 
+// SetBonusDependencies 注入保证金赠额预估和资金减少后的撤销能力。
+func (s *SecurityDepositService) SetBonusDependencies(reader SecurityDepositBonusReader, reconciler SecurityDepositBonusReconciler) {
+	s.bonusReader = reader
+	s.bonusReconciler = reconciler
+}
+
+func (s *SecurityDepositService) reconcileBonusAfterBalanceDecrease(ctx context.Context, userID int64, eventType string, eventID int64) error {
+	if s == nil || s.bonusReconciler == nil {
+		return nil
+	}
+	return s.bonusReconciler.ReconcileAfterBalanceDecrease(ctx, userID, eventType, eventID)
+}
+
 // DisableInsufficientKeys 在退款预留、管理员扣除等资金事件事务内禁用不足密钥。
 func (s *SecurityDepositService) DisableInsufficientKeys(ctx context.Context, userID int64, eventType string, eventID int64) ([]SecurityDepositKeyReference, error) {
 	if s == nil || s.keyEligibility == nil {
@@ -353,6 +369,13 @@ func (s *SecurityDepositService) GetAccount(ctx context.Context, userID int64) (
 	summary.EnforcementEnabled = policy.EnforcementEnabled
 	summary.SelfRefundEnabled = policy.SelfRefundEnabled
 	s.enrichSecurityDepositSelfRefundCapabilities(ctx, summary, policy.SelfRefundEnabled)
+	if s.bonusReader != nil {
+		bonus, bonusErr := s.bonusReader.GetEstimate(ctx, userID, summary)
+		if bonusErr != nil {
+			return nil, fmt.Errorf("get security deposit bonus estimate: %w", bonusErr)
+		}
+		summary.Bonus = bonus
+	}
 	return summary, nil
 }
 
