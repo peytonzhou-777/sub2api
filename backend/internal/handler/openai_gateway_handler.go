@@ -1801,10 +1801,11 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 	if selection.WaitPlan != nil && selection.WaitPlan.MaxConcurrency > 0 {
 		maxConcurrency = selection.WaitPlan.MaxConcurrency
 	}
+	estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, body, "", cfg.DefaultOutputTokens)
 	result, err := h.accountAdmission.Acquire(ctx, service.OpenAIAccountAdmissionRequest{
 		AccountID:       account.ID,
 		Class:           service.ClassifyOpenAIAdmissionClass(c.Request.Header, body),
-		EstimatedTokens: h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, body, "", cfg.DefaultOutputTokens),
+		EstimatedTokens: estimatedTokens,
 		MaxConcurrency:  maxConcurrency,
 		TryAcquireSlot:  h.concurrencyHelper.TryAcquireAccountSlot,
 	}, cfg)
@@ -1812,7 +1813,13 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 		if c.Request.Context().Err() != nil {
 			return nil, openAISlotAcquireFailed
 		}
-		reqLog.Info("openai.account_admission_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
+		reqLog.Info("openai.account_admission_rejected",
+			zap.Int64("account_id", account.ID),
+			zap.Int64("estimated_tokens", estimatedTokens),
+			zap.Int64("tokens_per_minute", cfg.TokensPerMinute),
+			zap.Int("body_bytes", len(body)),
+			zap.Error(err),
+		)
 		h.handleOpenAIAccountAdmissionError(c, err, *streamStarted)
 		return nil, openAISlotAcquireAdmissionRejected
 	}
@@ -2435,10 +2442,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				selection.Acquired = false
 				selection.ReleaseFunc = nil
 				accountReleaseFunc = nil
+				estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, wsAttemptMessage, reqModel, admissionCfg.DefaultOutputTokens)
 				admissionResult, admissionErr := h.accountAdmission.Acquire(admissionCtx, service.OpenAIAccountAdmissionRequest{
 					AccountID:       account.ID,
 					Class:           service.ClassifyOpenAIAdmissionClass(c.Request.Header, wsAttemptMessage),
-					EstimatedTokens: h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, wsAttemptMessage, reqModel, admissionCfg.DefaultOutputTokens),
+					EstimatedTokens: estimatedTokens,
 					MaxConcurrency:  accountMaxConcurrency,
 					TryAcquireSlot:  h.concurrencyHelper.TryAcquireAccountSlot,
 				}, admissionCfg)
@@ -2449,7 +2457,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 						waitMS = typedErr.Wait.Milliseconds()
 					}
 					h.submitOpenAIAdmissionRejectedUsage(admissionCtx, c, apiKey, account, subscription, reqModel, true, waitMS, reqLog)
-					reqLog.Info("openai.websocket_account_admission_rejected", zap.Int64("account_id", account.ID), zap.Error(admissionErr))
+					reqLog.Info("openai.websocket_account_admission_rejected",
+						zap.Int64("account_id", account.ID),
+						zap.Int64("estimated_tokens", estimatedTokens),
+						zap.Int64("tokens_per_minute", admissionCfg.TokensPerMinute),
+						zap.Int("body_bytes", len(wsAttemptMessage)),
+						zap.Error(admissionErr),
+					)
 					closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, openAIAccountBusyClientMessage)
 					return
 				}
@@ -2648,10 +2662,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			if !admissionCfg.Enabled {
 				return false, nil
 			}
+			estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, payload, model, admissionCfg.DefaultOutputTokens)
 			admissionResult, err := h.accountAdmission.Acquire(admissionCtx, service.OpenAIAccountAdmissionRequest{
 				AccountID:       account.ID,
 				Class:           service.ClassifyOpenAIAdmissionClass(c.Request.Header, payload),
-				EstimatedTokens: h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, payload, model, admissionCfg.DefaultOutputTokens),
+				EstimatedTokens: estimatedTokens,
 				MaxConcurrency:  accountMaxConcurrency,
 				TryAcquireSlot:  h.concurrencyHelper.TryAcquireAccountSlot,
 			}, admissionCfg)
@@ -2665,6 +2680,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					model = reqModel
 				}
 				h.submitOpenAIAdmissionRejectedUsage(admissionCtx, c, apiKey, account, subscription, model, true, waitMS, reqLog)
+				reqLog.Info("openai.websocket_turn_account_admission_rejected",
+					zap.Int64("account_id", account.ID),
+					zap.Int64("estimated_tokens", estimatedTokens),
+					zap.Int64("tokens_per_minute", admissionCfg.TokensPerMinute),
+					zap.Int("body_bytes", len(payload)),
+					zap.Error(err),
+				)
 				return true, service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, openAIAccountBusyClientMessage, err)
 			}
 			currentAccountRelease = wrapReleaseOnDone(ctx, admissionResult.ReleaseFunc)

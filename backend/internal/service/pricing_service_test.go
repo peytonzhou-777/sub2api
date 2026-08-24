@@ -260,6 +260,9 @@ func TestDefaultPricingIncludesOfficialGPT56Rates(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
+			maxInput, maxOutput := pricingSvc.GetIdentifiedModelTokenLimits(tt.model)
+			require.Equal(t, int64(1050000), maxInput)
+			require.Equal(t, int64(128000), maxOutput)
 			require.Equal(t, int64(128000), pricingSvc.GetIdentifiedModelMaxOutputTokens(tt.model))
 			pricing, err := billingSvc.GetModelPricing(tt.model)
 			require.NoError(t, err)

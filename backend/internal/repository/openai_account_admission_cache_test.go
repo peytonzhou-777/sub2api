@@ -112,6 +112,38 @@ func TestOpenAIAccountAdmissionQueueSmoothsRPMAndTPM(t *testing.T) {
 	}
 }
 
+func TestOpenAIAccountAdmissionQueueGrantsOversizedTicketAndDefersFollowingRequests(t *testing.T) {
+	ctx := context.Background()
+	queue := newOpenAIAdmissionTestCache(t)
+	now := time.Now()
+	cfg := service.DefaultOpenAIAccountAdmissionConfig()
+	cfg.TokensPerMinute = 100
+	oversized := service.OpenAIAccountAdmissionTicket{ID: "oversized", AccountID: 12, Class: service.OpenAIAdmissionInteractive, EnqueuedAt: now, Deadline: now.Add(2 * time.Minute), EstimatedTokens: 150}
+	following := service.OpenAIAccountAdmissionTicket{ID: "following", AccountID: 12, Class: service.OpenAIAdmissionInteractive, EnqueuedAt: now, Deadline: now.Add(2 * time.Minute), EstimatedTokens: 1}
+	for _, ticket := range []service.OpenAIAccountAdmissionTicket{oversized, following} {
+		if err := queue.Enqueue(ctx, ticket, cfg); err != nil {
+			t.Fatalf("enqueue %s: %v", ticket.ID, err)
+		}
+	}
+
+	poll, err := queue.Poll(ctx, oversized, cfg)
+	if err != nil || !poll.Selected || poll.Delay > 0 {
+		t.Fatalf("oversized head ticket was not immediately selectable: %+v, %v", poll, err)
+	}
+	grant, err := queue.Grant(ctx, oversized, cfg, 0)
+	if err != nil || !grant.Granted {
+		t.Fatalf("oversized head ticket was not granted: %+v, %v", grant, err)
+	}
+
+	poll, err = queue.Poll(ctx, following, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !poll.Selected || poll.Delay < 89*time.Second {
+		t.Fatalf("following request did not inherit oversized TPM debt: %+v", poll)
+	}
+}
+
 func TestOpenAIAccountAdmissionQueueCleansExpiredTicketsBeforeDepthCheck(t *testing.T) {
 	ctx := context.Background()
 	queue := newOpenAIAdmissionTestCache(t)

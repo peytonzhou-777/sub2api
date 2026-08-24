@@ -514,6 +514,20 @@ func extractToolOutputMedia(outputRaw json.RawMessage) (string, []ChatContentPar
 	return string(encoded), media, true
 }
 
+// NormalizeResponsesToolOutputForTokenCount 将工具输出中的内嵌图片替换为稳定标记，
+// 避免本地 Token 估算把 Data URI 的 Base64 正文误当成数百万文本 Token。
+func NormalizeResponsesToolOutputForTokenCount(output string) string {
+	raw, err := json.Marshal(output)
+	if err != nil {
+		return output
+	}
+	normalized, _, changed := extractToolOutputMedia(raw)
+	if !changed {
+		return output
+	}
+	return normalized
+}
+
 func decodeToolOutputJSON(raw []byte) (any, bool) {
 	if !json.Valid(raw) {
 		return nil, false

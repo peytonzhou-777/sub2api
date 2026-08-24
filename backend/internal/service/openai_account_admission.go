@@ -294,8 +294,8 @@ func ClassifyOpenAIAdmissionClass(headers http.Header, body []byte) OpenAIAdmiss
 	return OpenAIAdmissionInteractive
 }
 
-// EstimateOpenAIAdmissionTokens 估算输入并按模型或配置上限为尚未产生的输出预留 TPM。
-func EstimateOpenAIAdmissionTokens(body []byte, defaultOutput, maxOutput int64) int64 {
+// EstimateOpenAIAdmissionTokens 估算输入，并按模型输入上限及输出上限约束 TPM 预留。
+func EstimateOpenAIAdmissionTokens(body []byte, defaultOutput, maxInput, maxOutput int64) int64 {
 	var req openAIInputTokensCountRequest
 	if err := jsonUnmarshalOpenAIAdmission(body, &req); err != nil {
 		return openAIAdmissionOutputReserve(defaultOutput, defaultOutput, maxOutput)
@@ -316,13 +316,17 @@ func EstimateOpenAIAdmissionTokens(body []byte, defaultOutput, maxOutput int64) 
 	if err != nil {
 		input = max(int(defaultOutput/4), 1)
 	}
+	estimatedInput := int64(input)
+	if maxInput > 0 && estimatedInput > maxInput {
+		estimatedInput = maxInput
+	}
 	output := defaultOutput
 	if value := gjsonGetInt64(body, "max_output_tokens"); value > 0 {
 		output = value
 	} else if value := gjsonGetInt64(body, "max_tokens"); value > 0 {
 		output = value
 	}
-	return int64(input) + openAIAdmissionOutputReserve(output, defaultOutput, maxOutput)
+	return estimatedInput + openAIAdmissionOutputReserve(output, defaultOutput, maxOutput)
 }
 
 // EstimateOpenAIAccountAdmissionTokens 在账号确定后按实际转发模型解析输出上限。
@@ -332,11 +336,11 @@ func (s *OpenAIGatewayService) EstimateOpenAIAccountAdmissionTokens(account *Acc
 		requestedModel = strings.TrimSpace(modelHint)
 	}
 	resolvedModel := normalizeOpenAIModelForUpstream(account, resolveOpenAIForwardModel(account, requestedModel, ""))
-	maxOutput := int64(0)
+	maxInput, maxOutput := int64(0), int64(0)
 	if s != nil && s.billingService != nil && s.billingService.pricingService != nil {
-		maxOutput = s.billingService.pricingService.GetIdentifiedModelMaxOutputTokens(resolvedModel)
+		maxInput, maxOutput = s.billingService.pricingService.GetIdentifiedModelTokenLimits(resolvedModel)
 	}
-	return EstimateOpenAIAdmissionTokens(body, defaultOutput, maxOutput)
+	return EstimateOpenAIAdmissionTokens(body, defaultOutput, maxInput, maxOutput)
 }
 
 func openAIAdmissionOutputReserve(requested, configured, modelMax int64) int64 {

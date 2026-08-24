@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -127,8 +128,8 @@ func TestOpenAIAccountAdmissionDoesNotShortenFinalJitter(t *testing.T) {
 }
 
 func TestEstimateOpenAIAdmissionTokensSupportsMessages(t *testing.T) {
-	short := EstimateOpenAIAdmissionTokens([]byte(`{"model":"gpt-5","max_tokens":10,"messages":[{"role":"user","content":"hi"}]}`), 4096, 128000)
-	long := EstimateOpenAIAdmissionTokens([]byte(`{"model":"gpt-5","max_tokens":10,"messages":[{"role":"user","content":"please summarize this long message with several distinct words and details"}]}`), 4096, 128000)
+	short := EstimateOpenAIAdmissionTokens([]byte(`{"model":"gpt-5","max_tokens":10,"messages":[{"role":"user","content":"hi"}]}`), 4096, 0, 128000)
+	long := EstimateOpenAIAdmissionTokens([]byte(`{"model":"gpt-5","max_tokens":10,"messages":[{"role":"user","content":"please summarize this long message with several distinct words and details"}]}`), 4096, 0, 128000)
 	if long <= short {
 		t.Fatalf("messages token estimate did not grow: short=%d long=%d", short, long)
 	}
@@ -145,17 +146,44 @@ func TestEstimateOpenAIAdmissionTokensCapsUntrustedOutputBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got, want := EstimateOpenAIAdmissionTokens(body, 4096, 128000), int64(input)+128000; got != want {
+	if got, want := EstimateOpenAIAdmissionTokens(body, 4096, 0, 128000), int64(input)+128000; got != want {
 		t.Fatalf("model-capped estimate = %d, want %d", got, want)
 	}
-	if got, want := EstimateOpenAIAdmissionTokens(body, 4096, 0), int64(input)+4096; got != want {
+	if got, want := EstimateOpenAIAdmissionTokens(body, 4096, 0, 0), int64(input)+4096; got != want {
 		t.Fatalf("configured-capped estimate = %d, want %d", got, want)
+	}
+}
+
+func TestEstimateOpenAIAdmissionTokensCapsInputAtModelLimit(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.6-sol","max_output_tokens":10,"input":"` + strings.Repeat("token ", 2000) + `"}`)
+	uncapped := EstimateOpenAIAdmissionTokens(body, 4096, 0, 128000)
+	capped := EstimateOpenAIAdmissionTokens(body, 4096, 100, 128000)
+	if uncapped <= capped {
+		t.Fatalf("input cap was not exercised: uncapped=%d capped=%d", uncapped, capped)
+	}
+	if capped != 110 {
+		t.Fatalf("input-capped estimate = %d, want 110", capped)
+	}
+}
+
+func TestEstimateOpenAIAdmissionTokensDoesNotCountToolOutputImageBase64AsText(t *testing.T) {
+	base64Payload := strings.Repeat("A", 200000)
+	mediaBody := []byte(`{"model":"gpt-5.6-sol","max_output_tokens":10,"input":[{"type":"function_call_output","call_id":"call_image","output":[{"type":"input_image","image_url":"data:image/png;base64,` + base64Payload + `"}]}]}`)
+	plainBody := []byte(`{"model":"gpt-5.6-sol","max_output_tokens":10,"input":[{"type":"function_call_output","call_id":"call_text","output":"` + base64Payload + `"}]}`)
+
+	mediaEstimate := EstimateOpenAIAdmissionTokens(mediaBody, 4096, 0, 128000)
+	plainEstimate := EstimateOpenAIAdmissionTokens(plainBody, 4096, 0, 128000)
+	if mediaEstimate >= 1000 {
+		t.Fatalf("inline image base64 was still counted as text: %d", mediaEstimate)
+	}
+	if plainEstimate <= mediaEstimate+10000 {
+		t.Fatalf("plain tool text must remain countable: media=%d plain=%d", mediaEstimate, plainEstimate)
 	}
 }
 
 func TestEstimateOpenAIAccountAdmissionTokensUsesMappedModelLimit(t *testing.T) {
 	pricing := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
-		"gpt-5.6-sol": {MaxOutputTokens: 128000},
+		"gpt-5.6-sol": {MaxInputTokens: 1050000, MaxOutputTokens: 128000},
 	}}
 	gateway := &OpenAIGatewayService{billingService: NewBillingService(nil, pricing)}
 	account := &Account{

@@ -86,7 +86,7 @@ var pollOpenAIAccountAdmissionScript = redis.NewScript(`
 	if tonumber(ARGV[2]) > 0 then rpm_tat = tonumber(redis.call('HGET', KEYS[8], 'rpm_tat_ms') or '0') end
 	if tonumber(ARGV[3]) > 0 then tpm_tat = tonumber(redis.call('HGET', KEYS[8], 'tpm_tat_ms') or '0') end
 	local ready = math.max(now, rpm_tat, tpm_tat)
-	if tonumber(ARGV[3]) > 0 and tonumber(ARGV[4]) > tonumber(ARGV[3]) then return {2, 60000} end
+	-- 单票据超过 TPM 时仍可在账号空闲后被选中；Grant 会把完整成本记为后续请求的时间债务。
 	if ready > now then return {1, ready - now} end
 	return {1, 0}
 `)
@@ -121,7 +121,6 @@ var grantOpenAIAccountAdmissionScript = redis.NewScript(`
 	end
 	if chosen ~= ARGV[1] then return {0, 0} end
 	local tokens = tonumber(redis.call('HGET', KEYS[5], ARGV[1]) or '1')
-	if tonumber(ARGV[3]) > 0 and tokens > tonumber(ARGV[3]) then return {0, 60000} end
 	local rpm_tat = 0
 	local tpm_tat = 0
 	if tonumber(ARGV[2]) > 0 then rpm_tat = tonumber(redis.call('HGET', KEYS[8], 'rpm_tat_ms') or '0') end
@@ -133,6 +132,7 @@ var grantOpenAIAccountAdmissionScript = redis.NewScript(`
 		redis.call('HSET', KEYS[8], 'rpm_tat_ms', dispatch + (60000 / tonumber(ARGV[2])))
 	end
 	if tonumber(ARGV[3]) > 0 then
+		-- 允许理论到达时间跨越一分钟，确保超大请求只放行一次且不会绕过 TPM 约束。
 		redis.call('HSET', KEYS[8], 'tpm_tat_ms', dispatch + (60000 * tokens / tonumber(ARGV[3])))
 	end
 	local class = redis.call('HGET', KEYS[6], ARGV[1])

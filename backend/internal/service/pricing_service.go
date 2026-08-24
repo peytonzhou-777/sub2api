@@ -776,16 +776,23 @@ func (s *PricingService) GetIdentifiedModelPricing(modelName string) *LiteLLMMod
 	return s.lookupIdentifiedModelPricingLocked(s.buildModelLookupCandidates(modelLower))
 }
 
-// GetIdentifiedModelMaxOutputTokens 返回确定识别模型的输出上限，未知模型不做系列猜测。
-func (s *PricingService) GetIdentifiedModelMaxOutputTokens(modelName string) int64 {
+// GetIdentifiedModelTokenLimits 返回确定识别模型的输入与输出上限，未知模型不做系列猜测。
+func (s *PricingService) GetIdentifiedModelTokenLimits(modelName string) (int64, int64) {
 	pricing := s.GetIdentifiedModelPricing(modelName)
 	if pricing == nil {
-		return 0
+		return 0, 0
 	}
+	maxOutput := pricing.MaxTokens
 	if pricing.MaxOutputTokens > 0 {
-		return pricing.MaxOutputTokens
+		maxOutput = pricing.MaxOutputTokens
 	}
-	return pricing.MaxTokens
+	return pricing.MaxInputTokens, maxOutput
+}
+
+// GetIdentifiedModelMaxOutputTokens 返回确定识别模型的输出上限，未知模型不做系列猜测。
+func (s *PricingService) GetIdentifiedModelMaxOutputTokens(modelName string) int64 {
+	_, maxOutput := s.GetIdentifiedModelTokenLimits(modelName)
+	return maxOutput
 }
 
 func (s *PricingService) buildModelLookupCandidates(modelLower string) []string {
