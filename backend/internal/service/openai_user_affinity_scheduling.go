@@ -341,7 +341,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityMigrationTarget(ctx conte
 	return nil, true, ErrNoAvailableAccounts
 }
 
-// selectOpenAIUserAffinityNewResident 按 7d/5h 剩余容量和当前触达用户数为新居民选择账号。
+// selectOpenAIUserAffinityNewResident 先按账号软占用分层，再以 7d/5h 容量 BestFit 为新居民选号。
 func (s *OpenAIGatewayService) selectOpenAIUserAffinityNewResident(ctx context.Context, groupID *int64, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, requiredCapability OpenAIEndpointCapability, requiredImageCapability OpenAIImagesCapability, requiredTransport OpenAIUpstreamTransport, scopeKey string, config OpenAIUserAffinityConfig, now time.Time, preferExistingAffinity bool) (*AccountSelectionResult, bool, error) {
 	userID, _ := ctx.Value(ctxkey.UserID).(int64)
 	demand := s.predictOpenAIUserAffinityDemand(ctx, userID, config)
@@ -355,32 +355,39 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityNewResident(ctx context.C
 			unknownQuota = true
 		}
 	}
+	occupancies := make(map[int64]OpenAIAccountSoftOccupancy)
+	if routingStore, ok := s.accountRepo.(OpenAIUserAffinityActiveRoutingStore); ok {
+		accountIDs := make([]int64, 0, len(candidates))
+		for _, candidate := range candidates {
+			accountIDs = append(accountIDs, candidate.AccountID)
+		}
+		occupancies, err = routingStore.ListOpenAIAccountSoftOccupancies(ctx, accountIDs)
+		if err != nil {
+			return nil, true, err
+		}
+	}
 
-	for len(candidates) > 0 {
-		candidate, found := selectOpenAIUserAffinityCandidate(config, candidates, demand.Demand5H, demand.Demand7D, now, preferExistingAffinity)
-		if !found {
-			break
-		}
-		account := accountByID[candidate.AccountID]
-		acquired, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
-		if acquireErr == nil && acquired != nil && acquired.Acquired {
-			if !s.reserveOpenAIUserAffinityPlacement(ctx, account.ID, scopeKey) {
-				if acquired.ReleaseFunc != nil {
-					acquired.ReleaseFunc()
-				}
-				remaining := candidates[:0]
-				for _, current := range candidates {
-					if current.AccountID != candidate.AccountID {
-						remaining = append(remaining, current)
-					}
-				}
-				candidates = remaining
-				continue
+	for _, tierCandidates := range openAIUserAffinitySoftOccupancyCandidateTiers(candidates, occupancies, userID, true) {
+		for len(tierCandidates) > 0 {
+			candidate, found := selectOpenAIUserAffinityCandidate(config, tierCandidates, demand.Demand5H, demand.Demand7D, now, preferExistingAffinity)
+			if !found {
+				break
 			}
-			result, resultErr := s.newAcquiredSelectionResult(ctx, account, acquired.ReleaseFunc)
-			return result, true, resultErr
+			account := accountByID[candidate.AccountID]
+			acquired, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
+			if acquireErr == nil && acquired != nil && acquired.Acquired {
+				if !s.reserveOpenAIUserAffinityPlacement(ctx, account.ID, scopeKey) {
+					if acquired.ReleaseFunc != nil {
+						acquired.ReleaseFunc()
+					}
+					tierCandidates = removeOpenAIUserAffinityCandidate(tierCandidates, candidate.AccountID)
+					continue
+				}
+				result, resultErr := s.newAcquiredSelectionResult(ctx, account, acquired.ReleaseFunc)
+				return result, true, resultErr
+			}
+			tierCandidates = removeOpenAIUserAffinityCandidate(tierCandidates, candidate.AccountID)
 		}
-		candidates = removeOpenAIUserAffinityCandidate(candidates, candidate.AccountID)
 	}
 	if unknownQuota {
 		// 已知候选均未通过时，仍允许未知快照回退普通调度并用真实请求自愈。

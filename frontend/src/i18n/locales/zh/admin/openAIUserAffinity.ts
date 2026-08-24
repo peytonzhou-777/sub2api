@@ -4,7 +4,8 @@ export const openAIUserAffinityAccounts = {
   reset: '重置归属', inherit: '继承全局', maxContactUsers: '最大触达用户数',
   cooldownSeconds: '新居民冷却（秒）', failureThreshold: '搬迁失败阈值', failureWindow: '失败窗口（秒）',
   slot: '槽位', status: '状态', heat: '热度', slotValue: '槽位 {index} / generation {generation}',
-  heatValue: '热度 {value}', activeConversations: '{count} 个活跃会话'
+  heatValue: '热度 {value}', activeRoute: '活动账号', softOwner: '软驻留主用户',
+  activeRouteUsers: '{count} 个活动用户', softOwnerUser: '主用户 #{id}'
 }
 
 export const openAIUserAffinitySettings = {

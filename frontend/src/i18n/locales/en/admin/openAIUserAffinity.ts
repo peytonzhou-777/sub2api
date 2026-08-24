@@ -4,7 +4,8 @@ export const openAIUserAffinityAccounts = {
   reset: 'Reset placement', inherit: 'Inherit global', maxContactUsers: 'Maximum contacted users',
   cooldownSeconds: 'New resident cooldown (seconds)', failureThreshold: 'Migration failure threshold', failureWindow: 'Failure window (seconds)',
   slot: 'Slot', status: 'Status', heat: 'Heat', slotValue: 'Slot {index} / generation {generation}',
-  heatValue: 'Heat {value}', activeConversations: '{count} active conversations'
+  heatValue: 'Heat {value}', activeRoute: 'Active account', softOwner: 'Soft resident owner',
+  activeRouteUsers: '{count} active users', softOwnerUser: 'Owner #{id}'
 }
 
 export const openAIUserAffinitySettings = {

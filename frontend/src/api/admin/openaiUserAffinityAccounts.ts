@@ -14,7 +14,8 @@ export interface OpenAIUserAffinityResident {
   last_active_at: string | null
   expires_at: string
   usage_score: number
-  active_conversation_count: number
+  active_route: boolean
+  soft_owner: boolean
   touch_expires_at: string | null
 }
 
@@ -30,7 +31,8 @@ export interface OpenAIUserResidentSlot {
   last_success_at: string | null
   expires_at: string
   usage_score: number
-  active_conversation_count: number
+  active_route_user_count: number
+  soft_owner_user_id: number
   score_updated_at: string
   replacement_source_slot_id: number | null
   config_version: number

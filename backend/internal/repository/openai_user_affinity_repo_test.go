@@ -34,9 +34,11 @@ func TestListOpenAIUserResidentSlotsReadsAuthoritativeProjection(t *testing.T) {
 			"id", "user_id", "scope_key", "slot_index", "account_id", "generation", "status",
 			"admitted_at", "last_success_at", "expires_at", "usage_score", "score_updated_at",
 			"replacement_source_slot_id", "provisional_token", "config_version",
-			"active_conversation_count",
 		}).AddRow(7, 42, "openai", 1, 11, 3, service.OpenAIUserResidentSlotStatusActive,
-			now.Add(-time.Hour), now, now.Add(time.Hour), 2.5, now, nil, nil, 8, 2))
+			now.Add(-time.Hour), now, now.Add(time.Hour), 2.5, now, nil, nil, 8))
+	mock.ExpectQuery(`(?s)WITH claims AS.*FROM deduplicated GROUP BY account_id`).
+		WillReturnRows(sqlmock.NewRows([]string{"account_id", "active_user_count", "owner_user_id"}).
+			AddRow(11, 2, 42))
 
 	slots, err := repo.ListOpenAIUserResidentSlots(context.Background(), 42, "")
 	require.NoError(t, err)
@@ -44,7 +46,8 @@ func TestListOpenAIUserResidentSlotsReadsAuthoritativeProjection(t *testing.T) {
 	require.Equal(t, int64(11), slots[0].AccountID)
 	require.NotNil(t, slots[0].LastSuccessAt)
 	require.Equal(t, 2.5, slots[0].UsageScore)
-	require.Equal(t, 2, slots[0].ActiveConversationCount)
+	require.Equal(t, 2, slots[0].ActiveRouteUserCount)
+	require.Equal(t, int64(42), slots[0].SoftOwnerUserID)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

@@ -16,20 +16,21 @@ var ErrOpenAIUserAffinityContactLimitConflict = infraerrors.Conflict(
 
 // OpenAIUserAffinityResident 是管理员按账号查看的当前居民投影。
 type OpenAIUserAffinityResident struct {
-	UserID                  int64      `json:"user_id"`
-	UserEmail               string     `json:"user_email"`
-	AccountID               int64      `json:"account_id"`
-	ScopeKey                string     `json:"scope_key"`
-	ResidentSlotID          int64      `json:"resident_slot_id"`
-	SlotIndex               int        `json:"slot_index"`
-	Generation              int64      `json:"generation"`
-	Status                  string     `json:"status"`
-	AssignedAt              time.Time  `json:"assigned_at"`
-	LastActiveAt            *time.Time `json:"last_active_at"`
-	ExpiresAt               time.Time  `json:"expires_at"`
-	UsageScore              float64    `json:"usage_score"`
-	ActiveConversationCount int        `json:"active_conversation_count"`
-	TouchExpiresAt          *time.Time `json:"touch_expires_at"`
+	UserID         int64      `json:"user_id"`
+	UserEmail      string     `json:"user_email"`
+	AccountID      int64      `json:"account_id"`
+	ScopeKey       string     `json:"scope_key"`
+	ResidentSlotID int64      `json:"resident_slot_id"`
+	SlotIndex      int        `json:"slot_index"`
+	Generation     int64      `json:"generation"`
+	Status         string     `json:"status"`
+	AssignedAt     time.Time  `json:"assigned_at"`
+	LastActiveAt   *time.Time `json:"last_active_at"`
+	ExpiresAt      time.Time  `json:"expires_at"`
+	UsageScore     float64    `json:"usage_score"`
+	ActiveRoute    bool       `json:"active_route"`
+	SoftOwner      bool       `json:"soft_owner"`
+	TouchExpiresAt *time.Time `json:"touch_expires_at"`
 }
 
 // OpenAIUserAffinityAdminEvent 是管理员反查用户搬迁历史的只读投影。

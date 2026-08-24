@@ -253,7 +253,7 @@ func TestOpenAIUserConversationProvisionalCapacityFailureIsRecorded(t *testing.T
 	require.True(t, rolledBack)
 }
 
-func TestOpenAIUserResidentSlotIgnoresExpiredProvisionalBindingOccupancy(t *testing.T) {
+func TestOpenAIUserResidentSlotIgnoresConversationCountForSoftOccupancy(t *testing.T) {
 	ctx := context.Background()
 	tx := testEntTx(t)
 	client := tx.Client()
@@ -279,7 +279,96 @@ func TestOpenAIUserResidentSlotIgnoresExpiredProvisionalBindingOccupancy(t *test
 	slots, err := repo.ListOpenAIUserResidentSlots(ctx, user.ID, scopeKey)
 	require.NoError(t, err)
 	require.Len(t, slots, 1)
-	require.Zero(t, slots[0].ActiveConversationCount)
+	require.Zero(t, slots[0].ActiveRouteUserCount)
+}
+
+func TestOpenAIUserActiveRouteSoftOwnerAndPendingLifecycle(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	client := tx.Client()
+	repo := newAccountRepositoryWithSQL(client, tx, nil)
+	firstUser := mustCreateUser(t, client, &service.User{Email: "affinity-route-first-" + uuid.NewString() + "@example.com", PasswordHash: "hash"})
+	secondUser := mustCreateUser(t, client, &service.User{Email: "affinity-route-second-" + uuid.NewString() + "@example.com", PasswordHash: "hash"})
+	firstKey := mustCreateApiKey(t, client, &service.APIKey{UserID: firstUser.ID, Key: "sk-affinity-route-first-" + uuid.NewString(), Name: "affinity"})
+	secondKey := mustCreateApiKey(t, client, &service.APIKey{UserID: secondUser.ID, Key: "sk-affinity-route-second-" + uuid.NewString(), Name: "affinity"})
+	firstAccount := mustCreateAccount(t, client, &service.Account{Name: "openai-affinity-route-first-" + uuid.NewString(), Platform: service.PlatformOpenAI})
+	secondAccount := mustCreateAccount(t, client, &service.Account{Name: "openai-affinity-route-second-" + uuid.NewString(), Platform: service.PlatformOpenAI})
+	config := service.DefaultOpenAIUserAffinityConfig()
+	config.ResidentAccountSlotCount = 2
+	config.DefaultNewResidentCooldownSeconds = 0
+	scopeKey := "openai:v1:group:simple:lane:active-route"
+
+	reserveAndCommit := func(userID, apiKeyID, accountID int64, hashByte string) *service.OpenAIUserConversationBinding {
+		t.Helper()
+		token := uuid.NewString()
+		binding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+			UserID: userID, APIKeyID: apiKeyID, ScopeKey: scopeKey, ConversationHash: strings.Repeat(hashByte, 64),
+			AccountID: accountID, PlacementGeneration: 1, MaxResidentSlots: 2,
+			ContextRebuildable: true, ProvisionalToken: token, ManageActiveRoute: true, Config: config,
+		})
+		require.NoError(t, err)
+		require.True(t, created)
+		require.NotNil(t, binding)
+		committed, err := repo.CommitOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
+			BindingID: binding.ID, UserID: userID, APIKeyID: apiKeyID, ScopeKey: scopeKey,
+			ConversationHash: binding.ConversationHash, ResidentSlotID: binding.ResidentSlotID,
+			AccountID: accountID, SlotGeneration: binding.SlotGeneration, ProvisionalToken: token,
+			ManageActiveRoute: binding.ManageActiveRoute, ActiveRoutePending: binding.ActiveRoutePending, Config: config,
+		})
+		require.NoError(t, err)
+		require.True(t, committed)
+		return binding
+	}
+
+	firstBinding := reserveAndCommit(firstUser.ID, firstKey.ID, firstAccount.ID, "a")
+	_ = reserveAndCommit(secondUser.ID, secondKey.ID, firstAccount.ID, "b")
+	occupancies, err := repo.ListOpenAIAccountSoftOccupancies(ctx, []int64{firstAccount.ID, secondAccount.ID})
+	require.NoError(t, err)
+	require.Equal(t, 2, occupancies[firstAccount.ID].ActiveUserCount)
+	require.Equal(t, firstUser.ID, occupancies[firstAccount.ID].OwnerUserID)
+
+	token := uuid.NewString()
+	pendingBinding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+		UserID: secondUser.ID, APIKeyID: secondKey.ID, ScopeKey: scopeKey, ConversationHash: strings.Repeat("c", 64),
+		AccountID: secondAccount.ID, PlacementGeneration: 2, MaxResidentSlots: 2,
+		ContextRebuildable: true, ProvisionalToken: token, ManageActiveRoute: true, Config: config,
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+	require.True(t, pendingBinding.ActiveRoutePending)
+	route, err := repo.GetOpenAIUserActiveRoute(ctx, secondUser.ID, scopeKey)
+	require.NoError(t, err)
+	require.Equal(t, firstAccount.ID, route.AccountID)
+	require.Equal(t, secondAccount.ID, route.PendingAccountID)
+	occupancies, err = repo.ListOpenAIAccountSoftOccupancies(ctx, []int64{firstAccount.ID, secondAccount.ID})
+	require.NoError(t, err)
+	require.Equal(t, secondUser.ID, occupancies[secondAccount.ID].OwnerUserID)
+
+	rolledBack, err := repo.RollbackOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
+		BindingID: pendingBinding.ID, UserID: secondUser.ID, ScopeKey: scopeKey,
+		ResidentSlotID: pendingBinding.ResidentSlotID, AccountID: secondAccount.ID,
+		SlotGeneration: pendingBinding.SlotGeneration, ProvisionalToken: token,
+		ManageActiveRoute: true, ActiveRoutePending: true, Config: config,
+	})
+	require.NoError(t, err)
+	require.True(t, rolledBack)
+	route, err = repo.GetOpenAIUserActiveRoute(ctx, secondUser.ID, scopeKey)
+	require.NoError(t, err)
+	require.Equal(t, firstAccount.ID, route.AccountID)
+	require.Zero(t, route.PendingAccountID)
+
+	finalBinding := reserveAndCommit(secondUser.ID, secondKey.ID, secondAccount.ID, "d")
+	require.NotEqual(t, firstBinding.ResidentSlotID, finalBinding.ResidentSlotID)
+	route, err = repo.GetOpenAIUserActiveRoute(ctx, secondUser.ID, scopeKey)
+	require.NoError(t, err)
+	require.Equal(t, secondAccount.ID, route.AccountID)
+	require.Zero(t, route.PendingAccountID)
+	occupancies, err = repo.ListOpenAIAccountSoftOccupancies(ctx, []int64{firstAccount.ID, secondAccount.ID})
+	require.NoError(t, err)
+	require.Equal(t, 1, occupancies[firstAccount.ID].ActiveUserCount)
+	require.Equal(t, firstUser.ID, occupancies[firstAccount.ID].OwnerUserID)
+	require.Equal(t, 1, occupancies[secondAccount.ID].ActiveUserCount)
+	require.Equal(t, secondUser.ID, occupancies[secondAccount.ID].OwnerUserID)
 }
 
 func TestOpenAIUserAffinityConvergenceShortensExistingTTL(t *testing.T) {
@@ -297,14 +386,15 @@ func TestOpenAIUserAffinityConvergenceShortensExistingTTL(t *testing.T) {
 	binding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
 		UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey, ConversationHash: strings.Repeat("5", 64),
 		AccountID: account.ID, PlacementGeneration: 1, MaxResidentSlots: 1,
-		ContextRebuildable: true, ProvisionalToken: token, Config: config,
+		ContextRebuildable: true, ProvisionalToken: token, ManageActiveRoute: true, Config: config,
 	})
 	require.NoError(t, err)
 	require.True(t, created)
 	committed, err := repo.CommitOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
 		BindingID: binding.ID, UserID: user.ID, ScopeKey: scopeKey, ConversationHash: binding.ConversationHash,
 		ResidentSlotID: binding.ResidentSlotID, AccountID: account.ID, SlotGeneration: binding.SlotGeneration,
-		ProvisionalToken: token, ResponseAliasHash: responseAliasHash, Config: config,
+		ProvisionalToken: token, ResponseAliasHash: responseAliasHash,
+		ManageActiveRoute: binding.ManageActiveRoute, ActiveRoutePending: binding.ActiveRoutePending, Config: config,
 	})
 	require.NoError(t, err)
 	require.True(t, committed)
@@ -326,6 +416,7 @@ func TestOpenAIUserAffinityConvergenceShortensExistingTTL(t *testing.T) {
 	require.NoError(t, repo.ConvergeOpenAIUserResidentSlots(ctx, user.ID, scopeKey, reduced, now))
 
 	var slotStatus, bindingStatus string
+	var activeRouteCount int
 	var slotExpiresAt, bindingExpiresAt, aliasExpiresAt time.Time
 	require.NoError(t, scanSingleRow(ctx, tx, `SELECT status, expires_at FROM openai_user_resident_slots WHERE id = $1`,
 		[]any{binding.ResidentSlotID}, &slotStatus, &slotExpiresAt))
@@ -334,11 +425,14 @@ func TestOpenAIUserAffinityConvergenceShortensExistingTTL(t *testing.T) {
 	require.NoError(t, scanSingleRow(ctx, tx, `SELECT expires_at FROM openai_user_conversation_aliases
 		WHERE binding_id = $1 AND alias_type = 'response_id' AND alias_hash = $2::char(64)`,
 		[]any{binding.ID, responseAliasHash}, &aliasExpiresAt))
+	require.NoError(t, scanSingleRow(ctx, tx, `SELECT COUNT(*) FROM openai_user_active_routes
+		WHERE user_id = $1 AND scope_key = $2`, []any{user.ID, scopeKey}, &activeRouteCount))
 	require.Equal(t, service.OpenAIUserResidentSlotStatusExpired, slotStatus)
 	require.Equal(t, "expired", bindingStatus)
 	require.False(t, slotExpiresAt.After(now))
 	require.False(t, bindingExpiresAt.After(now))
 	require.False(t, aliasExpiresAt.After(now))
+	require.Zero(t, activeRouteCount)
 }
 
 // 多槽位上限、触达预留和回滚必须在同一事务中生效。
@@ -756,7 +850,7 @@ func TestResetOpenAIUserAffinityScopePreservesBindingsAndConsumesExclusions(t *t
 			UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey,
 			ConversationHash: strings.Repeat(hashChar, 64), AccountID: account.ID,
 			PlacementGeneration: generation, MaxResidentSlots: 2, ContextRebuildable: true,
-			ProvisionalToken: token, Config: config,
+			ProvisionalToken: token, ManageActiveRoute: true, Config: config,
 		})
 		require.NoError(t, err)
 		require.True(t, created)
@@ -764,7 +858,8 @@ func TestResetOpenAIUserAffinityScopePreservesBindingsAndConsumesExclusions(t *t
 			BindingID: binding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey,
 			ConversationHash: binding.ConversationHash, ResidentSlotID: binding.ResidentSlotID,
 			AccountID: binding.AccountID, SlotGeneration: binding.SlotGeneration,
-			ProvisionalToken: token, Config: config,
+			ProvisionalToken: token, ManageActiveRoute: binding.ManageActiveRoute,
+			ActiveRoutePending: binding.ActiveRoutePending, Config: config,
 		}
 		firstCommit, err := repo.CommitOpenAIUserConversationBinding(ctx, transition)
 		require.NoError(t, err)
@@ -775,16 +870,19 @@ func TestResetOpenAIUserAffinityScopePreservesBindingsAndConsumesExclusions(t *t
 	_ = reserveAndCommit(accounts[1], "9", 2)
 
 	require.NoError(t, repo.ResetOpenAIUserAffinityPlacement(ctx, user.ID, user.ID, scopeKey, true))
-	var resetSlots, drainingBindings, pendingExclusions int
+	var resetSlots, drainingBindings, pendingExclusions, activeRoutes int
 	require.NoError(t, scanSingleRow(ctx, tx, `SELECT COUNT(*) FROM openai_user_resident_slots
 		WHERE user_id = $1 AND scope_key = $2 AND status = 'reset'`, []any{user.ID, scopeKey}, &resetSlots))
 	require.NoError(t, scanSingleRow(ctx, tx, `SELECT COUNT(*) FROM openai_user_conversation_bindings
 		WHERE user_id = $1 AND scope_key = $2 AND status = 'draining'`, []any{user.ID, scopeKey}, &drainingBindings))
 	require.NoError(t, scanSingleRow(ctx, tx, `SELECT COUNT(*) FROM openai_user_affinity_reset_exclusions
 		WHERE user_id = $1 AND scope_key = $2 AND consumed_at IS NULL`, []any{user.ID, scopeKey}, &pendingExclusions))
+	require.NoError(t, scanSingleRow(ctx, tx, `SELECT COUNT(*) FROM openai_user_active_routes
+		WHERE user_id = $1 AND scope_key = $2`, []any{user.ID, scopeKey}, &activeRoutes))
 	require.Equal(t, 2, resetSlots)
 	require.Equal(t, 2, drainingBindings)
 	require.Equal(t, 2, pendingExclusions)
+	require.Zero(t, activeRoutes)
 	excluded, err := repo.ListOpenAIUserAffinityResetExcludedAccountIDs(ctx, user.ID, scopeKey)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []int64{accounts[0].ID, accounts[1].ID}, excluded)

@@ -70,3 +70,27 @@ func TestOpenAICodexThreadAliasMigrationExtendsAliasConstraint(t *testing.T) {
 		t.Fatal("Codex thread alias migration must not remove table data")
 	}
 }
+
+func TestOpenAIUserAffinityActiveRouteMigrationIsAdditive(t *testing.T) {
+	content, err := FS.ReadFile("245_openai_user_affinity_active_routes.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sqlText := string(content)
+	for _, required := range []string{
+		"CREATE TABLE IF NOT EXISTS openai_user_active_routes",
+		"PRIMARY KEY (user_id, scope_key)",
+		"pending_account_id",
+		"pending_token",
+		"ON DELETE CASCADE",
+		"idx_openai_user_active_routes_current_account",
+		"idx_openai_user_active_routes_pending_account",
+	} {
+		if !strings.Contains(sqlText, required) {
+			t.Fatalf("active route migration missing %q", required)
+		}
+	}
+	if strings.Contains(sqlText, "DROP TABLE") || strings.Contains(sqlText, "DROP COLUMN") {
+		t.Fatal("active route migration must remain additive")
+	}
+}

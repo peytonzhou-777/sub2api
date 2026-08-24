@@ -39,6 +39,12 @@ type OpenAIUserAffinityConversationStore interface {
 	RollbackOpenAIUserConversationBinding(ctx context.Context, transition OpenAIUserConversationTransition) (bool, error)
 }
 
+// OpenAIUserAffinityActiveRoutingStore 提供新会话活动路由与账号软驻留快照。
+type OpenAIUserAffinityActiveRoutingStore interface {
+	GetOpenAIUserActiveRoute(ctx context.Context, userID int64, scopeKey string) (*OpenAIUserActiveRoute, error)
+	ListOpenAIAccountSoftOccupancies(ctx context.Context, accountIDs []int64) (map[int64]OpenAIAccountSoftOccupancy, error)
+}
+
 // OpenAIUserAffinityConversationFailoverStore 以 pending 字段预留会话级切号，提交前不覆盖原绑定。
 type OpenAIUserAffinityConversationFailoverStore interface {
 	ReserveOpenAIUserConversationFailover(ctx context.Context, reservation OpenAIUserConversationFailoverReservation) (*OpenAIUserConversationTransition, bool, error)
@@ -197,11 +203,35 @@ type OpenAIUserResidentSlot struct {
 	LastSuccessAt           *time.Time `json:"last_success_at"`
 	ExpiresAt               time.Time  `json:"expires_at"`
 	UsageScore              float64    `json:"usage_score"`
-	ActiveConversationCount int        `json:"active_conversation_count"`
+	ActiveRouteUserCount    int        `json:"active_route_user_count"`
+	SoftOwnerUserID         int64      `json:"soft_owner_user_id"`
 	ScoreUpdatedAt          time.Time  `json:"score_updated_at"`
 	ReplacementSourceSlotID *int64     `json:"replacement_source_slot_id"`
 	ConfigVersion           int64      `json:"config_version"`
 	ProvisionalToken        string     `json:"-"`
+}
+
+// OpenAIUserActiveRoute 是用户在单个 scope 下供新会话复用的唯一短期活动账号。
+type OpenAIUserActiveRoute struct {
+	UserID                int64      `json:"user_id"`
+	ScopeKey              string     `json:"scope_key"`
+	ResidentSlotID        int64      `json:"resident_slot_id"`
+	AccountID             int64      `json:"account_id"`
+	SlotGeneration        int64      `json:"slot_generation"`
+	ClaimedAt             *time.Time `json:"claimed_at"`
+	ActiveUntil           *time.Time `json:"active_until"`
+	PendingResidentSlotID int64      `json:"pending_resident_slot_id"`
+	PendingAccountID      int64      `json:"pending_account_id"`
+	PendingSlotGeneration int64      `json:"pending_slot_generation"`
+	PendingClaimedAt      *time.Time `json:"pending_claimed_at"`
+	PendingExpiresAt      *time.Time `json:"pending_expires_at"`
+}
+
+// OpenAIAccountSoftOccupancy 描述账号当前活动用户数及稳定软驻留主用户。
+type OpenAIAccountSoftOccupancy struct {
+	AccountID       int64 `json:"account_id"`
+	ActiveUserCount int   `json:"active_user_count"`
+	OwnerUserID     int64 `json:"owner_user_id"`
 }
 
 // OpenAIUserConversationBinding 将一个逻辑会话固定到其首次成功使用的账号。
@@ -221,6 +251,8 @@ type OpenAIUserConversationBinding struct {
 	ExpiresAt            time.Time  `json:"expires_at"`
 	LastSuccessAt        *time.Time `json:"last_success_at"`
 	ProvisionalToken     string     `json:"-"`
+	ManageActiveRoute    bool       `json:"-"`
+	ActiveRoutePending   bool       `json:"-"`
 }
 
 // OpenAIUserConversationAlias 是会话绑定的作用域化派生索引，不保存客户端原始标识。
@@ -246,28 +278,31 @@ type OpenAIUserConversationReservation struct {
 	MaxResidentSlots        int
 	ContextRebuildable      bool
 	ProvisionalToken        string
+	ManageActiveRoute       bool
 	Config                  OpenAIUserAffinityConfig
 }
 
 // OpenAIUserConversationTransition 以 binding、账号和 token 限定提交或回滚目标。
 type OpenAIUserConversationTransition struct {
-	BindingID         int64
-	UserID            int64
-	APIKeyID          int64
-	ScopeKey          string
-	ConversationHash  string
-	ResidentSlotID    int64
-	AccountID         int64
-	SlotGeneration    int64
-	ProvisionalToken  string
-	Failover          bool
-	SourceAccountID   int64
-	SourceSlotID      int64
-	SourceGeneration  int64
-	Replacement       bool
-	ReplacementSlotID int64
-	ResponseAliasHash string
-	Config            OpenAIUserAffinityConfig
+	BindingID          int64
+	UserID             int64
+	APIKeyID           int64
+	ScopeKey           string
+	ConversationHash   string
+	ResidentSlotID     int64
+	AccountID          int64
+	SlotGeneration     int64
+	ProvisionalToken   string
+	Failover           bool
+	SourceAccountID    int64
+	SourceSlotID       int64
+	SourceGeneration   int64
+	Replacement        bool
+	ReplacementSlotID  int64
+	ResponseAliasHash  string
+	ManageActiveRoute  bool
+	ActiveRoutePending bool
+	Config             OpenAIUserAffinityConfig
 }
 
 // OpenAIUserConversationFailoverReservation 描述一个不破坏原绑定的槽位内重放预留。

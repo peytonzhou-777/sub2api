@@ -21,9 +21,10 @@ func (r *accountRepository) ListOpenAIUserAffinityResidents(ctx context.Context,
 		SELECT s.user_id, COALESCE(u.email, ''), s.account_id, s.scope_key, s.id,
 		       s.slot_index, s.generation, s.status, s.admitted_at, s.last_success_at,
 		       s.expires_at, s.usage_score,
-		       (SELECT COUNT(*) FROM openai_user_conversation_bindings b
-		        WHERE b.resident_slot_id = s.id AND b.status IN ('provisional', 'active', 'draining')
-		          AND b.active_until > NOW() AND b.expires_at > NOW()),
+		       EXISTS (SELECT 1 FROM openai_user_active_routes r
+		        WHERE r.user_id = s.user_id AND r.scope_key = s.scope_key
+		          AND r.resident_slot_id = s.id AND r.account_id = s.account_id
+		          AND r.slot_generation = s.generation AND r.active_until > NOW()),
 		       c.touch_expires_at,
 		       COUNT(*) OVER()
 		FROM openai_user_resident_slots s
@@ -49,7 +50,7 @@ func (r *accountRepository) ListOpenAIUserAffinityResidents(ctx context.Context,
 		if err := rows.Scan(&item.UserID, &item.UserEmail, &item.AccountID, &item.ScopeKey,
 			&item.ResidentSlotID, &item.SlotIndex, &item.Generation, &item.Status,
 			&item.AssignedAt, &lastActive, &item.ExpiresAt, &item.UsageScore,
-			&item.ActiveConversationCount, &touchExpires, &total); err != nil {
+			&item.ActiveRoute, &touchExpires, &total); err != nil {
 			return nil, 0, err
 		}
 		if lastActive.Valid {
@@ -64,6 +65,14 @@ func (r *accountRepository) ListOpenAIUserAffinityResidents(ctx context.Context,
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
+	}
+	occupancies, err := r.ListOpenAIAccountSoftOccupancies(ctx, []int64{accountID})
+	if err != nil {
+		return nil, 0, err
+	}
+	ownerUserID := occupancies[accountID].OwnerUserID
+	for i := range items {
+		items[i].SoftOwner = ownerUserID > 0 && items[i].UserID == ownerUserID
 	}
 	return items, total, nil
 }
@@ -138,10 +147,7 @@ func (r *accountRepository) listOpenAIUserAffinityAdminResidentSlots(ctx context
 		)
 		SELECT s.id, s.user_id, s.scope_key, s.slot_index, s.account_id, s.generation, s.status,
 		       s.admitted_at, s.last_success_at, s.expires_at, s.usage_score, s.score_updated_at,
-		       s.replacement_source_slot_id, s.config_version,
-		       (SELECT COUNT(*) FROM openai_user_conversation_bindings b
-		        WHERE b.resident_slot_id = s.id AND b.status IN ('provisional', 'active', 'draining')
-		          AND b.active_until > NOW() AND b.expires_at > NOW())
+		       s.replacement_source_slot_id, s.config_version
 		FROM openai_user_resident_slots s CROSS JOIN affinity_config c
 		WHERE s.user_id = $1 AND (s.scope_key = 'openai' OR s.scope_key LIKE 'openai:v1:%')
 		  AND ((s.status IN ('provisional', 'active', 'replacement_pending', 'draining') AND s.expires_at > NOW())
@@ -162,8 +168,7 @@ func (r *accountRepository) listOpenAIUserAffinityAdminResidentSlots(ctx context
 		var replacementSource sql.NullInt64
 		if err := rows.Scan(&slot.ID, &slot.UserID, &slot.ScopeKey, &slot.SlotIndex, &slot.AccountID,
 			&slot.Generation, &slot.Status, &slot.AdmittedAt, &lastSuccess, &slot.ExpiresAt,
-			&slot.UsageScore, &slot.ScoreUpdatedAt, &replacementSource, &slot.ConfigVersion,
-			&slot.ActiveConversationCount); err != nil {
+			&slot.UsageScore, &slot.ScoreUpdatedAt, &replacementSource, &slot.ConfigVersion); err != nil {
 			return nil, err
 		}
 		if lastSuccess.Valid {
@@ -176,7 +181,23 @@ func (r *accountRepository) listOpenAIUserAffinityAdminResidentSlots(ctx context
 		}
 		slots = append(slots, slot)
 	}
-	return slots, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	accountIDs := make([]int64, 0, len(slots))
+	for _, slot := range slots {
+		accountIDs = append(accountIDs, slot.AccountID)
+	}
+	occupancies, err := r.ListOpenAIAccountSoftOccupancies(ctx, accountIDs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range slots {
+		occupancy := occupancies[slots[i].AccountID]
+		slots[i].ActiveRouteUserCount = occupancy.ActiveUserCount
+		slots[i].SoftOwnerUserID = occupancy.OwnerUserID
+	}
+	return slots, nil
 }
 
 func openAIUserResidentSlotPlacement(slot service.OpenAIUserResidentSlot) service.OpenAIUserPlacement {
@@ -388,6 +409,11 @@ func (r *accountRepository) ResetOpenAIUserAffinityPlacement(ctx context.Context
 			pending_resident_slot_id = NULL, pending_account_id = NULL, pending_slot_generation = NULL,
 			pending_token = NULL, pending_expires_at = NULL, updated_at = $3
 		WHERE user_id = $1 AND scope_key = $2 AND status IN ('provisional', 'active', 'draining')`, userID, scopeKey, now); err != nil {
+		return err
+	}
+	if _, err := exec.ExecContext(ctx, `
+		DELETE FROM openai_user_active_routes
+		WHERE user_id = $1 AND scope_key = $2`, userID, scopeKey); err != nil {
 		return err
 	}
 	for accountID := range accountIDs {

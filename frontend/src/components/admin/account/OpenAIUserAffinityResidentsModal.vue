@@ -37,7 +37,7 @@
                     <td class="max-w-56 break-all px-3 py-3 font-mono text-xs">{{ resident.scope_key }}</td>
                     <td class="px-3 py-3 font-mono">{{ resident.slot_index }} / g{{ resident.generation }}</td>
                     <td class="px-3 py-3"><span :class="slotStatusClass(resident.status)" class="rounded px-1.5 py-0.5 text-xs font-medium">{{ resident.status }}</span></td>
-                    <td class="px-3 py-3"><div>{{ resident.usage_score.toFixed(2) }}</div><div class="text-xs text-gray-500">{{ t('admin.accounts.userAffinity.activeConversations', { count: resident.active_conversation_count }) }}</div></td>
+                    <td class="px-3 py-3"><div>{{ resident.usage_score.toFixed(2) }}</div><div v-if="resident.soft_owner || resident.active_route" class="text-xs text-gray-500">{{ resident.soft_owner ? t('admin.accounts.userAffinity.softOwner') : t('admin.accounts.userAffinity.activeRoute') }}</div></td>
                     <td class="px-3 py-3">{{ formatDateTime(resident.last_active_at) }}</td>
                     <td class="px-3 py-3">{{ formatDateTime(resident.expires_at) }}</td>
                     <td class="px-3 py-3 text-right"><button class="btn btn-secondary btn-sm" @click="inspectUser(resident.user_id, resident.scope_key)">{{ t('common.details') }}</button></td>
@@ -62,7 +62,7 @@
                   <div class="break-all font-mono text-xs text-gray-500">{{ slot.scope_key }}</div>
                   <div class="mt-1">#{{ slot.account_id }} · {{ t('admin.accounts.userAffinity.slotValue', { index: slot.slot_index, generation: slot.generation }) }}</div>
                   <div class="mt-1 flex items-center justify-between gap-2"><span :class="slotStatusClass(slot.status)" class="rounded px-1.5 py-0.5 text-xs font-medium">{{ slot.status }}</span><span class="text-xs text-gray-500">{{ t('admin.accounts.userAffinity.heatValue', { value: slot.usage_score.toFixed(2) }) }}</span></div>
-                  <div class="mt-1 text-xs text-gray-500">{{ t('admin.accounts.userAffinity.activeConversations', { count: slot.active_conversation_count }) }} · {{ formatDateTime(slot.expires_at) }}</div>
+                  <div class="mt-1 text-xs text-gray-500">{{ t('admin.accounts.userAffinity.activeRouteUsers', { count: slot.active_route_user_count }) }}<span v-if="slot.soft_owner_user_id"> · {{ t('admin.accounts.userAffinity.softOwnerUser', { id: slot.soft_owner_user_id }) }}</span> · {{ formatDateTime(slot.expires_at) }}</div>
                 </div>
                 <div v-if="inspectedSlots.length === 0" class="py-4 text-sm text-gray-500">{{ t('common.noData') }}</div>
               </div>

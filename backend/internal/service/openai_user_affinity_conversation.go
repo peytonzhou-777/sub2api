@@ -192,7 +192,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		childIdentity.scopeKey = binding.ScopeKey
 		if err := s.reserveOpenAIUserAffinityConversationWithAliases(ctx, req, account.ID, childIdentity, []OpenAIUserConversationAlias{
 			openAICodexThreadReservationAlias(req.GroupID, identity.codexThreadHash),
-		}, binding); err != nil {
+		}, binding, false); err != nil {
 			return nil, true, err
 		}
 	} else if bindingSource != "codex_self" && identity.codexThreadHash != "" {
@@ -201,7 +201,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		legacyIdentity.conversationHash = binding.ConversationHash
 		if err := s.reserveOpenAIUserAffinityConversationWithAliases(ctx, req, account.ID, legacyIdentity, []OpenAIUserConversationAlias{
 			openAICodexThreadReservationAlias(req.GroupID, identity.codexThreadHash),
-		}, nil); err != nil {
+		}, nil, false); err != nil {
 			return nil, true, err
 		}
 	}
@@ -251,7 +251,7 @@ func (s *OpenAIGatewayService) reserveOpenAIUserAffinityConversation(ctx context
 	if identity.codexThreadHash != "" {
 		aliases = append(aliases, openAICodexThreadReservationAlias(req.GroupID, identity.codexThreadHash))
 	}
-	return s.reserveOpenAIUserAffinityConversationWithAliases(ctx, req, accountID, identity, aliases, nil)
+	return s.reserveOpenAIUserAffinityConversationWithAliases(ctx, req, accountID, identity, aliases, nil, true)
 }
 
 // reserveOpenAIUserAffinityConversationWithAliases 允许父线程继承仅写入当前线程别名，避免夺取父响应别名。
@@ -262,6 +262,7 @@ func (s *OpenAIGatewayService) reserveOpenAIUserAffinityConversationWithAliases(
 	identity openAIUserConversationIdentity,
 	aliases []OpenAIUserConversationAlias,
 	preferredBinding *OpenAIUserConversationBinding,
+	manageActiveRoute bool,
 ) error {
 	if identity.conversationHash == "" {
 		return nil
@@ -291,7 +292,7 @@ func (s *OpenAIGatewayService) reserveOpenAIUserAffinityConversationWithAliases(
 		PlacementGeneration: attempt.generation, ContextRebuildable: identity.contextRebuildable,
 		PreferredResidentSlotID: preferredSlotID, PreferredSlotGeneration: preferredSlotGeneration,
 		MaxResidentSlots: config.RuntimeResidentAccountSlotCount(),
-		ProvisionalToken: token, Config: config,
+		ProvisionalToken: token, ManageActiveRoute: manageActiveRoute, Config: config,
 	})
 	if err != nil {
 		return err
@@ -334,6 +335,7 @@ func (s *OpenAIGatewayService) rememberOpenAIUserAffinityConversationAttempt(ctx
 		ScopeKey: binding.ScopeKey, ConversationHash: binding.ConversationHash,
 		ResidentSlotID: binding.ResidentSlotID, AccountID: binding.AccountID,
 		SlotGeneration: binding.SlotGeneration, ProvisionalToken: token, Config: config,
+		ManageActiveRoute: binding.ManageActiveRoute, ActiveRoutePending: binding.ActiveRoutePending,
 	}
 	if binding.FirstOutputCommitted {
 		state.conversationCommitted.Store(true)

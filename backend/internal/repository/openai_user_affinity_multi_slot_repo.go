@@ -176,6 +176,9 @@ func (r *accountRepository) ConvergeOpenAIUserResidentSlots(ctx context.Context,
 			return err
 		}
 	}
+	if err := cleanupOpenAIUserActiveRoute(ctx, exec, userID, scopeKey, now); err != nil {
+		return err
+	}
 	if tx != nil {
 		return tx.Commit()
 	}
@@ -190,11 +193,7 @@ func (r *accountRepository) ListOpenAIUserResidentSlots(ctx context.Context, use
 	rows, err := r.sql.QueryContext(ctx, `
 		SELECT id, user_id, scope_key, slot_index, account_id, generation, status,
 		       admitted_at, last_success_at, expires_at, usage_score, score_updated_at,
-		       replacement_source_slot_id, provisional_token, config_version,
-		       (SELECT COUNT(*) FROM openai_user_conversation_bindings b
-		        WHERE b.resident_slot_id = s.id
-		          AND b.status IN ('provisional', 'active', 'draining')
-		          AND b.active_until > NOW() AND b.expires_at > NOW())
+		       replacement_source_slot_id, provisional_token, config_version
 		FROM openai_user_resident_slots s
 		WHERE s.user_id = $1 AND s.scope_key = $2
 		  AND s.status IN ('provisional', 'active', 'replacement_pending', 'draining')
@@ -215,7 +214,7 @@ func (r *accountRepository) ListOpenAIUserResidentSlots(ctx context.Context, use
 			&slot.ID, &slot.UserID, &slot.ScopeKey, &slot.SlotIndex, &slot.AccountID,
 			&slot.Generation, &slot.Status, &slot.AdmittedAt, &lastSuccess, &slot.ExpiresAt,
 			&slot.UsageScore, &slot.ScoreUpdatedAt, &replacementSource, &provisionalToken,
-			&slot.ConfigVersion, &slot.ActiveConversationCount,
+			&slot.ConfigVersion,
 		); err != nil {
 			return nil, err
 		}
@@ -234,6 +233,19 @@ func (r *accountRepository) ListOpenAIUserResidentSlots(ctx context.Context, use
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	accountIDs := make([]int64, 0, len(slots))
+	for _, slot := range slots {
+		accountIDs = append(accountIDs, slot.AccountID)
+	}
+	occupancies, err := r.ListOpenAIAccountSoftOccupancies(ctx, accountIDs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range slots {
+		occupancy := occupancies[slots[i].AccountID]
+		slots[i].ActiveRouteUserCount = occupancy.ActiveUserCount
+		slots[i].SoftOwnerUserID = occupancy.OwnerUserID
 	}
 	return slots, nil
 }
@@ -646,6 +658,15 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 			return nil, false, slotErr
 		}
 	}
+	activeRouteAccepted, activeRoutePending, err := reserveOpenAIUserActiveRoute(
+		ctx, exec, reservation, slotID, slotGeneration, now,
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	if !activeRouteAccepted {
+		return nil, false, nil
+	}
 
 	bindingExpiresAt := now.Add(openAIUserAffinityProvisionalTTL(reservation.Config))
 	activeUntil := now.Add(reservation.Config.ConversationActiveTTL())
@@ -682,6 +703,8 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 	if err := upsertOpenAIUserConversationAliases(ctx, exec, binding, aliases, bindingExpiresAt); err != nil {
 		return nil, false, err
 	}
+	binding.ManageActiveRoute = reservation.ManageActiveRoute
+	binding.ActiveRoutePending = activeRoutePending
 	if tx != nil {
 		if err := tx.Commit(); err != nil {
 			return nil, false, err
@@ -1182,6 +1205,13 @@ func (r *accountRepository) CommitOpenAIUserConversationBinding(ctx context.Cont
 			return false, err
 		}
 	}
+	activeRouteCommitted, err := commitOpenAIUserActiveRoute(ctx, exec, transition, now)
+	if err != nil {
+		return false, err
+	}
+	if !activeRouteCommitted {
+		return false, nil
+	}
 	if tx != nil {
 		if err := tx.Commit(); err != nil {
 			return false, err
@@ -1396,6 +1426,10 @@ func (r *accountRepository) RollbackOpenAIUserConversationBinding(ctx context.Co
 	if err != nil || affected == 0 {
 		return false, err
 	}
+	now := time.Now().UTC()
+	if err := rollbackOpenAIUserActiveRoute(ctx, exec, transition, now); err != nil {
+		return false, err
+	}
 	if transition.ResidentSlotID > 0 {
 		if _, err := exec.ExecContext(ctx, `
 			DELETE FROM openai_user_resident_slots s
@@ -1418,12 +1452,11 @@ func (r *accountRepository) RollbackOpenAIUserConversationBinding(ctx context.Co
 		UPDATE account_user_contacts SET reservation_kind = NULL, reservation_token = NULL,
 			reservation_until = NULL, updated_at = $4
 		WHERE account_id = $1 AND user_id = $2 AND reservation_token = $3`,
-		transition.AccountID, transition.UserID, transition.ProvisionalToken, time.Now().UTC()); err != nil {
+		transition.AccountID, transition.UserID, transition.ProvisionalToken, now); err != nil {
 		return false, err
 	}
 	startedCooldown := reservationKind.Valid && reservationKind.String == "new_resident"
 	if startedCooldown {
-		now := time.Now().UTC()
 		if _, err := exec.ExecContext(ctx, `
 			UPDATE accounts SET new_resident_cooldown_until = NULL, updated_at = $2
 			WHERE id = $1 AND NOT EXISTS (
