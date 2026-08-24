@@ -171,6 +171,37 @@ func (r *limitedCreditRepository) ListActiveByUser(ctx context.Context, userID i
 	return out, nil
 }
 
+// ListDepletedByUser 返回耗尽时间落在半开区间 [startTime, endTime) 内的额度批次。
+func (r *limitedCreditRepository) ListDepletedByUser(ctx context.Context, userID int64, startTime, endTime time.Time) ([]service.LimitedCreditGrant, error) {
+	if r == nil || r.client == nil {
+		return nil, fmt.Errorf("limited credit repository client is nil")
+	}
+	client := clientFromContext(ctx, r.client)
+	rows, err := client.UserLimitedCreditGrant.Query().
+		Where(
+			dbgrant.UserIDEQ(userID),
+			dbgrant.StatusEQ(service.LimitedCreditStatusDepleted),
+			dbgrant.UpdatedAtGTE(startTime.UTC()),
+			dbgrant.UpdatedAtLT(endTime.UTC()),
+		).
+		Order(dbent.Desc(dbgrant.FieldUpdatedAt), dbent.Desc(dbgrant.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]service.LimitedCreditGrant, 0, len(rows))
+	for _, row := range rows {
+		if grant := limitedCreditGrantEntityToService(row); grant != nil {
+			out = append(out, *grant)
+		}
+	}
+	if err := r.attachSourceReasons(ctx, client, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // attachSourceReasons 按来源批量补充钱包标题文案，避免在每份额度中重复保存文本。
 func (r *limitedCreditRepository) attachSourceReasons(ctx context.Context, client *dbent.Client, grants []service.LimitedCreditGrant) error {
 	resetBatchIDs := make([]int64, 0)

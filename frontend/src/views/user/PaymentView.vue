@@ -367,6 +367,95 @@
                 </article>
               </div>
             </section>
+
+            <section data-test="depleted-limited-credit-details">
+              <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 class="text-base font-semibold text-gray-900 dark:text-white">
+                    {{ t('payment.account.depletedCreditDetails') }}
+                  </h2>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('payment.account.depletedCreditHint') }}
+                  </p>
+                </div>
+                <DateRangePicker
+                  data-test="depleted-credit-date-range"
+                  v-model:start-date="depletedHistoryStartDate"
+                  v-model:end-date="depletedHistoryEndDate"
+                  @change="loadDepletedLimitedCredits"
+                />
+              </div>
+
+              <div
+                v-if="depletedHistoryError"
+                data-test="depleted-credit-error"
+                class="card py-8 text-center text-sm text-red-600 dark:text-red-400"
+              >
+                {{ depletedHistoryError }}
+              </div>
+              <div
+                v-else-if="limitedCreditStore.historyLoading && sortedDepletedLimitedCredits.length === 0"
+                data-test="depleted-credit-loading"
+                class="flex justify-center py-12"
+              >
+                <div class="h-7 w-7 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />
+              </div>
+              <div
+                v-else-if="sortedDepletedLimitedCredits.length === 0"
+                data-test="depleted-credit-empty"
+                class="card py-12 text-center"
+              >
+                <Icon name="creditCard" size="xl" class="mx-auto mb-3 text-gray-300 dark:text-dark-600" />
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                  {{ t('payment.account.noDepletedCredits') }}
+                </p>
+              </div>
+              <div v-else data-test="depleted-credit-list" class="space-y-4">
+                <article
+                  v-for="credit in sortedDepletedLimitedCredits"
+                  :key="credit.id"
+                  data-test="depleted-credit-item"
+                  class="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800"
+                >
+                  <div class="flex items-center justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
+                    <h3 class="font-semibold text-gray-900 dark:text-white">
+                      {{ limitedCreditTitle(credit) }}
+                    </h3>
+                    <span class="badge shrink-0 text-xs">
+                      {{ t('payment.account.depleted') }}
+                    </span>
+                  </div>
+                  <div class="space-y-3 p-5">
+                    <div class="flex items-center justify-between gap-4 text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">
+                        {{ t('payment.account.usage') }}
+                      </span>
+                      <span class="font-medium text-gray-900 dark:text-white">
+                        {{ formatAccountMoney(credit.used_amount) }} / {{ formatAccountMoney(credit.initial_amount) }}
+                      </span>
+                    </div>
+                    <div
+                      class="limited-credit-progress-track h-2 overflow-hidden rounded-full"
+                      role="progressbar"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                      :aria-valuenow="limitedCreditUsagePercentage(credit)"
+                    >
+                      <div
+                        class="limited-credit-progress-fill h-full rounded-full"
+                        :style="{ width: limitedCreditProgressWidth(credit) }"
+                      />
+                    </div>
+                    <div class="flex flex-wrap justify-end gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                      <span data-test="depleted-credit-time">
+                        {{ t('payment.account.depletedAt', { time: formatDateTime(credit.updated_at) }) }}
+                      </span>
+                      <span>{{ t('payment.account.expiresAt', { time: formatDateTime(credit.expires_at) }) }}</span>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </section>
           </template>
         </template>
         <div v-if="(checkout.help_text || checkout.help_image_url) && paymentPhase === 'select' && !selectedPlan" class="card p-4">
@@ -450,6 +539,7 @@ import { formatDateTime } from '@/utils/format'
 import { platformAccentBarClass, platformBadgeLightClass, platformBadgeClass, platformTextClass, platformLabel } from '@/utils/platformColors'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
 import SecurityDepositAccountPanel from '@/components/securityDeposit/SecurityDepositAccountPanel.vue'
+import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import type { PaymentMethodOption } from '@/components/payment/PaymentMethodSelector.vue'
 import { buildPaymentErrorToastMessage, describePaymentScenarioError } from './paymentUx'
 import { hasWechatResumeQuery, parseWechatResumeRoute, stripWechatResumeQuery } from './paymentWechatResume'
@@ -496,6 +586,56 @@ const sortedLimitedCredits = computed(() =>
     return byExpiry || a.id - b.id
   }),
 )
+const sortedDepletedLimitedCredits = computed(() =>
+  [...limitedCreditStore.depletedCredits].sort((a, b) => {
+    const byDepletedAt = new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    return byDepletedAt || b.id - a.id
+  }),
+)
+
+// formatLocalDateInput 使用用户本地日期生成日期筛选器需要的 YYYY-MM-DD。
+function formatLocalDateInput(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const depletedHistoryEndDate = ref(formatLocalDateInput(new Date()))
+const depletedHistoryStartDate = ref((() => {
+  const start = new Date()
+  start.setDate(start.getDate() - 29)
+  return formatLocalDateInput(start)
+})())
+const depletedHistoryError = ref('')
+
+// limitedCreditHistoryWindow 将本地闭区间日期转换为后端使用的 UTC 半开区间。
+function limitedCreditHistoryWindow(startDate: string, endDate: string): { startTime: string; endTime: string } | null {
+  const start = new Date(`${startDate}T00:00:00`)
+  const end = new Date(`${endDate}T00:00:00`)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return null
+  end.setDate(end.getDate() + 1)
+  if (end.getTime() - start.getTime() > 366 * 24 * 60 * 60 * 1000) return null
+  return { startTime: start.toISOString(), endTime: end.toISOString() }
+}
+
+// loadDepletedLimitedCredits 按耗尽时间刷新历史额度列表。
+async function loadDepletedLimitedCredits(range?: { startDate: string; endDate: string }): Promise<void> {
+  const startDate = range?.startDate || depletedHistoryStartDate.value
+  const endDate = range?.endDate || depletedHistoryEndDate.value
+  const timeWindow = limitedCreditHistoryWindow(startDate, endDate)
+  if (!timeWindow) {
+    depletedHistoryError.value = t('payment.account.historyRangeInvalid')
+    return
+  }
+
+  depletedHistoryError.value = ''
+  try {
+    await limitedCreditStore.fetchDepletedLimitedCredits(timeWindow.startTime, timeWindow.endTime)
+  } catch {
+    depletedHistoryError.value = t('payment.account.historyLoadFailed')
+  }
+}
 
 // limitedCreditSourceReason 为固定投放来源补充展示文案，其余来源使用后端返回的动态原因。
 function limitedCreditSourceReason(credit: LimitedCreditGrant): string {
@@ -769,13 +909,19 @@ const tabs = computed(() => {
 
 // selectPaymentTab 将钱包标签切换收口到标题栏组件。
 function selectPaymentTab(key: string): void {
-  if (key === 'recharge' || key === 'subscription' || key === 'account') activeTab.value = key
+  if (key === 'recharge' || key === 'subscription' || key === 'account') {
+    activeTab.value = key
+    if (key === 'account' && limitedCreditStore.depletedCredits.length === 0) {
+      void loadDepletedLimitedCredits()
+    }
+  }
 }
 
 // 路由查询参数变化时同步钱包标签，支持在钱包页内再次点击余额详情链接。
 watch(() => route.query.tab, (tab) => {
   if (tab === 'account') {
     activeTab.value = 'account'
+    if (limitedCreditStore.depletedCredits.length === 0) void loadDepletedLimitedCredits()
     return
   }
   if (tab === 'subscription') {
@@ -1491,6 +1637,7 @@ onMounted(async () => {
   finally { loading.value = false }
   // 确保账户页使用当前有效限时额度。
   limitedCreditStore.fetchActiveLimitedCredits().catch(() => {})
+  if (activeTab.value === 'account') void loadDepletedLimitedCredits()
   subscriptionStore.fetchActiveSubscriptions().catch(() => {})
   void loadSecurityDepositAccount()
 })

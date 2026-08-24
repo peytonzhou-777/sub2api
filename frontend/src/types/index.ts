@@ -1829,6 +1829,7 @@ export interface LimitedCreditGrant {
   expires_at: string
   status: string
   created_at: string
+  updated_at: string
 }
 
 export interface LimitedCreditSummary {

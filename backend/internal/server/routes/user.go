@@ -144,6 +144,7 @@ func RegisterUserRoutes(
 		limitedCredits := authenticated.Group("/limited-credits")
 		{
 			limitedCredits.GET("/active", h.LimitedCredit.GetActive)
+			limitedCredits.GET("/depleted", h.LimitedCredit.GetDepleted)
 			limitedCredits.GET("/summary", h.LimitedCredit.GetSummary)
 		}
 

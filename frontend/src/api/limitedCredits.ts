@@ -11,6 +11,17 @@ export async function getActiveLimitedCredits(): Promise<LimitedCreditGrant[]> {
   return response.data
 }
 
+// 获取当前用户在指定耗尽时间窗口内的限时额度。
+export async function getDepletedLimitedCredits(startTime: string, endTime: string): Promise<LimitedCreditGrant[]> {
+  const response = await apiClient.get<LimitedCreditGrant[]>('/limited-credits/depleted', {
+    params: {
+      start_time: startTime,
+      end_time: endTime,
+    },
+  })
+  return response.data
+}
+
 // 获取当前用户限时额度汇总。
 export async function getLimitedCreditSummary(): Promise<LimitedCreditSummary> {
   const response = await apiClient.get<LimitedCreditSummary>('/limited-credits/summary')
@@ -19,5 +30,6 @@ export async function getLimitedCreditSummary(): Promise<LimitedCreditSummary> {
 
 export default {
   getActiveLimitedCredits,
+  getDepletedLimitedCredits,
   getLimitedCreditSummary
 }

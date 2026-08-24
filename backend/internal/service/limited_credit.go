@@ -77,6 +77,7 @@ type LimitedCreditRepository interface {
 	CreateGrant(ctx context.Context, grant *LimitedCreditGrant) (*LimitedCreditGrant, error)
 	CreateGrantsIndependent(ctx context.Context, grants []*LimitedCreditGrant) ([]LimitedCreditGrant, error)
 	ListActiveByUser(ctx context.Context, userID int64) ([]LimitedCreditGrant, error)
+	ListDepletedByUser(ctx context.Context, userID int64, startTime, endTime time.Time) ([]LimitedCreditGrant, error)
 	GetAvailableAmount(ctx context.Context, userID int64) (float64, error)
 }
 
@@ -252,6 +253,14 @@ func (s *LimitedCreditService) ListActive(ctx context.Context, userID int64) ([]
 		return nil, nil
 	}
 	return s.repo.ListActiveByUser(ctx, userID)
+}
+
+// ListDepleted 返回耗尽时间落在半开区间 [startTime, endTime) 内的限时额度。
+func (s *LimitedCreditService) ListDepleted(ctx context.Context, userID int64, startTime, endTime time.Time) ([]LimitedCreditGrant, error) {
+	if s == nil || s.repo == nil {
+		return nil, nil
+	}
+	return s.repo.ListDepletedByUser(ctx, userID, startTime, endTime)
 }
 
 // GetSummary 汇总用户当前所有 active 限时额度。

@@ -37,6 +37,10 @@ func (r *paymentRechargeBonusLimitedCreditRepo) ListActiveByUser(context.Context
 	panic("unexpected ListActiveByUser call")
 }
 
+func (r *paymentRechargeBonusLimitedCreditRepo) ListDepletedByUser(context.Context, int64, time.Time, time.Time) ([]LimitedCreditGrant, error) {
+	panic("unexpected ListDepletedByUser call")
+}
+
 func (r *paymentRechargeBonusLimitedCreditRepo) GetAvailableAmount(context.Context, int64) (float64, error) {
 	panic("unexpected GetAvailableAmount call")
 }

@@ -222,3 +222,51 @@ func TestLimitedCreditRepositoryListActiveByUserAttachesSourceReasons(t *testing
 	require.Equal(t, "每周赠额", reasons[service.LimitedCreditSourceRecurring])
 	require.Equal(t, "新人专项赠额", reasons[service.LimitedCreditSourceCreditGrantEvent])
 }
+
+func TestLimitedCreditRepositoryListDepletedByUserFiltersByExhaustedWindow(t *testing.T) {
+	ctx := context.Background()
+	repo, client := newLimitedCreditRepoSQLite(t)
+	userID := mustCreateLimitedCreditRepoUser(t, ctx, client)
+	otherUser, err := client.User.Create().
+		SetEmail("other-" + t.Name() + "@example.com").
+		SetPasswordHash("test-password-hash").
+		SetRole(service.RoleUser).
+		SetStatus(service.StatusActive).
+		Save(ctx)
+	require.NoError(t, err)
+	otherUserID := otherUser.ID
+	now := time.Now().UTC().Truncate(time.Second)
+
+	createGrant := func(userID int64, status string, updatedAt time.Time) int64 {
+		t.Helper()
+		usedAmount := 5.0
+		if status == service.LimitedCreditStatusActive {
+			usedAmount = 1
+		}
+		grant, err := client.UserLimitedCreditGrant.Create().
+			SetUserID(userID).
+			SetSourceType(service.LimitedCreditSourceDefaultUserSetting).
+			SetInitialAmount(5).
+			SetUsedAmount(usedAmount).
+			SetExpiresAt(now.AddDate(0, 1, 0)).
+			SetStatus(status).
+			SetUpdatedAt(updatedAt).
+			Save(ctx)
+		require.NoError(t, err)
+		return grant.ID
+	}
+
+	olderID := createGrant(userID, service.LimitedCreditStatusDepleted, now.Add(-4*time.Hour))
+	newerID := createGrant(userID, service.LimitedCreditStatusDepleted, now.Add(-2*time.Hour))
+	createGrant(userID, service.LimitedCreditStatusDepleted, now.Add(-48*time.Hour))
+	createGrant(userID, service.LimitedCreditStatusActive, now.Add(-time.Hour))
+	createGrant(otherUserID, service.LimitedCreditStatusDepleted, now.Add(-time.Hour))
+
+	grants, err := repo.ListDepletedByUser(ctx, userID, now.Add(-24*time.Hour), now)
+
+	require.NoError(t, err)
+	require.Len(t, grants, 2)
+	require.Equal(t, []int64{newerID, olderID}, []int64{grants[0].ID, grants[1].ID})
+	require.Equal(t, service.LimitedCreditStatusDepleted, grants[0].Status)
+	require.WithinDuration(t, now.Add(-2*time.Hour), grants[0].UpdatedAt, time.Second)
+}

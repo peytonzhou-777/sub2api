@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -34,7 +36,10 @@ type limitedCreditGrantResponse struct {
 	ExpiresAt       time.Time `json:"expires_at"`
 	Status          string    `json:"status"`
 	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
+
+const maxLimitedCreditHistoryWindow = 366 * 24 * time.Hour
 
 // GetActive 返回当前用户仍可见的限时额度明细。
 // GET /api/v1/limited-credits/active
@@ -51,6 +56,34 @@ func (h *LimitedCreditHandler) GetActive(c *gin.Context) {
 		return
 	}
 
+	response.Success(c, limitedCreditGrantResponses(grants))
+}
+
+// GetDepleted 返回当前用户在指定时间窗口内耗尽的限时额度。
+// GET /api/v1/limited-credits/depleted
+func (h *LimitedCreditHandler) GetDepleted(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not found in context")
+		return
+	}
+
+	startTime, endTime, err := parseLimitedCreditHistoryRange(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	grants, err := h.limitedCreditService.ListDepleted(c.Request.Context(), subject.UserID, startTime, endTime)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, limitedCreditGrantResponses(grants))
+}
+
+// limitedCreditGrantResponses 统一构造用户可见的额度响应，避免泄露内部字段。
+func limitedCreditGrantResponses(grants []service.LimitedCreditGrant) []limitedCreditGrantResponse {
 	out := make([]limitedCreditGrantResponse, 0, len(grants))
 	for _, grant := range grants {
 		out = append(out, limitedCreditGrantResponse{
@@ -67,10 +100,34 @@ func (h *LimitedCreditHandler) GetActive(c *gin.Context) {
 			ExpiresAt:       grant.ExpiresAt,
 			Status:          grant.Status,
 			CreatedAt:       grant.CreatedAt,
+			UpdatedAt:       grant.UpdatedAt,
 		})
 	}
+	return out
+}
 
-	response.Success(c, out)
+// parseLimitedCreditHistoryRange 解析并约束用户侧历史查询窗口。
+func parseLimitedCreditHistoryRange(c *gin.Context) (time.Time, time.Time, error) {
+	startRaw := strings.TrimSpace(c.Query("start_time"))
+	endRaw := strings.TrimSpace(c.Query("end_time"))
+	if startRaw == "" || endRaw == "" {
+		return time.Time{}, time.Time{}, fmt.Errorf("start_time and end_time are required")
+	}
+	startTime, err := time.Parse(time.RFC3339Nano, startRaw)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("start_time must be RFC3339")
+	}
+	endTime, err := time.Parse(time.RFC3339Nano, endRaw)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("end_time must be RFC3339")
+	}
+	if !startTime.Before(endTime) {
+		return time.Time{}, time.Time{}, fmt.Errorf("start_time must be before end_time")
+	}
+	if endTime.Sub(startTime) > maxLimitedCreditHistoryWindow {
+		return time.Time{}, time.Time{}, fmt.Errorf("time window must not exceed 366 days")
+	}
+	return startTime.UTC(), endTime.UTC(), nil
 }
 
 // GetSummary 返回当前用户限时额度汇总。

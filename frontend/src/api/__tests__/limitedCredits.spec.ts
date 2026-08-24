@@ -11,7 +11,7 @@ vi.mock('@/api/client', () => ({
   }
 }))
 
-import { getLimitedCreditSummary } from '@/api/limitedCredits'
+import { getDepletedLimitedCredits, getLimitedCreditSummary } from '@/api/limitedCredits'
 
 describe('limited credits api', () => {
   beforeEach(() => {
@@ -33,5 +33,22 @@ describe('limited credits api', () => {
     expect(get).toHaveBeenCalledWith('/limited-credits/summary')
     expect(result).toEqual(summary)
     expectTypeOf(result).toEqualTypeOf<LimitedCreditSummary>()
+  })
+
+  it('queries depleted credits with an explicit time window', async () => {
+    get.mockResolvedValue({ data: [] })
+
+    const result = await getDepletedLimitedCredits(
+      '2026-08-01T00:00:00.000Z',
+      '2026-09-01T00:00:00.000Z',
+    )
+
+    expect(get).toHaveBeenCalledWith('/limited-credits/depleted', {
+      params: {
+        start_time: '2026-08-01T00:00:00.000Z',
+        end_time: '2026-09-01T00:00:00.000Z',
+      },
+    })
+    expect(result).toEqual([])
   })
 })

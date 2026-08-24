@@ -4,6 +4,7 @@ import PaymentView from '../PaymentView.vue'
 import { PAYMENT_RECOVERY_STORAGE_KEY } from '@/components/payment/paymentFlow'
 import { formatPaymentAmount } from '@/components/payment/currency'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
+import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import type { CheckoutInfoResponse, MethodLimit, RechargeBonusTier, SubscriptionPlan } from '@/types/payment'
 
 const routeState = vi.hoisted(() => ({
@@ -28,9 +29,12 @@ const authState = vi.hoisted(() => ({
 }))
 const limitedCreditState = vi.hoisted(() => ({
   activeCredits: [] as Array<Record<string, unknown>>,
+  depletedCredits: [] as Array<Record<string, unknown>>,
   loading: false,
+  historyLoading: false,
   remainingAmount: 0,
   fetchActiveLimitedCredits: vi.fn().mockResolvedValue(undefined),
+  fetchDepletedLimitedCredits: vi.fn().mockResolvedValue(undefined),
 }))
 const fetchActiveSubscriptions = vi.hoisted(() => vi.fn().mockResolvedValue([]))
 const subscriptionState = vi.hoisted(() => ({
@@ -96,6 +100,12 @@ vi.mock('vue-i18n', async () => {
         if (key === 'payment.account.securityDepositBonusCreditReason') {
           return '保证金赠额'
         }
+        if (key === 'payment.account.depleted') {
+          return '已用完'
+        }
+        if (key === 'payment.account.depletedAt') {
+          return `${params?.time} 耗尽`
+        }
         return key
       },
     }),
@@ -143,9 +153,12 @@ vi.mock('@/utils/device', () => ({
 beforeEach(() => {
   authState.user.balance = 0
   limitedCreditState.activeCredits = []
+  limitedCreditState.depletedCredits = []
   limitedCreditState.loading = false
+  limitedCreditState.historyLoading = false
   limitedCreditState.remainingAmount = 0
   limitedCreditState.fetchActiveLimitedCredits.mockReset().mockResolvedValue(undefined)
+  limitedCreditState.fetchDepletedLimitedCredits.mockReset().mockResolvedValue(undefined)
   subscriptionState.activeSubscriptions = []
   fetchActiveSubscriptions.mockReset().mockResolvedValue([])
   getRefundEligibleProviders.mockReset().mockResolvedValue({
@@ -798,6 +811,48 @@ describe('PaymentView account tab', () => {
     const wrapper = await mountAccount()
     expect(wrapper.find('[data-test="limited-credit-empty"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="account-credit-deduction-hint"]').exists()).toBe(false)
+  })
+
+  it('shows every depleted limited credit returned for the selected window', async () => {
+    limitedCreditState.depletedCredits = [
+      {
+        id: 12, source_type: 'recharge_bonus', source_reason: '八月充值活动',
+        initial_amount: 8, used_amount: 8, frozen_amount: 0,
+        remaining_amount: 0, available_amount: 0,
+        expires_at: '2026-09-20T00:00:00Z', status: 'depleted',
+        created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-18T03:20:00Z',
+      },
+      {
+        id: 11, source_type: 'redeem_code',
+        initial_amount: 5, used_amount: 5, frozen_amount: 0,
+        remaining_amount: 0, available_amount: 0,
+        expires_at: '2026-09-10T00:00:00Z', status: 'depleted',
+        created_at: '2026-08-02T00:00:00Z', updated_at: '2026-08-17T03:20:00Z',
+      },
+    ]
+
+    const wrapper = await mountAccount()
+    const items = wrapper.findAll('[data-test="depleted-credit-item"]')
+
+    expect(items).toHaveLength(2)
+    expect(items[0].get('h3').text()).toBe('限时额度 #12 （八月充值活动）')
+    expect(items[0].text()).toContain('$8.00 / $8.00')
+    expect(items[0].text()).toContain('已用完')
+    expect(items[0].get('[data-test="depleted-credit-time"]').text()).toContain('耗尽')
+    expect(items[1].get('h3').text()).toBe('限时额度 #11 （兑换码兑换额度）')
+  })
+
+  it('reloads depleted credits when the time window changes', async () => {
+    const wrapper = await mountAccount()
+    limitedCreditState.fetchDepletedLimitedCredits.mockClear()
+    const picker = wrapper.getComponent(DateRangePicker)
+
+    picker.vm.$emit('change', { startDate: '2026-08-01', endDate: '2026-08-15', preset: null })
+    await flushPromises()
+
+    const expectedStart = new Date('2026-08-01T00:00:00').toISOString()
+    const expectedEnd = new Date('2026-08-16T00:00:00').toISOString()
+    expect(limitedCreditState.fetchDepletedLimitedCredits).toHaveBeenCalledWith(expectedStart, expectedEnd)
   })
 
   it('keeps recharge as default, ignores the legacy subscription tab, and hides subscription plans', async () => {

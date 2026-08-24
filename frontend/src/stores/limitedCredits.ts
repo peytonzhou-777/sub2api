@@ -10,10 +10,13 @@ import type { LimitedCreditGrant } from '@/types'
 const CACHE_TTL_MS = 60_000
 
 let requestGeneration = 0
+let historyRequestGeneration = 0
 
 export const useLimitedCreditStore = defineStore('limitedCredits', () => {
   const activeCredits = ref<LimitedCreditGrant[]>([])
+  const depletedCredits = ref<LimitedCreditGrant[]>([])
   const loading = ref(false)
+  const historyLoading = ref(false)
   const loaded = ref(false)
   const lastFetchedAt = ref<number | null>(null)
 
@@ -71,6 +74,26 @@ export const useLimitedCreditStore = defineStore('limitedCredits', () => {
     return activePromise
   }
 
+  // 按耗尽时间窗口拉取历史额度；后发请求覆盖先发请求，避免筛选快速切换时回写旧结果。
+  async function fetchDepletedLimitedCredits(startTime: string, endTime: string): Promise<LimitedCreditGrant[]> {
+    const currentGeneration = ++historyRequestGeneration
+    historyLoading.value = true
+    try {
+      const data = await limitedCreditsAPI.getDepletedLimitedCredits(startTime, endTime)
+      if (currentGeneration === historyRequestGeneration) {
+        depletedCredits.value = data
+      }
+      return data
+    } catch (error) {
+      console.error('Failed to fetch depleted limited credits:', error)
+      throw error
+    } finally {
+      if (currentGeneration === historyRequestGeneration) {
+        historyLoading.value = false
+      }
+    }
+  }
+
   // 开启定时刷新，避免额度使用后长期停留在旧值。
   function startPolling() {
     if (pollerInterval) return
@@ -91,10 +114,13 @@ export const useLimitedCreditStore = defineStore('limitedCredits', () => {
 
   function clear() {
     requestGeneration++
+    historyRequestGeneration++
     activePromise = null
     activeCredits.value = []
+    depletedCredits.value = []
     loaded.value = false
     lastFetchedAt.value = null
+    historyLoading.value = false
     stopPolling()
   }
 
@@ -104,7 +130,9 @@ export const useLimitedCreditStore = defineStore('limitedCredits', () => {
 
   return {
     activeCredits,
+    depletedCredits,
     loading,
+    historyLoading,
     hasActiveLimitedCredits,
     activeCount,
     initialAmount,
@@ -113,6 +141,7 @@ export const useLimitedCreditStore = defineStore('limitedCredits', () => {
     remainingAmount,
     availableAmount,
     fetchActiveLimitedCredits,
+    fetchDepletedLimitedCredits,
     startPolling,
     stopPolling,
     clear,

@@ -16,6 +16,10 @@ type limitedCreditRepoStub struct {
 	err             error
 	availableAmount float64
 	availableErr    error
+	depletedGrants  []LimitedCreditGrant
+	depletedUserID  int64
+	depletedStart   time.Time
+	depletedEnd     time.Time
 }
 
 func (s *limitedCreditRepoStub) CreateGrant(_ context.Context, grant *LimitedCreditGrant) (*LimitedCreditGrant, error) {
@@ -45,6 +49,13 @@ func (s *limitedCreditRepoStub) CreateGrantsIndependent(ctx context.Context, gra
 
 func (s *limitedCreditRepoStub) ListActiveByUser(context.Context, int64) ([]LimitedCreditGrant, error) {
 	return nil, nil
+}
+
+func (s *limitedCreditRepoStub) ListDepletedByUser(_ context.Context, userID int64, startTime, endTime time.Time) ([]LimitedCreditGrant, error) {
+	s.depletedUserID = userID
+	s.depletedStart = startTime
+	s.depletedEnd = endTime
+	return s.depletedGrants, s.err
 }
 
 func (s *limitedCreditRepoStub) GetAvailableAmount(context.Context, int64) (float64, error) {
@@ -120,4 +131,19 @@ func TestLimitedCreditService_GrantFromAuthSourceSettings_CreatesSourceGrant(t *
 	require.Equal(t, LimitedCreditStatusActive, grants[0].Status)
 	require.Equal(t, "由认证来源 oidc 首次绑定自动发放", grants[0].Notes)
 	require.WithinDuration(t, before.AddDate(0, 0, 45), grants[0].ExpiresAt, 2*time.Second)
+}
+
+func TestLimitedCreditService_ListDepleted_DelegatesTimeWindow(t *testing.T) {
+	startTime := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	endTime := startTime.AddDate(0, 1, 0)
+	repo := &limitedCreditRepoStub{depletedGrants: []LimitedCreditGrant{{ID: 9, Status: LimitedCreditStatusDepleted}}}
+	svc := NewLimitedCreditService(repo)
+
+	grants, err := svc.ListDepleted(context.Background(), 42, startTime, endTime)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(42), repo.depletedUserID)
+	require.Equal(t, startTime, repo.depletedStart)
+	require.Equal(t, endTime, repo.depletedEnd)
+	require.Equal(t, repo.depletedGrants, grants)
 }
