@@ -1011,6 +1011,24 @@
           v-if="enableCodexFingerprintMode && (codexFingerprintMode === 'session' || codexFingerprintMode === 'full')"
           class="mt-4"
         >
+          <label class="input-label">{{ t('admin.accounts.openai.codexSessionSlotCount') }}</label>
+          <input
+            v-model.number="codexSessionSlotCount"
+            data-testid="bulk-codex-session-slot-count-input"
+            type="number"
+            min="1"
+            max="4"
+            step="1"
+            class="input"
+          />
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.openai.codexSessionSlotCountDesc') }}
+          </p>
+        </div>
+        <div
+          v-if="enableCodexFingerprintMode && (codexFingerprintMode === 'session' || codexFingerprintMode === 'full')"
+          class="mt-4"
+        >
           <div class="mb-3 flex items-center justify-between">
             <label class="input-label mb-0">{{ t('admin.accounts.openai.codexSubagentConcurrency') }}</label>
             <input
@@ -1756,6 +1774,7 @@ const enableCodexOutboundProfile = ref(false)
 const codexOutboundProfileOverride = ref<CodexOutboundProfileOverride>('')
 const enableCodexFingerprintMode = ref(false)
 const codexFingerprintMode = ref<CodexFingerprintMode>('off')
+const codexSessionSlotCount = ref(2)
 const enableCodexSubagentConcurrency = ref(false)
 const codexSubagentMaxInflight = ref(0)
 const codexFingerprintModeOptions = computed(() => [
@@ -2156,6 +2175,11 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     } else {
       extra.codex_fingerprint_mode = ''
     }
+    if (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') {
+      extra.codex_session_slot_count = Math.max(1, Math.min(4, Math.trunc(codexSessionSlotCount.value || 1)))
+    } else {
+      extra.codex_session_slot_count = 1
+    }
     if (
       enableCodexSubagentConcurrency.value &&
       (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full')
@@ -2439,6 +2463,7 @@ watch(
       codexOutboundProfileOverride.value = ''
       enableCodexFingerprintMode.value = false
       codexFingerprintMode.value = 'off'
+      codexSessionSlotCount.value = 2
       enableCodexSubagentConcurrency.value = false
       codexSubagentMaxInflight.value = 0
       enableOpenAICompactMode.value = false

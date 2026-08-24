@@ -2093,6 +2093,21 @@
           </div>
         </div>
         <div v-if="codexFingerprintMode === 'session' || codexFingerprintMode === 'full'" class="mt-4">
+          <label class="input-label">{{ t('admin.accounts.openai.codexSessionSlotCount') }}</label>
+          <input
+            v-model.number="codexSessionSlotCount"
+            data-testid="edit-codex-session-slot-count-input"
+            type="number"
+            min="1"
+            max="4"
+            step="1"
+            class="input"
+          />
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.openai.codexSessionSlotCountDesc') }}
+          </p>
+        </div>
+        <div v-if="codexFingerprintMode === 'session' || codexFingerprintMode === 'full'" class="mt-4">
           <label class="input-label">{{ t('admin.accounts.openai.codexSubagentConcurrency') }}</label>
           <input
             v-model.number="codexSubagentMaxInflight"
@@ -3154,6 +3169,7 @@ type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 type CodexOutboundProfileOverride = '' | 'legacy' | 'codex_cli_0_149_0'
 const codexOutboundProfileOverride = ref<CodexOutboundProfileOverride>('')
 const codexFingerprintMode = ref<CodexFingerprintMode>('off')
+const codexSessionSlotCount = ref(1)
 const codexSubagentMaxInflight = ref(0)
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
 const codexImageToolMode = ref<CodexImageToolMode>('inherit')
@@ -3635,6 +3651,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   codexCLIOnlyAppServerEnabled.value = false
   codexOutboundProfileOverride.value = ''
   codexFingerprintMode.value = 'off'
+  codexSessionSlotCount.value = 1
   codexSubagentMaxInflight.value = 0
   codexImageToolMode.value = 'inherit'
   anthropicPassthroughEnabled.value = false
@@ -3699,6 +3716,10 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       codexFingerprintMode.value = (['off', 'device', 'session', 'full'].includes(fpMode || '')
         ? fpMode as CodexFingerprintMode
         : 'off')
+      const slotCount = Number(extra?.codex_session_slot_count ?? 1)
+      codexSessionSlotCount.value = Number.isInteger(slotCount) && slotCount >= 1 && slotCount <= 4
+        ? slotCount
+        : 1
       const subagentLimit = Number(extra?.codex_subagent_max_inflight_per_session ?? 0)
       codexSubagentMaxInflight.value = Number.isInteger(subagentLimit) && subagentLimit >= 0 && subagentLimit <= 64
         ? subagentLimit
@@ -5082,6 +5103,11 @@ const handleSubmit = async () => {
           newExtra.codex_fingerprint_mode = codexFingerprintMode.value
         } else {
           delete newExtra.codex_fingerprint_mode
+        }
+        if (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') {
+          newExtra.codex_session_slot_count = Math.max(1, Math.min(4, Math.trunc(codexSessionSlotCount.value || 1)))
+        } else {
+          delete newExtra.codex_session_slot_count
         }
         if (
           (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') &&

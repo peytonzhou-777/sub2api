@@ -474,6 +474,7 @@ type OpenAIGatewayService struct {
 	openaiAffinity                      openAIUserAffinityState
 	codexFingerprintStates              sync.Map // key: accountID, value: codexFingerprintStateCacheEntry
 	codexFingerprintSecretIDs           sync.Map // key: secret SHA-256, value: struct{}
+	codexSubagentQueueMaxWaitForTest    time.Duration
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService

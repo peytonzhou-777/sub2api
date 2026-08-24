@@ -1802,12 +1802,24 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 		maxConcurrency = selection.WaitPlan.MaxConcurrency
 	}
 	estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, body, "", cfg.DefaultOutputTokens)
+	if err := h.gatewayService.PrepareCodexFingerprintForAdmission(ctx, c, account, body, false); err != nil {
+		reqLog.Warn("openai.codex_fingerprint_admission_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+		h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "Codex session identity is temporarily unavailable", *streamStarted)
+		return nil, openAISlotAcquireFailed
+	}
+	sessionScopeHash, sessionEpoch := service.CodexFingerprintAdmissionScope(c)
 	result, err := h.accountAdmission.Acquire(ctx, service.OpenAIAccountAdmissionRequest{
-		AccountID:       account.ID,
-		Class:           service.ClassifyOpenAIAdmissionClass(c.Request.Header, body),
-		EstimatedTokens: estimatedTokens,
-		MaxConcurrency:  maxConcurrency,
-		TryAcquireSlot:  h.concurrencyHelper.TryAcquireAccountSlot,
+		AccountID:        account.ID,
+		SessionScopeHash: sessionScopeHash,
+		SessionEpoch:     sessionEpoch,
+		Class:            service.ClassifyOpenAIAdmissionClass(c.Request.Header, body),
+		EstimatedTokens:  estimatedTokens,
+		MaxConcurrency:   maxConcurrency,
+		TryAcquireSlot: func(acquireCtx context.Context, _ int64, limit int) (func(), bool, error) {
+			return h.gatewayService.TryAcquireCodexSessionAdmissionSlots(
+				acquireCtx, c, account, limit, h.concurrencyHelper.TryAcquireAccountSlot,
+			)
+		},
 	}, cfg)
 	if err != nil {
 		if c.Request.Context().Err() != nil {
@@ -2443,12 +2455,24 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				selection.ReleaseFunc = nil
 				accountReleaseFunc = nil
 				estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, wsAttemptMessage, reqModel, admissionCfg.DefaultOutputTokens)
+				if prepareErr := h.gatewayService.PrepareCodexFingerprintForAdmission(admissionCtx, c, account, wsAttemptMessage, true); prepareErr != nil {
+					reqLog.Warn("openai.websocket_codex_fingerprint_admission_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(prepareErr))
+					closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "Codex session identity is temporarily unavailable")
+					return
+				}
+				sessionScopeHash, sessionEpoch := service.CodexFingerprintAdmissionScope(c)
 				admissionResult, admissionErr := h.accountAdmission.Acquire(admissionCtx, service.OpenAIAccountAdmissionRequest{
-					AccountID:       account.ID,
-					Class:           service.ClassifyOpenAIAdmissionClass(c.Request.Header, wsAttemptMessage),
-					EstimatedTokens: estimatedTokens,
-					MaxConcurrency:  accountMaxConcurrency,
-					TryAcquireSlot:  h.concurrencyHelper.TryAcquireAccountSlot,
+					AccountID:        account.ID,
+					SessionScopeHash: sessionScopeHash,
+					SessionEpoch:     sessionEpoch,
+					Class:            service.ClassifyOpenAIAdmissionClass(c.Request.Header, wsAttemptMessage),
+					EstimatedTokens:  estimatedTokens,
+					MaxConcurrency:   accountMaxConcurrency,
+					TryAcquireSlot: func(acquireCtx context.Context, _ int64, limit int) (func(), bool, error) {
+						return h.gatewayService.TryAcquireCodexSessionAdmissionSlots(
+							acquireCtx, c, account, limit, h.concurrencyHelper.TryAcquireAccountSlot,
+						)
+					},
 				}, admissionCfg)
 				if admissionErr != nil {
 					var typedErr *service.OpenAIAccountAdmissionError
@@ -2663,12 +2687,22 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return false, nil
 			}
 			estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, payload, model, admissionCfg.DefaultOutputTokens)
+			if prepareErr := h.gatewayService.PrepareCodexFingerprintForAdmission(admissionCtx, c, account, payload, true); prepareErr != nil {
+				return false, service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "Codex session identity is temporarily unavailable", prepareErr)
+			}
+			sessionScopeHash, sessionEpoch := service.CodexFingerprintAdmissionScope(c)
 			admissionResult, err := h.accountAdmission.Acquire(admissionCtx, service.OpenAIAccountAdmissionRequest{
-				AccountID:       account.ID,
-				Class:           service.ClassifyOpenAIAdmissionClass(c.Request.Header, payload),
-				EstimatedTokens: estimatedTokens,
-				MaxConcurrency:  accountMaxConcurrency,
-				TryAcquireSlot:  h.concurrencyHelper.TryAcquireAccountSlot,
+				AccountID:        account.ID,
+				SessionScopeHash: sessionScopeHash,
+				SessionEpoch:     sessionEpoch,
+				Class:            service.ClassifyOpenAIAdmissionClass(c.Request.Header, payload),
+				EstimatedTokens:  estimatedTokens,
+				MaxConcurrency:   accountMaxConcurrency,
+				TryAcquireSlot: func(acquireCtx context.Context, _ int64, limit int) (func(), bool, error) {
+					return h.gatewayService.TryAcquireCodexSessionAdmissionSlots(
+						acquireCtx, c, account, limit, h.concurrencyHelper.TryAcquireAccountSlot,
+					)
+				},
 			}, admissionCfg)
 			if err != nil {
 				var typedErr *service.OpenAIAccountAdmissionError

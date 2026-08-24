@@ -5,12 +5,15 @@ package service
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,15 +76,19 @@ type codexSubagentConcurrencyCacheForTest struct {
 	maxConcurrency int
 	requestID      string
 	releaseCalls   int
+	acquireCalls   int
+	acquireAfter   int
 }
 
 func (c *codexSubagentConcurrencyCacheForTest) AcquireCodexSubagentSlot(_ context.Context, accountID int64, scopeHash string, epoch int64, maxConcurrency int, requestID string) (bool, error) {
+	c.acquireCalls++
 	c.accountID = accountID
 	c.scopeHash = scopeHash
 	c.epoch = epoch
 	c.maxConcurrency = maxConcurrency
 	c.requestID = requestID
-	return c.acquired, c.acquireErr
+	acquired := c.acquired || c.acquireAfter > 0 && c.acquireCalls >= c.acquireAfter
+	return acquired, c.acquireErr
 }
 
 func (c *codexSubagentConcurrencyCacheForTest) RefreshCodexSubagentSlot(_ context.Context, _ int64, _ string, _ int64, _ string) (bool, error) {
@@ -675,7 +682,10 @@ func TestAcquireCodexSubagentSlotUsesIndependentLeaseAndReleasesOnce(t *testing.
 
 func TestAcquireCodexSubagentSlotLimitReturnsLocalNonSchedulingFailure(t *testing.T) {
 	cache := &codexSubagentConcurrencyCacheForTest{acquired: false}
-	svc := &OpenAIGatewayService{concurrencyService: NewConcurrencyService(cache)}
+	svc := &OpenAIGatewayService{
+		concurrencyService:               NewConcurrencyService(cache),
+		codexSubagentQueueMaxWaitForTest: 10 * time.Millisecond,
+	}
 	account := &Account{
 		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Extra: map[string]any{
@@ -695,4 +705,69 @@ func TestAcquireCodexSubagentSlotLimitReturnsLocalNonSchedulingFailure(t *testin
 	require.True(t, failoverErr.LocalRequestFailure)
 	require.False(t, failoverErr.ShouldRetryNextAccount())
 	require.False(t, failoverErr.ShouldReportAccountScheduleFailure())
+}
+
+func TestAcquireCodexSubagentSlotQueuesUntilCapacityIsAvailable(t *testing.T) {
+	cache := &codexSubagentConcurrencyCacheForTest{acquireAfter: 2, refreshOwned: true}
+	svc := &OpenAIGatewayService{
+		concurrencyService:               NewConcurrencyService(cache),
+		codexSubagentQueueMaxWaitForTest: time.Second,
+	}
+	account := &Account{
+		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra: map[string]any{
+			codexFingerprintModeExtraKey:     string(codexFingerprintSession),
+			codexSubagentMaxInflightExtraKey: 1,
+		},
+	}
+	ids := &codexFingerprintIDs{isSubagent: true, sessionScopeHash: strings.Repeat("cd", 32), sessionEpoch: 3}
+
+	release, err := svc.acquireCodexSubagentSlot(context.Background(), account, ids)
+	require.NoError(t, err)
+	require.NotNil(t, release)
+	require.Equal(t, 2, cache.acquireCalls)
+	release()
+}
+
+func TestTryAcquireCodexSessionAdmissionSlotsQueuesBeforeAccountSlot(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
+	cache := &codexSubagentConcurrencyCacheForTest{acquireAfter: 2, refreshOwned: true}
+	svc := &OpenAIGatewayService{concurrencyService: NewConcurrencyService(cache)}
+	account := &Account{
+		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra: map[string]any{
+			codexFingerprintModeExtraKey: string(codexFingerprintSession), codexSubagentMaxInflightExtraKey: 1,
+		},
+	}
+	ids := &codexFingerprintIDs{accountID: 27, isSubagent: true, sessionScopeHash: strings.Repeat("cd", 32), sessionEpoch: 3}
+	stageCodexFingerprintIDs(c, ids)
+	accountAcquireCalls := 0
+	tryAccount := func(context.Context, int64, int) (func(), bool, error) {
+		accountAcquireCalls++
+		return func() {}, true, nil
+	}
+
+	release, acquired, err := svc.TryAcquireCodexSessionAdmissionSlots(context.Background(), c, account, 8, tryAccount)
+	require.NoError(t, err)
+	require.False(t, acquired)
+	require.Nil(t, release)
+	require.Zero(t, accountAcquireCalls, "子代理槽满时不能先占账号总槽位")
+
+	release, acquired, err = svc.TryAcquireCodexSessionAdmissionSlots(context.Background(), c, account, 8, tryAccount)
+	require.NoError(t, err)
+	require.True(t, acquired)
+	require.Equal(t, 1, accountAcquireCalls)
+	before := cache.acquireCalls
+	innerRelease, err := svc.acquireCodexSubagentSlot(c.Request.Context(), account, ids)
+	require.NoError(t, err)
+	require.Equal(t, before, cache.acquireCalls, "出站层必须复用准入阶段已持有的子代理槽位")
+	innerRelease()
+	release()
+	before = cache.acquireCalls
+	nextRelease, err := svc.acquireCodexSubagentSlot(c.Request.Context(), account, ids)
+	require.NoError(t, err)
+	require.Greater(t, cache.acquireCalls, before, "组合租约释放后，后续 turn 必须重新获取子代理槽位")
+	nextRelease()
 }

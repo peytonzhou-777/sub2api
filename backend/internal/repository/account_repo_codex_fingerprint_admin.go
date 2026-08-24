@@ -25,10 +25,13 @@ func (r *accountRepository) GetCodexFingerprintAdminStatus(ctx context.Context, 
 		AlgorithmVersion: account.CodexFingerprintVersion,
 		AccountEpoch:     account.CodexFingerprintEpoch,
 		EpochStartedAt:   account.CodexFingerprintEpochStartedAt,
+		SessionSlotCount: account.GetCodexSessionSlotCount(),
 	}
 	rows, err := r.sql.QueryContext(ctx, `
 SELECT
   (SELECT COUNT(*) FROM codex_fingerprint_session_scopes WHERE account_id = $1),
+  (SELECT COUNT(*) FROM codex_fingerprint_session_scopes WHERE account_id = $1 AND scope_version = 1),
+  (SELECT COUNT(*) FROM codex_fingerprint_session_scopes WHERE account_id = $1 AND scope_version = 2),
   (SELECT COALESCE(SUM(rotation_count), 0) FROM codex_fingerprint_session_scopes WHERE account_id = $1),
   (SELECT COUNT(*) FROM codex_fingerprint_thread_epochs WHERE account_id = $1),
   COALESCE((SELECT secret_hash::text FROM codex_fingerprint_cluster_secrets WHERE singleton_id = TRUE), '')`, accountID)
@@ -45,6 +48,8 @@ SELECT
 	var secretID string
 	if err := rows.Scan(
 		&status.SessionScopeCount,
+		&status.LegacyScopeCount,
+		&status.SlottedScopeCount,
 		&status.RotationCount,
 		&status.ThreadCount,
 		&secretID,

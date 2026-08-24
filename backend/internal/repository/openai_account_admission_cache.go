@@ -83,8 +83,8 @@ var pollOpenAIAccountAdmissionScript = redis.NewScript(`
 	if chosen ~= ARGV[1] then return {0, 0} end
 	local rpm_tat = 0
 	local tpm_tat = 0
-	if tonumber(ARGV[2]) > 0 then rpm_tat = tonumber(redis.call('HGET', KEYS[8], 'rpm_tat_ms') or '0') end
-	if tonumber(ARGV[3]) > 0 then tpm_tat = tonumber(redis.call('HGET', KEYS[8], 'tpm_tat_ms') or '0') end
+	if tonumber(ARGV[2]) > 0 then rpm_tat = tonumber(redis.call('HGET', KEYS[11], 'rpm_tat_ms') or '0') end
+	if tonumber(ARGV[3]) > 0 then tpm_tat = tonumber(redis.call('HGET', KEYS[11], 'tpm_tat_ms') or '0') end
 	local ready = math.max(now, rpm_tat, tpm_tat)
 	-- 单票据超过 TPM 时仍可在账号空闲后被选中；Grant 会把完整成本记为后续请求的时间债务。
 	if ready > now then return {1, ready - now} end
@@ -123,17 +123,17 @@ var grantOpenAIAccountAdmissionScript = redis.NewScript(`
 	local tokens = tonumber(redis.call('HGET', KEYS[5], ARGV[1]) or '1')
 	local rpm_tat = 0
 	local tpm_tat = 0
-	if tonumber(ARGV[2]) > 0 then rpm_tat = tonumber(redis.call('HGET', KEYS[8], 'rpm_tat_ms') or '0') end
-	if tonumber(ARGV[3]) > 0 then tpm_tat = tonumber(redis.call('HGET', KEYS[8], 'tpm_tat_ms') or '0') end
+	if tonumber(ARGV[2]) > 0 then rpm_tat = tonumber(redis.call('HGET', KEYS[11], 'rpm_tat_ms') or '0') end
+	if tonumber(ARGV[3]) > 0 then tpm_tat = tonumber(redis.call('HGET', KEYS[11], 'tpm_tat_ms') or '0') end
 	local ready = math.max(now, rpm_tat, tpm_tat)
 	if ready > now then return {0, ready - now} end
 	local dispatch = now + tonumber(ARGV[4])
 	if tonumber(ARGV[2]) > 0 then
-		redis.call('HSET', KEYS[8], 'rpm_tat_ms', dispatch + (60000 / tonumber(ARGV[2])))
+		redis.call('HSET', KEYS[11], 'rpm_tat_ms', dispatch + (60000 / tonumber(ARGV[2])))
 	end
 	if tonumber(ARGV[3]) > 0 then
 		-- 允许理论到达时间跨越一分钟，确保超大请求只放行一次且不会绕过 TPM 约束。
-		redis.call('HSET', KEYS[8], 'tpm_tat_ms', dispatch + (60000 * tokens / tonumber(ARGV[3])))
+		redis.call('HSET', KEYS[11], 'tpm_tat_ms', dispatch + (60000 * tokens / tonumber(ARGV[3])))
 	end
 	local class = redis.call('HGET', KEYS[6], ARGV[1])
 	if class == 'background' then
@@ -143,22 +143,29 @@ var grantOpenAIAccountAdmissionScript = redis.NewScript(`
 	end
 	remove(ARGV[1])
 	redis.call('PEXPIRE', KEYS[8], ARGV[5])
+	redis.call('PEXPIRE', KEYS[11], ARGV[5])
 	return {1, tonumber(ARGV[4])}
 `)
 
-func openAIAccountAdmissionKeys(accountID int64) []string {
-	tag := fmt.Sprintf("{%d}", accountID)
+func openAIAccountAdmissionKeys(ticket service.OpenAIAccountAdmissionTicket) []string {
+	tag := fmt.Sprintf("{%d}", ticket.AccountID)
+	queueScope := "account"
+	if len(ticket.SessionScopeHash) == 64 && ticket.SessionEpoch > 0 {
+		queueScope = fmt.Sprintf("session:%s:%d", ticket.SessionScopeHash, ticket.SessionEpoch)
+	}
+	prefix := "openai:admission:" + tag + ":" + queueScope
 	return []string{
-		"openai:admission:" + tag + ":interactive",
-		"openai:admission:" + tag + ":background",
-		"openai:admission:" + tag + ":deadline",
-		"openai:admission:" + tag + ":enqueued",
-		"openai:admission:" + tag + ":tokens",
-		"openai:admission:" + tag + ":class",
-		"openai:admission:" + tag + ":seq",
-		"openai:admission:" + tag + ":state",
-		"openai:admission:" + tag + ":burst_limit",
-		"openai:admission:" + tag + ":aging_ms",
+		prefix + ":interactive",
+		prefix + ":background",
+		prefix + ":deadline",
+		prefix + ":enqueued",
+		prefix + ":tokens",
+		prefix + ":class",
+		prefix + ":seq",
+		prefix + ":state",
+		prefix + ":burst_limit",
+		prefix + ":aging_ms",
+		"openai:admission:" + tag + ":rate_state",
 	}
 }
 
@@ -170,7 +177,7 @@ func (q *openAIAccountAdmissionQueue) Enqueue(ctx context.Context, ticket servic
 	if ttl < time.Minute {
 		ttl = time.Minute
 	}
-	result, err := enqueueOpenAIAccountAdmissionScript.Run(ctx, q.rdb, openAIAccountAdmissionKeys(ticket.AccountID),
+	result, err := enqueueOpenAIAccountAdmissionScript.Run(ctx, q.rdb, openAIAccountAdmissionKeys(ticket),
 		ticket.ID, string(ticket.Class), time.Duration(cfg.MaxWaitSeconds)*time.Second/time.Millisecond,
 		max(ticket.EstimatedTokens, 1), ttl.Milliseconds(), cfg.MaxQueueDepthPerAccount, cfg.InteractiveBurst,
 		time.Duration(cfg.BackgroundAgingSeconds)*time.Second/time.Millisecond).Int64()
@@ -184,7 +191,7 @@ func (q *openAIAccountAdmissionQueue) Enqueue(ctx context.Context, ticket servic
 }
 
 func (q *openAIAccountAdmissionQueue) Poll(ctx context.Context, ticket service.OpenAIAccountAdmissionTicket, cfg service.OpenAIAccountAdmissionConfig) (service.OpenAIAccountAdmissionPoll, error) {
-	result, err := pollOpenAIAccountAdmissionScript.Run(ctx, q.rdb, openAIAccountAdmissionKeys(ticket.AccountID),
+	result, err := pollOpenAIAccountAdmissionScript.Run(ctx, q.rdb, openAIAccountAdmissionKeys(ticket),
 		ticket.ID, cfg.RequestsPerMinute, cfg.TokensPerMinute, max(ticket.EstimatedTokens, 1)).Result()
 	code, delay, err := parseOpenAIAdmissionResult(result, err)
 	if err != nil {
@@ -198,7 +205,7 @@ func (q *openAIAccountAdmissionQueue) Poll(ctx context.Context, ticket service.O
 
 func (q *openAIAccountAdmissionQueue) Grant(ctx context.Context, ticket service.OpenAIAccountAdmissionTicket, cfg service.OpenAIAccountAdmissionConfig, jitter time.Duration) (service.OpenAIAccountAdmissionGrant, error) {
 	ttl := time.Duration(cfg.MaxWaitSeconds+60) * time.Second
-	result, err := grantOpenAIAccountAdmissionScript.Run(ctx, q.rdb, openAIAccountAdmissionKeys(ticket.AccountID),
+	result, err := grantOpenAIAccountAdmissionScript.Run(ctx, q.rdb, openAIAccountAdmissionKeys(ticket),
 		ticket.ID, cfg.RequestsPerMinute, cfg.TokensPerMinute, jitter.Milliseconds(), ttl.Milliseconds()).Result()
 	code, delay, err := parseOpenAIAdmissionResult(result, err)
 	if err != nil {
@@ -214,7 +221,7 @@ func (q *openAIAccountAdmissionQueue) Remove(ctx context.Context, ticket service
 	if q == nil || q.rdb == nil || ticket.ID == "" {
 		return nil
 	}
-	keys := openAIAccountAdmissionKeys(ticket.AccountID)
+	keys := openAIAccountAdmissionKeys(ticket)
 	pipe := q.rdb.TxPipeline()
 	pipe.ZRem(ctx, keys[0], ticket.ID)
 	pipe.ZRem(ctx, keys[1], ticket.ID)

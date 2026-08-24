@@ -3168,6 +3168,21 @@
           </div>
         </div>
         <div v-if="codexFingerprintMode === 'session' || codexFingerprintMode === 'full'" class="mt-4">
+          <label class="input-label">{{ t('admin.accounts.openai.codexSessionSlotCount') }}</label>
+          <input
+            v-model.number="codexSessionSlotCount"
+            data-testid="create-codex-session-slot-count-input"
+            type="number"
+            min="1"
+            max="4"
+            step="1"
+            class="input"
+          />
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.openai.codexSessionSlotCountDesc') }}
+          </p>
+        </div>
+        <div v-if="codexFingerprintMode === 'session' || codexFingerprintMode === 'full'" class="mt-4">
           <label class="input-label">{{ t('admin.accounts.openai.codexSubagentConcurrency') }}</label>
           <input
             v-model.number="codexSubagentMaxInflight"
@@ -4146,6 +4161,7 @@ type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 type CodexOutboundProfileOverride = '' | 'legacy' | 'codex_cli_0_149_0'
 const codexOutboundProfileOverride = ref<CodexOutboundProfileOverride>('')
 const codexFingerprintMode = ref<CodexFingerprintMode>('off')
+const codexSessionSlotCount = ref(2)
 const codexSubagentMaxInflight = ref(0)
 const codexFingerprintModeOptions = computed(() => [
   { value: 'off' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintOff') },
@@ -5045,6 +5061,7 @@ const resetForm = () => {
   codexCLIOnlyAppServerEnabled.value = false
   codexOutboundProfileOverride.value = ''
   codexFingerprintMode.value = 'off'
+  codexSessionSlotCount.value = 2
   codexSubagentMaxInflight.value = 0
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
@@ -5155,6 +5172,11 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
     extra.codex_outbound_profile = codexOutboundProfileOverride.value
   } else {
     delete extra.codex_outbound_profile
+  }
+  if (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') {
+    extra.codex_session_slot_count = Math.max(1, Math.min(4, Math.trunc(codexSessionSlotCount.value || 1)))
+  } else {
+    delete extra.codex_session_slot_count
   }
   if (
     (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') &&

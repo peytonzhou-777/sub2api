@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func TestOpenAIAccountAdmissionQueuePrioritizesInteractiveAndAgesBackground(t *t
 		t.Fatalf("enqueue background: %v", err)
 	}
 	queueImpl := queue.(*openAIAccountAdmissionQueue)
-	if err := queueImpl.rdb.HSet(ctx, openAIAccountAdmissionKeys(background.AccountID)[3], background.ID, now.Add(-6*time.Second).UnixMilli()).Err(); err != nil {
+	if err := queueImpl.rdb.HSet(ctx, openAIAccountAdmissionKeys(background)[3], background.ID, now.Add(-6*time.Second).UnixMilli()).Err(); err != nil {
 		t.Fatalf("age background ticket: %v", err)
 	}
 	if err := queue.Enqueue(ctx, interactive, cfg); err != nil {
@@ -112,6 +113,39 @@ func TestOpenAIAccountAdmissionQueueSmoothsRPMAndTPM(t *testing.T) {
 	}
 }
 
+func TestOpenAIAccountAdmissionQueueSeparatesSessionOrderButSharesAccountRate(t *testing.T) {
+	ctx := context.Background()
+	queue := newOpenAIAdmissionTestCache(t)
+	now := time.Now()
+	cfg := service.DefaultOpenAIAccountAdmissionConfig()
+	cfg.RequestsPerMinute = 60
+	first := service.OpenAIAccountAdmissionTicket{
+		ID: "slot-0", AccountID: 19, SessionScopeHash: strings.Repeat("a", 64), SessionEpoch: 3,
+		Class: service.OpenAIAdmissionInteractive, EnqueuedAt: now, Deadline: now.Add(time.Minute), EstimatedTokens: 1,
+	}
+	second := service.OpenAIAccountAdmissionTicket{
+		ID: "slot-1", AccountID: 19, SessionScopeHash: strings.Repeat("b", 64), SessionEpoch: 3,
+		Class: service.OpenAIAdmissionInteractive, EnqueuedAt: now, Deadline: now.Add(time.Minute), EstimatedTokens: 1,
+	}
+	for _, ticket := range []service.OpenAIAccountAdmissionTicket{first, second} {
+		if err := queue.Enqueue(ctx, ticket, cfg); err != nil {
+			t.Fatal(err)
+		}
+		poll, err := queue.Poll(ctx, ticket, cfg)
+		if err != nil || !poll.Selected {
+			t.Fatalf("session queue head not selected: %+v, %v", poll, err)
+		}
+	}
+	grant, err := queue.Grant(ctx, first, cfg, 0)
+	if err != nil || !grant.Granted {
+		t.Fatalf("first session grant: %+v, %v", grant, err)
+	}
+	poll, err := queue.Poll(ctx, second, cfg)
+	if err != nil || !poll.Selected || poll.Delay < 900*time.Millisecond {
+		t.Fatalf("second session did not share account RPM debt: %+v, %v", poll, err)
+	}
+}
+
 func TestOpenAIAccountAdmissionQueueGrantsOversizedTicketAndDefersFollowingRequests(t *testing.T) {
 	ctx := context.Background()
 	queue := newOpenAIAdmissionTestCache(t)
@@ -152,7 +186,7 @@ func TestOpenAIAccountAdmissionQueueCleansExpiredTicketsBeforeDepthCheck(t *test
 	cfg.MaxQueueDepthPerAccount = 1
 	fresh := service.OpenAIAccountAdmissionTicket{ID: "fresh", AccountID: 10, Class: service.OpenAIAdmissionInteractive, EnqueuedAt: now, Deadline: now.Add(time.Minute), EstimatedTokens: 1}
 	queueImpl := queue.(*openAIAccountAdmissionQueue)
-	keys := openAIAccountAdmissionKeys(fresh.AccountID)
+	keys := openAIAccountAdmissionKeys(fresh)
 	pipe := queueImpl.rdb.TxPipeline()
 	pipe.ZAdd(ctx, keys[0], redis.Z{Score: 1, Member: "expired"})
 	pipe.ZAdd(ctx, keys[2], redis.Z{Score: float64(now.Add(-time.Second).UnixMilli()), Member: "expired"})

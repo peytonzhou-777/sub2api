@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -26,6 +27,7 @@ type codexFingerprintSessionRepoStub struct {
 	lastRequest         CodexFingerprintSessionRequest
 	matchedHash         string
 	boundScopeHash      string
+	resolveCalls        int
 }
 
 // configureCodexFingerprintV3TestState 为整链路测试装配 UUIDv7 指纹状态。
@@ -68,6 +70,7 @@ func (r *codexFingerprintSessionRepoStub) ResolveCodexFingerprintSessionState(
 	_ context.Context,
 	request CodexFingerprintSessionRequest,
 ) (*CodexFingerprintSessionResolution, error) {
+	r.resolveCalls++
 	r.lastRequest = request
 	state := r.state
 	matchedHash := r.matchedHash
@@ -93,6 +96,37 @@ func (r *codexFingerprintSessionRepoStub) ResolveCodexFingerprintSessionState(
 		MatchedThreadSourceHash: matchedHash,
 		BoundSessionScopeHash:   boundScopeHash,
 	}, nil
+}
+
+func TestPrepareCodexFingerprintForAdmissionIsReusedByOutboundAttempt(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(nil)
+	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Request.Header.Set("session-id", "root-session")
+	c.Set("api_key", &APIKey{ID: 101, UserID: 17})
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	account := &Account{
+		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra:                map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
+		CodexFingerprintSeed: testCodexFingerprintV3Seed(), CodexFingerprintVersion: codexFingerprintAlgorithmV3,
+		CodexFingerprintEpoch: 3, CodexFingerprintEpochStartedAt: &startedAt,
+	}
+	repo := &codexFingerprintSessionRepoStub{state: CodexFingerprintState{
+		Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3, Epoch: 3, EpochStartedAt: startedAt,
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV3Secret())}},
+		accountRepo: repo,
+	}
+	body := []byte(`{"client_metadata":{"session_id":"root-session","thread_id":"root-thread"}}`)
+
+	require.NoError(t, svc.PrepareCodexFingerprintForAdmission(context.Background(), c, account, body, false))
+	prepared := stagedCodexFingerprintIDs(c)
+	require.NotNil(t, prepared)
+	reused, err := svc.prepareCodexFingerprintForAttempt(context.Background(), c, account, body, false)
+	require.NoError(t, err)
+	require.Same(t, prepared, reused)
+	require.Equal(t, 1, repo.resolveCalls)
 }
 
 func TestResolveCodexFingerprintContextForAttemptUsesStableFallbacks(t *testing.T) {
@@ -137,7 +171,7 @@ func TestResolveCodexFingerprintContextForAttemptUsesStableFallbacks(t *testing.
 	require.NotEmpty(t, source)
 }
 
-func TestResolveCodexFingerprintContextForAttemptRejectsOldSessionScope(t *testing.T) {
+func TestResolveCodexFingerprintContextForAttemptInheritsLegacySessionScope(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(nil)
 	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
@@ -163,24 +197,138 @@ func TestResolveCodexFingerprintContextForAttemptRejectsOldSessionScope(t *testi
 			CodexFingerprintSecret: string(testCodexFingerprintV3Secret()),
 		}},
 		accountRepo: &codexFingerprintSessionRepoStub{
-			state: state, boundScopeHash: strings.Repeat("ef", 32),
+			state: state, boundScopeHash: codexFingerprintSessionScopeHash(
+				testCodexFingerprintV3Secret(), "protocol:responses:transport:http",
+			),
 		},
 	}
 
-	_, err := svc.resolveCodexFingerprintContextForAttempt(
+	fingerprint, err := svc.resolveCodexFingerprintContextForAttempt(
 		context.Background(), c, account, c.Request.Header, []byte(`{"input":"hello"}`),
 	)
-	require.ErrorContains(t, err, "another session scope")
+	require.NoError(t, err)
+	require.NotEmpty(t, fingerprint.SessionID())
+	require.Equal(t, codexFingerprintScopeV1, fingerprint.sessionScopeVersion)
+}
+
+func TestResolveCodexFingerprintSessionSlotIsStableAndBounded(t *testing.T) {
+	secret := testCodexFingerprintV3Secret()
+	seed, err := decodeCodexFingerprintSeed(testCodexFingerprintV3Seed())
+	require.NoError(t, err)
+
+	first := resolveCodexFingerprintSessionSlot(secret, seed, "client:codex", "user:17", "root-a", 2)
+	second := resolveCodexFingerprintSessionSlot(secret, seed, "client:codex", "user:17", "root-a", 2)
+	require.Equal(t, first, second)
+	require.GreaterOrEqual(t, first, 0)
+	require.Less(t, first, 2)
+	require.Zero(t, resolveCodexFingerprintSessionSlot(secret, seed, "client:codex", "user:17", "root-a", 1))
+	for userID := 18; userID <= 40; userID++ {
+		require.Equal(t,
+			resolveCodexFingerprintSessionSlot(secret, seed, "client:codex", "user:17", "root-a", 4),
+			resolveCodexFingerprintSessionSlot(secret, seed, "client:codex", fmt.Sprintf("user:%d", userID), "root-a", 4),
+			"有根谱系时不得因本站用户或 API Key 变化改变槽位",
+		)
+	}
+}
+
+func TestResolveCodexFingerprintMissingRootUsesStableUserFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	account := &Account{
+		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra:                map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession), codexSessionSlotCountExtraKey: 4},
+		CodexFingerprintSeed: testCodexFingerprintV3Seed(), CodexFingerprintVersion: codexFingerprintAlgorithmV3,
+		CodexFingerprintEpoch: 3, CodexFingerprintEpochStartedAt: &startedAt,
+	}
+	repo := &codexFingerprintSessionRepoStub{state: CodexFingerprintState{
+		Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3, Epoch: 3, EpochStartedAt: startedAt,
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV3Secret())}},
+		accountRepo: repo,
+	}
+	resolve := func() *CodexFingerprintContext {
+		c, _ := gin.CreateTestContext(nil)
+		c.Request, _ = http.NewRequest(http.MethodPost, "/v1/messages", nil)
+		c.Set("api_key", &APIKey{ID: 101, UserID: 17})
+		fp, err := svc.resolveCodexFingerprintContextForAttempt(
+			context.Background(), c, account, c.Request.Header, []byte(`{"model":"gpt-5.4","messages":[]}`),
+		)
+		require.NoError(t, err)
+		return fp
+	}
+
+	first := resolve()
+	second := resolve()
+	require.Equal(t, first.sessionSlot, second.sessionSlot)
+	require.Equal(t, first.SessionID(), second.SessionID())
+	require.NotEqual(t, first.ThreadID(), second.ThreadID(), "临时 Thread 可变化，但不得改变用户回退槽位")
+}
+
+func TestResolveCodexFingerprintScopeCandidatesPreferCurrentSlotMetadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(nil)
+	c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	candidates := resolveCodexFingerprintScopeCandidates(c, nil, true, "protocol:responses", 0, 4)
+	require.NotEmpty(t, candidates)
+	require.Equal(t, codexFingerprintScopeCandidate{
+		scope: "protocol:responses:slot:0", version: codexFingerprintScopeV2, slot: 0, count: 4,
+	}, candidates[0])
+}
+
+func TestResolveCodexFingerprintTwoSlotsStayTransportNeutral(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	account := &Account{
+		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra:                map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession), codexSessionSlotCountExtraKey: 2},
+		CodexFingerprintSeed: testCodexFingerprintV3Seed(), CodexFingerprintVersion: codexFingerprintAlgorithmV3,
+		CodexFingerprintEpoch: 3, CodexFingerprintEpochStartedAt: &startedAt,
+	}
+	repo := &codexFingerprintSessionRepoStub{state: CodexFingerprintState{
+		Seed: testCodexFingerprintV3Seed(), Version: codexFingerprintAlgorithmV3, Epoch: 3, EpochStartedAt: startedAt,
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV3Secret())}},
+		accountRepo: repo,
+	}
+	resolve := func(transport OpenAIClientTransport, root string) *CodexFingerprintContext {
+		c, _ := gin.CreateTestContext(nil)
+		c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
+		c.Set("api_key", &APIKey{ID: 101, UserID: 17})
+		SetOpenAIClientTransport(c, transport)
+		body := []byte(fmt.Sprintf(`{"prompt_cache_key":%q,"client_metadata":{"session_id":%q,"thread_id":%q}}`, root, root, root))
+		fingerprint, err := svc.resolveCodexFingerprintContextForAttempt(context.Background(), c, account, c.Request.Header, body)
+		require.NoError(t, err)
+		return fingerprint
+	}
+
+	httpFingerprint := resolve(OpenAIClientTransportHTTP, "root-a")
+	wsFingerprint := resolve(OpenAIClientTransportWS, "root-a")
+	require.Equal(t, httpFingerprint.SessionID(), wsFingerprint.SessionID())
+	require.Equal(t, httpFingerprint.sessionScopeHash, wsFingerprint.sessionScopeHash)
+	require.Equal(t, codexFingerprintScopeV2, httpFingerprint.sessionScopeVersion)
+	require.Equal(t, 2, httpFingerprint.sessionSlotCount)
+
+	seen := map[int]struct{}{httpFingerprint.sessionSlot: {}}
+	for index := 0; index < 64 && len(seen) < 2; index++ {
+		candidate := resolve(OpenAIClientTransportHTTP, fmt.Sprintf("root-%d", index))
+		seen[candidate.sessionSlot] = struct{}{}
+	}
+	require.Len(t, seen, 2, "独立根谱系应能稳定分布到两个 Session 槽位")
 }
 
 func TestResolveCodexFingerprintContextScopesThreadsAndUsesThreadRequestID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	account := &Account{
-		ID:                             27,
-		Platform:                       PlatformOpenAI,
-		Type:                           AccountTypeOAuth,
-		Extra:                          map[string]any{codexFingerprintModeExtraKey: string(codexFingerprintSession)},
+		ID:       27,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			codexFingerprintModeExtraKey: string(codexFingerprintSession), codexSessionSlotCountExtraKey: 2,
+		},
 		CodexFingerprintSeed:           testCodexFingerprintV3Seed(),
 		CodexFingerprintVersion:        codexFingerprintAlgorithmV3,
 		CodexFingerprintEpoch:          3,
@@ -213,10 +361,10 @@ func TestResolveCodexFingerprintContextScopesThreadsAndUsesThreadRequestID(t *te
 	wsSecond, wsSecondScopeHash := resolve(404, OpenAIClientTransportWS)
 	require.Equal(t, httpFirst.SessionID(), httpSecond.SessionID(), "相同入站传输的不同 API Key 应共用 Session")
 	require.Equal(t, wsFirst.SessionID(), wsSecond.SessionID(), "相同入站传输的不同 API Key 应共用 Session")
-	require.NotEqual(t, httpFirst.SessionID(), wsFirst.SessionID(), "HTTP 与 WS 入站必须使用独立 Session")
+	require.Equal(t, httpFirst.SessionID(), wsFirst.SessionID(), "HTTP 与 WS 只是传输维度，必须共用逻辑 Session")
 	require.Equal(t, httpScopeHash, httpSecondScopeHash)
 	require.Equal(t, wsScopeHash, wsSecondScopeHash)
-	require.NotEqual(t, httpScopeHash, wsScopeHash, "HTTP 与 WS 必须使用独立的持久化轮换作用域")
+	require.Equal(t, httpScopeHash, wsScopeHash, "HTTP 与 WS 必须共享持久化轮换作用域")
 	require.NotEqual(t, httpFirst.ThreadID(), httpSecond.ThreadID(), "不同 API Key 的同名客户端 Session 必须隔离")
 	require.Equal(t, httpFirst.ThreadID(), httpFirst.RequestID(), "CodexCLI 0.149.0 的请求头标识必须复用 Thread ID")
 }
@@ -238,7 +386,7 @@ func TestResolveCodexFingerprintSessionScopeUsesUpstreamVisibility(t *testing.T)
 	codexResponsesWS := resolve("/v1/responses", "codex_cli_rs/0.101.0", "codex_cli_rs", true, OpenAIClientTransportWS)
 	codexChat := resolve("/v1/chat/completions", "codex_cli_rs/0.102.0", "codex_cli_rs", true, OpenAIClientTransportHTTP)
 	require.Equal(t, codexResponses, openClawResponses, "身份被统一后同协议必须共用 Session")
-	require.NotEqual(t, codexResponses, codexResponsesWS, "身份被统一后仍须按 HTTP/WS 入站传输隔离")
+	require.Equal(t, codexResponses, codexResponsesWS, "身份被统一后 HTTP/WS 必须共享逻辑 Session")
 	require.NotEqual(t, codexResponses, codexChat, "身份不可见时按语义协议隔离")
 
 	codexVisible := resolve("/v1/responses", "codex_cli_rs/0.101.0", "codex_cli_rs", false, OpenAIClientTransportHTTP)
@@ -248,7 +396,7 @@ func TestResolveCodexFingerprintSessionScopeUsesUpstreamVisibility(t *testing.T)
 	codexVisibleWS := resolve("/v1/responses", "codex_cli_rs/0.102.0", "codex_cli_rs", false, OpenAIClientTransportWS)
 	require.NotEqual(t, codexVisible, vscodeVisible, "可配对且真实出站的不同官方客户端必须分槽")
 	require.Equal(t, codexVisible, codexVisibleChat, "同一可见客户端不因协议或版本变化切换 Session")
-	require.NotEqual(t, codexVisible, codexVisibleWS, "同一可见客户端的 HTTP/WS 入站必须分槽")
+	require.Equal(t, codexVisible, codexVisibleWS, "同一可见客户端不因 HTTP/WS 切换 Session")
 	require.Equal(t, openClawFallback, codexResponses, "无法真实出站的 OpenClaw 身份必须按协议收敛")
 	require.NotEqual(t,
 		resolve("/v1/chat/completions", "", "", false, OpenAIClientTransportHTTP),
@@ -829,8 +977,8 @@ func TestApplyCodexFingerprintForAttemptMakesPromptCacheFollowSession(t *testing
 	wsSession, wsCache, _, _ := apply(OpenAIClientTransportWS, 42, 202, body)
 	require.Equal(t, httpSession, httpCache)
 	require.Equal(t, wsSession, wsCache)
-	require.NotEqual(t, httpSession, wsSession, "现有 Session 仍按入站传输分别收敛")
-	require.NotEqual(t, httpCache, wsCache, "缓存身份必须跟随现有 HTTP/WS Session 作用域")
+	require.Equal(t, httpSession, wsSession, "HTTP/WS 只负责传输，必须复用同一逻辑 Session")
+	require.Equal(t, httpCache, wsCache, "缓存身份必须跟随传输无关的 Session 作用域")
 	require.NotContains(t, string(httpBody), originalPromptCacheKey)
 	for name, values := range httpHeaders {
 		require.NotContains(t, strings.Join(values, ","), originalPromptCacheKey, name)
@@ -1143,6 +1291,7 @@ func TestCodexFingerprintFullModeWithGatePreservesSubagentTopology(t *testing.T)
 		ID: 27, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Extra: map[string]any{
 			codexFingerprintModeExtraKey:     string(codexFingerprintFull),
+			codexSessionSlotCountExtraKey:    2,
 			codexSubagentMaxInflightExtraKey: 4,
 		},
 		CodexFingerprintSeed:           testCodexFingerprintV3Seed(),
@@ -1192,4 +1341,21 @@ func TestAccountCodexSubagentConcurrencyGateRequiresSessionMode(t *testing.T) {
 	account.Extra[codexFingerprintModeExtraKey] = string(codexFingerprintFull)
 	account.Extra[codexSubagentMaxInflightExtraKey] = 65
 	require.Zero(t, account.GetCodexSubagentMaxInflightPerSession())
+}
+
+func TestAccountCodexSessionSlotCountRequiresSessionMode(t *testing.T) {
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			codexFingerprintModeExtraKey:  string(codexFingerprintSession),
+			codexSessionSlotCountExtraKey: json.Number("2"),
+		},
+	}
+	require.Equal(t, 2, account.GetCodexSessionSlotCount())
+	account.Extra[codexFingerprintModeExtraKey] = string(codexFingerprintDevice)
+	require.Equal(t, 1, account.GetCodexSessionSlotCount())
+	account.Extra[codexFingerprintModeExtraKey] = string(codexFingerprintFull)
+	account.Extra[codexSessionSlotCountExtraKey] = 5
+	require.Equal(t, 1, account.GetCodexSessionSlotCount())
 }

@@ -2205,15 +2205,21 @@ func toServiceBulkUpdateAccountFilters(filters *BulkUpdateAccountFilters) *servi
 	}
 }
 
-// sanitizeCodexSubagentConcurrencyExtra 将管理员输入规范为 0..64 的整数；保留 0 以支持 JSONB 批量覆盖关闭。
+// sanitizeCodexSubagentConcurrencyExtra 统一校验 Codex Session 槽位和子代理并发配置。
 func sanitizeCodexSubagentConcurrencyExtra(extra map[string]any) error {
-	const key = "codex_subagent_max_inflight_per_session"
 	if err := sanitizeCodexOutboundProfileExtra(extra); err != nil {
 		return err
 	}
 	if extra == nil {
 		return nil
 	}
+	if err := sanitizeCodexIntegerExtra(extra, "codex_session_slot_count", 1, 4); err != nil {
+		return err
+	}
+	return sanitizeCodexIntegerExtra(extra, "codex_subagent_max_inflight_per_session", 0, 64)
+}
+
+func sanitizeCodexIntegerExtra(extra map[string]any, key string, minimum, maximum int) error {
 	raw, ok := extra[key]
 	if !ok || raw == nil {
 		return nil
@@ -2222,7 +2228,7 @@ func sanitizeCodexSubagentConcurrencyExtra(extra map[string]any) error {
 	switch typed := raw.(type) {
 	case float64:
 		if typed != float64(int(typed)) {
-			return fmt.Errorf("%s must be an integer between 0 and 64", key)
+			return fmt.Errorf("%s must be an integer between %d and %d", key, minimum, maximum)
 		}
 		value = int(typed)
 	case int:
@@ -2232,14 +2238,14 @@ func sanitizeCodexSubagentConcurrencyExtra(extra map[string]any) error {
 	case json.Number:
 		parsed, err := strconv.Atoi(typed.String())
 		if err != nil {
-			return fmt.Errorf("%s must be an integer between 0 and 64", key)
+			return fmt.Errorf("%s must be an integer between %d and %d", key, minimum, maximum)
 		}
 		value = parsed
 	default:
-		return fmt.Errorf("%s must be an integer between 0 and 64", key)
+		return fmt.Errorf("%s must be an integer between %d and %d", key, minimum, maximum)
 	}
-	if value < 0 || value > 64 {
-		return fmt.Errorf("%s must be an integer between 0 and 64", key)
+	if value < minimum || value > maximum {
+		return fmt.Errorf("%s must be an integer between %d and %d", key, minimum, maximum)
 	}
 	extra[key] = value
 	return nil

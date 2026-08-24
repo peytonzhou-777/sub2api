@@ -22,7 +22,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	beginUpstreamResponseModelObservation(c)
 	restoreAttemptRequest := s.isolateOpenAITurnStateAttempt(ctx, c, account, body)
 	defer restoreAttemptRequest()
-	stageCodexFingerprintIDs(c, nil)
+	if !codexFingerprintAdmissionPreparedForAccount(c, account) {
+		stageCodexFingerprintIDs(c, nil)
+	}
 	clearGrokResponsesClientToolMapping(c)
 	clearOpenAIResponsesClientToolMapping(c)
 	clearOpenAIResponsesNamespaceNames(c)

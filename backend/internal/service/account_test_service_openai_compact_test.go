@@ -343,7 +343,7 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeIdentityMatc
 	converged, err := deriveCodexFingerprintSessionUUIDV7(
 		[]byte(secret), mustDecodeCodexFingerprintSeedForTest(t, state.Seed), state.Epoch,
 		state.EpochStartedAt,
-		codexFingerprintScopedDerivationSource("protocol:responses:transport:http", "account-session"),
+		codexFingerprintScopedDerivationSource("protocol:responses", "account-session"),
 	)
 	require.NoError(t, err)
 	require.Equal(t, converged, upstream.lastReq.Header.Get("session-id"))

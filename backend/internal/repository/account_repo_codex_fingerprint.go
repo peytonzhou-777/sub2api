@@ -180,7 +180,7 @@ WHERE account_id = $1 AND source_hash = $2 AND last_seen_at < $4`,
 			// 绑定可能刚被并发清理；回到事务路径重新确认并绑定。
 			return nil, false, nil
 		}
-		if boundScopeHash != "" {
+		if boundScopeHash != "" && state.Epoch == boundEpoch {
 			if _, err := exec.ExecContext(ctx, `
 UPDATE codex_fingerprint_session_scopes
 SET last_active_at = $3, updated_at = $3
@@ -207,6 +207,11 @@ func validateCodexFingerprintSessionRequest(request service.CodexFingerprintSess
 	if _, err := hex.DecodeString(request.SessionScopeHash); err != nil {
 		return service.ErrAccountNotFound
 	}
+	if request.SessionScopeVersion < 1 || request.SessionScopeVersion > 2 ||
+		request.SessionSlot < 0 || request.SessionSlotCount < 1 || request.SessionSlotCount > 4 ||
+		request.SessionSlot >= request.SessionSlotCount {
+		return service.ErrAccountNotFound
+	}
 	allHashes := append(append([]string{}, request.ThreadSourceHashes...), request.BindSourceHashes...)
 	for _, hash := range allHashes {
 		if len(hash) != 64 || hash != strings.ToLower(hash) {
@@ -223,13 +228,19 @@ func shouldRotateCodexFingerprintScope(
 	request service.CodexFingerprintSessionRequest,
 	state service.CodexFingerprintState,
 	lastActiveAt time.Time,
-) bool {
-	if !request.RotationAllowed || state.EpochStartedAt.IsZero() || lastActiveAt.IsZero() {
-		return false
+) (bool, string) {
+	if state.EpochStartedAt.IsZero() || lastActiveAt.IsZero() {
+		return false, ""
 	}
-	canRotateAfterIdle := !state.EpochStartedAt.After(request.MinAgeBefore) && !lastActiveAt.After(request.IdleBefore)
+	canRotateAfterIdle := request.RotationAllowed && !state.EpochStartedAt.After(request.MinAgeBefore) && !lastActiveAt.After(request.IdleBefore)
 	canRotateAtMaxAge := !state.EpochStartedAt.After(request.MaxAgeBefore)
-	return canRotateAfterIdle || canRotateAtMaxAge
+	if canRotateAtMaxAge {
+		return true, "max_age"
+	}
+	if canRotateAfterIdle {
+		return true, "idle_after_min_age"
+	}
+	return false, ""
 }
 
 // ResolveCodexFingerprintSessionState 为 Thread 固定作用域与 epoch；仅新 Thread 可轮换。
@@ -237,6 +248,13 @@ func (r *accountRepository) ResolveCodexFingerprintSessionState(
 	ctx context.Context,
 	request service.CodexFingerprintSessionRequest,
 ) (*service.CodexFingerprintSessionResolution, error) {
+	// 零值来自旧调用方和历史测试，统一按单槽 v1 兼容；新链路显式写入 v2。
+	if request.SessionScopeVersion == 0 {
+		request.SessionScopeVersion = 1
+	}
+	if request.SessionSlotCount == 0 {
+		request.SessionSlotCount = 1
+	}
 	if err := validateCodexFingerprintSessionRequest(request); err != nil {
 		return nil, err
 	}
@@ -315,10 +333,12 @@ WHERE id = $1 AND deleted_at IS NULL AND platform = 'openai' AND type = 'oauth'
 
 	if _, err := exec.ExecContext(ctx, `
 INSERT INTO codex_fingerprint_session_scopes
-  (account_id, scope_hash, session_epoch, epoch_started_at, last_active_at, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $4, $4, $4)
+  (account_id, scope_hash, session_epoch, epoch_started_at, last_active_at, created_at, updated_at,
+   scope_version, slot_index, slot_count)
+VALUES ($1, $2, $3, $4, $4, $4, $4, $5, $6, $7)
 ON CONFLICT (account_id, scope_hash) DO NOTHING`,
-		request.AccountID, request.SessionScopeHash, accountState.Epoch, request.Now.UTC()); err != nil {
+		request.AccountID, request.SessionScopeHash, accountState.Epoch, request.Now.UTC(),
+		request.SessionScopeVersion, request.SessionSlot, request.SessionSlotCount); err != nil {
 		return nil, err
 	}
 
@@ -336,7 +356,8 @@ FOR UPDATE`, []any{request.AccountID, request.SessionScopeHash}, func(rows *sql.
 	}
 
 	rotated := false
-	if shouldRotateCodexFingerprintScope(request, state, lastActiveAt) {
+	rotationReason := ""
+	if shouldRotate, reason := shouldRotateCodexFingerprintScope(request, state, lastActiveAt); shouldRotate {
 		err = queryOne(`
 UPDATE codex_fingerprint_session_scopes
 SET session_epoch = session_epoch + 1,
@@ -352,10 +373,12 @@ RETURNING session_epoch, epoch_started_at`, []any{request.AccountID, request.Ses
 			return nil, err
 		}
 		rotated = true
+		rotationReason = reason
 	}
 
 	boundEpoch := int64(0)
 	boundEpochStartedAt := time.Time{}
+	boundScopeHash := ""
 	primaryThreadHash := request.ThreadSourceHashes[0]
 	err = queryOne(`
 INSERT INTO codex_fingerprint_thread_epochs
@@ -363,10 +386,10 @@ INSERT INTO codex_fingerprint_thread_epochs
 VALUES ($1, $2, $3, $4, $5, $5, $6)
 ON CONFLICT (account_id, source_hash)
 DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at
-RETURNING session_epoch, session_epoch_started_at`, []any{
+RETURNING session_epoch, session_epoch_started_at, session_scope_hash::text`, []any{
 		request.AccountID, primaryThreadHash, state.Epoch, state.EpochStartedAt.UTC(), request.Now.UTC(), request.SessionScopeHash,
 	}, func(rows *sql.Rows) error {
-		return rows.Scan(&boundEpoch, &boundEpochStartedAt)
+		return rows.Scan(&boundEpoch, &boundEpochStartedAt, &boundScopeHash)
 	})
 	if err != nil {
 		return nil, err
@@ -374,7 +397,8 @@ RETURNING session_epoch, session_epoch_started_at`, []any{
 	if _, err := exec.ExecContext(ctx, `
 UPDATE codex_fingerprint_session_scopes
 SET last_active_at = $3, updated_at = $3
-WHERE account_id = $1 AND scope_hash = $2`, request.AccountID, request.SessionScopeHash, request.Now.UTC()); err != nil {
+WHERE account_id = $1 AND scope_hash = $2 AND session_epoch = $4`,
+		request.AccountID, boundScopeHash, request.Now.UTC(), boundEpoch); err != nil {
 		return nil, err
 	}
 
@@ -382,7 +406,7 @@ WHERE account_id = $1 AND scope_hash = $2`, request.AccountID, request.SessionSc
 DELETE FROM codex_fingerprint_thread_epochs
 WHERE account_id = $1 AND session_scope_hash = $2
   AND session_epoch < $3 - 2 AND last_seen_at < $4`,
-		request.AccountID, request.SessionScopeHash, state.Epoch, request.OldEpochCutoff.UTC()); err != nil {
+		request.AccountID, boundScopeHash, boundEpoch, request.OldEpochCutoff.UTC()); err != nil {
 		return nil, err
 	}
 	decodedSeed, decodeErr := hex.DecodeString(state.Seed)
@@ -398,7 +422,11 @@ WHERE account_id = $1 AND session_scope_hash = $2
 		BoundEpoch:              boundEpoch,
 		BoundEpochStartedAt:     boundEpochStartedAt,
 		MatchedThreadSourceHash: primaryThreadHash,
-		BoundSessionScopeHash:   request.SessionScopeHash,
+		BoundSessionScopeHash:   boundScopeHash,
+		BoundScopeVersion:       request.SessionScopeVersion,
+		BoundSessionSlot:        request.SessionSlot,
+		BoundSessionSlotCount:   request.SessionSlotCount,
+		RotationReason:          rotationReason,
 		Rotated:                 rotated,
 		Created:                 true,
 	}, nil

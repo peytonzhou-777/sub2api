@@ -197,7 +197,7 @@ func TestResolveCodexFingerprintSessionStateReturnsBoundEpoch(t *testing.T) {
 			"codex_fingerprint_epoch_started_at",
 		}).AddRow(seed, "v3", int64(3), startedAt))
 	mock.ExpectExec(`(?s)INSERT INTO codex_fingerprint_session_scopes`).
-		WithArgs(int64(27), scopeHash, int64(3), now).
+		WithArgs(int64(27), scopeHash, int64(3), now, 1, 0, 1).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery(`(?s)SELECT session_epoch, epoch_started_at, last_active_at.*FOR UPDATE`).
 		WithArgs(int64(27), scopeHash).
@@ -207,9 +207,9 @@ func TestResolveCodexFingerprintSessionStateReturnsBoundEpoch(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"session_epoch", "epoch_started_at"}).AddRow(int64(4), now))
 	mock.ExpectQuery(`(?s)INSERT INTO codex_fingerprint_thread_epochs`).
 		WithArgs(int64(27), threadHash, int64(4), now, now, scopeHash).
-		WillReturnRows(sqlmock.NewRows([]string{"session_epoch", "session_epoch_started_at"}).AddRow(int64(4), now))
+		WillReturnRows(sqlmock.NewRows([]string{"session_epoch", "session_epoch_started_at", "session_scope_hash"}).AddRow(int64(4), now, scopeHash))
 	mock.ExpectExec(`(?s)UPDATE codex_fingerprint_session_scopes.*last_active_at`).
-		WithArgs(int64(27), scopeHash, now).
+		WithArgs(int64(27), scopeHash, now, int64(4)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`(?s)DELETE FROM codex_fingerprint_thread_epochs`).
 		WithArgs(int64(27), scopeHash, int64(4), cutoff).
@@ -420,25 +420,32 @@ func TestShouldRotateCodexFingerprintScopeUsesIdleAndMaxAgeGates(t *testing.T) {
 		MaxAgeBefore:    now.Add(-7 * 24 * time.Hour),
 	}
 
-	require.True(t, shouldRotateCodexFingerprintScope(
+	rotated, reason := shouldRotateCodexFingerprintScope(
 		request,
 		service.CodexFingerprintState{EpochStartedAt: now.Add(-80 * time.Hour)},
 		now.Add(-3*time.Hour),
-	), "达到最短年龄且空闲时应轮换")
-	require.False(t, shouldRotateCodexFingerprintScope(
+	)
+	require.True(t, rotated, "达到最短年龄且空闲时应轮换")
+	require.Equal(t, "idle_after_min_age", reason)
+	rotated, _ = shouldRotateCodexFingerprintScope(
 		request,
 		service.CodexFingerprintState{EpochStartedAt: now.Add(-80 * time.Hour)},
 		now.Add(-time.Hour),
-	), "未达到最长年龄时不得跳过空闲门")
-	require.True(t, shouldRotateCodexFingerprintScope(
+	)
+	require.False(t, rotated, "未达到最长年龄时不得跳过空闲门")
+	rotated, reason = shouldRotateCodexFingerprintScope(
 		request,
 		service.CodexFingerprintState{EpochStartedAt: now.Add(-8 * 24 * time.Hour)},
 		now.Add(-time.Hour),
-	), "达到最长年龄后应允许新 Thread 兜底轮换")
+	)
+	require.True(t, rotated, "达到最长年龄后应允许新 Thread 兜底轮换")
+	require.Equal(t, "max_age", reason)
 	request.RotationAllowed = false
-	require.False(t, shouldRotateCodexFingerprintScope(
+	rotated, reason = shouldRotateCodexFingerprintScope(
 		request,
 		service.CodexFingerprintState{EpochStartedAt: now.Add(-8 * 24 * time.Hour)},
 		now.Add(-3*time.Hour),
-	), "作用域存在活跃 WS 时不得轮换")
+	)
+	require.True(t, rotated, "达到最长寿命后不得被活跃 WS 阻止新根切换")
+	require.Equal(t, "max_age", reason)
 }

@@ -29,12 +29,14 @@ var (
 
 // OpenAIAccountAdmissionTicket 只携带准入元数据，严禁在 Redis 队列保存请求正文。
 type OpenAIAccountAdmissionTicket struct {
-	ID              string
-	AccountID       int64
-	Class           OpenAIAdmissionClass
-	EnqueuedAt      time.Time
-	Deadline        time.Time
-	EstimatedTokens int64
+	ID               string
+	AccountID        int64
+	SessionScopeHash string
+	SessionEpoch     int64
+	Class            OpenAIAdmissionClass
+	EnqueuedAt       time.Time
+	Deadline         time.Time
+	EstimatedTokens  int64
 }
 
 type OpenAIAccountAdmissionPoll struct {
@@ -56,11 +58,13 @@ type OpenAIAccountAdmissionQueue interface {
 }
 
 type OpenAIAccountAdmissionRequest struct {
-	AccountID       int64
-	Class           OpenAIAdmissionClass
-	EstimatedTokens int64
-	MaxConcurrency  int
-	TryAcquireSlot  func(context.Context, int64, int) (func(), bool, error)
+	AccountID        int64
+	SessionScopeHash string
+	SessionEpoch     int64
+	Class            OpenAIAdmissionClass
+	EstimatedTokens  int64
+	MaxConcurrency   int
+	TryAcquireSlot   func(context.Context, int64, int) (func(), bool, error)
 }
 
 type OpenAIAccountAdmissionResult struct {
@@ -151,7 +155,9 @@ func (s *OpenAIAccountAdmissionService) Acquire(ctx context.Context, req OpenAIA
 	started := s.now()
 	deadline := started.Add(time.Duration(cfg.MaxWaitSeconds) * time.Second)
 	ticket := OpenAIAccountAdmissionTicket{
-		ID: uuid.NewString(), AccountID: req.AccountID, Class: req.Class,
+		ID: uuid.NewString(), AccountID: req.AccountID,
+		SessionScopeHash: strings.ToLower(strings.TrimSpace(req.SessionScopeHash)), SessionEpoch: req.SessionEpoch,
+		Class:      req.Class,
 		EnqueuedAt: started, Deadline: deadline, EstimatedTokens: openAIAdmissionMaxInt64(req.EstimatedTokens, 1),
 	}
 	if ticket.Class != OpenAIAdmissionBackground {

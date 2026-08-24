@@ -84,6 +84,8 @@ const (
 	codexFingerprintModeExtraKey = "codex_fingerprint_mode"
 	// codexFingerprintSeedExtraKey 仅用于拒绝旧版 extra 输入；真实 seed 只存专用列。
 	codexFingerprintSeedExtraKey          = "codex_fingerprint_seed"
+	codexSessionSlotCountExtraKey         = "codex_session_slot_count"
+	codexSessionSlotCountUpperBoundary    = 4
 	codexSubagentMaxInflightExtraKey      = "codex_subagent_max_inflight_per_session"
 	codexSubagentMaxInflightUpperBoundary = 64
 )
@@ -187,6 +189,45 @@ func (a *Account) GetCodexSubagentMaxInflightPerSession() int {
 	return value
 }
 
+// GetCodexSessionSlotCount 返回账号启用的收敛 Session 槽位数。
+// 缺失或非法值按 1 兼容；仅 session/full 模式生效。
+func (a *Account) GetCodexSessionSlotCount() int {
+	if a == nil || !a.IsOpenAIOAuth() {
+		return 1
+	}
+	mode := a.GetCodexFingerprintMode()
+	if mode != codexFingerprintSession && mode != codexFingerprintFull {
+		return 1
+	}
+	raw, ok := a.Extra[codexSessionSlotCountExtraKey]
+	if !ok || raw == nil {
+		return 1
+	}
+	value := 0
+	switch typed := raw.(type) {
+	case int:
+		value = typed
+	case int64:
+		value = int(typed)
+	case float64:
+		if typed == float64(int(typed)) {
+			value = int(typed)
+		}
+	case json.Number:
+		if parsed, err := typed.Int64(); err == nil {
+			value = int(parsed)
+		}
+	case string:
+		if parsed, err := strconv.Atoi(strings.TrimSpace(typed)); err == nil {
+			value = parsed
+		}
+	}
+	if value < 1 || value > codexSessionSlotCountUpperBoundary {
+		return 1
+	}
+	return value
+}
+
 // deriveStableUUIDv4 从种子确定性派生一个 UUIDv4 格式的字符串。
 // 同一种子永远返回同一值。
 func deriveStableUUIDv4(seed string) string {
@@ -211,6 +252,9 @@ type codexFingerprintIDs struct {
 	mode                codexFingerprintMode
 	sessionScopeHash    string
 	sessionEpoch        int64
+	sessionScopeVersion int
+	sessionSlot         int
+	sessionSlotCount    int
 	installationID      string
 	sessionID           string
 	threadID            string

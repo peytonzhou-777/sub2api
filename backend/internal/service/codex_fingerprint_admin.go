@@ -26,6 +26,9 @@ type CodexFingerprintAdminStatus struct {
 	AccountEpoch      int64      `json:"account_epoch"`
 	EpochStartedAt    *time.Time `json:"epoch_started_at,omitempty"`
 	SessionScopeCount int64      `json:"session_scope_count"`
+	LegacyScopeCount  int64      `json:"legacy_scope_count"`
+	SlottedScopeCount int64      `json:"slotted_scope_count"`
+	SessionSlotCount  int        `json:"session_slot_count"`
 	ThreadCount       int64      `json:"thread_count"`
 	RotationCount     int64      `json:"rotation_count"`
 	SecretID          string     `json:"secret_id,omitempty"`

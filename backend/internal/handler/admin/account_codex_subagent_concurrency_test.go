@@ -26,6 +26,17 @@ func TestSanitizeCodexSubagentConcurrencyExtra(t *testing.T) {
 	}
 }
 
+func TestSanitizeCodexSessionSlotCountExtra(t *testing.T) {
+	for _, value := range []any{1, json.Number("2"), float64(4)} {
+		extra := map[string]any{"codex_session_slot_count": value}
+		require.NoError(t, sanitizeCodexSubagentConcurrencyExtra(extra))
+	}
+	for _, value := range []any{0, 5, float64(1.5), "2"} {
+		extra := map[string]any{"codex_session_slot_count": value}
+		require.Error(t, sanitizeCodexSubagentConcurrencyExtra(extra))
+	}
+}
+
 func TestSanitizeCodexOutboundProfileExtra(t *testing.T) {
 	for _, profile := range []string{"", "legacy", "codex_cli_0_149_0", " CODEX_CLI_0_149_0 "} {
 		extra := map[string]any{"codex_outbound_profile": profile}

@@ -70,3 +70,14 @@ func TestMigration237RemovesLegacyCodexFingerprintVersions(t *testing.T) {
 	require.Contains(t, sql, "ALTER COLUMN session_scope_hash SET NOT NULL")
 	require.Contains(t, sql, "FOREIGN KEY (account_id, session_scope_hash) REFERENCES codex_fingerprint_session_scopes (account_id, scope_hash) ON DELETE CASCADE")
 }
+
+func TestMigration246AddsTransportNeutralSessionSlots(t *testing.T) {
+	content, err := FS.ReadFile("246_openai_codex_session_scope_slots.sql")
+	require.NoError(t, err)
+
+	sql := strings.Join(strings.Fields(string(content)), " ")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS scope_version SMALLINT NOT NULL DEFAULT 1")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS slot_index SMALLINT NOT NULL DEFAULT 0")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS slot_count SMALLINT NOT NULL DEFAULT 1")
+	require.Contains(t, sql, "CHECK (slot_count BETWEEN 1 AND 4 AND slot_index >= 0 AND slot_index < slot_count)")
+}
