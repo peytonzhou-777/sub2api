@@ -114,6 +114,22 @@
           </div>
         </div>
 
+        <div v-if="detail.is_subagent || detail.subagent_kind" class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.agentRole') }}</div>
+          <div class="mt-1 font-mono text-sm font-medium text-gray-900 dark:text-white">
+            {{ detail.subagent_kind || t('admin.ops.errorDetail.subagent') }}
+          </div>
+        </div>
+
+        <div v-if="detail.inbound_transport || detail.upstream_transport" class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.transportPath') }}</div>
+          <div class="mt-1 font-mono text-sm font-medium text-gray-900 dark:text-white">
+            {{ detail.inbound_transport || '—' }}
+            <span class="mx-1 text-gray-400">→</span>
+            {{ detail.upstream_transport || '—' }}
+          </div>
+        </div>
+
       </div>
 
       <!-- Response content (client request -> error_body; upstream -> upstream_error_detail/message) -->

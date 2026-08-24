@@ -137,6 +137,10 @@ type OpsInsertErrorLogInput struct {
 	SessionSourceHash        string
 	PromptCacheKeyPresent    bool
 	PromptCacheKeyHash       string
+	IsSubagent               bool
+	SubagentKind             string
+	InboundTransport         string
+	UpstreamTransport        string
 
 	CreatedAt time.Time
 

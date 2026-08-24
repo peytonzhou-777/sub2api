@@ -38,6 +38,10 @@ type OpsRequestObservation struct {
 	SessionSourceHash        string
 	PromptCacheKeyPresent    bool
 	PromptCacheKeyHash       string
+	IsSubagent               bool
+	SubagentKind             string
+	InboundTransport         string
+	UpstreamTransport        string
 
 	UpstreamErrorCode    string
 	UpstreamErrorType    string
@@ -83,6 +87,14 @@ func SetOpsOpenAIRequestMetadata(c *gin.Context, body []byte) {
 	obs.PromptCacheKeyPresent = promptCacheKey != ""
 	obs.PromptCacheKeyHash = hashSensitiveValueForLog(promptCacheKey)
 	obs.ServiceTier = truncateString(strings.TrimSpace(gjson.GetBytes(body, "service_tier").String()), 64)
+	obs.InboundTransport = normalizeOpsOpenAIInboundTransport(GetOpenAIClientTransport(c))
+	var headers http.Header
+	if c.Request != nil {
+		headers = c.Request.Header
+	}
+	original := extractCodexFingerprintOriginalIDs(headers, body)
+	obs.IsSubagent = original.isSubagent
+	obs.SubagentKind = truncateString(original.subagentKind, 64)
 }
 
 // SetOpsOpenAIForwardAttempt 记录当前上游尝试的安全出口标识和累计重试次数。
@@ -174,6 +186,16 @@ func GetOpsRequestObservation(c *gin.Context, completedAt time.Time) OpsRequestO
 	if source := existingCodexFingerprintLogicalTurnSource(c); source != "" {
 		out.SessionSourceHash = hashSensitiveValueForLog(source)
 	}
+	if out.InboundTransport == "" {
+		out.InboundTransport = normalizeOpsOpenAIInboundTransport(GetOpenAIClientTransport(c))
+	}
+	if snapshot := stagedCodexOutboundSnapshotAnyAccount(c); snapshot != nil {
+		out.UpstreamTransport = normalizeOpsOpenAIUpstreamTransport(snapshot.transport)
+		if snapshot.subagentKind != "" {
+			out.IsSubagent = true
+			out.SubagentKind = truncateString(snapshot.subagentKind, 64)
+		}
+	}
 	out.RateLimitHeaders = cloneOpsRateLimitHeaders(out.RateLimitHeaders)
 	if len(out.RateLimitHeaders) > 0 {
 		if raw, err := json.Marshal(out.RateLimitHeaders); err == nil {
@@ -182,6 +204,32 @@ func GetOpsRequestObservation(c *gin.Context, completedAt time.Time) OpsRequestO
 		}
 	}
 	return out
+}
+
+func normalizeOpsOpenAIInboundTransport(transport OpenAIClientTransport) string {
+	switch transport {
+	case OpenAIClientTransportHTTP:
+		return "http"
+	case OpenAIClientTransportWS:
+		return "ws"
+	default:
+		return ""
+	}
+}
+
+func normalizeOpsOpenAIUpstreamTransport(transport string) string {
+	switch strings.ToLower(strings.TrimSpace(transport)) {
+	case "http", string(OpenAIUpstreamTransportHTTPSSE):
+		return string(OpenAIUpstreamTransportHTTPSSE)
+	case "ws":
+		return "websocket"
+	case "ws_v2", string(OpenAIUpstreamTransportResponsesWebsocketV2):
+		return string(OpenAIUpstreamTransportResponsesWebsocketV2)
+	case string(OpenAIUpstreamTransportResponsesWebsocket):
+		return string(OpenAIUpstreamTransportResponsesWebsocket)
+	default:
+		return ""
+	}
 }
 
 func getOrCreateOpsRequestObservation(c *gin.Context) *OpsRequestObservation {

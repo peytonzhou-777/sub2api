@@ -114,6 +114,10 @@ type OpsErrorLogDetail struct {
 	SessionSourceHash        string `json:"session_source_hash,omitempty"`
 	PromptCacheKeyPresent    bool   `json:"prompt_cache_key_present"`
 	PromptCacheKeyHash       string `json:"prompt_cache_key_hash,omitempty"`
+	IsSubagent               bool   `json:"is_subagent"`
+	SubagentKind             string `json:"subagent_kind,omitempty"`
+	InboundTransport         string `json:"inbound_transport,omitempty"`
+	UpstreamTransport        string `json:"upstream_transport,omitempty"`
 
 	// vNext metric semantics
 	IsBusinessLimited bool `json:"is_business_limited"`

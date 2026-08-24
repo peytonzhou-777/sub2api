@@ -1312,6 +1312,10 @@ func applyOpsRequestObservation(c *gin.Context, entry *service.OpsInsertErrorLog
 	entry.SessionSourceHash = obs.SessionSourceHash
 	entry.PromptCacheKeyPresent = obs.PromptCacheKeyPresent
 	entry.PromptCacheKeyHash = obs.PromptCacheKeyHash
+	entry.IsSubagent = obs.IsSubagent
+	entry.SubagentKind = obs.SubagentKind
+	entry.InboundTransport = obs.InboundTransport
+	entry.UpstreamTransport = obs.UpstreamTransport
 }
 
 // applyOpsUpstreamFieldsFromContext captures attempt-level upstream context.

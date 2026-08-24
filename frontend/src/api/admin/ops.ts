@@ -972,6 +972,11 @@ export interface OpsErrorDetail extends OpsErrorLog {
   prompt_cache_key_present: boolean
   prompt_cache_key_hash?: string
 
+  is_subagent: boolean
+  subagent_kind?: string
+  inbound_transport?: string
+  upstream_transport?: string
+
   is_business_limited: boolean
 
   // Bound (non-deleted) key prefix, snapshotted at error time

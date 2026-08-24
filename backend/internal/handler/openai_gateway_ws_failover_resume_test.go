@@ -36,7 +36,7 @@ func TestOpenAIWSNextAttemptMessageKeepsInitialMessageForFirstTurnFailover(t *te
 	require.Equal(t, firstMessage, next)
 }
 
-func TestShouldRetryOpenAIWS429OnSameAccountConsumesConfiguredBudget(t *testing.T) {
+func TestShouldRetryOpenAIWS429OnSameAccountConsumesConfiguredBudgetForConnectionLimit(t *testing.T) {
 	account := &service.Account{
 		ID:       42,
 		Platform: service.PlatformOpenAI,
@@ -47,14 +47,29 @@ func TestShouldRetryOpenAIWS429OnSameAccountConsumesConfiguredBudget(t *testing.
 		},
 	}
 	failoverErr := &service.UpstreamFailoverError{
-		StatusCode:           http.StatusTooManyRequests,
-		OpenAIRateLimitClass: service.OpenAIRateLimitClassUsageQuota,
+		StatusCode:   http.StatusTooManyRequests,
+		ResponseBody: []byte(`{"error":{"code":"websocket_connection_limit_reached"}}`),
 	}
 
 	for completed := 0; completed < 3; completed++ {
 		require.True(t, shouldRetryOpenAIWS429OnSameAccount(account, failoverErr, true, completed))
 	}
 	require.False(t, shouldRetryOpenAIWS429OnSameAccount(account, failoverErr, true, 3))
+}
+
+func TestShouldRetryOpenAIWS429OnSameAccountRejectsOrdinaryRateLimits(t *testing.T) {
+	account := &service.Account{ID: 42, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth}
+	for _, body := range []string{
+		`{"error":{"code":"rate_limit_exceeded"}}`,
+		`{"error":{"code":"usage_limit_reached"}}`,
+		`{"error":{"type":"rate_limit_error"}}`,
+	} {
+		failoverErr := &service.UpstreamFailoverError{
+			StatusCode:   http.StatusTooManyRequests,
+			ResponseBody: []byte(body),
+		}
+		require.False(t, shouldRetryOpenAIWS429OnSameAccount(account, failoverErr, true, 0), body)
+	}
 }
 
 func TestShouldRetryOpenAIWS429OnSameAccountHonorsZeroAndSafetyGuards(t *testing.T) {

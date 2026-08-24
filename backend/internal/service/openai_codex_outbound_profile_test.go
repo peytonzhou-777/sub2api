@@ -43,11 +43,27 @@ func stageCodexOutboundTestIDs(c *gin.Context, accountID int64) *codexFingerprin
 		threadID:            "0198a000-0000-7000-8000-000000000003",
 		parentThreadID:      "0198a000-0000-7000-8000-000000000004",
 		turnID:              "0198a000-0000-7000-8000-000000000005",
-		windowID:            "0198a000-0000-7000-8000-000000000006",
+		windowID:            "0198a000-0000-7000-8000-000000000003:0",
 		promptCacheKey:      "0198a000-0000-7000-8000-000000000002",
 		requestID:           "0198a000-0000-7000-8000-000000000099",
 		turnStartedAtUnixMs: 1770000000123,
 	}
+	stageCodexFingerprintIDs(c, ids)
+	return ids
+}
+
+func stageCodexOutboundSubagentTestIDs(c *gin.Context, accountID int64) *codexFingerprintIDs {
+	ids := stageCodexOutboundTestIDs(c, accountID)
+	ids.threadID = "0198a000-0000-7000-8000-000000000103"
+	ids.parentThreadID = "0198a000-0000-7000-8000-000000000003"
+	ids.turnID = "0198a000-0000-7000-8000-000000000105"
+	ids.parentTurnID = "0198a000-0000-7000-8000-000000000005"
+	ids.rootTurnID = "0198a000-0000-7000-8000-000000000001"
+	ids.windowID = ids.threadID + ":2"
+	ids.subagentHeader = "collab_spawn"
+	ids.subagentKind = "thread_spawn"
+	ids.threadSource = "subagent"
+	ids.isSubagent = true
 	stageCodexFingerprintIDs(c, ids)
 	return ids
 }
@@ -323,6 +339,70 @@ func TestCodexOutboundStrictWSAndCompactProjection(t *testing.T) {
 	for _, name := range fixtureStringArray(t, fixture, "compact.forbidden_headers") {
 		require.Empty(t, compactHeaders.Get(name), name)
 	}
+}
+
+func TestCodexOutboundStrictSubagentProjectionMatchesCLI0149(t *testing.T) {
+	tests := []struct {
+		name              string
+		inboundTransport  OpenAIClientTransport
+		outboundTransport string
+	}{
+		{name: "http_sse", inboundTransport: OpenAIClientTransportHTTP, outboundTransport: "http"},
+		{name: "ws_v2", inboundTransport: OpenAIClientTransportWS, outboundTransport: "ws_v2"},
+		{name: "ws_http_bridge", inboundTransport: OpenAIClientTransportWS, outboundTransport: "http"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := newCodexOutboundStrictTestService()
+			account := &Account{ID: 35, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+			c := newCodexOutboundTestContext()
+			SetOpenAIClientTransport(c, tt.inboundTransport)
+			ids := stageCodexOutboundSubagentTestIDs(c, account.ID)
+			body := []byte(`{"model":"gpt-5.4","input":[],"prompt_cache_key":"raw-session","client_metadata":{"parent_turn_id":"raw-parent-turn","root_turn_id":"raw-root-turn","x-openai-subagent":"raw-worker","x-codex-turn-metadata":"{\"subagent_kind\":\"raw-worker\",\"parent_turn_id\":\"raw-parent-turn\",\"root_turn_id\":\"raw-root-turn\"}"}}`)
+
+			projected, snapshot, err := svc.prepareCodexOutboundBody(c, account, body, tt.outboundTransport, false)
+			require.NoError(t, err)
+			require.NotNil(t, snapshot)
+			require.Equal(t, "collab_spawn", gjson.GetBytes(projected, "client_metadata.x-openai-subagent").String())
+			require.Equal(t, ids.parentTurnID, gjson.GetBytes(projected, "client_metadata.parent_turn_id").String())
+			require.Equal(t, ids.rootTurnID, gjson.GetBytes(projected, "client_metadata.root_turn_id").String())
+			require.Equal(t, ids.windowID, gjson.GetBytes(projected, "client_metadata.x-codex-window-id").String())
+			turnMetadata := gjson.GetBytes(projected, "client_metadata.x-codex-turn-metadata").String()
+			require.Equal(t, "thread_spawn", gjson.Get(turnMetadata, "subagent_kind").String())
+			require.Equal(t, "subagent", gjson.Get(turnMetadata, "thread_source").String())
+			require.Equal(t, ids.parentTurnID, gjson.Get(turnMetadata, "parent_turn_id").String())
+			require.Equal(t, ids.rootTurnID, gjson.Get(turnMetadata, "root_turn_id").String())
+			require.NotContains(t, string(projected), "raw-worker")
+			require.NotContains(t, string(projected), "raw-parent-turn")
+
+			headers := http.Header{"X-Openai-Subagent": {"raw-worker"}}
+			svc.finalizeCodexOutboundHeaders(c, account, headers, false, tt.outboundTransport, "gpt-5.4", "")
+			require.Equal(t, "collab_spawn", headers.Get("x-openai-subagent"))
+			require.Equal(t, ids.parentThreadID, headers.Get("x-codex-parent-thread-id"))
+			require.Equal(t, ids.threadID, headers.Get("x-client-request-id"))
+			require.Equal(t, ids.windowID, headers.Get("x-codex-window-id"))
+			headerMetadata := headers.Get("x-codex-turn-metadata")
+			require.Equal(t, "thread_spawn", gjson.Get(headerMetadata, "subagent_kind").String())
+			require.Equal(t, ids.parentTurnID, gjson.Get(headerMetadata, "parent_turn_id").String())
+		})
+	}
+}
+
+func TestCodexOutboundHeadersRefineGenericWSTransportForObservation(t *testing.T) {
+	svc := newCodexOutboundStrictTestService()
+	account := &Account{ID: 36, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	c := newCodexOutboundTestContext()
+	stageCodexOutboundTestIDs(c, account.ID)
+
+	_, snapshot, err := svc.prepareCodexOutboundBody(c, account, []byte(`{"model":"gpt-5.4","input":[]}`), "ws", false)
+	require.NoError(t, err)
+	require.Equal(t, "ws", snapshot.transport)
+
+	svc.finalizeCodexOutboundHeaders(c, account, make(http.Header), false, string(OpenAIUpstreamTransportResponsesWebsocketV2), "gpt-5.4", "")
+	refined := stagedCodexOutboundSnapshot(c, account)
+	require.NotNil(t, refined)
+	require.Equal(t, string(OpenAIUpstreamTransportResponsesWebsocketV2), refined.transport)
 }
 
 func TestCodexOutboundStrictUnknownFieldFallsBackWholeRequest(t *testing.T) {

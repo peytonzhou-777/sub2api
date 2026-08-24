@@ -31,18 +31,26 @@ func TestGetErrorLogByID_APIKeyPrefixAndUpstreamStatus(t *testing.T) {
 	require.Empty(t, plain.APIKeyPrefix)
 
 	validID, err := repo.InsertErrorLog(ctx, &service.OpsInsertErrorLogInput{
-		ErrorPhase:   "request",
-		ErrorType:    "api_error",
-		Severity:     "error",
-		StatusCode:   402,
-		CreatedAt:    time.Now(),
-		APIKeyPrefix: "sk-valid",
+		ErrorPhase:        "request",
+		ErrorType:         "api_error",
+		Severity:          "error",
+		StatusCode:        402,
+		IsSubagent:        true,
+		SubagentKind:      "thread_spawn",
+		InboundTransport:  "ws",
+		UpstreamTransport: "responses_websockets_v2",
+		CreatedAt:         time.Now(),
+		APIKeyPrefix:      "sk-valid",
 	})
 	require.NoError(t, err)
 
 	valid, err := repo.GetErrorLogByID(ctx, validID)
 	require.NoError(t, err)
 	require.Equal(t, "sk-valid", valid.APIKeyPrefix)
+	require.True(t, valid.IsSubagent)
+	require.Equal(t, "thread_spawn", valid.SubagentKind)
+	require.Equal(t, "ws", valid.InboundTransport)
+	require.Equal(t, "responses_websockets_v2", valid.UpstreamTransport)
 
 	zero := 0
 	credentialFailureID, err := repo.InsertErrorLog(ctx, &service.OpsInsertErrorLogInput{

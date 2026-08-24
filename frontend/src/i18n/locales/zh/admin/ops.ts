@@ -382,6 +382,9 @@ export default {
         suggestPlatform: '🚨 平台错误，建议立即排查修复',
         suggestGeneric: '查看详情了解更多信息',
         apiKeyPrefix: 'Key 前缀',
+        agentRole: '代理角色',
+        subagent: '子代理',
+        transportPath: '传输路径',
         keyDeletedBadge: 'Key 已删除'
       },
       requestDetails: {

@@ -215,9 +215,14 @@ type codexFingerprintIDs struct {
 	parentThreadID      string
 	forkedThreadID      string
 	turnID              string
+	parentTurnID        string
+	rootTurnID          string
 	windowID            string
 	promptCacheKey      string
 	requestID           string
+	subagentHeader      string
+	subagentKind        string
+	threadSource        string
 	isSubagent          bool
 	turnStartedAtUnixMs int64
 }
@@ -297,6 +302,9 @@ func applyCodexFingerprintHeaders(h http.Header, ids *codexFingerprintIDs) {
 	if ids.parentThreadID != "" {
 		h.Set("x-codex-parent-thread-id", ids.parentThreadID)
 	}
+	if ids.subagentHeader != "" {
+		h.Set("x-openai-subagent", ids.subagentHeader)
+	}
 
 	turnMetadataFields := map[string]any{
 		"installation_id":         ids.installationID,
@@ -311,6 +319,18 @@ func applyCodexFingerprintHeaders(h http.Header, ids *codexFingerprintIDs) {
 	}
 	if ids.forkedThreadID != "" {
 		turnMetadataFields["forked_from_thread_id"] = ids.forkedThreadID
+	}
+	if ids.parentTurnID != "" {
+		turnMetadataFields["parent_turn_id"] = ids.parentTurnID
+	}
+	if ids.rootTurnID != "" {
+		turnMetadataFields["root_turn_id"] = ids.rootTurnID
+	}
+	if ids.subagentKind != "" {
+		turnMetadataFields["subagent_kind"] = ids.subagentKind
+	}
+	if ids.threadSource != "" {
+		turnMetadataFields["thread_source"] = ids.threadSource
 	}
 	rewriteCodexTurnMetadataFields(h, turnMetadataFields)
 }
@@ -394,7 +414,16 @@ func applyCodexFingerprintToClientMetadataMap(existing map[string]any, ids *code
 		existing["forked_from_thread_id"] = ids.forkedThreadID
 	}
 	existing["turn_id"] = ids.turnID
+	if ids.parentTurnID != "" {
+		existing["parent_turn_id"] = ids.parentTurnID
+	}
+	if ids.rootTurnID != "" {
+		existing["root_turn_id"] = ids.rootTurnID
+	}
 	existing["x-codex-window-id"] = ids.windowID
+	if ids.subagentHeader != "" {
+		existing["x-openai-subagent"] = ids.subagentHeader
+	}
 
 	turnMetadataFields := map[string]any{
 		"installation_id":         ids.installationID,
@@ -409,6 +438,18 @@ func applyCodexFingerprintToClientMetadataMap(existing map[string]any, ids *code
 	}
 	if ids.forkedThreadID != "" {
 		turnMetadataFields["forked_from_thread_id"] = ids.forkedThreadID
+	}
+	if ids.parentTurnID != "" {
+		turnMetadataFields["parent_turn_id"] = ids.parentTurnID
+	}
+	if ids.rootTurnID != "" {
+		turnMetadataFields["root_turn_id"] = ids.rootTurnID
+	}
+	if ids.subagentKind != "" {
+		turnMetadataFields["subagent_kind"] = ids.subagentKind
+	}
+	if ids.threadSource != "" {
+		turnMetadataFields["thread_source"] = ids.threadSource
 	}
 	rewriteClientMetadataEmbeddedTurnMetadata(existing, turnMetadataFields)
 	return true

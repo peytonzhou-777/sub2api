@@ -72,10 +72,14 @@ INSERT INTO ops_error_logs (
   session_source_hash,
   prompt_cache_key_present,
   prompt_cache_key_hash,
+  is_subagent,
+  subagent_kind,
+  inbound_transport,
+  upstream_transport,
   created_at,
   api_key_prefix
 ) VALUES (
-  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56
+  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60
 )`
 
 func NewOpsRepository(db *sql.DB) service.OpsRepository {
@@ -201,6 +205,10 @@ func opsInsertErrorLogArgs(input *service.OpsInsertErrorLogInput) []any {
 		opsNullString(input.SessionSourceHash),
 		input.PromptCacheKeyPresent,
 		opsNullString(input.PromptCacheKeyHash),
+		input.IsSubagent,
+		opsNullString(input.SubagentKind),
+		opsNullString(input.InboundTransport),
+		opsNullString(input.UpstreamTransport),
 		input.CreatedAt,
 		opsNullString(input.APIKeyPrefix),
 	}
@@ -501,6 +509,10 @@ SELECT
   COALESCE(e.session_source_hash, ''),
   COALESCE(e.prompt_cache_key_present, false),
   COALESCE(e.prompt_cache_key_hash, ''),
+  COALESCE(e.is_subagent, false),
+  COALESCE(e.subagent_kind, ''),
+  COALESCE(e.inbound_transport, ''),
+  COALESCE(e.upstream_transport, ''),
   COALESCE(e.api_key_prefix, ''),
   COALESCE(ak.name, ''),
   ak.deleted_at
@@ -597,6 +609,10 @@ LIMIT 1`
 		&out.SessionSourceHash,
 		&out.PromptCacheKeyPresent,
 		&out.PromptCacheKeyHash,
+		&out.IsSubagent,
+		&out.SubagentKind,
+		&out.InboundTransport,
+		&out.UpstreamTransport,
 		&out.APIKeyPrefix,
 		&detailAPIKeyName,
 		&detailAPIKeyDeletedAt,

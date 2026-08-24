@@ -3678,8 +3678,8 @@ func openAIWSNextAttemptMessage(current, retryPayload []byte, retryCurrentTurn b
 	return append([]byte(nil), retryPayload...), true
 }
 
-// shouldRetryOpenAIWS429OnSameAccount 对所有可安全重放的 OpenAI 429 先消耗
-// 同账号预算。额度/并发分类仍限制后续跨账号次数，但不会跳过本地高粘性阶段。
+// shouldRetryOpenAIWS429OnSameAccount 仅重放官方明确标记为可恢复的 WS 连接数限制。
+// 普通 RPM/额度 429 直接进入既有 failover 流程，避免同一请求在受限账号上放大流量。
 func shouldRetryOpenAIWS429OnSameAccount(
 	account *service.Account,
 	failoverErr *service.UpstreamFailoverError,
@@ -3689,6 +3689,13 @@ func shouldRetryOpenAIWS429OnSameAccount(
 	if account == nil || account.Platform != service.PlatformOpenAI || failoverErr == nil ||
 		failoverErr.StatusCode != http.StatusTooManyRequests || failoverErr.LocalRequestFailure ||
 		!replaySafe || !failoverErr.ShouldRetryNextAccount() {
+		return false
+	}
+	code := strings.ToLower(strings.TrimSpace(gjson.GetBytes(failoverErr.ResponseBody, "error.code").String()))
+	if code == "" {
+		code = strings.ToLower(strings.TrimSpace(gjson.GetBytes(failoverErr.ResponseBody, "response.error.code").String()))
+	}
+	if code != "websocket_connection_limit_reached" {
 		return false
 	}
 	retryLimit := account.GetPoolModeRetryCount()

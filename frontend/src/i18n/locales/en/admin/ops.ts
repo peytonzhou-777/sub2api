@@ -382,6 +382,9 @@ export default {
         suggestPlatform: 'Platform error: prioritize investigation and fix',
         suggestGeneric: 'See details for more context',
         apiKeyPrefix: 'Key Prefix',
+        agentRole: 'Agent Role',
+        subagent: 'Subagent',
+        transportPath: 'Transport Path',
         keyDeletedBadge: 'Key Deleted'
       },
       requestDetails: {

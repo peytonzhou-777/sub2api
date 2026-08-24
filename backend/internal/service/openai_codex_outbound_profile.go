@@ -230,12 +230,16 @@ type CodexOutboundSnapshot struct {
 	parentThreadID      string
 	forkedThreadID      string
 	turnID              string
+	parentTurnID        string
+	rootTurnID          string
 	windowID            string
 	promptCacheKey      string
 	turnStartedAtUnixMs int64
 	model               string
 	serviceTier         string
+	subagentHeader      string
 	subagentKind        string
+	threadSource        string
 	turnMetadata        string
 	zstd                bool
 	orderedBody         []byte
@@ -289,6 +293,18 @@ func stagedCodexOutboundSnapshot(c *gin.Context, account *Account) *CodexOutboun
 	return snapshot
 }
 
+func stagedCodexOutboundSnapshotAnyAccount(c *gin.Context) *CodexOutboundSnapshot {
+	if c == nil {
+		return nil
+	}
+	value, exists := c.Get(codexOutboundSnapshotContextKey)
+	snapshot, ok := value.(*CodexOutboundSnapshot)
+	if !exists || !ok {
+		return nil
+	}
+	return snapshot
+}
+
 func stagedCodexOutboundTopologyScope(c *gin.Context, account *Account) string {
 	snapshot := stagedCodexOutboundSnapshot(c, account)
 	if snapshot == nil {
@@ -298,7 +314,7 @@ func stagedCodexOutboundTopologyScope(c *gin.Context, account *Account) string {
 		snapshot.installationID,
 		snapshot.threadID,
 		snapshot.parentThreadID,
-		snapshot.subagentKind,
+		snapshot.subagentHeader,
 	)
 }
 
@@ -352,8 +368,13 @@ func buildCodexOutboundSnapshot(c *gin.Context, account *Account, body []byte, t
 		snapshot.parentThreadID = ids.parentThreadID
 		snapshot.forkedThreadID = ids.forkedThreadID
 		snapshot.turnID = ids.turnID
+		snapshot.parentTurnID = ids.parentTurnID
+		snapshot.rootTurnID = ids.rootTurnID
 		snapshot.windowID = ids.windowID
 		snapshot.promptCacheKey = ids.promptCacheKey
+		snapshot.subagentHeader = ids.subagentHeader
+		snapshot.subagentKind = ids.subagentKind
+		snapshot.threadSource = ids.threadSource
 		snapshot.turnStartedAtUnixMs = ids.turnStartedAtUnixMs
 	}
 
@@ -379,7 +400,10 @@ func marshalCodexOutboundTurnMetadata(snapshot *CodexOutboundSnapshot) string {
 		RequestKind         string `json:"request_kind"`
 		ForkedFromThreadID  string `json:"forked_from_thread_id,omitempty"`
 		ParentThreadID      string `json:"parent_thread_id,omitempty"`
+		ParentTurnID        string `json:"parent_turn_id,omitempty"`
+		RootTurnID          string `json:"root_turn_id,omitempty"`
 		SubagentKind        string `json:"subagent_kind,omitempty"`
+		ThreadSource        string `json:"thread_source,omitempty"`
 		TurnStartedAtUnixMs int64  `json:"turn_started_at_unix_ms"`
 	}{
 		InstallationID:      snapshot.installationID,
@@ -390,7 +414,10 @@ func marshalCodexOutboundTurnMetadata(snapshot *CodexOutboundSnapshot) string {
 		RequestKind:         snapshot.requestKind,
 		ForkedFromThreadID:  snapshot.forkedThreadID,
 		ParentThreadID:      snapshot.parentThreadID,
+		ParentTurnID:        snapshot.parentTurnID,
+		RootTurnID:          snapshot.rootTurnID,
 		SubagentKind:        snapshot.subagentKind,
+		ThreadSource:        snapshot.threadSource,
 		TurnStartedAtUnixMs: snapshot.turnStartedAtUnixMs,
 	}
 	raw, err := marshalOpenAIUpstreamJSON(metadata)
@@ -412,8 +439,10 @@ func buildCodexOutboundClientMetadata(snapshot *CodexOutboundSnapshot) []byte {
 		"parent_thread_id":        snapshot.parentThreadID,
 		"forked_from_thread_id":   snapshot.forkedThreadID,
 		"turn_id":                 snapshot.turnID,
+		"parent_turn_id":          snapshot.parentTurnID,
+		"root_turn_id":            snapshot.rootTurnID,
 		"x-codex-window-id":       snapshot.windowID,
-		"x-openai-subagent":       snapshot.subagentKind,
+		"x-openai-subagent":       snapshot.subagentHeader,
 	} {
 		if value != "" {
 			metadata[key] = value
@@ -853,11 +882,18 @@ func (s *OpenAIGatewayService) finalizeCodexOutboundHeaders(
 			snapshot.profile = s.resolveCodexOutboundProfile(account)
 		}
 		stageCodexOutboundSnapshot(c, snapshot)
-	} else if (snapshot.transport == "" && transport != "") || (snapshot.model == "" && model != "") || (snapshot.serviceTier == "" && serviceTier != "") {
+	}
+	if snapshot == nil {
+		return
+	}
+	normalizedTransport := strings.TrimSpace(transport)
+	refineTransport := normalizedTransport != "" && (snapshot.transport == "" ||
+		(strings.EqualFold(strings.TrimSpace(snapshot.transport), "ws") && !strings.EqualFold(snapshot.transport, normalizedTransport)))
+	if refineTransport || (snapshot.model == "" && model != "") || (snapshot.serviceTier == "" && serviceTier != "") {
 		// 快照生成后不原地修改；低频预连接缺少 body 时复制并补齐握手投影输入。
 		copied := *snapshot
-		if copied.transport == "" {
-			copied.transport = strings.TrimSpace(transport)
+		if refineTransport {
+			copied.transport = normalizedTransport
 		}
 		if copied.model == "" {
 			copied.model = strings.TrimSpace(model)
@@ -868,10 +904,6 @@ func (s *OpenAIGatewayService) finalizeCodexOutboundHeaders(
 		snapshot = &copied
 		stageCodexOutboundSnapshot(c, snapshot)
 	}
-	if snapshot == nil {
-		return
-	}
-
 	for _, name := range []string{
 		"user-agent", "originator", "version", "accept-language", "session-id", "session_id",
 		"conversation_id", "thread-id", "x-client-request-id", "x-codex-window-id",
@@ -902,8 +934,8 @@ func (s *OpenAIGatewayService) finalizeCodexOutboundHeaders(
 	if snapshot.parentThreadID != "" {
 		headers.Set("x-codex-parent-thread-id", snapshot.parentThreadID)
 	}
-	if snapshot.subagentKind != "" {
-		headers.Set("x-openai-subagent", snapshot.subagentKind)
+	if snapshot.subagentHeader != "" {
+		headers.Set("x-openai-subagent", snapshot.subagentHeader)
 	}
 	if snapshot.turnMetadata != "" {
 		headers.Set("x-codex-turn-metadata", snapshot.turnMetadata)

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,7 +36,6 @@ const (
 	codexFingerprintKindSession      codexFingerprintKind = "session"
 	codexFingerprintKindThread       codexFingerprintKind = "thread"
 	codexFingerprintKindTurn         codexFingerprintKind = "turn"
-	codexFingerprintKindWindow       codexFingerprintKind = "window"
 )
 
 var (
@@ -121,8 +121,12 @@ type codexFingerprintOriginalIDs struct {
 	parentThreadID   string
 	forkedThreadID   string
 	turnID           string
+	parentTurnID     string
+	rootTurnID       string
 	windowID         string
-	subagentMarker   string
+	subagentHeader   string
+	subagentKind     string
+	threadSource     string
 	isSubagent       bool
 }
 
@@ -648,14 +652,21 @@ func extractCodexFingerprintOriginalIDs(headers http.Header, body []byte) codexF
 		if original.windowID == "" {
 			original.windowID = firstNonEmptyHeader(headers, "x-codex-window-id")
 		}
-		if original.subagentMarker == "" {
-			original.subagentMarker = strings.TrimSpace(headers.Get("x-openai-subagent"))
+		if original.subagentHeader == "" {
+			original.subagentHeader = strings.TrimSpace(headers.Get("x-openai-subagent"))
 		}
 		if raw := strings.TrimSpace(headers.Get("x-codex-turn-metadata")); raw != "" {
 			applyCodexFingerprintOriginalMetadata(&original, gjson.Parse(raw), true)
 		}
 	}
-	original.isSubagent = original.subagentMarker != "" || original.parentThreadID != "" || original.forkedThreadID != ""
+	original.subagentHeader, original.subagentKind = normalizeCodexSubagentIdentity(
+		original.subagentHeader,
+		original.subagentKind,
+		original.parentThreadID != "" || original.forkedThreadID != "" || original.isSubagent,
+	)
+	original.threadSource = normalizeCodexThreadSource(original.threadSource)
+	original.isSubagent = original.subagentHeader != "" || original.subagentKind != "" ||
+		original.parentThreadID != "" || original.forkedThreadID != "" || original.threadSource == "subagent"
 	return original
 }
 
@@ -671,12 +682,21 @@ func fillCodexFingerprintOriginalBodyFallbacks(original *codexFingerprintOrigina
 		{&original.parentThreadID, "client_metadata.parent_thread_id"},
 		{&original.forkedThreadID, "client_metadata.forked_from_thread_id"},
 		{&original.turnID, "client_metadata.turn_id"},
+		{&original.parentTurnID, "client_metadata.parent_turn_id"},
+		{&original.rootTurnID, "client_metadata.root_turn_id"},
 		{&original.windowID, "client_metadata.x-codex-window-id"},
+		{&original.threadSource, "client_metadata.thread_source"},
 	}
 	for _, field := range fields {
 		if *field.target == "" {
 			*field.target = strings.TrimSpace(gjson.GetBytes(body, field.path).String())
 		}
+	}
+	if original.subagentHeader == "" {
+		original.subagentHeader = strings.TrimSpace(gjson.GetBytes(body, "client_metadata.x-openai-subagent").String())
+	}
+	if original.subagentKind == "" {
+		original.subagentKind = strings.TrimSpace(gjson.GetBytes(body, "client_metadata.subagent_kind").String())
 	}
 }
 
@@ -692,28 +712,82 @@ func applyCodexFingerprintOriginalMetadata(original *codexFingerprintOriginalIDs
 		{&original.parentThreadID, "parent_thread_id"},
 		{&original.forkedThreadID, "forked_from_thread_id"},
 		{&original.turnID, "turn_id"},
+		{&original.parentTurnID, "parent_turn_id"},
+		{&original.rootTurnID, "root_turn_id"},
 		{&original.windowID, "window_id"},
+		{&original.threadSource, "thread_source"},
 	}
 	for _, field := range fields {
 		if !fallbackOnly || *field.target == "" {
 			*field.target = strings.TrimSpace(metadata.Get(field.path).String())
 		}
 	}
-	if !fallbackOnly || original.subagentMarker == "" {
-		original.subagentMarker = strings.TrimSpace(metadata.Get("subagent_kind").String())
+	if !fallbackOnly || original.subagentKind == "" {
+		original.subagentKind = strings.TrimSpace(metadata.Get("subagent_kind").String())
 	}
-	if original.subagentMarker == "" {
+	if original.subagentHeader == "" && original.subagentKind == "" {
 		requestKind := strings.ToLower(strings.TrimSpace(metadata.Get("request_kind").String()))
 		if strings.Contains(requestKind, "subagent") {
-			original.subagentMarker = requestKind
+			original.isSubagent = true
 		}
 	}
-	if original.subagentMarker == "" {
+	if original.subagentHeader == "" && original.subagentKind == "" {
 		threadSource := strings.ToLower(strings.TrimSpace(metadata.Get("thread_source").String()))
 		if strings.Contains(threadSource, "subagent") {
-			original.subagentMarker = threadSource
+			original.isSubagent = true
 		}
 	}
+}
+
+// normalizeCodexSubagentIdentity 将同一子代理语义投影为官方区分的请求头值和 metadata 值。
+func normalizeCodexSubagentIdentity(headerValue, metadataKind string, fallbackThreadSpawn bool) (string, string) {
+	headerValue = strings.ToLower(strings.TrimSpace(headerValue))
+	metadataKind = strings.ToLower(strings.TrimSpace(metadataKind))
+	values := []string{headerValue, metadataKind}
+	for _, value := range values {
+		switch value {
+		case "collab_spawn", "thread_spawn":
+			return "collab_spawn", "thread_spawn"
+		case "review":
+			return "review", "review"
+		case "compact":
+			return "compact", "compact"
+		case "memory_consolidation":
+			return "memory_consolidation", "memory_consolidation"
+		}
+	}
+	if headerValue != "" || metadataKind != "" {
+		// 不透传任意代理标签，避免 agent 名称成为新的多用户可见特征。
+		return "other", "other"
+	}
+	if fallbackThreadSpawn {
+		return "collab_spawn", "thread_spawn"
+	}
+	return "", ""
+}
+
+func normalizeCodexThreadSource(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "user", "subagent", "memory_consolidation", "automation", "sdk":
+		return value
+	default:
+		return ""
+	}
+}
+
+// codexWindowGeneration 提取官方 `<thread_id>:<generation>` 中的窗口代数。
+func codexWindowGeneration(value string) uint64 {
+	value = strings.TrimSpace(value)
+	separator := strings.LastIndexByte(value, ':')
+	if separator < 0 || separator == len(value)-1 {
+		return 0
+	}
+	generation, err := strconv.ParseUint(value[separator+1:], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return generation
 }
 
 func firstNonEmptyHeader(headers http.Header, names ...string) string {
@@ -744,9 +818,14 @@ func codexFingerprintIDsFromContext(fp *CodexFingerprintContext) *codexFingerpri
 		parentThreadID:      fp.parentThreadID,
 		forkedThreadID:      fp.forkedThreadID,
 		turnID:              fp.turnID,
+		parentTurnID:        fp.parentTurnID,
+		rootTurnID:          fp.rootTurnID,
 		windowID:            fp.windowID,
 		promptCacheKey:      fp.promptCacheKey,
 		requestID:           fp.requestID,
+		subagentHeader:      fp.subagentHeader,
+		subagentKind:        fp.subagentKind,
+		threadSource:        fp.threadSource,
 		isSubagent:          fp.isSubagent,
 		turnStartedAtUnixMs: turnStartedAtUnixMs,
 	}
@@ -766,9 +845,14 @@ type CodexFingerprintContext struct {
 	parentThreadID      string
 	forkedThreadID      string
 	turnID              string
+	parentTurnID        string
+	rootTurnID          string
 	windowID            string
 	promptCacheKey      string
 	requestID           string
+	subagentHeader      string
+	subagentKind        string
+	threadSource        string
 	isSubagent          bool
 	turnStartedAtUnixMs int64
 }
@@ -887,6 +971,9 @@ func newCodexFingerprintContextV3(
 		sessionEpoch:        epoch,
 		sessionScopeHash:    strings.TrimSpace(original.sessionScopeHash),
 		installationID:      strings.TrimSpace(configuredDeviceID),
+		subagentHeader:      original.subagentHeader,
+		subagentKind:        original.subagentKind,
+		threadSource:        original.threadSource,
 		isSubagent:          original.isSubagent,
 		turnStartedAtUnixMs: time.Now().UnixMilli(),
 	}
@@ -918,10 +1005,7 @@ func newCodexFingerprintContextV3(
 			clusterSecret, seed, epoch, epochStartedAt, codexFingerprintKindTurn,
 			codexFingerprintScopedDerivationSource(threadScope, original.turnID), original.turnID,
 		)
-		ctx.windowID = deriveCodexFingerprintStableUUIDV7(
-			clusterSecret, seed, epoch, epochStartedAt, codexFingerprintKindWindow,
-			codexFingerprintScopedDerivationSource(threadScope, "account-window"), "",
-		)
+		ctx.windowID = ctx.threadID + ":" + strconv.FormatUint(codexWindowGeneration(original.windowID), 10)
 		ctx.requestID = ctx.threadID
 		return ctx, nil
 	}
@@ -955,16 +1039,19 @@ func newCodexFingerprintContextV3(
 			codexFingerprintScopedDerivationSource(threadScope, value), value,
 		)
 	}
-	windowSource := strings.TrimSpace(original.windowID)
-	windowTimestampSource := windowSource
-	if windowSource == "" {
-		windowSource = threadSource + ":0"
-		windowTimestampSource = threadSource
+	if value := strings.TrimSpace(original.parentTurnID); value != "" {
+		ctx.parentTurnID = deriveCodexFingerprintStableUUIDV7(
+			clusterSecret, seed, epoch, epochStartedAt, codexFingerprintKindTurn,
+			codexFingerprintScopedDerivationSource(threadScope, value), value,
+		)
 	}
-	ctx.windowID = deriveCodexFingerprintStableUUIDV7(
-		clusterSecret, seed, epoch, epochStartedAt, codexFingerprintKindWindow,
-		codexFingerprintScopedDerivationSource(threadScope, windowSource), windowTimestampSource,
-	)
+	if value := strings.TrimSpace(original.rootTurnID); value != "" {
+		ctx.rootTurnID = deriveCodexFingerprintStableUUIDV7(
+			clusterSecret, seed, epoch, epochStartedAt, codexFingerprintKindTurn,
+			codexFingerprintScopedDerivationSource(threadScope, value), value,
+		)
+	}
+	ctx.windowID = ctx.threadID + ":" + strconv.FormatUint(codexWindowGeneration(original.windowID), 10)
 	// CodexCLI 0.149.0 直接以 Thread ID 作为 x-client-request-id，不再派生独立请求标识。
 	ctx.requestID = ctx.threadID
 	return ctx, nil

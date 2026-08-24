@@ -17,6 +17,8 @@ func TestOpsRequestObservationSanitizesSensitiveValuesAndHeaders(t *testing.T) {
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 	c.Request.Header.Set("session_id", "secret-session")
+	c.Request.Header.Set("x-openai-subagent", "collab_spawn")
+	SetOpenAIClientTransport(c, OpenAIClientTransportWS)
 	startedAt := time.Now().UTC().Add(-1500 * time.Millisecond)
 
 	BeginOpsRequestObservation(c, startedAt)
@@ -31,6 +33,11 @@ func TestOpsRequestObservationSanitizesSensitiveValuesAndHeaders(t *testing.T) {
 		"Authorization":              []string{"Bearer must-not-persist"},
 	}, []byte(`{"error":{"type":"overloaded_error","code":"server_overloaded"}}`))
 	c.Set(codexFingerprintLogicalTurnSourceContextKey, "secret-source")
+	stageCodexOutboundSnapshot(c, &CodexOutboundSnapshot{
+		transport:      "ws_v2",
+		subagentHeader: "collab_spawn",
+		subagentKind:   "thread_spawn",
+	})
 
 	obs := GetOpsRequestObservation(c, time.Now().UTC())
 	require.True(t, obs.ExplicitSessionIDPresent)
@@ -52,6 +59,10 @@ func TestOpsRequestObservationSanitizesSensitiveValuesAndHeaders(t *testing.T) {
 	require.Equal(t, "12", obs.RetryAfter)
 	require.Equal(t, []string{"500"}, obs.RateLimitHeaders["x-ratelimit-limit-requests"])
 	require.NotContains(t, *obs.RateLimitHeadersJSON, "Authorization")
+	require.True(t, obs.IsSubagent)
+	require.Equal(t, "thread_spawn", obs.SubagentKind)
+	require.Equal(t, "ws", obs.InboundTransport)
+	require.Equal(t, "responses_websockets_v2", obs.UpstreamTransport)
 	require.GreaterOrEqual(t, obs.DurationMs, int64(1400))
 }
 

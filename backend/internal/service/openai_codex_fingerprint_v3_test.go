@@ -506,7 +506,7 @@ func TestCodexFingerprintV3ContextReusesLogicalTurnWithCodexCLI0149UUIDShapes(t 
 	assert.Equal(t, uuid.Version(4), parsedInstallation.Version())
 	assert.Equal(t, uuid.RFC4122, parsedInstallation.Variant())
 	for _, value := range []string{
-		first.SessionID(), first.PromptCacheKey(), first.ThreadID(), first.TurnID(), first.WindowID(), first.RequestID(),
+		first.SessionID(), first.PromptCacheKey(), first.ThreadID(), first.TurnID(), first.RequestID(),
 	} {
 		parsed, parseErr := uuid.Parse(value)
 		require.NoError(t, parseErr)
@@ -514,6 +514,7 @@ func TestCodexFingerprintV3ContextReusesLogicalTurnWithCodexCLI0149UUIDShapes(t 
 		assert.Equal(t, uuid.RFC4122, parsed.Variant())
 	}
 	assert.Equal(t, first.ThreadID(), first.RequestID())
+	assert.Equal(t, first.ThreadID()+":0", first.WindowID())
 }
 
 func TestCodexFingerprintV3PreservesOriginalUUIDv7Timestamps(t *testing.T) {
@@ -526,7 +527,7 @@ func TestCodexFingerprintV3PreservesOriginalUUIDv7Timestamps(t *testing.T) {
 		parentThreadID:  "0198a002-0000-7000-8000-000000000003",
 		forkedThreadID:  "0198a003-0000-7000-8000-000000000004",
 		turnID:          "0198a004-0000-7000-8000-000000000005",
-		windowID:        "0198a005-0000-7000-8000-000000000006",
+		windowID:        "0198a001-0000-7000-8000-000000000002:5",
 	}
 	fingerprint, err := newCodexFingerprintContextV3(
 		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 9, startedAt,
@@ -536,7 +537,7 @@ func TestCodexFingerprintV3PreservesOriginalUUIDv7Timestamps(t *testing.T) {
 
 	assert.Equal(t, codexFingerprintUUIDV7UnixMilli(uuid.MustParse(original.threadID)), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(fingerprint.ThreadID())))
 	assert.Equal(t, codexFingerprintUUIDV7UnixMilli(uuid.MustParse(original.turnID)), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(fingerprint.TurnID())))
-	assert.Equal(t, codexFingerprintUUIDV7UnixMilli(uuid.MustParse(original.windowID)), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(fingerprint.WindowID())))
+	assert.Equal(t, fingerprint.ThreadID()+":5", fingerprint.WindowID())
 	assert.Equal(t, codexFingerprintUUIDV7UnixMilli(uuid.MustParse(original.parentThreadID)), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(fingerprint.parentThreadID)))
 	assert.Equal(t, codexFingerprintUUIDV7UnixMilli(uuid.MustParse(original.forkedThreadID)), codexFingerprintUUIDV7UnixMilli(uuid.MustParse(fingerprint.forkedThreadID)))
 	assert.Equal(t, fingerprint.ThreadID(), fingerprint.RequestID())
@@ -990,8 +991,12 @@ func TestCodexFingerprintSubagentMapsClosedTopology(t *testing.T) {
 		parentThreadID:   "root-thread",
 		forkedThreadID:   "root-thread",
 		turnID:           "child-turn",
-		windowID:         "child-window",
-		subagentMarker:   "worker",
+		parentTurnID:     "parent-turn",
+		rootTurnID:       "root-turn",
+		windowID:         "child-thread:2",
+		subagentHeader:   "collab_spawn",
+		subagentKind:     "thread_spawn",
+		threadSource:     "subagent",
 		isSubagent:       true,
 		sessionScopeHash: strings.Repeat("cd", 32),
 	}
@@ -1004,7 +1009,13 @@ func TestCodexFingerprintSubagentMapsClosedTopology(t *testing.T) {
 	rootInput.threadID = original.parentThreadID
 	rootInput.parentThreadID = ""
 	rootInput.forkedThreadID = ""
+	rootInput.parentTurnID = ""
+	rootInput.rootTurnID = ""
+	rootInput.subagentHeader = ""
+	rootInput.subagentKind = ""
+	rootInput.threadSource = ""
 	rootInput.isSubagent = false
+	rootInput.turnID = original.parentTurnID
 	root, err := newTestCodexFingerprintContextV3(
 		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7,
 		codexFingerprintSession, "", rootInput,
@@ -1016,10 +1027,22 @@ func TestCodexFingerprintSubagentMapsClosedTopology(t *testing.T) {
 	require.Equal(t, root.ThreadID(), child.parentThreadID)
 	require.Equal(t, root.ThreadID(), child.forkedThreadID)
 	require.NotEqual(t, root.ThreadID(), child.ThreadID())
+	require.Equal(t, root.turnID, child.parentTurnID)
+	rootTurnInput := rootInput
+	rootTurnInput.turnID = original.rootTurnID
+	rootTurn, rootTurnErr := newTestCodexFingerprintContextV3(
+		testCodexFingerprintV3Secret(), testCodexFingerprintV3Seed(), 7,
+		codexFingerprintSession, "", rootTurnInput,
+	)
+	require.NoError(t, rootTurnErr)
+	require.Equal(t, rootTurn.turnID, child.rootTurnID)
+	require.Equal(t, child.ThreadID()+":2", child.WindowID())
+	require.NotEqual(t, original.parentTurnID, child.parentTurnID)
+	require.NotEqual(t, original.rootTurnID, child.rootTurnID)
 
 	ids := codexFingerprintIDsFromContext(child)
 	headers := http.Header{
-		"X-Openai-Subagent":     []string{"worker"},
+		"X-Openai-Subagent":     []string{"raw-worker"},
 		"X-Codex-Turn-Metadata": []string{`{"request_kind":"subagent","custom":"kept"}`},
 	}
 	body := map[string]any{"client_metadata": map[string]any{
@@ -1028,30 +1051,39 @@ func TestCodexFingerprintSubagentMapsClosedTopology(t *testing.T) {
 	applyCodexFingerprintHeaders(headers, ids)
 	require.True(t, applyCodexFingerprintClientMetadata(body, ids))
 	require.Equal(t, root.ThreadID(), headers.Get("x-codex-parent-thread-id"))
-	require.Equal(t, "worker", headers.Get("x-openai-subagent"))
+	require.Equal(t, "collab_spawn", headers.Get("x-openai-subagent"))
 	require.Equal(t, "kept", gjson.Get(headers.Get("x-codex-turn-metadata"), "custom").String())
 	metadata, ok := body["client_metadata"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, root.ThreadID(), metadata["parent_thread_id"])
+	require.Equal(t, child.parentTurnID, metadata["parent_turn_id"])
+	require.Equal(t, child.rootTurnID, metadata["root_turn_id"])
+	require.Equal(t, "collab_spawn", metadata["x-openai-subagent"])
 	turnMetadata, ok := metadata["x-codex-turn-metadata"].(string)
 	require.True(t, ok)
 	require.Equal(t, "kept", gjson.Get(turnMetadata, "custom").String())
+	require.Equal(t, "thread_spawn", gjson.Get(turnMetadata, "subagent_kind").String())
+	require.Equal(t, "subagent", gjson.Get(turnMetadata, "thread_source").String())
 }
 
 func TestExtractCodexFingerprintOriginalIDsPrefersBodyTopology(t *testing.T) {
 	headers := http.Header{
 		"Thread-Id":                []string{"header-child"},
 		"X-Codex-Parent-Thread-Id": []string{"header-parent"},
-		"X-Openai-Subagent":        []string{"true"},
+		"X-Openai-Subagent":        []string{"collab_spawn"},
 		"X-Codex-Turn-Metadata":    []string{`{"thread_id":"header-metadata-child","parent_thread_id":"header-metadata-parent"}`},
 	}
-	body := []byte(`{"client_metadata":{"thread_id":"flat-child","parent_thread_id":"flat-parent","x-codex-turn-metadata":"{\"thread_id\":\"body-child\",\"parent_thread_id\":\"body-parent\",\"forked_from_thread_id\":\"body-fork\",\"subagent_kind\":\"worker\"}"}}`)
+	body := []byte(`{"client_metadata":{"thread_id":"flat-child","parent_thread_id":"flat-parent","parent_turn_id":"flat-parent-turn","root_turn_id":"flat-root-turn","x-codex-turn-metadata":"{\"thread_id\":\"body-child\",\"parent_thread_id\":\"body-parent\",\"forked_from_thread_id\":\"body-fork\",\"parent_turn_id\":\"body-parent-turn\",\"root_turn_id\":\"body-root-turn\",\"subagent_kind\":\"thread_spawn\",\"thread_source\":\"subagent\"}"}}`)
 
 	original := extractCodexFingerprintOriginalIDs(headers, body)
 	require.Equal(t, "body-child", original.threadID)
 	require.Equal(t, "body-parent", original.parentThreadID)
 	require.Equal(t, "body-fork", original.forkedThreadID)
-	require.Equal(t, "worker", original.subagentMarker)
+	require.Equal(t, "body-parent-turn", original.parentTurnID)
+	require.Equal(t, "body-root-turn", original.rootTurnID)
+	require.Equal(t, "collab_spawn", original.subagentHeader)
+	require.Equal(t, "thread_spawn", original.subagentKind)
+	require.Equal(t, "subagent", original.threadSource)
 	require.True(t, original.isSubagent)
 }
 
@@ -1059,7 +1091,23 @@ func TestExtractCodexFingerprintOriginalIDsDetectsMetadataOnlySubagent(t *testin
 	body := []byte(`{"client_metadata":{"x-codex-turn-metadata":"{\"thread_id\":\"child\",\"request_kind\":\"subagent_task\"}"}}`)
 	original := extractCodexFingerprintOriginalIDs(nil, body)
 	require.True(t, original.isSubagent)
-	require.Equal(t, "subagent_task", original.subagentMarker)
+	require.Equal(t, "collab_spawn", original.subagentHeader)
+	require.Equal(t, "thread_spawn", original.subagentKind)
+}
+
+func TestExtractCodexFingerprintOriginalIDsNormalizesFlatSubagentIdentity(t *testing.T) {
+	body := []byte(`{"client_metadata":{"x-openai-subagent":"collab_spawn","subagent_kind":"thread_spawn","thread_source":"subagent"}}`)
+	original := extractCodexFingerprintOriginalIDs(nil, body)
+	require.True(t, original.isSubagent)
+	require.Equal(t, "collab_spawn", original.subagentHeader)
+	require.Equal(t, "thread_spawn", original.subagentKind)
+	require.Equal(t, "subagent", original.threadSource)
+}
+
+func TestCodexWindowGenerationUsesOfficialSuffix(t *testing.T) {
+	require.Equal(t, uint64(7), codexWindowGeneration("0198a001-0000-7000-8000-000000000002:7"))
+	require.Zero(t, codexWindowGeneration("0198a001-0000-7000-8000-000000000002"))
+	require.Zero(t, codexWindowGeneration("thread:not-a-number"))
 }
 
 func TestCodexFingerprintFullModeRejectsSubagent(t *testing.T) {

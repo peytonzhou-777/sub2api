@@ -329,6 +329,7 @@ func TestLogOpsStreamError_UpstreamFailureCountsTowardsSLA(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 	c.Set(opsModelKey, "gpt-5.6-sol")
+	service.SetOpenAIClientTransport(c, service.OpenAIClientTransportHTTP)
 	service.BeginOpsRequestObservation(c, time.Now().UTC().Add(-2*time.Second))
 	service.SetOpsOpenAIRequestMetadata(c, []byte(`{"service_tier":"priority","prompt_cache_key":"cache-secret"}`))
 	service.CaptureOpsUpstreamResponse(c, http.Header{
@@ -368,6 +369,7 @@ func TestLogOpsStreamError_UpstreamFailureCountsTowardsSLA(t *testing.T) {
 	require.True(t, job.entry.PromptCacheKeyPresent)
 	require.NotEmpty(t, job.entry.PromptCacheKeyHash)
 	require.NotContains(t, job.entry.PromptCacheKeyHash, "cache-secret")
+	require.Equal(t, "http", job.entry.InboundTransport)
 }
 
 func TestOpsErrorLoggerMiddleware_PrioritizesTerminalStreamFailure(t *testing.T) {
