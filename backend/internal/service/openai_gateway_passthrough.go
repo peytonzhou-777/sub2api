@@ -176,6 +176,12 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		}
 		defer releaseSubagentSlot()
 	}
+	// OAuth/API Key 与 compact 共用最终父系保护，未授权 lineage 不得留在透传 body。
+	lineageBody, _, lineageErr := stripOpenAICodexLineageRaw(c, account, body)
+	if lineageErr != nil {
+		return nil, fmt.Errorf("strip unauthorized Codex lineage: %w", lineageErr)
+	}
+	body = lineageBody
 
 	if account != nil && account.Platform == PlatformOpenAI && account.Type == AccountTypeAPIKey &&
 		!isOpenAIResponsesCompactPath(c) && needsOpenAIResponsesClientToolAdaptation(body) {

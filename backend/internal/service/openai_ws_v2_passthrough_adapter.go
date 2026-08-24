@@ -796,6 +796,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			return errors.New("failed to attach initial subagent concurrency slot")
 		}
 	}
+	lineageFirst, _, lineageErr := stripOpenAICodexLineageRaw(c, account, firstClientMessage)
+	if lineageErr != nil {
+		return fmt.Errorf("strip first passthrough Codex lineage: %w", lineageErr)
+	}
+	firstClientMessage = lineageFirst
 
 	// 在 policy filter 之后再提取 service_tier / reasoning_effort 用于
 	// usage 上报：filter
@@ -1090,6 +1095,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					releaseSubagentSlot()
 					return payload, nil, errors.New("failed to attach subagent concurrency slot")
 				}
+			}
+			if policyErr == nil && blocked == nil && isResponseCreate {
+				lineageOut, _, lineageErr := stripOpenAICodexLineageRaw(c, account, out)
+				if lineageErr != nil {
+					return payload, nil, fmt.Errorf("strip passthrough Codex lineage: %w", lineageErr)
+				}
+				out = lineageOut
 			}
 			// 多轮 passthrough usage：仅在成功（non-block / non-err）
 			// 的 response.create 帧上更新 usageMeta，使用

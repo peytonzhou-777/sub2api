@@ -71,6 +71,31 @@ func TestGetOpenAIUserConversationBindingByAliasScopesLookup(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestNormalizeOpenAIUserConversationReservationAliasesSupportsCodexThreadScope(t *testing.T) {
+	responseHash := strings.Repeat("a", 64)
+	threadHash := strings.Repeat("b", 64)
+	aliases, err := normalizeOpenAIUserConversationReservationAliases(service.OpenAIUserConversationReservation{
+		ScopeKey:  "openai:v1:group:1:lane:general",
+		AliasType: " RESPONSE_ID ", AliasHash: strings.ToUpper(responseHash),
+		Aliases: []service.OpenAIUserConversationAlias{
+			{ScopeKey: "openai:v1:group:1:lineage:codex-thread", Type: "CODEX_THREAD", Hash: strings.ToUpper(threadHash)},
+			{ScopeKey: "openai:v1:group:1:lineage:codex-thread", Type: "codex_thread", Hash: threadHash},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []service.OpenAIUserConversationAlias{
+		{ScopeKey: "openai:v1:group:1:lane:general", Type: "response_id", Hash: responseHash},
+		{ScopeKey: "openai:v1:group:1:lineage:codex-thread", Type: "codex_thread", Hash: threadHash},
+	}, aliases)
+}
+
+func TestNormalizeOpenAIUserConversationReservationAliasesRejectsUnknownType(t *testing.T) {
+	_, err := normalizeOpenAIUserConversationReservationAliases(service.OpenAIUserConversationReservation{
+		Aliases: []service.OpenAIUserConversationAlias{{Type: "raw_thread", Hash: strings.Repeat("c", 64)}},
+	})
+	require.ErrorContains(t, err, "invalid openai conversation alias")
+}
+
 func TestGetOpenAIUserAffinityCandidateStatsMarksAlreadyActiveUser(t *testing.T) {
 	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
 	mock.ExpectQuery(`(?s)SELECT a.id, a.max_contact_users.*BOOL_OR\(c.user_id = \$3.*WHERE a.id IN \(\$1, \$2\)`).

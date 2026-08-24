@@ -850,6 +850,8 @@ func (s *OpenAIGatewayService) finalizeCodexOutboundHeaders(
 	if headers == nil {
 		return
 	}
+	// 无论 strict/legacy/fallback 如何重建 Header，父系授权都在函数返回前最终收口。
+	defer stripOpenAICodexLineageHeaders(c, account, headers)
 	if fallback := stagedCodexOutboundFallback(c, account); fallback != nil {
 		// 请求级兼容回退必须同时恢复 identity/body/compression，不能留下严格 profile 混合形态。
 		identity := resolveCodexOutboundIdentity(account.GetOpenAIUserAgent())

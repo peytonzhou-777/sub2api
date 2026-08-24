@@ -431,11 +431,6 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if fpErr != nil {
 			return nil, fpErr
 		}
-		if !isCompactRequest && fpIDs != nil {
-			if applyCodexFingerprintClientMetadata(decoded, fpIDs) {
-				markDecodedModified()
-			}
-		}
 		releaseSubagentSlot, gateErr := s.acquireCodexSubagentSlot(ctx, account, fpIDs)
 		if gateErr != nil {
 			return nil, gateErr
@@ -448,6 +443,16 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			promptCacheKey = currentPromptCacheKey
 		} else if codexResult.PromptCacheKey != "" {
 			promptCacheKey = codexResult.PromptCacheKey
+		}
+	}
+	// 账号类型不改变父系保护：OAuth 应用收敛快照，API Key 同样剥离未授权 lineage。
+	if !isCompactRequest && (account.Type == AccountTypeOAuth || stagedOpenAICodexThreadAffinity(c) != nil) {
+		decoded, decodeErr := ensureReqBody()
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if applyStagedCodexFingerprintClientMetadata(c, account, decoded) {
+			markDecodedModified()
 		}
 	}
 

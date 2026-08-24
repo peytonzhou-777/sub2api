@@ -416,6 +416,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			fingerprintIDs = stagedCodexFingerprintIDs(c)
 			promptCacheKey = strings.TrimSpace(gjson.GetBytes(normalized, "prompt_cache_key").String())
 		}
+		lineageNormalized, _, lineageErr := stripOpenAICodexLineageRaw(c, account, normalized)
+		if lineageErr != nil {
+			return openAIWSClientPayload{}, fmt.Errorf("strip ingress Codex lineage: %w", lineageErr)
+		}
+		normalized = lineageNormalized
 		ingressSessionOriginalModel = originalModel
 
 		return openAIWSClientPayload{

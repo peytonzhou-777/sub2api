@@ -173,6 +173,8 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 	now := time.Now()
 	mode := account.GetCodexFingerprintMode()
 	original := extractCodexFingerprintOriginalIDs(headers, body)
+	// 父系字段只有在调度层验证绑定且最终账号一致后才允许参与上游身份派生。
+	applyOpenAICodexThreadLineagePolicy(c, account, &original)
 	// full 模式启用子代理阀门即表示账号需要父子拓扑；所有请求统一按 session
 	// 派生 Thread，避免根请求先被压成 account-thread 后子线程无法闭合引用。
 	if mode == codexFingerprintFull && account.GetCodexSubagentMaxInflightPerSession() > 0 {
@@ -588,7 +590,11 @@ func (s *OpenAIGatewayService) applyCodexFingerprintForAttempt(
 		return body, err
 	}
 	if fpIDs == nil {
-		return body, nil
+		next, _, stripErr := stripOpenAICodexLineageRaw(c, account, body)
+		if stripErr != nil {
+			return body, fmt.Errorf("strip unauthorized Codex lineage: %w", stripErr)
+		}
+		return next, nil
 	}
 	if !rewriteBody {
 		return body, nil
@@ -598,9 +604,13 @@ func (s *OpenAIGatewayService) applyCodexFingerprintForAttempt(
 		return body, err
 	}
 	if !changed {
-		return body, nil
+		next = body
 	}
-	return next, nil
+	stripped, _, stripErr := stripOpenAICodexLineageRaw(c, account, next)
+	if stripErr != nil {
+		return body, fmt.Errorf("strip unauthorized Codex lineage: %w", stripErr)
+	}
+	return stripped, nil
 }
 
 // applyCodexFingerprintRawForAttempt 在账号选定后统一改写 WS/透传 JSON，并暂存同一份握手头身份。
@@ -647,7 +657,10 @@ func extractCodexFingerprintOriginalIDs(headers http.Header, body []byte) codexF
 			original.threadID = firstNonEmptyHeader(headers, "thread-id", "thread_id")
 		}
 		if original.parentThreadID == "" {
-			original.parentThreadID = firstNonEmptyHeader(headers, "x-codex-parent-thread-id")
+			original.parentThreadID = firstNonEmptyHeader(headers, "x-codex-parent-thread-id", "parent_thread_id")
+		}
+		if original.forkedThreadID == "" {
+			original.forkedThreadID = firstNonEmptyHeader(headers, "x-codex-forked-from-thread-id", "forked_from_thread_id")
 		}
 		if original.windowID == "" {
 			original.windowID = firstNonEmptyHeader(headers, "x-codex-window-id")
@@ -698,6 +711,9 @@ func fillCodexFingerprintOriginalBodyFallbacks(original *codexFingerprintOrigina
 	if original.subagentKind == "" {
 		original.subagentKind = strings.TrimSpace(gjson.GetBytes(body, "client_metadata.subagent_kind").String())
 	}
+	if requestKind := strings.TrimSpace(gjson.GetBytes(body, "client_metadata.request_kind").String()); isOpenAICodexDerivedSemantic(requestKind) {
+		original.isSubagent = true
+	}
 }
 
 func applyCodexFingerprintOriginalMetadata(original *codexFingerprintOriginalIDs, metadata gjson.Result, fallbackOnly bool) {
@@ -726,14 +742,14 @@ func applyCodexFingerprintOriginalMetadata(original *codexFingerprintOriginalIDs
 		original.subagentKind = strings.TrimSpace(metadata.Get("subagent_kind").String())
 	}
 	if original.subagentHeader == "" && original.subagentKind == "" {
-		requestKind := strings.ToLower(strings.TrimSpace(metadata.Get("request_kind").String()))
-		if strings.Contains(requestKind, "subagent") {
+		requestKind := strings.TrimSpace(metadata.Get("request_kind").String())
+		if isOpenAICodexDerivedSemantic(requestKind) {
 			original.isSubagent = true
 		}
 	}
 	if original.subagentHeader == "" && original.subagentKind == "" {
-		threadSource := strings.ToLower(strings.TrimSpace(metadata.Get("thread_source").String()))
-		if strings.Contains(threadSource, "subagent") {
+		threadSource := strings.TrimSpace(metadata.Get("thread_source").String())
+		if isOpenAICodexDerivedSemantic(threadSource) {
 			original.isSubagent = true
 		}
 	}

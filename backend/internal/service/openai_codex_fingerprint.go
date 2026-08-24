@@ -49,10 +49,12 @@ func stagedCodexFingerprintIDsForAccount(c *gin.Context, account *Account) *code
 // snapshot 的 OAuth 账号可读取，避免 stale context 跨账号 failover 泄漏。
 func applyStagedCodexFingerprintHeaders(c *gin.Context, account *Account, h http.Header) {
 	applyCodexFingerprintHeaders(h, stagedCodexFingerprintIDsForAccount(c, account))
+	stripOpenAICodexLineageHeaders(c, account, h)
 }
 
 func applyStagedCodexFingerprintClientMetadata(c *gin.Context, account *Account, reqBody map[string]any) bool {
-	return applyCodexFingerprintClientMetadata(reqBody, stagedCodexFingerprintIDsForAccount(c, account))
+	modified := applyCodexFingerprintClientMetadata(reqBody, stagedCodexFingerprintIDsForAccount(c, account))
+	return stripOpenAICodexLineageClientMetadata(c, account, reqBody) || modified
 }
 
 // codexFingerprintMode 控制 OAuth 账号出站请求的设备指纹收敛强度。

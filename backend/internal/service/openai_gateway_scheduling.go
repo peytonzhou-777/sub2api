@@ -151,6 +151,8 @@ func (s *OpenAIGatewayService) GenerateSessionHash(c *gin.Context, body []byte) 
 	if c == nil {
 		return ""
 	}
+	// 派生线程账号绑定与普通 session hash 共用入口，确保选号前已获得拓扑索引。
+	s.stageOpenAICodexThreadAffinity(c, body)
 
 	sessionID := explicitOpenAIRequestSessionID(c, body)
 	if sessionID == "" && len(body) > 0 {

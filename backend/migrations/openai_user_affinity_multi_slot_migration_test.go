@@ -49,3 +49,24 @@ func TestOpenAIUserAffinityResetExclusionMigrationIsAdditive(t *testing.T) {
 		t.Fatal("reset exclusion migration must remain additive")
 	}
 }
+
+func TestOpenAICodexThreadAliasMigrationExtendsAliasConstraint(t *testing.T) {
+	content, err := FS.ReadFile("243_openai_codex_thread_alias.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sqlText := string(content)
+	for _, required := range []string{
+		"openai_user_conversation_aliases_type_check",
+		"'codex_thread'",
+		"DROP CONSTRAINT IF EXISTS",
+		"ADD CONSTRAINT",
+	} {
+		if !strings.Contains(sqlText, required) {
+			t.Fatalf("Codex thread alias migration missing %q", required)
+		}
+	}
+	if strings.Contains(sqlText, "DROP TABLE") || strings.Contains(sqlText, "DROP COLUMN") {
+		t.Fatal("Codex thread alias migration must not remove table data")
+	}
+}

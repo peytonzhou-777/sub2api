@@ -223,20 +223,30 @@ type OpenAIUserConversationBinding struct {
 	ProvisionalToken     string     `json:"-"`
 }
 
+// OpenAIUserConversationAlias 是会话绑定的作用域化派生索引，不保存客户端原始标识。
+type OpenAIUserConversationAlias struct {
+	ScopeKey string
+	Type     string
+	Hash     string
+}
+
 // OpenAIUserConversationReservation 是选号后、上游首输出前的原子会话预留输入。
 type OpenAIUserConversationReservation struct {
-	UserID              int64
-	APIKeyID            int64
-	ScopeKey            string
-	ConversationHash    string
-	AliasType           string
-	AliasHash           string
-	AccountID           int64
-	PlacementGeneration int64
-	MaxResidentSlots    int
-	ContextRebuildable  bool
-	ProvisionalToken    string
-	Config              OpenAIUserAffinityConfig
+	UserID                  int64
+	APIKeyID                int64
+	ScopeKey                string
+	ConversationHash        string
+	AliasType               string
+	AliasHash               string
+	Aliases                 []OpenAIUserConversationAlias
+	AccountID               int64
+	PlacementGeneration     int64
+	PreferredResidentSlotID int64
+	PreferredSlotGeneration int64
+	MaxResidentSlots        int
+	ContextRebuildable      bool
+	ProvisionalToken        string
+	Config                  OpenAIUserAffinityConfig
 }
 
 // OpenAIUserConversationTransition 以 binding、账号和 token 限定提交或回滚目标。

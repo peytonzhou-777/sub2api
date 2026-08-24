@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -301,6 +303,109 @@ func scanOpenAIUserConversationBindingRow(ctx context.Context, exec sqlQueryer, 
 	return &binding, nil
 }
 
+func normalizeOpenAIUserConversationReservationAliases(reservation service.OpenAIUserConversationReservation) ([]service.OpenAIUserConversationAlias, error) {
+	aliases := append([]service.OpenAIUserConversationAlias(nil), reservation.Aliases...)
+	if strings.TrimSpace(reservation.AliasType) != "" || strings.TrimSpace(reservation.AliasHash) != "" {
+		aliases = append(aliases, service.OpenAIUserConversationAlias{
+			ScopeKey: reservation.ScopeKey, Type: reservation.AliasType, Hash: reservation.AliasHash,
+		})
+	}
+	allowedTypes := map[string]struct{}{
+		"previous_response_id": {}, "response_id": {}, "session_id": {},
+		"prompt_cache_key": {}, "websocket": {}, "codex_thread": {},
+	}
+	normalized := make([]service.OpenAIUserConversationAlias, 0, len(aliases))
+	seen := make(map[string]struct{}, len(aliases))
+	for _, alias := range aliases {
+		alias.ScopeKey = normalizeOpenAIUserAffinityScopeKey(alias.ScopeKey)
+		alias.Type = strings.ToLower(strings.TrimSpace(alias.Type))
+		alias.Hash = strings.ToLower(strings.TrimSpace(alias.Hash))
+		decodedHash, decodeErr := hex.DecodeString(alias.Hash)
+		if _, allowed := allowedTypes[alias.Type]; !allowed || decodeErr != nil || len(decodedHash) != 32 {
+			return nil, errors.New("invalid openai conversation alias")
+		}
+		key := alias.ScopeKey + "\x00" + alias.Type + "\x00" + alias.Hash
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, alias)
+	}
+	sort.Slice(normalized, func(i, j int) bool {
+		left := normalized[i].ScopeKey + "\x00" + normalized[i].Type + "\x00" + normalized[i].Hash
+		right := normalized[j].ScopeKey + "\x00" + normalized[j].Type + "\x00" + normalized[j].Hash
+		return left < right
+	})
+	return normalized, nil
+}
+
+func lockOpenAIUserConversationAliases(ctx context.Context, exec sqlQueryExecutor, userID, apiKeyID int64, aliases []service.OpenAIUserConversationAlias) error {
+	for _, alias := range aliases {
+		lockKey := fmt.Sprintf("%d:%d:%s:%s:%s", userID, apiKeyID, alias.ScopeKey, alias.Type, alias.Hash)
+		if _, err := exec.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, lockKey); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func getOpenAIUserConversationBindingByAliasesForUpdate(
+	ctx context.Context,
+	exec sqlQueryExecutor,
+	userID, apiKeyID int64,
+	aliases []service.OpenAIUserConversationAlias,
+) (*service.OpenAIUserConversationBinding, error) {
+	var winner *service.OpenAIUserConversationBinding
+	for _, alias := range aliases {
+		candidate, err := scanOpenAIUserConversationBindingRow(ctx, exec, `
+			SELECT b.id, b.user_id, b.api_key_id, b.scope_key, b.conversation_hash, b.resident_slot_id,
+			       b.account_id, b.slot_generation, b.status, b.context_rebuildable,
+			       b.first_output_committed, b.active_until, b.expires_at, b.last_success_at, b.provisional_token
+			FROM openai_user_conversation_aliases a
+			JOIN openai_user_conversation_bindings b ON b.id = a.binding_id
+			WHERE a.user_id = $1 AND a.api_key_id = $2 AND a.scope_key = $3
+			  AND a.alias_type = $4 AND a.alias_hash = $5 AND a.expires_at > NOW()
+			  AND b.status IN ('provisional', 'active', 'draining') AND b.expires_at > NOW()
+			FOR UPDATE OF a, b`, []any{userID, apiKeyID, alias.ScopeKey, alias.Type, alias.Hash})
+		if err != nil {
+			return nil, err
+		}
+		if candidate == nil {
+			continue
+		}
+		if winner != nil && winner.ID != candidate.ID {
+			return nil, errors.New("openai conversation aliases belong to different bindings")
+		}
+		winner = candidate
+	}
+	return winner, nil
+}
+
+func upsertOpenAIUserConversationAliases(
+	ctx context.Context,
+	exec sqlQueryExecutor,
+	binding *service.OpenAIUserConversationBinding,
+	aliases []service.OpenAIUserConversationAlias,
+	expiresAt time.Time,
+) error {
+	if binding == nil {
+		return errors.New("openai conversation alias requires binding")
+	}
+	for _, alias := range aliases {
+		if _, err := exec.ExecContext(ctx, `
+			INSERT INTO openai_user_conversation_aliases
+				(binding_id, user_id, api_key_id, scope_key, alias_type, alias_hash, account_id, expires_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			ON CONFLICT (user_id, api_key_id, scope_key, alias_type, alias_hash) DO UPDATE SET
+				binding_id = EXCLUDED.binding_id, account_id = EXCLUDED.account_id,
+				expires_at = EXCLUDED.expires_at`, binding.ID, binding.UserID, binding.APIKeyID,
+			alias.ScopeKey, alias.Type, alias.Hash, binding.AccountID, expiresAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ReserveOpenAIUserConversationBinding 在上游首输出前原子预留会话和槽位占用。
 func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Context, reservation service.OpenAIUserConversationReservation) (*service.OpenAIUserConversationBinding, bool, error) {
 	if r == nil || r.client == nil || r.sql == nil {
@@ -313,6 +418,10 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 	}
 	reservation.ScopeKey = normalizeOpenAIUserAffinityScopeKey(reservation.ScopeKey)
 	reservation.ConversationHash = strings.ToLower(strings.TrimSpace(reservation.ConversationHash))
+	aliases, err := normalizeOpenAIUserConversationReservationAliases(reservation)
+	if err != nil {
+		return nil, false, err
+	}
 
 	tx, err := r.client.Tx(ctx)
 	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
@@ -326,6 +435,15 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 	now := time.Now().UTC()
 	lockKey := fmt.Sprintf("%d:%s", reservation.UserID, reservation.ScopeKey)
 	if _, err := exec.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, lockKey); err != nil {
+		return nil, false, err
+	}
+	if err := lockOpenAIUserConversationAliases(ctx, exec, reservation.UserID, reservation.APIKeyID, aliases); err != nil {
+		return nil, false, err
+	}
+	aliasBinding, err := getOpenAIUserConversationBindingByAliasesForUpdate(
+		ctx, exec, reservation.UserID, reservation.APIKeyID, aliases,
+	)
+	if err != nil {
 		return nil, false, err
 	}
 	var maxContactUsers, cooldownSeconds sql.NullInt64
@@ -351,18 +469,24 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 		return nil, false, nil
 	}
 
-	existing, err := scanOpenAIUserConversationBindingRow(ctx, exec, `
-		SELECT id, user_id, api_key_id, scope_key, conversation_hash, resident_slot_id,
-		       account_id, slot_generation, status, context_rebuildable,
-		       first_output_committed, active_until, expires_at, last_success_at, provisional_token
-		FROM openai_user_conversation_bindings
-		WHERE user_id = $1 AND api_key_id = $2 AND scope_key = $3 AND conversation_hash = $4
-		FOR UPDATE`, []any{reservation.UserID, reservation.APIKeyID, reservation.ScopeKey, reservation.ConversationHash})
-	if err != nil {
-		return nil, false, err
+	existing := aliasBinding
+	if existing == nil {
+		existing, err = scanOpenAIUserConversationBindingRow(ctx, exec, `
+			SELECT id, user_id, api_key_id, scope_key, conversation_hash, resident_slot_id,
+			       account_id, slot_generation, status, context_rebuildable,
+			       first_output_committed, active_until, expires_at, last_success_at, provisional_token
+			FROM openai_user_conversation_bindings
+			WHERE user_id = $1 AND api_key_id = $2 AND scope_key = $3 AND conversation_hash = $4
+			FOR UPDATE`, []any{reservation.UserID, reservation.APIKeyID, reservation.ScopeKey, reservation.ConversationHash})
+		if err != nil {
+			return nil, false, err
+		}
 	}
 	if existing != nil && existing.ExpiresAt.After(now) &&
 		(existing.Status == "provisional" || existing.Status == "active" || existing.Status == "draining") {
+		if err := upsertOpenAIUserConversationAliases(ctx, exec, existing, aliases, existing.ExpiresAt); err != nil {
+			return nil, false, err
+		}
 		if tx != nil {
 			if err := tx.Commit(); err != nil {
 				return nil, false, err
@@ -451,6 +575,8 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 		return nil, false, err
 	}
 	var slotID, slotGeneration, maxGeneration int64
+	preferredSlotRequested := reservation.PreferredResidentSlotID > 0 && reservation.PreferredSlotGeneration > 0
+	preferredSlotFound := false
 	usedIndexes := make(map[int]struct{}, maxSlots)
 	activeSlotCount := 0
 	for rows.Next() {
@@ -468,13 +594,22 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 			activeSlotCount++
 			usedIndexes[slotIndex] = struct{}{}
 		}
-		if accountID == reservation.AccountID && status != service.OpenAIUserResidentSlotStatusDraining {
+		if preferredSlotRequested && id == reservation.PreferredResidentSlotID &&
+			accountID == reservation.AccountID && generation == reservation.PreferredSlotGeneration &&
+			status != service.OpenAIUserResidentSlotStatusReplacementPending {
+			slotID = id
+			slotGeneration = generation
+			preferredSlotFound = true
+		} else if !preferredSlotRequested && accountID == reservation.AccountID && status != service.OpenAIUserResidentSlotStatusDraining {
 			slotID = id
 			slotGeneration = generation
 		}
 	}
 	if err := rows.Close(); err != nil {
 		return nil, false, err
+	}
+	if preferredSlotRequested && !preferredSlotFound {
+		return nil, false, nil
 	}
 	if slotID == 0 {
 		if activeSlotCount >= maxSlots {
@@ -544,19 +679,8 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 	if err != nil {
 		return nil, false, err
 	}
-	if reservation.AliasType != "" && len(strings.TrimSpace(reservation.AliasHash)) == 64 {
-		if _, err := exec.ExecContext(ctx, `
-			INSERT INTO openai_user_conversation_aliases
-				(binding_id, user_id, api_key_id, scope_key, alias_type, alias_hash, account_id, expires_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			ON CONFLICT (user_id, api_key_id, scope_key, alias_type, alias_hash) DO UPDATE SET
-				binding_id = EXCLUDED.binding_id, account_id = EXCLUDED.account_id,
-				expires_at = EXCLUDED.expires_at`,
-			binding.ID, reservation.UserID, reservation.APIKeyID, reservation.ScopeKey,
-			strings.ToLower(strings.TrimSpace(reservation.AliasType)),
-			strings.ToLower(strings.TrimSpace(reservation.AliasHash)), reservation.AccountID, bindingExpiresAt); err != nil {
-			return nil, false, err
-		}
+	if err := upsertOpenAIUserConversationAliases(ctx, exec, binding, aliases, bindingExpiresAt); err != nil {
+		return nil, false, err
 	}
 	if tx != nil {
 		if err := tx.Commit(); err != nil {

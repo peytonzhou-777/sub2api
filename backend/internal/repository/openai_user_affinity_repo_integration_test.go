@@ -89,11 +89,14 @@ func TestOpenAIUserConversationBindingProvisionalLifecycle(t *testing.T) {
 	config := service.DefaultOpenAIUserAffinityConfig()
 	conversationHash := strings.Repeat("b", 64)
 	aliasHash := strings.Repeat("c", 64)
+	threadAliasHash := strings.Repeat("a", 64)
+	threadAliasScope := "openai:v1:group:simple:lineage:codex-thread"
 	responseAliasHash := strings.Repeat("e", 64)
 	token := uuid.NewString()
 	binding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
 		UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey,
 		ConversationHash: conversationHash, AliasType: "response_id", AliasHash: aliasHash,
+		Aliases:   []service.OpenAIUserConversationAlias{{ScopeKey: threadAliasScope, Type: "codex_thread", Hash: threadAliasHash}},
 		AccountID: account.ID, PlacementGeneration: 2, ContextRebuildable: true,
 		ProvisionalToken: token, Config: config,
 	})
@@ -122,6 +125,34 @@ func TestOpenAIUserConversationBindingProvisionalLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, byAlias)
 	require.Equal(t, loaded.ID, byAlias.ID)
+	byThreadAlias, err := repo.GetOpenAIUserConversationBindingByAlias(ctx, user.ID, apiKey.ID, threadAliasScope, "codex_thread", threadAliasHash)
+	require.NoError(t, err)
+	require.NotNil(t, byThreadAlias)
+	require.Equal(t, loaded.ID, byThreadAlias.ID)
+	secondThreadAliasHash := strings.Repeat("f", 64)
+	existingBinding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+		UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey, ConversationHash: conversationHash,
+		AccountID: account.ID, PlacementGeneration: binding.SlotGeneration, ContextRebuildable: true,
+		ProvisionalToken: uuid.NewString(), Config: config,
+		Aliases: []service.OpenAIUserConversationAlias{{ScopeKey: threadAliasScope, Type: "codex_thread", Hash: secondThreadAliasHash}},
+	})
+	require.NoError(t, err)
+	require.False(t, created)
+	require.Equal(t, loaded.ID, existingBinding.ID)
+	bySecondThreadAlias, err := repo.GetOpenAIUserConversationBindingByAlias(
+		ctx, user.ID, apiKey.ID, threadAliasScope, "codex_thread", secondThreadAliasHash,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, bySecondThreadAlias)
+	require.Equal(t, loaded.ID, bySecondThreadAlias.ID, "既有 binding 必须可原子补齐新线程别名")
+	otherAPIKeyForSameUser := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID, Key: "sk-affinity-conversation-same-user-" + uuid.NewString(), Name: "affinity",
+	})
+	crossAPIKeyThreadAlias, err := repo.GetOpenAIUserConversationBindingByAlias(
+		ctx, user.ID, otherAPIKeyForSameUser.ID, threadAliasScope, "codex_thread", threadAliasHash,
+	)
+	require.NoError(t, err)
+	require.Nil(t, crossAPIKeyThreadAlias, "Codex thread alias 保持现有 API Key 隔离")
 	byResponseAlias, err := repo.GetOpenAIUserConversationBindingByAlias(ctx, user.ID, apiKey.ID, scopeKey, "response_id", responseAliasHash)
 	require.NoError(t, err)
 	require.NotNil(t, byResponseAlias)

@@ -16,13 +16,15 @@ import (
 const openAIAccountScheduleLayerConversationBinding = "conversation_binding"
 
 type openAIUserConversationIdentity struct {
-	userID             int64
-	apiKeyID           int64
-	scopeKey           string
-	conversationHash   string
-	aliasType          string
-	aliasHash          string
-	contextRebuildable bool
+	userID                 int64
+	apiKeyID               int64
+	scopeKey               string
+	conversationHash       string
+	legacyConversationHash string
+	aliasType              string
+	aliasHash              string
+	codexThreadHash        string
+	contextRebuildable     bool
 }
 
 // resolveOpenAIUserConversationIdentity 只使用认证上下文和网关生成的会话信号，不信任请求体用户标识。
@@ -37,11 +39,21 @@ func resolveOpenAIUserConversationIdentity(ctx context.Context, req OpenAIAccoun
 		userID: userID, apiKeyID: apiKeyID, scopeKey: scopeKey,
 		contextRebuildable: req.PreviousResponseCanMove || strings.TrimSpace(req.PreviousResponseID) == "",
 	}
+	if topology := openAICodexThreadAffinityFromContext(ctx); topology != nil {
+		identity.codexThreadHash = strings.ToLower(strings.TrimSpace(topology.selfAliasHash))
+	}
 	if previousResponseID := strings.TrimSpace(req.PreviousResponseID); previousResponseID != "" {
 		identity.aliasType = "response_id"
 		identity.aliasHash = openAIUserAffinityScopedStateHash(userID, apiKeyID, scopeKey, identity.aliasType, previousResponseID)
 	}
-	if sessionHash := strings.TrimSpace(req.SessionHash); sessionHash != "" {
+	if identity.codexThreadHash != "" {
+		// Codex 同一 session 下可派生多个线程，线程 HMAC 必须高于 session hash。
+		identity.conversationHash = identity.codexThreadHash
+		if sessionHash := strings.TrimSpace(req.SessionHash); sessionHash != "" {
+			// 升级期仍回读旧的 session 会话绑定，命中后原子补齐线程别名。
+			identity.legacyConversationHash = openAIUserAffinityScopedStateHash(userID, apiKeyID, scopeKey, "session_hash", sessionHash)
+		}
+	} else if sessionHash := strings.TrimSpace(req.SessionHash); sessionHash != "" {
 		identity.conversationHash = openAIUserAffinityScopedStateHash(userID, apiKeyID, scopeKey, "session_hash", sessionHash)
 	} else if identity.aliasHash != "" {
 		// 没有稳定 session 信号时，同一个 previous_response_id 的客户端重试仍归入同一会话。
@@ -92,12 +104,30 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 	if !ok {
 		return nil, false, nil
 	}
+	topology := openAICodexThreadAffinityFromContext(ctx)
+	if topology != nil {
+		topology.resetAuthorization()
+	}
+	selfBinding, parentBinding, topologyErr := resolveOpenAICodexThreadBindings(ctx, store, req, identity, topology)
+	if topologyErr != nil {
+		return nil, true, topologyErr
+	}
 	var binding *OpenAIUserConversationBinding
-	if identity.aliasHash != "" {
+	bindingSource := ""
+	if selfBinding != nil {
+		binding = selfBinding
+		bindingSource = "codex_self"
+	} else if parentBinding != nil && identity.codexThreadHash != "" {
+		binding = parentBinding
+		bindingSource = "codex_parent"
+	} else if identity.aliasHash != "" {
 		binding, err = store.GetOpenAIUserConversationBindingByAlias(ctx, identity.userID, identity.apiKeyID,
 			identity.scopeKey, identity.aliasType, identity.aliasHash)
 		if err != nil {
 			return nil, true, err
+		}
+		if binding != nil {
+			bindingSource = "protocol_alias"
 		}
 	}
 	if binding == nil && identity.conversationHash != "" {
@@ -105,6 +135,19 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 			identity.scopeKey, identity.conversationHash)
 		if err != nil {
 			return nil, true, err
+		}
+		if binding != nil {
+			bindingSource = "conversation"
+		}
+	}
+	if binding == nil && identity.legacyConversationHash != "" {
+		binding, err = store.GetOpenAIUserConversationBinding(ctx, identity.userID, identity.apiKeyID,
+			identity.scopeKey, identity.legacyConversationHash)
+		if err != nil {
+			return nil, true, err
+		}
+		if binding != nil {
+			bindingSource = "legacy_conversation"
 		}
 	}
 	if binding == nil {
@@ -116,6 +159,9 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 	}
 	if binding.Status == "provisional" || !binding.FirstOutputCommitted {
 		// leader 首输出前不允许同会话 follower 向上游发送。
+		if bindingSource == "codex_parent" {
+			return nil, true, ErrOpenAICodexParentThreadPending
+		}
 		return nil, true, ErrNoAvailableAccounts
 	}
 	excluded := false
@@ -129,12 +175,39 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 	admission := s.classifyOpenAIUserAffinityResidentAdmission(ctx, account, req.GroupID, req.RequestedModel,
 		req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
 	if excluded || admission != openAIUserAffinityResidentAllowed {
+		if bindingSource == "codex_parent" {
+			// 父线程命中后属于硬锁；父账号不可用时不得把派生请求投递到其他账号。
+			return nil, true, ErrOpenAICodexParentThreadUnavailable
+		}
 		if !binding.ContextRebuildable || !identity.contextRebuildable {
 			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
 		}
 		return s.selectOpenAIUserAffinityConversationFailover(ctx, req, config, identity, binding, admission)
 	}
 	s.rememberOpenAIUserAffinityConversationAttempt(ctx, binding, config, "")
+	if bindingSource == "codex_parent" {
+		// 为派生线程建立自己的 provisional binding，父 binding 只作为选号依据。
+		childIdentity := identity
+		// 派生线程沿用父 binding 的居民槽位 scope，避免跨 HTTP/WS lane 重复占槽。
+		childIdentity.scopeKey = binding.ScopeKey
+		if err := s.reserveOpenAIUserAffinityConversationWithAliases(ctx, req, account.ID, childIdentity, []OpenAIUserConversationAlias{
+			openAICodexThreadReservationAlias(req.GroupID, identity.codexThreadHash),
+		}, binding); err != nil {
+			return nil, true, err
+		}
+	} else if bindingSource != "codex_self" && identity.codexThreadHash != "" {
+		// 为升级前已存在的会话补齐线程别名，后续子线程可直接按父系索引命中。
+		legacyIdentity := identity
+		legacyIdentity.conversationHash = binding.ConversationHash
+		if err := s.reserveOpenAIUserAffinityConversationWithAliases(ctx, req, account.ID, legacyIdentity, []OpenAIUserConversationAlias{
+			openAICodexThreadReservationAlias(req.GroupID, identity.codexThreadHash),
+		}, nil); err != nil {
+			return nil, true, err
+		}
+	}
+	if topology != nil && parentBinding != nil && parentBinding.AccountID == account.ID {
+		topology.authorize(account.ID)
+	}
 	acquired, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
 	if acquireErr == nil && acquired != nil && acquired.Acquired {
 		selection, selectionErr := s.newAcquiredSelectionResult(ctx, account, acquired.ReleaseFunc)
@@ -169,6 +242,30 @@ func (s *OpenAIGatewayService) reserveOpenAIUserAffinityConversation(ctx context
 	if !ok || identity.conversationHash == "" {
 		return nil
 	}
+	aliases := make([]OpenAIUserConversationAlias, 0, 2)
+	if identity.aliasType != "" && identity.aliasHash != "" {
+		aliases = append(aliases, OpenAIUserConversationAlias{
+			ScopeKey: identity.scopeKey, Type: identity.aliasType, Hash: identity.aliasHash,
+		})
+	}
+	if identity.codexThreadHash != "" {
+		aliases = append(aliases, openAICodexThreadReservationAlias(req.GroupID, identity.codexThreadHash))
+	}
+	return s.reserveOpenAIUserAffinityConversationWithAliases(ctx, req, accountID, identity, aliases, nil)
+}
+
+// reserveOpenAIUserAffinityConversationWithAliases 允许父线程继承仅写入当前线程别名，避免夺取父响应别名。
+func (s *OpenAIGatewayService) reserveOpenAIUserAffinityConversationWithAliases(
+	ctx context.Context,
+	req OpenAIAccountScheduleRequest,
+	accountID int64,
+	identity openAIUserConversationIdentity,
+	aliases []OpenAIUserConversationAlias,
+	preferredBinding *OpenAIUserConversationBinding,
+) error {
+	if identity.conversationHash == "" {
+		return nil
+	}
 	store, ok := s.accountRepo.(OpenAIUserAffinityConversationStore)
 	if !ok {
 		return nil
@@ -182,16 +279,25 @@ func (s *OpenAIGatewayService) reserveOpenAIUserAffinityConversation(ctx context
 		return err
 	}
 	token := uuid.NewString()
+	preferredSlotID, preferredSlotGeneration := int64(0), int64(0)
+	if preferredBinding != nil && preferredBinding.AccountID == accountID {
+		preferredSlotID = preferredBinding.ResidentSlotID
+		preferredSlotGeneration = preferredBinding.SlotGeneration
+	}
 	binding, created, err := store.ReserveOpenAIUserConversationBinding(ctx, OpenAIUserConversationReservation{
 		UserID: identity.userID, APIKeyID: identity.apiKeyID, ScopeKey: identity.scopeKey,
 		ConversationHash: identity.conversationHash, AccountID: accountID,
-		AliasType: identity.aliasType, AliasHash: identity.aliasHash,
+		Aliases:             aliases,
 		PlacementGeneration: attempt.generation, ContextRebuildable: identity.contextRebuildable,
+		PreferredResidentSlotID: preferredSlotID, PreferredSlotGeneration: preferredSlotGeneration,
 		MaxResidentSlots: config.RuntimeResidentAccountSlotCount(),
 		ProvisionalToken: token, Config: config,
 	})
 	if err != nil {
 		return err
+	}
+	if binding == nil && preferredBinding != nil {
+		return ErrOpenAICodexParentThreadUnavailable
 	}
 	if binding == nil || binding.AccountID != accountID {
 		return errors.New("openai conversation was concurrently bound to another account")

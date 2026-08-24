@@ -81,14 +81,30 @@ type schedulerAffinityCache struct {
 
 type schedulerConversationAffinityRepo struct {
 	*schedulerAffinityAccountRepo
-	binding      *OpenAIUserConversationBinding
-	slots        []OpenAIUserResidentSlot
-	reservations []OpenAIUserConversationReservation
-	failovers    []OpenAIUserConversationFailoverReservation
-	replacements []OpenAIUserResidentSlotReplacementReservation
-	converges    int
-	aliasType    string
-	aliasHash    string
+	binding        *OpenAIUserConversationBinding
+	bindingsByHash map[string]*OpenAIUserConversationBinding
+	bindingLookups []string
+	slots          []OpenAIUserResidentSlot
+	reservations   []OpenAIUserConversationReservation
+	failovers      []OpenAIUserConversationFailoverReservation
+	replacements   []OpenAIUserResidentSlotReplacementReservation
+	converges      int
+	aliasType      string
+	aliasHash      string
+	aliasBindings  map[string]*OpenAIUserConversationBinding
+}
+
+func withOpenAICodexThreadAffinityTestState(ctx context.Context, selfHash string, parentHashes ...string) (context.Context, *openAICodexThreadAffinityState) {
+	state := &openAICodexThreadAffinityState{
+		selfAliasHash:     selfHash,
+		parentAliasHashes: append([]string(nil), parentHashes...),
+		internalSubagent:  len(parentHashes) > 0,
+	}
+	return context.WithValue(ctx, openAICodexThreadAffinityContextKey{}, state), state
+}
+
+func openAICodexThreadAliasTestKey(groupID *int64, hash string) string {
+	return openAICodexThreadAliasScopeKey(groupID) + "\x00" + openAICodexThreadAliasType + "\x00" + hash
 }
 
 func (r *schedulerConversationAffinityRepo) ConvergeOpenAIUserResidentSlots(context.Context, int64, string, OpenAIUserAffinityConfig, time.Time) error {
@@ -100,29 +116,56 @@ func (r *schedulerConversationAffinityRepo) ListOpenAIUserResidentSlots(context.
 	return append([]OpenAIUserResidentSlot(nil), r.slots...), nil
 }
 
-func (r *schedulerConversationAffinityRepo) GetOpenAIUserConversationBinding(context.Context, int64, int64, string, string) (*OpenAIUserConversationBinding, error) {
-	if r.binding == nil {
+func (r *schedulerConversationAffinityRepo) GetOpenAIUserConversationBinding(_ context.Context, _, _ int64, _, conversationHash string) (*OpenAIUserConversationBinding, error) {
+	r.bindingLookups = append(r.bindingLookups, conversationHash)
+	binding := r.binding
+	if r.bindingsByHash != nil {
+		binding = r.bindingsByHash[conversationHash]
+	}
+	if binding == nil {
 		return nil, nil
 	}
-	copy := *r.binding
+	copy := *binding
 	return &copy, nil
 }
 
-func (r *schedulerConversationAffinityRepo) GetOpenAIUserConversationBindingByAlias(_ context.Context, _, _ int64, _, aliasType, aliasHash string) (*OpenAIUserConversationBinding, error) {
+func (r *schedulerConversationAffinityRepo) GetOpenAIUserConversationBindingByAlias(_ context.Context, _, _ int64, scopeKey, aliasType, aliasHash string) (*OpenAIUserConversationBinding, error) {
 	r.aliasType = aliasType
 	r.aliasHash = aliasHash
+	if binding := r.aliasBindings[scopeKey+"\x00"+aliasType+"\x00"+aliasHash]; binding != nil {
+		copy := *binding
+		return &copy, nil
+	}
 	return nil, nil
 }
 
 func (r *schedulerConversationAffinityRepo) ReserveOpenAIUserConversationBinding(_ context.Context, reservation OpenAIUserConversationReservation) (*OpenAIUserConversationBinding, bool, error) {
 	r.reservations = append(r.reservations, reservation)
+	if existing := r.bindingsByHash[reservation.ConversationHash]; existing != nil {
+		copy := *existing
+		r.binding = &copy
+		if r.aliasBindings == nil {
+			r.aliasBindings = make(map[string]*OpenAIUserConversationBinding)
+		}
+		for _, alias := range reservation.Aliases {
+			aliasCopy := copy
+			r.aliasBindings[alias.ScopeKey+"\x00"+alias.Type+"\x00"+alias.Hash] = &aliasCopy
+		}
+		return &copy, false, nil
+	}
 	residentSlotID := int64(100 + len(r.reservations))
 	slotGeneration := reservation.PlacementGeneration
-	for _, slot := range r.slots {
-		if slot.AccountID == reservation.AccountID {
-			residentSlotID = slot.ID
-			slotGeneration = slot.Generation
-			break
+	if reservation.PreferredResidentSlotID > 0 && reservation.PreferredSlotGeneration > 0 {
+		residentSlotID = reservation.PreferredResidentSlotID
+		slotGeneration = reservation.PreferredSlotGeneration
+	}
+	if reservation.PreferredResidentSlotID == 0 {
+		for _, slot := range r.slots {
+			if slot.AccountID == reservation.AccountID {
+				residentSlotID = slot.ID
+				slotGeneration = slot.Generation
+				break
+			}
 		}
 	}
 	r.binding = &OpenAIUserConversationBinding{
@@ -131,6 +174,13 @@ func (r *schedulerConversationAffinityRepo) ReserveOpenAIUserConversationBinding
 		ResidentSlotID: residentSlotID, AccountID: reservation.AccountID, SlotGeneration: slotGeneration,
 		Status: "provisional", ContextRebuildable: reservation.ContextRebuildable,
 		ExpiresAt: time.Now().UTC().Add(2 * time.Minute), ProvisionalToken: reservation.ProvisionalToken,
+	}
+	if r.aliasBindings == nil {
+		r.aliasBindings = make(map[string]*OpenAIUserConversationBinding)
+	}
+	for _, alias := range reservation.Aliases {
+		copy := *r.binding
+		r.aliasBindings[alias.ScopeKey+"\x00"+alias.Type+"\x00"+alias.Hash] = &copy
 	}
 	return r.binding, true, nil
 }
@@ -352,6 +402,176 @@ func TestOpenAIGatewayService_ConversationBindingPrecedesResidentPlacement(t *te
 	require.NotNil(t, selection)
 	require.Equal(t, boundAccountID, selection.Account.ID)
 	require.Equal(t, openAIAccountScheduleLayerConversationBinding, decision.Layer)
+}
+
+func TestOpenAIGatewayService_CodexDerivedThreadLocksParentAndReservesOwnBinding(t *testing.T) {
+	now := time.Now().UTC()
+	accountID := int64(36231)
+	accounts := []Account{{
+		ID: accountID, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Status: StatusActive, Schedulable: true, Concurrency: 1,
+	}}
+	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t, nil, accounts, nil, 2)
+	parentHash := strings.Repeat("a", 64)
+	childHash := strings.Repeat("b", 64)
+	parent := &OpenAIUserConversationBinding{
+		ID: 2301, UserID: 42, APIKeyID: 77,
+		ScopeKey:         openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE),
+		ConversationHash: strings.Repeat("c", 64), ResidentSlotID: 31,
+		AccountID: accountID, SlotGeneration: 3, Status: "active",
+		ContextRebuildable: true, FirstOutputCommitted: true, ExpiresAt: now.Add(time.Hour),
+	}
+	repo.aliasBindings = map[string]*OpenAIUserConversationBinding{
+		openAICodexThreadAliasTestKey(nil, parentHash): parent,
+	}
+	ctx, topology := withOpenAICodexThreadAffinityTestState(ctx, childHash, parentHash)
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = "shared-session"
+
+	selection, found, err := svc.selectOpenAIUserAffinityConversation(ctx, req)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, selection)
+	require.Equal(t, accountID, selection.Account.ID)
+	require.True(t, topology.allows(accountID))
+	require.Len(t, repo.reservations, 1)
+	require.Equal(t, childHash, repo.reservations[0].ConversationHash)
+	require.Equal(t, parent.ScopeKey, repo.reservations[0].ScopeKey)
+	require.Equal(t, parent.ResidentSlotID, repo.reservations[0].PreferredResidentSlotID)
+	require.Equal(t, parent.SlotGeneration, repo.reservations[0].PreferredSlotGeneration)
+	require.Equal(t, []OpenAIUserConversationAlias{
+		openAICodexThreadReservationAlias(nil, childHash),
+	}, repo.reservations[0].Aliases)
+	attempt, ok := svc.openAIUserAffinityAttempt(ctx, accountID)
+	require.True(t, ok)
+	require.NotNil(t, attempt.conversation)
+	require.NotEqual(t, parent.ID, attempt.conversation.BindingID, "子线程必须提交自己的 provisional binding")
+}
+
+func TestOpenAIGatewayService_CodexParentProvisionalFailsRetryably(t *testing.T) {
+	now := time.Now().UTC()
+	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t, nil, nil, nil, 2)
+	parentHash := strings.Repeat("d", 64)
+	childHash := strings.Repeat("e", 64)
+	repo.aliasBindings = map[string]*OpenAIUserConversationBinding{
+		openAICodexThreadAliasTestKey(nil, parentHash): {
+			ID: 2302, UserID: 42, APIKeyID: 77, ScopeKey: openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE),
+			ConversationHash: strings.Repeat("f", 64), ResidentSlotID: 32, AccountID: 36232,
+			SlotGeneration: 1, Status: "provisional", ExpiresAt: now.Add(time.Minute),
+		},
+	}
+	ctx, topology := withOpenAICodexThreadAffinityTestState(ctx, childHash, parentHash)
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = "shared-session"
+
+	selection, found, err := svc.selectOpenAIUserAffinityConversation(ctx, req)
+	require.ErrorIs(t, err, ErrOpenAICodexParentThreadPending)
+	require.ErrorIs(t, err, ErrNoAvailableAccounts)
+	require.True(t, found)
+	require.Nil(t, selection)
+	require.False(t, topology.allows(36232))
+	require.Empty(t, repo.reservations)
+}
+
+func TestOpenAIGatewayService_CodexSelfBindingWinsAndDetachesMigratedLineage(t *testing.T) {
+	now := time.Now().UTC()
+	parentAccountID := int64(36233)
+	selfAccountID := int64(36234)
+	accounts := []Account{
+		{ID: parentAccountID, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1},
+		{ID: selfAccountID, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1},
+	}
+	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t, nil, accounts, nil, 2)
+	parentHash := strings.Repeat("1", 64)
+	selfHash := strings.Repeat("2", 64)
+	newBinding := func(id, accountID int64, hash string) *OpenAIUserConversationBinding {
+		return &OpenAIUserConversationBinding{
+			ID: id, UserID: 42, APIKeyID: 77,
+			ScopeKey:         openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE),
+			ConversationHash: hash, ResidentSlotID: id + 100, AccountID: accountID,
+			SlotGeneration: 1, Status: "active", ContextRebuildable: true,
+			FirstOutputCommitted: true, ExpiresAt: now.Add(time.Hour),
+		}
+	}
+	repo.aliasBindings = map[string]*OpenAIUserConversationBinding{
+		openAICodexThreadAliasTestKey(nil, parentHash): newBinding(2303, parentAccountID, strings.Repeat("3", 64)),
+		openAICodexThreadAliasTestKey(nil, selfHash):   newBinding(2304, selfAccountID, selfHash),
+	}
+	ctx, topology := withOpenAICodexThreadAffinityTestState(ctx, selfHash, parentHash)
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = "shared-session"
+
+	selection, found, err := svc.selectOpenAIUserAffinityConversation(ctx, req)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, selfAccountID, selection.Account.ID)
+	require.False(t, topology.allows(selfAccountID), "迁移后的自身绑定不得重新继承旧父系")
+	require.Empty(t, repo.reservations)
+}
+
+func TestOpenAIGatewayService_CodexParentUnavailableDoesNotFallBack(t *testing.T) {
+	now := time.Now().UTC()
+	parentAccountID := int64(36235)
+	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t, nil, []Account{{
+		ID: parentAccountID, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Status: StatusDisabled, Schedulable: false, Concurrency: 1,
+	}}, nil, 2)
+	parentHash := strings.Repeat("4", 64)
+	childHash := strings.Repeat("5", 64)
+	repo.aliasBindings = map[string]*OpenAIUserConversationBinding{
+		openAICodexThreadAliasTestKey(nil, parentHash): {
+			ID: 2305, UserID: 42, APIKeyID: 77,
+			ScopeKey:         openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE),
+			ConversationHash: strings.Repeat("6", 64), ResidentSlotID: 35,
+			AccountID: parentAccountID, SlotGeneration: 1, Status: "active",
+			ContextRebuildable: true, FirstOutputCommitted: true, ExpiresAt: now.Add(time.Hour),
+		},
+	}
+	ctx, _ = withOpenAICodexThreadAffinityTestState(ctx, childHash, parentHash)
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = "shared-session"
+
+	selection, found, err := svc.selectOpenAIUserAffinityConversation(ctx, req)
+	require.ErrorIs(t, err, ErrOpenAICodexParentThreadUnavailable)
+	require.ErrorIs(t, err, ErrNoAvailableAccounts)
+	require.True(t, found)
+	require.Nil(t, selection)
+	require.Empty(t, repo.failovers)
+	require.Empty(t, repo.replacements)
+}
+
+func TestOpenAIGatewayService_CodexThreadBackfillsLegacySessionBinding(t *testing.T) {
+	now := time.Now().UTC()
+	accountID := int64(36237)
+	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t, nil, []Account{{
+		ID: accountID, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Status: StatusActive, Schedulable: true, Concurrency: 1,
+	}}, nil, 2)
+	selfHash := strings.Repeat("8", 64)
+	sessionHash := "legacy-session"
+	scopeKey := openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE)
+	legacyHash := openAIUserAffinityScopedStateHash(42, 77, scopeKey, "session_hash", sessionHash)
+	legacyBinding := &OpenAIUserConversationBinding{
+		ID: 2307, UserID: 42, APIKeyID: 77, ScopeKey: scopeKey,
+		ConversationHash: legacyHash, ResidentSlotID: 37, AccountID: accountID,
+		SlotGeneration: 2, Status: "active", ContextRebuildable: true,
+		FirstOutputCommitted: true, ExpiresAt: now.Add(time.Hour),
+	}
+	repo.bindingsByHash = map[string]*OpenAIUserConversationBinding{legacyHash: legacyBinding}
+	ctx, topology := withOpenAICodexThreadAffinityTestState(ctx, selfHash)
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = sessionHash
+
+	selection, found, err := svc.selectOpenAIUserAffinityConversation(ctx, req)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, accountID, selection.Account.ID)
+	require.False(t, topology.allows(accountID), "根线程补齐别名不得自我授权父系")
+	require.Equal(t, []string{selfHash, legacyHash}, repo.bindingLookups)
+	require.Len(t, repo.reservations, 1)
+	require.Equal(t, legacyHash, repo.reservations[0].ConversationHash)
+	require.Equal(t, []OpenAIUserConversationAlias{openAICodexThreadReservationAlias(nil, selfHash)}, repo.reservations[0].Aliases)
+	require.Equal(t, legacyBinding.ID, repo.binding.ID)
 }
 
 func TestOpenAIGatewayService_ConversationFailoverRequiresThresholdAndMovesOnlyBinding(t *testing.T) {
