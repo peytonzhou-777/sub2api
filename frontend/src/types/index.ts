@@ -1724,6 +1724,7 @@ export interface UsageLogAccountSummary {
 
 export interface AdminUsageLog extends UsageLog {
   account_queue_wait_ms?: number | null
+  is_subagent?: boolean
   upstream_model?: string | null
   upstream_response_model?: string | null
   upstream_model_mismatch?: boolean | null

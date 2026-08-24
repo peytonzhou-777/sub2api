@@ -68,7 +68,8 @@ const messages: Record<string, string> = {
 	'usage.modelMismatch': 'Different model',
 	'usage.latencyFirstToken': 'First',
 	'usage.latencyDuration': 'Total',
-	'usage.latencyAccountQueue': 'Account queue',
+  'usage.latencyAccountQueue': 'Account queue',
+  'usage.subagent': 'Subagent',
 }
 
 vi.mock('vue-i18n', async () => {
@@ -87,6 +88,7 @@ const DataTableStub = {
     <div>
       <div v-for="row in data" :key="row.request_id">
         <slot name="cell-model" :row="row" :value="row.model" />
+        <slot name="cell-stream" :row="row" />
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
@@ -123,6 +125,26 @@ const baseImageRow = {
   image_size_source: null,
   image_size_breakdown: null,
 }
+
+describe('admin UsageTable subagent marker', () => {
+  it('shows a subagent badge only for marked successful usage rows', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [
+          { ...baseImageRow, request_id: 'req-subagent', is_subagent: true },
+          { ...baseImageRow, request_id: 'req-primary', is_subagent: false },
+        ],
+        loading: false,
+        columns: [{ key: 'stream', label: 'Type' }],
+      },
+      global: {
+        stubs: { DataTable: DataTableStub, EmptyState: true, Teleport: true },
+      },
+    })
+
+    expect(wrapper.findAll('span').filter((node) => node.text() === 'Subagent')).toHaveLength(1)
+  })
+})
 
 describe('admin UsageTable account admission latency', () => {
   it('renders the account queue wait separately from upstream latency', () => {

@@ -696,6 +696,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					SessionScopeHash:   requestObservation.SessionScopeHash,
 					SessionSourceHash:  requestObservation.SessionSourceHash,
 					PromptCacheKeyHash: requestObservation.PromptCacheKeyHash,
+					IsSubagent:         requestObservation.IsSubagent,
 					ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, reqModel, res.UpstreamModel),
 					PricingAt:          pricingAt,
 					CyberBlocked:       cyberBlocked,
@@ -1069,6 +1070,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		h.anthropicErrorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
 		return
 	}
+	service.SetOpsOpenAIRequestMetadata(c, body)
 
 	modelResult := gjson.GetBytes(body, "model")
 	if !modelResult.Exists() || modelResult.Type != gjson.String || modelResult.String() == "" {
@@ -1274,6 +1276,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account, res)
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 			sessionID := service.ExtractClientSessionID(c)
+			requestObservation := service.GetOpsRequestObservation(c, time.Now().UTC())
 			cyberBlocked := service.GetOpsCyberPolicy(c) != nil
 			h.submitOpenAIUsageRecordTask(c.Request.Context(), res, func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
@@ -1290,6 +1293,10 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					APIKeyService:      h.apiKeyService,
 					QuotaPlatform:      quotaPlatform,
 					SessionID:          sessionID,
+					SessionScopeHash:   requestObservation.SessionScopeHash,
+					SessionSourceHash:  requestObservation.SessionSourceHash,
+					PromptCacheKeyHash: requestObservation.PromptCacheKeyHash,
+					IsSubagent:         requestObservation.IsSubagent,
 					ChannelUsageFields: clientRequestedUsageFields(c, channelMappingMsg, reqModel, res.UpstreamModel),
 					PricingAt:          pricingAt,
 					CyberBlocked:       cyberBlocked,
@@ -2012,6 +2019,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "invalid JSON payload")
 		return
 	}
+	service.SetOpsOpenAIRequestMetadata(c, firstMessage)
 	reqModel := strings.TrimSpace(gjson.GetBytes(firstMessage, "model").String())
 	if reqModel == "" {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "model is required in first response.create payload")
@@ -2876,6 +2884,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account, result)
 				quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 				sessionID := service.ExtractClientSessionID(c)
+				requestObservation := service.GetOpsRequestObservation(c, time.Now().UTC())
 				turnRecordPricingAt := turnPricing.currentOr(turnStart)
 				cyberBlocked := service.GetOpsCyberPolicy(c) != nil
 				turnUsageCtx := ctx
@@ -2897,6 +2906,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 						APIKeyService:      h.apiKeyService,
 						QuotaPlatform:      quotaPlatform,
 						SessionID:          sessionID,
+						SessionScopeHash:   requestObservation.SessionScopeHash,
+						SessionSourceHash:  requestObservation.SessionSourceHash,
+						PromptCacheKeyHash: requestObservation.PromptCacheKeyHash,
+						IsSubagent:         requestObservation.IsSubagent,
 						ChannelUsageFields: turnUsageFields,
 						PricingAt:          turnRecordPricingAt,
 						CyberBlocked:       cyberBlocked,

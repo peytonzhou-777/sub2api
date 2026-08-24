@@ -46,6 +46,19 @@ func TestUsageLogFromService_ExposesAccountQueueWaitToAdminOnly(t *testing.T) {
 	require.Contains(t, string(adminJSON), `"account_queue_wait_ms":1234`)
 }
 
+func TestUsageLogFromService_ExposesSubagentMarkerToAdminOnly(t *testing.T) {
+	t.Parallel()
+
+	log := &service.UsageLog{RequestID: "req_subagent", Model: "gpt-5.3-codex", IsSubagent: true}
+	userJSON, err := json.Marshal(UsageLogFromService(log))
+	require.NoError(t, err)
+	adminJSON, err := json.Marshal(UsageLogFromServiceAdmin(log))
+	require.NoError(t, err)
+
+	require.NotContains(t, string(userJSON), "is_subagent")
+	require.Contains(t, string(adminJSON), `"is_subagent":true`)
+}
+
 func TestUsageLogFromService_PrefersRequestTypeForLegacyFields(t *testing.T) {
 	t.Parallel()
 

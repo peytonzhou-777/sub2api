@@ -722,6 +722,7 @@ func UsageLogFromServiceAdmin(l *service.UsageLog) *AdminUsageLog {
 	return &AdminUsageLog{
 		UsageLog:              usageLog,
 		AccountQueueWaitMs:    l.AccountQueueWaitMs,
+		IsSubagent:            l.IsSubagent,
 		UpstreamModel:         l.UpstreamModel,
 		UpstreamResponseModel: l.UpstreamResponseModel,
 		UpstreamModelMismatch: l.UpstreamModelMismatch,

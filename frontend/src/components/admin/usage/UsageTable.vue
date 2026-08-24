@@ -126,9 +126,17 @@
         </template>
 
         <template #cell-stream="{ row }">
-          <span class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium" :class="getRequestTypeBadgeClass(row)">
-            {{ getRequestTypeLabel(row) }}
-          </span>
+          <div class="flex flex-wrap items-center gap-1">
+            <span class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium" :class="getRequestTypeBadgeClass(row)">
+              {{ getRequestTypeLabel(row) }}
+            </span>
+            <span
+              v-if="row.is_subagent"
+              class="inline-flex items-center rounded bg-cyan-100 px-2 py-0.5 text-xs font-medium text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200"
+            >
+              {{ t('usage.subagent') }}
+            </span>
+          </div>
         </template>
 
         <template #cell-billing_mode="{ row }">

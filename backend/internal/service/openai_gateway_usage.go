@@ -33,6 +33,7 @@ type OpenAIRecordUsageInput struct {
 	SessionScopeHash   string // 内部 session scope 安全哈希
 	SessionSourceHash  string // 内部逻辑 source 安全哈希
 	PromptCacheKeyHash string // prompt_cache_key 安全哈希
+	IsSubagent         bool   // 是否为已识别的 Codex 子代理请求
 	RequestPayloadHash string
 	APIKeyService      APIKeyQuotaUpdater
 	QuotaPlatform      string // user×platform quota platform resolved by the handler before async billing.
@@ -469,6 +470,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	usageLog.SessionScopeHash = optionalTrimmedStringPtr(input.SessionScopeHash)
 	usageLog.SessionSourceHash = optionalTrimmedStringPtr(input.SessionSourceHash)
 	usageLog.PromptCacheKeyHash = optionalTrimmedStringPtr(input.PromptCacheKeyHash)
+	usageLog.IsSubagent = input.IsSubagent
 
 	if apiKey.GroupID != nil {
 		usageLog.GroupID = apiKey.GroupID

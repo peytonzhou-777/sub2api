@@ -357,6 +357,7 @@ export default {
     ws: 'WS',
     stream: 'Stream',
     sync: 'Sync',
+    subagent: 'Subagent',
     cyber: 'Cyber',
     admissionRejected: 'Account admission rejected',
     live: 'Live',

@@ -574,6 +574,8 @@ type AdminUsageLog struct {
 	UsageLog
 	// AccountQueueWaitMs 是账号选定后的准入排队耗时，仅管理员可见。
 	AccountQueueWaitMs *int `json:"account_queue_wait_ms"`
+	// IsSubagent 标记该用量是否来自已识别的 Codex 子代理请求。
+	IsSubagent bool `json:"is_subagent"`
 
 	// UpstreamModel is the actual model sent to the upstream provider after mapping.
 	// Omitted when no mapping was applied (requested model was used as-is).

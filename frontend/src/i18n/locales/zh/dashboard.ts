@@ -362,6 +362,7 @@ export default {
     ws: 'WS',
     stream: '流式',
     sync: '同步',
+    subagent: '子代理',
     cyber: '安全策略',
     admissionRejected: '账号准入拒绝',
     live: 'Live',

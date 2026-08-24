@@ -103,6 +103,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // session_source_hash
 			sqlmock.AnyArg(), // prompt_cache_key_hash
 			sqlmock.AnyArg(), // session_id
+			log.IsSubagent,
 			createdAt,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
@@ -199,6 +200,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // session_source_hash
 			sqlmock.AnyArg(), // prompt_cache_key_hash
 			sqlmock.AnyArg(), // session_id
+			log.IsSubagent,
 			createdAt,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
@@ -851,9 +853,11 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{}, // session_source_hash
 			sql.NullString{}, // prompt_cache_key_hash
 			sql.NullString{},
+			true,
 			now,
 		}})
 		require.NoError(t, err)
+		require.True(t, log.IsSubagent)
 		require.Equal(t, 2, log.ImageCount)
 		require.NotNil(t, log.ImageSize)
 		require.Equal(t, "4K", *log.ImageSize)
@@ -932,6 +936,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // session_source_hash
 			sql.NullString{},  // prompt_cache_key_hash
 			sql.NullString{},  // session_id
+			false,             // is_subagent
 			now,
 		}})
 		require.NoError(t, err)
@@ -996,6 +1001,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // session_source_hash
 			sql.NullString{},  // prompt_cache_key_hash
 			sql.NullString{},  // session_id
+			false,             // is_subagent
 			now,
 		}})
 		require.NoError(t, err)
@@ -1060,6 +1066,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // session_source_hash
 			sql.NullString{},  // prompt_cache_key_hash
 			sql.NullString{},  // session_id
+			false,             // is_subagent
 			now,
 		}})
 		require.NoError(t, err)

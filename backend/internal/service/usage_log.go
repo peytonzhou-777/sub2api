@@ -191,6 +191,8 @@ type UsageLog struct {
 	SessionScopeHash   *string
 	SessionSourceHash  *string
 	PromptCacheKeyHash *string
+	// IsSubagent 仅记录安全布尔标记，不保存子代理原始线程或轮次标识。
+	IsSubagent bool
 
 	// Cache TTL Override 标记（管理员强制替换了缓存 TTL 计费）
 	CacheTTLOverridden bool
