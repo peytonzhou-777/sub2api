@@ -46,6 +46,29 @@ func TestUsageLogFromService_ExposesAccountQueueWaitToAdminOnly(t *testing.T) {
 	require.Contains(t, string(adminJSON), `"account_queue_wait_ms":1234`)
 }
 
+func TestUsageLogFromService_ExposesLatencyStagesToUserAndAdmin(t *testing.T) {
+	t.Parallel()
+
+	firstResponse := 1240
+	firstEvent := 1310
+	firstOutput := 1460
+	log := &service.UsageLog{
+		RequestID:       "req_latency_stages",
+		Model:           "gpt-5.4",
+		FirstResponseMs: &firstResponse,
+		FirstEventMs:    &firstEvent,
+		FirstOutputMs:   &firstOutput,
+	}
+
+	userDTO := UsageLogFromService(log)
+	adminDTO := UsageLogFromServiceAdmin(log)
+	for _, dto := range []*UsageLog{userDTO, &adminDTO.UsageLog} {
+		require.Equal(t, firstResponse, *dto.FirstResponseMs)
+		require.Equal(t, firstEvent, *dto.FirstEventMs)
+		require.Equal(t, firstOutput, *dto.FirstOutputMs)
+	}
+}
+
 func TestUsageLogFromService_ExposesSubagentMarkerToAdminOnly(t *testing.T) {
 	t.Parallel()
 

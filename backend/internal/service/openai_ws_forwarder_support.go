@@ -352,6 +352,15 @@ func isOpenAIWSTokenEvent(eventType string) bool {
 	return false
 }
 
+// isOpenAIWSClientOutputEvent 识别首个面向客户端的结构性输出事件，包含工具输出项和内容增量。
+func isOpenAIWSClientOutputEvent(eventType string) bool {
+	eventType = strings.TrimSpace(eventType)
+	if eventType == "" || isOpenAIWSTerminalEvent(eventType) || eventType == "response.created" || eventType == "response.in_progress" {
+		return false
+	}
+	return strings.HasPrefix(eventType, "response.output_item.") || isOpenAIWSTokenEvent(eventType)
+}
+
 func replaceOpenAIWSMessageModel(message []byte, fromModel, toModel string) []byte {
 	if len(message) == 0 {
 		return message

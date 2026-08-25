@@ -433,6 +433,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	usageLog.OpenAIWSMode = result.OpenAIWSMode
 	usageLog.DurationMs = &durationMs
 	usageLog.FirstTokenMs = result.FirstTokenMs
+	usageLog.FirstResponseMs = result.FirstResponseMs
+	usageLog.FirstEventMs = result.FirstEventMs
+	usageLog.FirstOutputMs = result.FirstOutputMs
 	if queueWaitMS := OpenAIAccountQueueWaitMSFromContext(ctx); queueWaitMS > 0 {
 		value := int(queueWaitMS)
 		usageLog.AccountQueueWaitMs = &value

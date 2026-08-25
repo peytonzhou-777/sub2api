@@ -75935,6 +75935,12 @@ type UsageLogMutation struct {
 	addduration_ms               *int
 	first_token_ms               *int
 	addfirst_token_ms            *int
+	first_response_ms            *int
+	addfirst_response_ms         *int
+	first_event_ms               *int
+	addfirst_event_ms            *int
+	first_output_ms              *int
+	addfirst_output_ms           *int
 	account_queue_wait_ms        *int
 	addaccount_queue_wait_ms     *int
 	user_agent                   *string
@@ -77824,6 +77830,216 @@ func (m *UsageLogMutation) ResetFirstTokenMs() {
 	delete(m.clearedFields, usagelog.FieldFirstTokenMs)
 }
 
+// SetFirstResponseMs sets the "first_response_ms" field.
+func (m *UsageLogMutation) SetFirstResponseMs(i int) {
+	m.first_response_ms = &i
+	m.addfirst_response_ms = nil
+}
+
+// FirstResponseMs returns the value of the "first_response_ms" field in the mutation.
+func (m *UsageLogMutation) FirstResponseMs() (r int, exists bool) {
+	v := m.first_response_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFirstResponseMs returns the old "first_response_ms" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldFirstResponseMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFirstResponseMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFirstResponseMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFirstResponseMs: %w", err)
+	}
+	return oldValue.FirstResponseMs, nil
+}
+
+// AddFirstResponseMs adds i to the "first_response_ms" field.
+func (m *UsageLogMutation) AddFirstResponseMs(i int) {
+	if m.addfirst_response_ms != nil {
+		*m.addfirst_response_ms += i
+	} else {
+		m.addfirst_response_ms = &i
+	}
+}
+
+// AddedFirstResponseMs returns the value that was added to the "first_response_ms" field in this mutation.
+func (m *UsageLogMutation) AddedFirstResponseMs() (r int, exists bool) {
+	v := m.addfirst_response_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearFirstResponseMs clears the value of the "first_response_ms" field.
+func (m *UsageLogMutation) ClearFirstResponseMs() {
+	m.first_response_ms = nil
+	m.addfirst_response_ms = nil
+	m.clearedFields[usagelog.FieldFirstResponseMs] = struct{}{}
+}
+
+// FirstResponseMsCleared returns if the "first_response_ms" field was cleared in this mutation.
+func (m *UsageLogMutation) FirstResponseMsCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldFirstResponseMs]
+	return ok
+}
+
+// ResetFirstResponseMs resets all changes to the "first_response_ms" field.
+func (m *UsageLogMutation) ResetFirstResponseMs() {
+	m.first_response_ms = nil
+	m.addfirst_response_ms = nil
+	delete(m.clearedFields, usagelog.FieldFirstResponseMs)
+}
+
+// SetFirstEventMs sets the "first_event_ms" field.
+func (m *UsageLogMutation) SetFirstEventMs(i int) {
+	m.first_event_ms = &i
+	m.addfirst_event_ms = nil
+}
+
+// FirstEventMs returns the value of the "first_event_ms" field in the mutation.
+func (m *UsageLogMutation) FirstEventMs() (r int, exists bool) {
+	v := m.first_event_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFirstEventMs returns the old "first_event_ms" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldFirstEventMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFirstEventMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFirstEventMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFirstEventMs: %w", err)
+	}
+	return oldValue.FirstEventMs, nil
+}
+
+// AddFirstEventMs adds i to the "first_event_ms" field.
+func (m *UsageLogMutation) AddFirstEventMs(i int) {
+	if m.addfirst_event_ms != nil {
+		*m.addfirst_event_ms += i
+	} else {
+		m.addfirst_event_ms = &i
+	}
+}
+
+// AddedFirstEventMs returns the value that was added to the "first_event_ms" field in this mutation.
+func (m *UsageLogMutation) AddedFirstEventMs() (r int, exists bool) {
+	v := m.addfirst_event_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearFirstEventMs clears the value of the "first_event_ms" field.
+func (m *UsageLogMutation) ClearFirstEventMs() {
+	m.first_event_ms = nil
+	m.addfirst_event_ms = nil
+	m.clearedFields[usagelog.FieldFirstEventMs] = struct{}{}
+}
+
+// FirstEventMsCleared returns if the "first_event_ms" field was cleared in this mutation.
+func (m *UsageLogMutation) FirstEventMsCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldFirstEventMs]
+	return ok
+}
+
+// ResetFirstEventMs resets all changes to the "first_event_ms" field.
+func (m *UsageLogMutation) ResetFirstEventMs() {
+	m.first_event_ms = nil
+	m.addfirst_event_ms = nil
+	delete(m.clearedFields, usagelog.FieldFirstEventMs)
+}
+
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (m *UsageLogMutation) SetFirstOutputMs(i int) {
+	m.first_output_ms = &i
+	m.addfirst_output_ms = nil
+}
+
+// FirstOutputMs returns the value of the "first_output_ms" field in the mutation.
+func (m *UsageLogMutation) FirstOutputMs() (r int, exists bool) {
+	v := m.first_output_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFirstOutputMs returns the old "first_output_ms" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldFirstOutputMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFirstOutputMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFirstOutputMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFirstOutputMs: %w", err)
+	}
+	return oldValue.FirstOutputMs, nil
+}
+
+// AddFirstOutputMs adds i to the "first_output_ms" field.
+func (m *UsageLogMutation) AddFirstOutputMs(i int) {
+	if m.addfirst_output_ms != nil {
+		*m.addfirst_output_ms += i
+	} else {
+		m.addfirst_output_ms = &i
+	}
+}
+
+// AddedFirstOutputMs returns the value that was added to the "first_output_ms" field in this mutation.
+func (m *UsageLogMutation) AddedFirstOutputMs() (r int, exists bool) {
+	v := m.addfirst_output_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearFirstOutputMs clears the value of the "first_output_ms" field.
+func (m *UsageLogMutation) ClearFirstOutputMs() {
+	m.first_output_ms = nil
+	m.addfirst_output_ms = nil
+	m.clearedFields[usagelog.FieldFirstOutputMs] = struct{}{}
+}
+
+// FirstOutputMsCleared returns if the "first_output_ms" field was cleared in this mutation.
+func (m *UsageLogMutation) FirstOutputMsCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldFirstOutputMs]
+	return ok
+}
+
+// ResetFirstOutputMs resets all changes to the "first_output_ms" field.
+func (m *UsageLogMutation) ResetFirstOutputMs() {
+	m.first_output_ms = nil
+	m.addfirst_output_ms = nil
+	delete(m.clearedFields, usagelog.FieldFirstOutputMs)
+}
+
 // SetAccountQueueWaitMs sets the "account_queue_wait_ms" field.
 func (m *UsageLogMutation) SetAccountQueueWaitMs(i int) {
 	m.account_queue_wait_ms = &i
@@ -78709,7 +78925,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 48)
+	fields := make([]string, 0, 51)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -78811,6 +79027,15 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.first_token_ms != nil {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
+	}
+	if m.first_response_ms != nil {
+		fields = append(fields, usagelog.FieldFirstResponseMs)
+	}
+	if m.first_event_ms != nil {
+		fields = append(fields, usagelog.FieldFirstEventMs)
+	}
+	if m.first_output_ms != nil {
+		fields = append(fields, usagelog.FieldFirstOutputMs)
 	}
 	if m.account_queue_wait_ms != nil {
 		fields = append(fields, usagelog.FieldAccountQueueWaitMs)
@@ -78930,6 +79155,12 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.DurationMs()
 	case usagelog.FieldFirstTokenMs:
 		return m.FirstTokenMs()
+	case usagelog.FieldFirstResponseMs:
+		return m.FirstResponseMs()
+	case usagelog.FieldFirstEventMs:
+		return m.FirstEventMs()
+	case usagelog.FieldFirstOutputMs:
+		return m.FirstOutputMs()
 	case usagelog.FieldAccountQueueWaitMs:
 		return m.AccountQueueWaitMs()
 	case usagelog.FieldUserAgent:
@@ -79035,6 +79266,12 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldDurationMs(ctx)
 	case usagelog.FieldFirstTokenMs:
 		return m.OldFirstTokenMs(ctx)
+	case usagelog.FieldFirstResponseMs:
+		return m.OldFirstResponseMs(ctx)
+	case usagelog.FieldFirstEventMs:
+		return m.OldFirstEventMs(ctx)
+	case usagelog.FieldFirstOutputMs:
+		return m.OldFirstOutputMs(ctx)
 	case usagelog.FieldAccountQueueWaitMs:
 		return m.OldAccountQueueWaitMs(ctx)
 	case usagelog.FieldUserAgent:
@@ -79310,6 +79547,27 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetFirstTokenMs(v)
 		return nil
+	case usagelog.FieldFirstResponseMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFirstResponseMs(v)
+		return nil
+	case usagelog.FieldFirstEventMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFirstEventMs(v)
+		return nil
+	case usagelog.FieldFirstOutputMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFirstOutputMs(v)
+		return nil
 	case usagelog.FieldAccountQueueWaitMs:
 		v, ok := value.(int)
 		if !ok {
@@ -79470,6 +79728,15 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addfirst_token_ms != nil {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
 	}
+	if m.addfirst_response_ms != nil {
+		fields = append(fields, usagelog.FieldFirstResponseMs)
+	}
+	if m.addfirst_event_ms != nil {
+		fields = append(fields, usagelog.FieldFirstEventMs)
+	}
+	if m.addfirst_output_ms != nil {
+		fields = append(fields, usagelog.FieldFirstOutputMs)
+	}
 	if m.addaccount_queue_wait_ms != nil {
 		fields = append(fields, usagelog.FieldAccountQueueWaitMs)
 	}
@@ -79526,6 +79793,12 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedDurationMs()
 	case usagelog.FieldFirstTokenMs:
 		return m.AddedFirstTokenMs()
+	case usagelog.FieldFirstResponseMs:
+		return m.AddedFirstResponseMs()
+	case usagelog.FieldFirstEventMs:
+		return m.AddedFirstEventMs()
+	case usagelog.FieldFirstOutputMs:
+		return m.AddedFirstOutputMs()
 	case usagelog.FieldAccountQueueWaitMs:
 		return m.AddedAccountQueueWaitMs()
 	case usagelog.FieldImageCount:
@@ -79669,6 +79942,27 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddFirstTokenMs(v)
 		return nil
+	case usagelog.FieldFirstResponseMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFirstResponseMs(v)
+		return nil
+	case usagelog.FieldFirstEventMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFirstEventMs(v)
+		return nil
+	case usagelog.FieldFirstOutputMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFirstOutputMs(v)
+		return nil
 	case usagelog.FieldAccountQueueWaitMs:
 		v, ok := value.(int)
 		if !ok {
@@ -79743,6 +80037,15 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(usagelog.FieldFirstTokenMs) {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
+	}
+	if m.FieldCleared(usagelog.FieldFirstResponseMs) {
+		fields = append(fields, usagelog.FieldFirstResponseMs)
+	}
+	if m.FieldCleared(usagelog.FieldFirstEventMs) {
+		fields = append(fields, usagelog.FieldFirstEventMs)
+	}
+	if m.FieldCleared(usagelog.FieldFirstOutputMs) {
+		fields = append(fields, usagelog.FieldFirstOutputMs)
 	}
 	if m.FieldCleared(usagelog.FieldAccountQueueWaitMs) {
 		fields = append(fields, usagelog.FieldAccountQueueWaitMs)
@@ -79826,6 +80129,15 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		m.ClearFirstTokenMs()
+		return nil
+	case usagelog.FieldFirstResponseMs:
+		m.ClearFirstResponseMs()
+		return nil
+	case usagelog.FieldFirstEventMs:
+		m.ClearFirstEventMs()
+		return nil
+	case usagelog.FieldFirstOutputMs:
+		m.ClearFirstOutputMs()
 		return nil
 	case usagelog.FieldAccountQueueWaitMs:
 		m.ClearAccountQueueWaitMs()
@@ -79966,6 +80278,15 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		m.ResetFirstTokenMs()
+		return nil
+	case usagelog.FieldFirstResponseMs:
+		m.ResetFirstResponseMs()
+		return nil
+	case usagelog.FieldFirstEventMs:
+		m.ResetFirstEventMs()
+		return nil
+	case usagelog.FieldFirstOutputMs:
+		m.ResetFirstOutputMs()
 		return nil
 	case usagelog.FieldAccountQueueWaitMs:
 		m.ResetAccountQueueWaitMs()

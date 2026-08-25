@@ -67,6 +67,9 @@ const messages: Record<string, string> = {
 	'usage.modelVariant': 'Possible version variant',
 	'usage.modelMismatch': 'Different model',
 	'usage.latencyFirstToken': 'First',
+	'usage.latencyFirstResponse': 'First response',
+	'usage.latencyFirstEvent': 'First event',
+	'usage.latencyFirstOutput': 'First output',
 	'usage.latencyDuration': 'Total',
   'usage.latencyAccountQueue': 'Account queue',
   'usage.subagent': 'Subagent',
@@ -154,6 +157,9 @@ describe('admin UsageTable account admission latency', () => {
           ...baseImageRow,
           request_id: 'req-account-queue-wait',
           account_queue_wait_ms: 1234,
+          first_response_ms: 1240,
+          first_event_ms: 1310,
+          first_output_ms: 1460,
           first_token_ms: 250,
           duration_ms: 2600,
         }],
@@ -175,6 +181,12 @@ describe('admin UsageTable account admission latency', () => {
 
     expect(wrapper.text()).toContain('Account queue')
     expect(wrapper.text()).toContain('1.23s')
+    expect(wrapper.text()).toContain('First response')
+    expect(wrapper.text()).toContain('1.24s')
+    expect(wrapper.text()).toContain('First event')
+    expect(wrapper.text()).toContain('1.31s')
+    expect(wrapper.text()).toContain('First output')
+    expect(wrapper.text()).toContain('1.46s')
     expect(wrapper.text()).toContain('250ms')
     expect(wrapper.text()).toContain('2.60s')
   })

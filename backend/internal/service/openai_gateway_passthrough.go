@@ -425,6 +425,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
 	}
+	applyOpenAITimingToResult(c, forwardResult)
 	if imageCount > 0 {
 		forwardResult.ImageCount = imageCount
 		forwardResult.ImageSize = imageSizeTier

@@ -225,6 +225,21 @@ func FirstTokenMs(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldFirstTokenMs, v))
 }
 
+// FirstResponseMs applies equality check predicate on the "first_response_ms" field. It's identical to FirstResponseMsEQ.
+func FirstResponseMs(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFirstResponseMs, v))
+}
+
+// FirstEventMs applies equality check predicate on the "first_event_ms" field. It's identical to FirstEventMsEQ.
+func FirstEventMs(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFirstEventMs, v))
+}
+
+// FirstOutputMs applies equality check predicate on the "first_output_ms" field. It's identical to FirstOutputMsEQ.
+func FirstOutputMs(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFirstOutputMs, v))
+}
+
 // AccountQueueWaitMs applies equality check predicate on the "account_queue_wait_ms" field. It's identical to AccountQueueWaitMsEQ.
 func AccountQueueWaitMs(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldAccountQueueWaitMs, v))
@@ -1788,6 +1803,156 @@ func FirstTokenMsIsNil() predicate.UsageLog {
 // FirstTokenMsNotNil applies the NotNil predicate on the "first_token_ms" field.
 func FirstTokenMsNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldFirstTokenMs))
+}
+
+// FirstResponseMsEQ applies the EQ predicate on the "first_response_ms" field.
+func FirstResponseMsEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFirstResponseMs, v))
+}
+
+// FirstResponseMsNEQ applies the NEQ predicate on the "first_response_ms" field.
+func FirstResponseMsNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldFirstResponseMs, v))
+}
+
+// FirstResponseMsIn applies the In predicate on the "first_response_ms" field.
+func FirstResponseMsIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldFirstResponseMs, vs...))
+}
+
+// FirstResponseMsNotIn applies the NotIn predicate on the "first_response_ms" field.
+func FirstResponseMsNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldFirstResponseMs, vs...))
+}
+
+// FirstResponseMsGT applies the GT predicate on the "first_response_ms" field.
+func FirstResponseMsGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldFirstResponseMs, v))
+}
+
+// FirstResponseMsGTE applies the GTE predicate on the "first_response_ms" field.
+func FirstResponseMsGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldFirstResponseMs, v))
+}
+
+// FirstResponseMsLT applies the LT predicate on the "first_response_ms" field.
+func FirstResponseMsLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldFirstResponseMs, v))
+}
+
+// FirstResponseMsLTE applies the LTE predicate on the "first_response_ms" field.
+func FirstResponseMsLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldFirstResponseMs, v))
+}
+
+// FirstResponseMsIsNil applies the IsNil predicate on the "first_response_ms" field.
+func FirstResponseMsIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldFirstResponseMs))
+}
+
+// FirstResponseMsNotNil applies the NotNil predicate on the "first_response_ms" field.
+func FirstResponseMsNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldFirstResponseMs))
+}
+
+// FirstEventMsEQ applies the EQ predicate on the "first_event_ms" field.
+func FirstEventMsEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFirstEventMs, v))
+}
+
+// FirstEventMsNEQ applies the NEQ predicate on the "first_event_ms" field.
+func FirstEventMsNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldFirstEventMs, v))
+}
+
+// FirstEventMsIn applies the In predicate on the "first_event_ms" field.
+func FirstEventMsIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldFirstEventMs, vs...))
+}
+
+// FirstEventMsNotIn applies the NotIn predicate on the "first_event_ms" field.
+func FirstEventMsNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldFirstEventMs, vs...))
+}
+
+// FirstEventMsGT applies the GT predicate on the "first_event_ms" field.
+func FirstEventMsGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldFirstEventMs, v))
+}
+
+// FirstEventMsGTE applies the GTE predicate on the "first_event_ms" field.
+func FirstEventMsGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldFirstEventMs, v))
+}
+
+// FirstEventMsLT applies the LT predicate on the "first_event_ms" field.
+func FirstEventMsLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldFirstEventMs, v))
+}
+
+// FirstEventMsLTE applies the LTE predicate on the "first_event_ms" field.
+func FirstEventMsLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldFirstEventMs, v))
+}
+
+// FirstEventMsIsNil applies the IsNil predicate on the "first_event_ms" field.
+func FirstEventMsIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldFirstEventMs))
+}
+
+// FirstEventMsNotNil applies the NotNil predicate on the "first_event_ms" field.
+func FirstEventMsNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldFirstEventMs))
+}
+
+// FirstOutputMsEQ applies the EQ predicate on the "first_output_ms" field.
+func FirstOutputMsEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFirstOutputMs, v))
+}
+
+// FirstOutputMsNEQ applies the NEQ predicate on the "first_output_ms" field.
+func FirstOutputMsNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldFirstOutputMs, v))
+}
+
+// FirstOutputMsIn applies the In predicate on the "first_output_ms" field.
+func FirstOutputMsIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldFirstOutputMs, vs...))
+}
+
+// FirstOutputMsNotIn applies the NotIn predicate on the "first_output_ms" field.
+func FirstOutputMsNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldFirstOutputMs, vs...))
+}
+
+// FirstOutputMsGT applies the GT predicate on the "first_output_ms" field.
+func FirstOutputMsGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldFirstOutputMs, v))
+}
+
+// FirstOutputMsGTE applies the GTE predicate on the "first_output_ms" field.
+func FirstOutputMsGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldFirstOutputMs, v))
+}
+
+// FirstOutputMsLT applies the LT predicate on the "first_output_ms" field.
+func FirstOutputMsLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldFirstOutputMs, v))
+}
+
+// FirstOutputMsLTE applies the LTE predicate on the "first_output_ms" field.
+func FirstOutputMsLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldFirstOutputMs, v))
+}
+
+// FirstOutputMsIsNil applies the IsNil predicate on the "first_output_ms" field.
+func FirstOutputMsIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldFirstOutputMs))
+}
+
+// FirstOutputMsNotNil applies the NotNil predicate on the "first_output_ms" field.
+func FirstOutputMsNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldFirstOutputMs))
 }
 
 // AccountQueueWaitMsEQ applies the EQ predicate on the "account_queue_wait_ms" field.

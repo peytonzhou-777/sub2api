@@ -174,12 +174,18 @@ type UsageLog struct {
 	// AccountStatsCost 账号统计定价预计算费用（nil = 使用默认公式 total_cost × account_rate_multiplier）
 	AccountStatsCost *float64
 
-	BillingType        int8
-	RequestType        RequestType
-	Stream             bool
-	OpenAIWSMode       bool
-	DurationMs         *int
-	FirstTokenMs       *int
+	BillingType  int8
+	RequestType  RequestType
+	Stream       bool
+	OpenAIWSMode bool
+	DurationMs   *int
+	FirstTokenMs *int
+	// FirstResponseMs 是上游最终成功尝试收到响应头（WS 为连接/租约确认）的耗时。
+	FirstResponseMs *int
+	// FirstEventMs 是首个可解析 SSE data 或 WS 事件的耗时。
+	FirstEventMs *int
+	// FirstOutputMs 是首次满足 startsClientOutput 的结构性输出事件耗时。
+	FirstOutputMs      *int
 	AccountQueueWaitMs *int
 	UserAgent          *string
 	IPAddress          *string

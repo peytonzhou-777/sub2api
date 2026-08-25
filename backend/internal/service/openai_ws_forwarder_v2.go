@@ -558,6 +558,9 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		}
 
 		isTokenEvent := isOpenAIWSTokenEvent(eventType)
+		if isOpenAIWSClientOutputEvent(eventType) {
+			markOpenAITimingFirstClientOutput(c, time.Now())
+		}
 		if isTokenEvent {
 			tokenEventCount++
 		}
@@ -811,6 +814,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
 	}
+	applyOpenAITimingToResult(c, forwardResult)
 	markOpenAITimingUpstreamBodyDone(c, time.Now())
 	logOpenAITiming(ctx, c, account, originalModel, reqStream, forwardResult, time.Now())
 	return forwardResult, nil

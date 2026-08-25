@@ -617,6 +617,9 @@ type ForwardResult struct {
 	Stream                        bool
 	Duration                      time.Duration
 	FirstTokenMs                  *int // 首字时间（流式请求）
+	FirstResponseMs               *int // 首响应阶段耗时
+	FirstEventMs                  *int // 首事件阶段耗时
+	FirstOutputMs                 *int // 首结构性输出阶段耗时
 	ClientDisconnect              bool // 客户端是否在流式传输过程中断开
 	ReasoningEffort               *string
 	// ServiceTier records the billable request tier. OpenAI uses service_tier;

@@ -82,6 +82,12 @@ const (
 	FieldDurationMs = "duration_ms"
 	// FieldFirstTokenMs holds the string denoting the first_token_ms field in the database.
 	FieldFirstTokenMs = "first_token_ms"
+	// FieldFirstResponseMs holds the string denoting the first_response_ms field in the database.
+	FieldFirstResponseMs = "first_response_ms"
+	// FieldFirstEventMs holds the string denoting the first_event_ms field in the database.
+	FieldFirstEventMs = "first_event_ms"
+	// FieldFirstOutputMs holds the string denoting the first_output_ms field in the database.
+	FieldFirstOutputMs = "first_output_ms"
 	// FieldAccountQueueWaitMs holds the string denoting the account_queue_wait_ms field in the database.
 	FieldAccountQueueWaitMs = "account_queue_wait_ms"
 	// FieldUserAgent holds the string denoting the user_agent field in the database.
@@ -196,6 +202,9 @@ var Columns = []string{
 	FieldStream,
 	FieldDurationMs,
 	FieldFirstTokenMs,
+	FieldFirstResponseMs,
+	FieldFirstEventMs,
+	FieldFirstOutputMs,
 	FieldAccountQueueWaitMs,
 	FieldUserAgent,
 	FieldIPAddress,
@@ -471,6 +480,21 @@ func ByDurationMs(opts ...sql.OrderTermOption) OrderOption {
 // ByFirstTokenMs orders the results by the first_token_ms field.
 func ByFirstTokenMs(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFirstTokenMs, opts...).ToFunc()
+}
+
+// ByFirstResponseMs orders the results by the first_response_ms field.
+func ByFirstResponseMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFirstResponseMs, opts...).ToFunc()
+}
+
+// ByFirstEventMs orders the results by the first_event_ms field.
+func ByFirstEventMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFirstEventMs, opts...).ToFunc()
+}
+
+// ByFirstOutputMs orders the results by the first_output_ms field.
+func ByFirstOutputMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFirstOutputMs, opts...).ToFunc()
 }
 
 // ByAccountQueueWaitMs orders the results by the account_queue_wait_ms field.

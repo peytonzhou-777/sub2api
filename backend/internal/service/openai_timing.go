@@ -10,8 +10,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// OpenAI 请求阶段观测只保存在 Gin 请求上下文，不写入业务表，避免改变
-// 调度、指纹、计费和前端 first_token_ms 的既有语义。
+// OpenAI 请求阶段观测先保存在 Gin 请求上下文，再由成功结果快照写入使用记录；
+// 不改变调度、指纹、计费和前端 first_token_ms 的既有语义。
 const openAITimingContextKey = "openai_timing_trace"
 
 type openAITimingTrace struct {
@@ -133,6 +133,25 @@ func openAITimingDurationMS(startAt, endAt time.Time) (int64, bool) {
 	return endAt.Sub(startAt).Milliseconds(), true
 }
 
+// applyOpenAITimingToResult 将请求阶段观测快照复制到使用记录结果，供计费写入和 API 展示复用。
+func applyOpenAITimingToResult(c *gin.Context, result *OpenAIForwardResult) {
+	trace := openAITiming(c)
+	if trace == nil || result == nil {
+		return
+	}
+	toIntPtr := func(startAt, endAt time.Time) *int {
+		value, ok := openAITimingDurationMS(startAt, endAt)
+		if !ok || value < 0 {
+			return nil
+		}
+		converted := int(value)
+		return &converted
+	}
+	result.FirstResponseMs = toIntPtr(trace.upstreamAttemptStarted, trace.upstreamHeadersAt)
+	result.FirstEventMs = toIntPtr(trace.upstreamAttemptStarted, trace.upstreamFirstEventAt)
+	result.FirstOutputMs = toIntPtr(trace.upstreamAttemptStarted, trace.firstClientOutputAt)
+}
+
 // logOpenAITiming 输出单条请求级阶段日志，不记录请求体、Prompt、Token 或凭据。
 // 阶段均以最终上游 attempt 为基准，便于直接定位 HTTP/SSE 首字长尾。
 func logOpenAITiming(
@@ -174,6 +193,7 @@ func logOpenAITiming(
 		)
 	}
 	if result != nil {
+		applyOpenAITimingToResult(c, result)
 		fields = append(fields,
 			zap.Bool("openai_ws_mode", result.OpenAIWSMode),
 			zap.Int64("request_duration_ms", result.Duration.Milliseconds()),

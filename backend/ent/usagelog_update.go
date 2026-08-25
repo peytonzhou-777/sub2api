@@ -712,6 +712,87 @@ func (_u *UsageLogUpdate) ClearFirstTokenMs() *UsageLogUpdate {
 	return _u
 }
 
+// SetFirstResponseMs sets the "first_response_ms" field.
+func (_u *UsageLogUpdate) SetFirstResponseMs(v int) *UsageLogUpdate {
+	_u.mutation.ResetFirstResponseMs()
+	_u.mutation.SetFirstResponseMs(v)
+	return _u
+}
+
+// SetNillableFirstResponseMs sets the "first_response_ms" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableFirstResponseMs(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetFirstResponseMs(*v)
+	}
+	return _u
+}
+
+// AddFirstResponseMs adds value to the "first_response_ms" field.
+func (_u *UsageLogUpdate) AddFirstResponseMs(v int) *UsageLogUpdate {
+	_u.mutation.AddFirstResponseMs(v)
+	return _u
+}
+
+// ClearFirstResponseMs clears the value of the "first_response_ms" field.
+func (_u *UsageLogUpdate) ClearFirstResponseMs() *UsageLogUpdate {
+	_u.mutation.ClearFirstResponseMs()
+	return _u
+}
+
+// SetFirstEventMs sets the "first_event_ms" field.
+func (_u *UsageLogUpdate) SetFirstEventMs(v int) *UsageLogUpdate {
+	_u.mutation.ResetFirstEventMs()
+	_u.mutation.SetFirstEventMs(v)
+	return _u
+}
+
+// SetNillableFirstEventMs sets the "first_event_ms" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableFirstEventMs(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetFirstEventMs(*v)
+	}
+	return _u
+}
+
+// AddFirstEventMs adds value to the "first_event_ms" field.
+func (_u *UsageLogUpdate) AddFirstEventMs(v int) *UsageLogUpdate {
+	_u.mutation.AddFirstEventMs(v)
+	return _u
+}
+
+// ClearFirstEventMs clears the value of the "first_event_ms" field.
+func (_u *UsageLogUpdate) ClearFirstEventMs() *UsageLogUpdate {
+	_u.mutation.ClearFirstEventMs()
+	return _u
+}
+
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (_u *UsageLogUpdate) SetFirstOutputMs(v int) *UsageLogUpdate {
+	_u.mutation.ResetFirstOutputMs()
+	_u.mutation.SetFirstOutputMs(v)
+	return _u
+}
+
+// SetNillableFirstOutputMs sets the "first_output_ms" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableFirstOutputMs(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetFirstOutputMs(*v)
+	}
+	return _u
+}
+
+// AddFirstOutputMs adds value to the "first_output_ms" field.
+func (_u *UsageLogUpdate) AddFirstOutputMs(v int) *UsageLogUpdate {
+	_u.mutation.AddFirstOutputMs(v)
+	return _u
+}
+
+// ClearFirstOutputMs clears the value of the "first_output_ms" field.
+func (_u *UsageLogUpdate) ClearFirstOutputMs() *UsageLogUpdate {
+	_u.mutation.ClearFirstOutputMs()
+	return _u
+}
+
 // SetAccountQueueWaitMs sets the "account_queue_wait_ms" field.
 func (_u *UsageLogUpdate) SetAccountQueueWaitMs(v int) *UsageLogUpdate {
 	_u.mutation.ResetAccountQueueWaitMs()
@@ -1335,6 +1416,33 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstResponseMs(); ok {
+		_spec.SetField(usagelog.FieldFirstResponseMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstResponseMs(); ok {
+		_spec.AddField(usagelog.FieldFirstResponseMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstResponseMsCleared() {
+		_spec.ClearField(usagelog.FieldFirstResponseMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstEventMs(); ok {
+		_spec.SetField(usagelog.FieldFirstEventMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstEventMs(); ok {
+		_spec.AddField(usagelog.FieldFirstEventMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstEventMsCleared() {
+		_spec.ClearField(usagelog.FieldFirstEventMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstOutputMs(); ok {
+		_spec.SetField(usagelog.FieldFirstOutputMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstOutputMs(); ok {
+		_spec.AddField(usagelog.FieldFirstOutputMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstOutputMsCleared() {
+		_spec.ClearField(usagelog.FieldFirstOutputMs, field.TypeInt)
 	}
 	if value, ok := _u.mutation.AccountQueueWaitMs(); ok {
 		_spec.SetField(usagelog.FieldAccountQueueWaitMs, field.TypeInt, value)
@@ -2262,6 +2370,87 @@ func (_u *UsageLogUpdateOne) ClearFirstTokenMs() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetFirstResponseMs sets the "first_response_ms" field.
+func (_u *UsageLogUpdateOne) SetFirstResponseMs(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetFirstResponseMs()
+	_u.mutation.SetFirstResponseMs(v)
+	return _u
+}
+
+// SetNillableFirstResponseMs sets the "first_response_ms" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableFirstResponseMs(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetFirstResponseMs(*v)
+	}
+	return _u
+}
+
+// AddFirstResponseMs adds value to the "first_response_ms" field.
+func (_u *UsageLogUpdateOne) AddFirstResponseMs(v int) *UsageLogUpdateOne {
+	_u.mutation.AddFirstResponseMs(v)
+	return _u
+}
+
+// ClearFirstResponseMs clears the value of the "first_response_ms" field.
+func (_u *UsageLogUpdateOne) ClearFirstResponseMs() *UsageLogUpdateOne {
+	_u.mutation.ClearFirstResponseMs()
+	return _u
+}
+
+// SetFirstEventMs sets the "first_event_ms" field.
+func (_u *UsageLogUpdateOne) SetFirstEventMs(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetFirstEventMs()
+	_u.mutation.SetFirstEventMs(v)
+	return _u
+}
+
+// SetNillableFirstEventMs sets the "first_event_ms" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableFirstEventMs(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetFirstEventMs(*v)
+	}
+	return _u
+}
+
+// AddFirstEventMs adds value to the "first_event_ms" field.
+func (_u *UsageLogUpdateOne) AddFirstEventMs(v int) *UsageLogUpdateOne {
+	_u.mutation.AddFirstEventMs(v)
+	return _u
+}
+
+// ClearFirstEventMs clears the value of the "first_event_ms" field.
+func (_u *UsageLogUpdateOne) ClearFirstEventMs() *UsageLogUpdateOne {
+	_u.mutation.ClearFirstEventMs()
+	return _u
+}
+
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (_u *UsageLogUpdateOne) SetFirstOutputMs(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetFirstOutputMs()
+	_u.mutation.SetFirstOutputMs(v)
+	return _u
+}
+
+// SetNillableFirstOutputMs sets the "first_output_ms" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableFirstOutputMs(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetFirstOutputMs(*v)
+	}
+	return _u
+}
+
+// AddFirstOutputMs adds value to the "first_output_ms" field.
+func (_u *UsageLogUpdateOne) AddFirstOutputMs(v int) *UsageLogUpdateOne {
+	_u.mutation.AddFirstOutputMs(v)
+	return _u
+}
+
+// ClearFirstOutputMs clears the value of the "first_output_ms" field.
+func (_u *UsageLogUpdateOne) ClearFirstOutputMs() *UsageLogUpdateOne {
+	_u.mutation.ClearFirstOutputMs()
+	return _u
+}
+
 // SetAccountQueueWaitMs sets the "account_queue_wait_ms" field.
 func (_u *UsageLogUpdateOne) SetAccountQueueWaitMs(v int) *UsageLogUpdateOne {
 	_u.mutation.ResetAccountQueueWaitMs()
@@ -2915,6 +3104,33 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstResponseMs(); ok {
+		_spec.SetField(usagelog.FieldFirstResponseMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstResponseMs(); ok {
+		_spec.AddField(usagelog.FieldFirstResponseMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstResponseMsCleared() {
+		_spec.ClearField(usagelog.FieldFirstResponseMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstEventMs(); ok {
+		_spec.SetField(usagelog.FieldFirstEventMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstEventMs(); ok {
+		_spec.AddField(usagelog.FieldFirstEventMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstEventMsCleared() {
+		_spec.ClearField(usagelog.FieldFirstEventMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstOutputMs(); ok {
+		_spec.SetField(usagelog.FieldFirstOutputMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstOutputMs(); ok {
+		_spec.AddField(usagelog.FieldFirstOutputMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstOutputMsCleared() {
+		_spec.ClearField(usagelog.FieldFirstOutputMs, field.TypeInt)
 	}
 	if value, ok := _u.mutation.AccountQueueWaitMs(); ok {
 		_spec.SetField(usagelog.FieldAccountQueueWaitMs, field.TypeInt, value)

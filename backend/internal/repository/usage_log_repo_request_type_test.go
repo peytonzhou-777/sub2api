@@ -104,6 +104,9 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // prompt_cache_key_hash
 			sqlmock.AnyArg(), // session_id
 			log.IsSubagent,
+			sqlmock.AnyArg(), // first_response_ms
+			sqlmock.AnyArg(), // first_event_ms
+			sqlmock.AnyArg(), // first_output_ms
 			createdAt,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
@@ -201,6 +204,9 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // prompt_cache_key_hash
 			sqlmock.AnyArg(), // session_id
 			log.IsSubagent,
+			sqlmock.AnyArg(), // first_response_ms
+			sqlmock.AnyArg(), // first_event_ms
+			sqlmock.AnyArg(), // first_output_ms
 			createdAt,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
@@ -854,6 +860,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{}, // prompt_cache_key_hash
 			sql.NullString{},
 			true,
+			sql.NullInt64{}, // first_response_ms
+			sql.NullInt64{}, // first_event_ms
+			sql.NullInt64{}, // first_output_ms
 			now,
 		}})
 		require.NoError(t, err)
@@ -937,6 +946,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // prompt_cache_key_hash
 			sql.NullString{},  // session_id
 			false,             // is_subagent
+			sql.NullInt64{},   // first_response_ms
+			sql.NullInt64{},   // first_event_ms
+			sql.NullInt64{},   // first_output_ms
 			now,
 		}})
 		require.NoError(t, err)
@@ -1002,6 +1014,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // prompt_cache_key_hash
 			sql.NullString{},  // session_id
 			false,             // is_subagent
+			sql.NullInt64{},   // first_response_ms
+			sql.NullInt64{},   // first_event_ms
+			sql.NullInt64{},   // first_output_ms
 			now,
 		}})
 		require.NoError(t, err)
@@ -1067,6 +1082,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // prompt_cache_key_hash
 			sql.NullString{},  // session_id
 			false,             // is_subagent
+			sql.NullInt64{},   // first_response_ms
+			sql.NullInt64{},   // first_event_ms
+			sql.NullInt64{},   // first_output_ms
 			now,
 		}})
 		require.NoError(t, err)

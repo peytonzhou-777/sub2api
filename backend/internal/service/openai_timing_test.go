@@ -52,6 +52,17 @@ func TestOpenAITimingStagesAreFirstWins(t *testing.T) {
 	if trace.upstreamStatusCode != 200 {
 		t.Fatalf("upstream status = %d, want 200", trace.upstreamStatusCode)
 	}
+	result := &OpenAIForwardResult{}
+	applyOpenAITimingToResult(c, result)
+	if result.FirstResponseMs == nil || *result.FirstResponseMs != 10 {
+		t.Fatalf("first response = %v, want 10ms", result.FirstResponseMs)
+	}
+	if result.FirstEventMs == nil || *result.FirstEventMs != 20 {
+		t.Fatalf("first event = %v, want 20ms", result.FirstEventMs)
+	}
+	if result.FirstOutputMs == nil || *result.FirstOutputMs != 35 {
+		t.Fatalf("first output = %v, want 35ms", result.FirstOutputMs)
+	}
 	if duration, ok := openAITimingDurationMS(base, base.Add(1234*time.Millisecond)); !ok || duration != 1234 {
 		t.Fatalf("duration = %d, ok=%v, want 1234ms/true", duration, ok)
 	}

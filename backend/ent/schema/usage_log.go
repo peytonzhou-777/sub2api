@@ -132,6 +132,18 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int("first_token_ms").
 			Optional().
 			Nillable(),
+		field.Int("first_response_ms").
+			Optional().
+			Nillable().
+			Comment("上游首响应头或 WS 连接/租约确认耗时"),
+		field.Int("first_event_ms").
+			Optional().
+			Nillable().
+			Comment("首个可解析 SSE data 或 WS 事件耗时"),
+		field.Int("first_output_ms").
+			Optional().
+			Nillable().
+			Comment("首次满足 startsClientOutput 的结构性输出事件耗时"),
 		field.Int("account_queue_wait_ms").
 			Optional().
 			Nillable().

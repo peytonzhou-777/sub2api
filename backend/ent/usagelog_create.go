@@ -463,6 +463,48 @@ func (_c *UsageLogCreate) SetNillableFirstTokenMs(v *int) *UsageLogCreate {
 	return _c
 }
 
+// SetFirstResponseMs sets the "first_response_ms" field.
+func (_c *UsageLogCreate) SetFirstResponseMs(v int) *UsageLogCreate {
+	_c.mutation.SetFirstResponseMs(v)
+	return _c
+}
+
+// SetNillableFirstResponseMs sets the "first_response_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableFirstResponseMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetFirstResponseMs(*v)
+	}
+	return _c
+}
+
+// SetFirstEventMs sets the "first_event_ms" field.
+func (_c *UsageLogCreate) SetFirstEventMs(v int) *UsageLogCreate {
+	_c.mutation.SetFirstEventMs(v)
+	return _c
+}
+
+// SetNillableFirstEventMs sets the "first_event_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableFirstEventMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetFirstEventMs(*v)
+	}
+	return _c
+}
+
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (_c *UsageLogCreate) SetFirstOutputMs(v int) *UsageLogCreate {
+	_c.mutation.SetFirstOutputMs(v)
+	return _c
+}
+
+// SetNillableFirstOutputMs sets the "first_output_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableFirstOutputMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetFirstOutputMs(*v)
+	}
+	return _c
+}
+
 // SetAccountQueueWaitMs sets the "account_queue_wait_ms" field.
 func (_c *UsageLogCreate) SetAccountQueueWaitMs(v int) *UsageLogCreate {
 	_c.mutation.SetAccountQueueWaitMs(v)
@@ -1096,6 +1138,18 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
 		_node.FirstTokenMs = &value
+	}
+	if value, ok := _c.mutation.FirstResponseMs(); ok {
+		_spec.SetField(usagelog.FieldFirstResponseMs, field.TypeInt, value)
+		_node.FirstResponseMs = &value
+	}
+	if value, ok := _c.mutation.FirstEventMs(); ok {
+		_spec.SetField(usagelog.FieldFirstEventMs, field.TypeInt, value)
+		_node.FirstEventMs = &value
+	}
+	if value, ok := _c.mutation.FirstOutputMs(); ok {
+		_spec.SetField(usagelog.FieldFirstOutputMs, field.TypeInt, value)
+		_node.FirstOutputMs = &value
 	}
 	if value, ok := _c.mutation.AccountQueueWaitMs(); ok {
 		_spec.SetField(usagelog.FieldAccountQueueWaitMs, field.TypeInt, value)
@@ -1881,6 +1935,78 @@ func (u *UsageLogUpsert) AddFirstTokenMs(v int) *UsageLogUpsert {
 // ClearFirstTokenMs clears the value of the "first_token_ms" field.
 func (u *UsageLogUpsert) ClearFirstTokenMs() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldFirstTokenMs)
+	return u
+}
+
+// SetFirstResponseMs sets the "first_response_ms" field.
+func (u *UsageLogUpsert) SetFirstResponseMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldFirstResponseMs, v)
+	return u
+}
+
+// UpdateFirstResponseMs sets the "first_response_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateFirstResponseMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldFirstResponseMs)
+	return u
+}
+
+// AddFirstResponseMs adds v to the "first_response_ms" field.
+func (u *UsageLogUpsert) AddFirstResponseMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldFirstResponseMs, v)
+	return u
+}
+
+// ClearFirstResponseMs clears the value of the "first_response_ms" field.
+func (u *UsageLogUpsert) ClearFirstResponseMs() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldFirstResponseMs)
+	return u
+}
+
+// SetFirstEventMs sets the "first_event_ms" field.
+func (u *UsageLogUpsert) SetFirstEventMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldFirstEventMs, v)
+	return u
+}
+
+// UpdateFirstEventMs sets the "first_event_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateFirstEventMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldFirstEventMs)
+	return u
+}
+
+// AddFirstEventMs adds v to the "first_event_ms" field.
+func (u *UsageLogUpsert) AddFirstEventMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldFirstEventMs, v)
+	return u
+}
+
+// ClearFirstEventMs clears the value of the "first_event_ms" field.
+func (u *UsageLogUpsert) ClearFirstEventMs() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldFirstEventMs)
+	return u
+}
+
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (u *UsageLogUpsert) SetFirstOutputMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldFirstOutputMs, v)
+	return u
+}
+
+// UpdateFirstOutputMs sets the "first_output_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateFirstOutputMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldFirstOutputMs)
+	return u
+}
+
+// AddFirstOutputMs adds v to the "first_output_ms" field.
+func (u *UsageLogUpsert) AddFirstOutputMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldFirstOutputMs, v)
+	return u
+}
+
+// ClearFirstOutputMs clears the value of the "first_output_ms" field.
+func (u *UsageLogUpsert) ClearFirstOutputMs() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldFirstOutputMs)
 	return u
 }
 
@@ -2859,6 +2985,90 @@ func (u *UsageLogUpsertOne) UpdateFirstTokenMs() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearFirstTokenMs() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetFirstResponseMs sets the "first_response_ms" field.
+func (u *UsageLogUpsertOne) SetFirstResponseMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFirstResponseMs(v)
+	})
+}
+
+// AddFirstResponseMs adds v to the "first_response_ms" field.
+func (u *UsageLogUpsertOne) AddFirstResponseMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddFirstResponseMs(v)
+	})
+}
+
+// UpdateFirstResponseMs sets the "first_response_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateFirstResponseMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFirstResponseMs()
+	})
+}
+
+// ClearFirstResponseMs clears the value of the "first_response_ms" field.
+func (u *UsageLogUpsertOne) ClearFirstResponseMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFirstResponseMs()
+	})
+}
+
+// SetFirstEventMs sets the "first_event_ms" field.
+func (u *UsageLogUpsertOne) SetFirstEventMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFirstEventMs(v)
+	})
+}
+
+// AddFirstEventMs adds v to the "first_event_ms" field.
+func (u *UsageLogUpsertOne) AddFirstEventMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddFirstEventMs(v)
+	})
+}
+
+// UpdateFirstEventMs sets the "first_event_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateFirstEventMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFirstEventMs()
+	})
+}
+
+// ClearFirstEventMs clears the value of the "first_event_ms" field.
+func (u *UsageLogUpsertOne) ClearFirstEventMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFirstEventMs()
+	})
+}
+
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (u *UsageLogUpsertOne) SetFirstOutputMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFirstOutputMs(v)
+	})
+}
+
+// AddFirstOutputMs adds v to the "first_output_ms" field.
+func (u *UsageLogUpsertOne) AddFirstOutputMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddFirstOutputMs(v)
+	})
+}
+
+// UpdateFirstOutputMs sets the "first_output_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateFirstOutputMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFirstOutputMs()
+	})
+}
+
+// ClearFirstOutputMs clears the value of the "first_output_ms" field.
+func (u *UsageLogUpsertOne) ClearFirstOutputMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFirstOutputMs()
 	})
 }
 
@@ -4043,6 +4253,90 @@ func (u *UsageLogUpsertBulk) UpdateFirstTokenMs() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearFirstTokenMs() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetFirstResponseMs sets the "first_response_ms" field.
+func (u *UsageLogUpsertBulk) SetFirstResponseMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFirstResponseMs(v)
+	})
+}
+
+// AddFirstResponseMs adds v to the "first_response_ms" field.
+func (u *UsageLogUpsertBulk) AddFirstResponseMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddFirstResponseMs(v)
+	})
+}
+
+// UpdateFirstResponseMs sets the "first_response_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateFirstResponseMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFirstResponseMs()
+	})
+}
+
+// ClearFirstResponseMs clears the value of the "first_response_ms" field.
+func (u *UsageLogUpsertBulk) ClearFirstResponseMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFirstResponseMs()
+	})
+}
+
+// SetFirstEventMs sets the "first_event_ms" field.
+func (u *UsageLogUpsertBulk) SetFirstEventMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFirstEventMs(v)
+	})
+}
+
+// AddFirstEventMs adds v to the "first_event_ms" field.
+func (u *UsageLogUpsertBulk) AddFirstEventMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddFirstEventMs(v)
+	})
+}
+
+// UpdateFirstEventMs sets the "first_event_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateFirstEventMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFirstEventMs()
+	})
+}
+
+// ClearFirstEventMs clears the value of the "first_event_ms" field.
+func (u *UsageLogUpsertBulk) ClearFirstEventMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFirstEventMs()
+	})
+}
+
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (u *UsageLogUpsertBulk) SetFirstOutputMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFirstOutputMs(v)
+	})
+}
+
+// AddFirstOutputMs adds v to the "first_output_ms" field.
+func (u *UsageLogUpsertBulk) AddFirstOutputMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddFirstOutputMs(v)
+	})
+}
+
+// UpdateFirstOutputMs sets the "first_output_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateFirstOutputMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFirstOutputMs()
+	})
+}
+
+// ClearFirstOutputMs clears the value of the "first_output_ms" field.
+func (u *UsageLogUpsertBulk) ClearFirstOutputMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFirstOutputMs()
 	})
 }
 
