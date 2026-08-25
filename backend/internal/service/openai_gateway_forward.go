@@ -29,6 +29,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	clearOpenAIResponsesClientToolMapping(c)
 	clearOpenAIResponsesNamespaceNames(c)
 	startTime := time.Now()
+	beginOpenAITiming(c, startTime)
 	// 固定渠道映射后的请求级 canonical body；账号 normalize/strip 不得改写跨 failover hint。
 	canonicalImageIntentBody := body
 
@@ -860,7 +861,11 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 
 		// Send request
 		upstreamStart := time.Now()
+		markOpenAITimingUpstreamAttempt(c, upstreamStart)
 		resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+		if resp != nil {
+			markOpenAITimingUpstreamResponse(c, time.Now(), resp.StatusCode)
+		}
 		SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 		if headerGuard != nil && headerGuard.stopHeaderWait() {
 			if resp != nil && resp.Body != nil {
@@ -1009,6 +1014,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			imageOutputSizes = nonStreamResult.imageOutputSizes
 			searchCount = nonStreamResult.searchCount
 		}
+		markOpenAITimingUpstreamBodyDone(c, time.Now())
 		if turnState := strings.TrimSpace(resp.Header.Get(openAIWSTurnStateHeader)); turnState != "" {
 			s.bindOpenAITurnStateProvenance(ctx, c, account.ID, openAITurnStateSessionHash(c), turnState, s.openAIWSSessionStickyTTL())
 		}
@@ -1055,6 +1061,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if searchCount > 0 && account != nil && account.IsGrok() {
 			forwardResult.SearchCount = searchCount
 		}
+		logOpenAITiming(ctx, c, account, originalModel, reqStream, forwardResult, time.Now())
 		return forwardResult, nil
 	}
 }

@@ -304,6 +304,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
 					logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming flush, continuing to drain upstream for billing")
 				} else {
 					clientOutputStarted = true
+					if completedVisibleEvent {
+						markOpenAITimingFirstClientWrite(c, time.Now())
+					}
 					lastDownstreamWriteAt = time.Now()
 				}
 			}
@@ -314,6 +317,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
 			stopFirstOutputTimer()
 		}
 		if completedVisibleEvent && firstTokenMs == nil {
+			markOpenAITimingFirstSemanticOutput(c, time.Now())
 			ms := int(time.Since(firstTokenStartTime).Milliseconds())
 			firstTokenMs = &ms
 		}
@@ -352,6 +356,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
 	// both list the same call_id — counting both would ~2× the surcharge).
 	streamSearchSeen := make(map[string]struct{})
 	resultWithUsage := func() *openaiStreamingResult {
+		markOpenAITimingUpstreamBodyDone(c, time.Now())
 		return &openaiStreamingResult{
 			usage:            usage,
 			firstTokenMs:     firstTokenMs,
@@ -467,6 +472,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
 		}
 		// Extract data from SSE line (supports both "data: " and "data:" formats)
 		if data, ok := extractOpenAISSEDataLine(line); ok {
+			markOpenAITimingUpstreamFirstEvent(c, time.Now())
 			dataBytes := []byte(data)
 			eventTypeRaw := gjson.GetBytes(dataBytes, "type").String()
 			eventType := strings.TrimSpace(eventTypeRaw)
@@ -610,6 +616,10 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
 			}
 			startsClientOutput := forceFlushFailedEvent || openAIStreamDataStartsClientOutput(data, eventType)
 			startsVisibleOutput := openAIStreamDataStartsVisibleOutput(data, eventType)
+			if startsVisibleOutput {
+				markOpenAITimingFirstSemanticOutput(c, time.Now())
+			}
+			eventStartsVisibleOutput = eventStartsVisibleOutput || startsVisibleOutput
 			if stageFirstOutput {
 				eventStartsClientOutput = eventStartsClientOutput || startsClientOutput
 				eventStartsVisibleOutput = eventStartsVisibleOutput || startsVisibleOutput
@@ -692,6 +702,10 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
 						logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming flush, continuing to drain upstream for billing")
 					} else {
 						clientOutputStarted = true
+						if eventStartsVisibleOutput {
+							markOpenAITimingFirstClientWrite(c, time.Now())
+							eventStartsVisibleOutput = false
+						}
 						lastDownstreamWriteAt = time.Now()
 					}
 				}
