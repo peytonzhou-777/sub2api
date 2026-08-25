@@ -185,6 +185,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	acquireCtx, acquireCancel := context.WithTimeout(ctx, s.openAIWSAcquireTimeout())
 	defer acquireCancel()
 
+	markOpenAITimingUpstreamAttempt(c, time.Now())
 	lease, err := s.getOpenAIWSConnPool().Acquire(acquireCtx, openAIWSAcquireRequest{
 		Account:                 account,
 		WSURL:                   wsURL,
@@ -253,6 +254,14 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		lease.Release()
 	}()
 	connID := strings.TrimSpace(lease.ConnID())
+	markOpenAITimingUpstreamResponse(c, time.Now(), http.StatusSwitchingProtocols)
+	markOpenAITimingWSLease(
+		c,
+		lease.QueueWaitDuration().Milliseconds(),
+		lease.ConnPickDuration().Milliseconds(),
+		lease.Reused(),
+		connID,
+	)
 	logOpenAIWSModeDebug(
 		"connected account_id=%d account_type=%s transport=%s conn_id=%s conn_reused=%v conn_pick_ms=%d queue_wait_ms=%d has_previous_response_id=%v",
 		account.ID,
@@ -536,6 +545,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		if eventType == "" {
 			continue
 		}
+		markOpenAITimingUpstreamFirstEvent(c, time.Now())
 		responseModelObserver.ObserveOpenAI(message, eventType)
 		eventCount++
 		if firstEventType == "" {
@@ -556,6 +566,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			terminalEventCount++
 		}
 		if firstTokenMs == nil && isTokenEvent {
+			markOpenAITimingFirstSemanticOutput(c, time.Now())
 			ms := int(time.Since(startTime).Milliseconds())
 			firstTokenMs = &ms
 		}
@@ -696,6 +707,9 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			} else {
 				flushBufferedStreamEvents(eventType)
 				emitStreamMessage(message, isTerminalEvent)
+				if isTokenEvent && wroteDownstream {
+					markOpenAITimingFirstClientWrite(c, time.Now())
+				}
 			}
 		} else {
 			if responseField.Exists() && responseField.Type == gjson.JSON {
@@ -740,6 +754,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		}
 
 		c.Data(http.StatusOK, "application/json", finalResponse)
+		markOpenAITimingFirstClientWrite(c, time.Now())
 	} else {
 		flushStreamWriter(true)
 	}
@@ -778,7 +793,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		clientDisconnected,
 	)
 
-	return &OpenAIForwardResult{
+	forwardResult := &OpenAIForwardResult{
 		RequestID:                     responseID,
 		Usage:                         *usage,
 		Model:                         originalModel,
@@ -795,7 +810,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		ResponseHeaders:               lease.HandshakeHeaders(),
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
-	}, nil
+	}
+	markOpenAITimingUpstreamBodyDone(c, time.Now())
+	logOpenAITiming(ctx, c, account, originalModel, reqStream, forwardResult, time.Now())
+	return forwardResult, nil
 }
 
 // ProxyResponsesWebSocketFromClient 处理客户端入站 WebSocket（OpenAI Responses WS Mode）并转发到上游。

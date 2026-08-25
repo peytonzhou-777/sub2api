@@ -24,6 +24,11 @@ type openAITimingTrace struct {
 	upstreamBodyDoneAt     time.Time
 	upstreamAttempts       int
 	upstreamStatusCode     int
+	wsQueueWaitMs          int64
+	wsConnPickMs           int64
+	wsConnReused           bool
+	wsConnID               string
+	wsLeaseObserved        bool
 }
 
 func beginOpenAITiming(c *gin.Context, startedAt time.Time) {
@@ -98,6 +103,19 @@ func markOpenAITimingUpstreamBodyDone(c *gin.Context, doneAt time.Time) {
 	trace.upstreamBodyDoneAt = doneAt
 }
 
+// markOpenAITimingWSLease 保存 WS 连接池租约信息，便于与 SSE 的上游阶段耗时对照。
+func markOpenAITimingWSLease(c *gin.Context, queueWaitMs, connPickMs int64, reused bool, connID string) {
+	trace := openAITiming(c)
+	if trace == nil {
+		return
+	}
+	trace.wsQueueWaitMs = queueWaitMs
+	trace.wsConnPickMs = connPickMs
+	trace.wsConnReused = reused
+	trace.wsConnID = strings.TrimSpace(connID)
+	trace.wsLeaseObserved = true
+}
+
 func openAITimingDurationMS(startAt, endAt time.Time) (int64, bool) {
 	if startAt.IsZero() || endAt.IsZero() || endAt.Before(startAt) {
 		return 0, false
@@ -124,13 +142,15 @@ func logOpenAITiming(
 		finishedAt = time.Now()
 	}
 
+	transport := "http_json"
+	if stream {
+		transport = "http_sse"
+	}
+	if result != nil && result.OpenAIWSMode {
+		transport = "ws"
+	}
 	fields := []zap.Field{
-		zap.String("transport", func() string {
-			if stream {
-				return "http_sse"
-			}
-			return "http_json"
-		}()),
+		zap.String("transport", transport),
 		zap.Bool("stream", stream),
 		zap.String("model", strings.TrimSpace(model)),
 		zap.Int("upstream_attempts", trace.upstreamAttempts),
@@ -164,6 +184,16 @@ func logOpenAITiming(
 	appendDuration("first_client_write_ms", trace.upstreamAttemptStarted, trace.firstClientWriteAt)
 	appendDuration("upstream_body_ms", trace.upstreamAttemptStarted, trace.upstreamBodyDoneAt)
 	appendDuration("forward_total_ms", trace.forwardStartedAt, finishedAt)
+	if trace.wsLeaseObserved {
+		fields = append(fields,
+			zap.Int64("ws_queue_wait_ms", trace.wsQueueWaitMs),
+			zap.Int64("ws_conn_pick_ms", trace.wsConnPickMs),
+			zap.Bool("ws_conn_reused", trace.wsConnReused),
+		)
+		if trace.wsConnID != "" {
+			fields = append(fields, zap.String("ws_conn_id", trace.wsConnID))
+		}
+	}
 
 	logger.FromContext(ctx).With(fields...).Info("openai.ttft_stage_timing")
 }
