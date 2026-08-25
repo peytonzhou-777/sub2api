@@ -480,6 +480,7 @@ type OpenAIGatewayService struct {
 	responseHeaderFilter                *responseheaders.CompiledHeaderFilter
 	codexSnapshotThrottle               *accountWriteThrottle
 	codexModelsManifestCache            codexModelsManifestCache
+	codexLifecyclePrefetch              atomic.Pointer[codexLifecyclePrefetchRuntime]
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
 	openaiAffinity                      openAIUserAffinityState

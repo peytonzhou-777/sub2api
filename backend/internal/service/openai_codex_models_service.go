@@ -32,7 +32,10 @@ const (
 	codexModelsManifestCacheMaxEntries       = 64
 	codexModelsManifestCacheTTL              = 30 * time.Second
 	codexModelsManifestCacheStaleTTL         = 5 * time.Minute
-	codexModelsManifestRequestTimeout        = 15 * time.Second
+	// 官方 CLI 每三分钟刷新一次；OAuth 按上游账号缓存可避免多个下游实例放大刷新频率。
+	codexModelsManifestOAuthCacheTTL      = 3 * time.Minute
+	codexModelsManifestOAuthCacheStaleTTL = 10 * time.Minute
+	codexModelsManifestRequestTimeout     = 15 * time.Second
 )
 
 // CodexModelsManifest carries the client representation plus caching metadata.
@@ -190,9 +193,15 @@ func (c *codexModelsManifestCache) get(key string, now time.Time) (*CodexModelsM
 	return entry.manifest, codexModelsManifestCacheStale
 }
 
-func (c *codexModelsManifestCache) set(key string, manifest *CodexModelsManifest, now time.Time) {
+func (c *codexModelsManifestCache) set(key string, manifest *CodexModelsManifest, now time.Time, freshTTL, staleTTL time.Duration) {
 	if manifest == nil || len(manifest.Body) > codexModelsManifestCacheBodyLimit {
 		return
+	}
+	if freshTTL <= 0 {
+		freshTTL = codexModelsManifestCacheTTL
+	}
+	if staleTTL < freshTTL {
+		staleTTL = codexModelsManifestCacheStaleTTL
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -220,8 +229,8 @@ func (c *codexModelsManifestCache) set(key string, manifest *CodexModelsManifest
 	c.entries[key] = codexModelsManifestCacheEntry{
 		manifest:   manifest,
 		order:      c.nextOrder,
-		expiresAt:  now.Add(codexModelsManifestCacheTTL),
-		staleUntil: now.Add(codexModelsManifestCacheStaleTTL),
+		expiresAt:  now.Add(freshTTL),
+		staleUntil: now.Add(staleTTL),
 	}
 }
 
@@ -363,8 +372,19 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		useAPIKeyUpstream:   useAPIKeyUpstream,
 	}
 	if useAPIKeyUpstream {
-		return s.fetchCachedAPIKeyCodexModelsManifest(ctx, request, ifNoneMatch)
+		return s.fetchCachedCodexModelsManifest(ctx, request, ifNoneMatch, s.fetchCodexModelsManifestUpstream)
 	}
+	return s.fetchCachedCodexModelsManifest(ctx, request, ifNoneMatch, func(refreshCtx context.Context, refreshRequest codexModelsManifestRequest, upstreamETag string) (*CodexModelsManifest, error) {
+		return s.fetchOAuthCodexModelsManifestUpstream(refreshCtx, account, credAccount, refreshRequest, upstreamETag)
+	})
+}
+
+func (s *OpenAIGatewayService) fetchOAuthCodexModelsManifestUpstream(
+	ctx context.Context,
+	account, credAccount *Account,
+	request codexModelsManifestRequest,
+	ifNoneMatch string,
+) (*CodexModelsManifest, error) {
 	manifest, fetchErr := s.fetchCodexModelsManifestUpstream(ctx, request, ifNoneMatch)
 	if !credAccount.IsOpenAIAgentIdentity() || !isAgentIdentityTaskInvalidCodexModelsError(fetchErr) {
 		s.handleCodexModelsManifestAccountAuthError(ctx, account, credAccount, fetchErr)
@@ -386,7 +406,9 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		}
 	}
 	setOpenAIChatGPTAccountHeaders(request.headers, credAccount)
-	return s.fetchCodexModelsManifestUpstream(ctx, request, ifNoneMatch)
+	manifest, fetchErr = s.fetchCodexModelsManifestUpstream(ctx, request, ifNoneMatch)
+	s.handleCodexModelsManifestAccountAuthError(ctx, account, credAccount, fetchErr)
+	return manifest, fetchErr
 }
 
 func isAgentIdentityTaskInvalidCodexModelsError(err error) bool {
@@ -426,7 +448,14 @@ func (s *OpenAIGatewayService) handleCodexModelsManifestAccountAuthError(ctx con
 	s.handleOpenAIAccountUpstreamError(ctx, account, upstreamErr.statusCode, headers, upstreamErr.body)
 }
 
-func (s *OpenAIGatewayService) fetchCachedAPIKeyCodexModelsManifest(ctx context.Context, request codexModelsManifestRequest, ifNoneMatch string) (*CodexModelsManifest, error) {
+type codexModelsManifestFetcher func(context.Context, codexModelsManifestRequest, string) (*CodexModelsManifest, error)
+
+func (s *OpenAIGatewayService) fetchCachedCodexModelsManifest(
+	ctx context.Context,
+	request codexModelsManifestRequest,
+	ifNoneMatch string,
+	fetch codexModelsManifestFetcher,
+) (*CodexModelsManifest, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -435,7 +464,20 @@ func (s *OpenAIGatewayService) fetchCachedAPIKeyCodexModelsManifest(ctx context.
 	if state == codexModelsManifestCacheFresh {
 		return codexModelsManifestForClient(manifest, ifNoneMatch), nil
 	}
-	resultCh := s.refreshCachedAPIKeyCodexModelsManifest(cacheKey, request)
+	// OAuth 冷缓存时保留既有 If-None-Match 透传契约；API Key 上游继续使用
+	// 代理本地 ETag，不继承调用者的条件头。首次拿到完整 body 后即转入账号级合并缓存。
+	if state == codexModelsManifestCacheMiss && !request.useAPIKeyUpstream && strings.TrimSpace(ifNoneMatch) != "" {
+		manifest, err := fetch(ctx, request, ifNoneMatch)
+		if err != nil {
+			return nil, err
+		}
+		if manifest != nil && !manifest.NotModified {
+			freshTTL, staleTTL := codexModelsManifestCacheDurations(request)
+			s.codexModelsManifestCache.set(cacheKey, manifest, time.Now(), freshTTL, staleTTL)
+		}
+		return manifest, nil
+	}
+	resultCh := s.refreshCachedCodexModelsManifest(cacheKey, request, fetch)
 	if state == codexModelsManifestCacheStale {
 		return codexModelsManifestForClient(manifest, ifNoneMatch), nil
 	}
@@ -454,26 +496,39 @@ func (s *OpenAIGatewayService) fetchCachedAPIKeyCodexModelsManifest(ctx context.
 	}
 }
 
-func (s *OpenAIGatewayService) refreshCachedAPIKeyCodexModelsManifest(cacheKey string, request codexModelsManifestRequest) <-chan singleflight.Result {
+func (s *OpenAIGatewayService) refreshCachedCodexModelsManifest(
+	cacheKey string,
+	request codexModelsManifestRequest,
+	fetch codexModelsManifestFetcher,
+) <-chan singleflight.Result {
 	return s.codexModelsManifestCache.refresh.DoChan(cacheKey, func() (any, error) {
 		cached, _ := s.codexModelsManifestCache.get(cacheKey, time.Now())
 		ifNoneMatch := ""
 		if cached != nil {
 			ifNoneMatch = cached.upstreamETag
 		}
-		manifest, err := s.fetchCodexModelsManifestUpstream(context.Background(), request, ifNoneMatch)
+		manifest, err := fetch(context.Background(), request, ifNoneMatch)
 		if err != nil {
 			return nil, err
 		}
 		if manifest.NotModified && cached != nil {
-			s.codexModelsManifestCache.set(cacheKey, cached, time.Now())
+			freshTTL, staleTTL := codexModelsManifestCacheDurations(request)
+			s.codexModelsManifestCache.set(cacheKey, cached, time.Now(), freshTTL, staleTTL)
 			return cached, nil
 		}
 		if !manifest.NotModified {
-			s.codexModelsManifestCache.set(cacheKey, manifest, time.Now())
+			freshTTL, staleTTL := codexModelsManifestCacheDurations(request)
+			s.codexModelsManifestCache.set(cacheKey, manifest, time.Now(), freshTTL, staleTTL)
 		}
 		return manifest, nil
 	})
+}
+
+func codexModelsManifestCacheDurations(request codexModelsManifestRequest) (time.Duration, time.Duration) {
+	if request.useAPIKeyUpstream {
+		return codexModelsManifestCacheTTL, codexModelsManifestCacheStaleTTL
+	}
+	return codexModelsManifestOAuthCacheTTL, codexModelsManifestOAuthCacheStaleTTL
 }
 
 func (s *OpenAIGatewayService) fetchCodexModelsManifestUpstream(ctx context.Context, request codexModelsManifestRequest, ifNoneMatch string) (*CodexModelsManifest, error) {
@@ -719,9 +774,17 @@ func validateCodexModelsManifestEnvelope(body []byte) error {
 
 func buildCodexModelsManifestCacheKey(request codexModelsManifestRequest) string {
 	hasher := sha256.New()
-	_, _ = fmt.Fprintf(hasher, "%d\n%d\n%s\n%s\n", request.accountID, request.credentialAccountID, request.proxyURL, request.url)
+	cacheAccountID := request.accountID
+	if !request.useAPIKeyUpstream {
+		cacheAccountID = request.credentialAccountID
+	}
+	_, _ = fmt.Fprintf(hasher, "%d\n%d\n%s\n%s\n", cacheAccountID, request.credentialAccountID, request.proxyURL, request.url)
 	headerNames := make([]string, 0, len(request.headers))
 	for name := range request.headers {
+		// OAuth Token/Agent assertion 会轮换，但账号级 manifest 身份不变；避免因此击穿缓存。
+		if !request.useAPIKeyUpstream && strings.EqualFold(name, "authorization") {
+			continue
+		}
 		headerNames = append(headerNames, name)
 	}
 	sort.Strings(headerNames)

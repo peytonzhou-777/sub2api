@@ -769,6 +769,7 @@ func (s *OpenAIGatewayService) prepareCodexFingerprintForAttempt(
 			if preparedID, idOK := preparedAccount.(int64); idOK && preparedID == account.ID {
 				if staged := stagedCodexFingerprintIDsForAccount(c, account); staged != nil {
 					c.Set(codexFingerprintAdmissionPreparedContextKey, int64(0))
+					s.maybeStartCodexLifecyclePrefetch(ctx, c, account, staged)
 					return staged, nil
 				}
 			}
@@ -794,6 +795,7 @@ func (s *OpenAIGatewayService) prepareCodexFingerprintForAttempt(
 	}
 	fpIDs := codexFingerprintIDsFromContext(fpContext)
 	stageCodexFingerprintIDs(c, fpIDs)
+	s.maybeStartCodexLifecyclePrefetch(ctx, c, account, fpIDs)
 	return fpIDs, nil
 }
 

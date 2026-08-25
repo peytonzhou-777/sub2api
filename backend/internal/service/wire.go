@@ -189,6 +189,10 @@ func ProvideOpenAIQuotaService(
 ) *OpenAIQuotaService {
 	service := NewOpenAIQuotaService(accountRepo, proxyRepo, tokenProvider, privacyClientFactory)
 	service.agentIdentityWS = openAIGatewayService
+	if openAIGatewayService != nil {
+		service.SetHTTPUpstream(openAIGatewayService.httpUpstream)
+		openAIGatewayService.SetCodexLifecycleQuotaPrefetcher(service)
+	}
 	return service
 }
 

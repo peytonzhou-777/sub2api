@@ -699,6 +699,70 @@ func TestFetchCodexModelsManifestOAuthPreservesResponsesLite(t *testing.T) {
 	require.Equal(t, manifestBody, string(manifest.Body))
 }
 
+func TestFetchCodexModelsManifestOAuthCoalescesPerAccount(t *testing.T) {
+	const manifestBody = `{"models":[{"slug":"gpt-5.6-sol"}]}`
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.Header().Set("ETag", `W/"oauth-models"`)
+		_, _ = w.Write([]byte(manifestBody))
+	}))
+	defer server.Close()
+	original := chatgptCodexModelsURL
+	chatgptCodexModelsURL = server.URL
+	defer func() { chatgptCodexModelsURL = original }()
+
+	svc := &OpenAIGatewayService{}
+	account := newCodexModelsTestAccount()
+	first, err := svc.FetchCodexModelsManifest(context.Background(), account, "0.149.0", "")
+	require.NoError(t, err)
+	account.Credentials["access_token"] = "rotated-token"
+	second, err := svc.FetchCodexModelsManifest(context.Background(), account, "0.149.0", first.ETag)
+	require.NoError(t, err)
+	require.True(t, second.NotModified)
+	require.Equal(t, int32(1), calls.Load(), "同一上游账号的 Token 轮换不应击穿 models 缓存")
+
+	other := newCodexModelsTestAccount()
+	other.ID = account.ID + 1
+	_, err = svc.FetchCodexModelsManifest(context.Background(), other, "0.149.0", "")
+	require.NoError(t, err)
+	require.Equal(t, int32(2), calls.Load(), "不同账号必须保持 models 缓存隔离")
+}
+
+func TestCodexModelsManifestOAuthCacheKeyUsesCredentialAccount(t *testing.T) {
+	headers := http.Header{
+		"Authorization":      []string{"Bearer token-a"},
+		"ChatGPT-Account-ID": []string{"workspace"},
+	}
+	parent := codexModelsManifestRequest{
+		url:                 "https://chatgpt.com/backend-api/codex/models?client_version=0.149.0",
+		headers:             headers,
+		accountID:           10,
+		credentialAccountID: 10,
+	}
+	shadow := parent
+	shadow.accountID = 20
+	shadow.headers = headers.Clone()
+	shadow.headers.Set("Authorization", "Bearer rotated-token")
+	require.Equal(t, buildCodexModelsManifestCacheKey(parent), buildCodexModelsManifestCacheKey(shadow))
+
+	apiKeyParent := parent
+	apiKeyParent.useAPIKeyUpstream = true
+	apiKeyShadow := shadow
+	apiKeyShadow.useAPIKeyUpstream = true
+	require.NotEqual(t, buildCodexModelsManifestCacheKey(apiKeyParent), buildCodexModelsManifestCacheKey(apiKeyShadow))
+}
+
+func TestCodexModelsManifestCacheDurationsSeparateOAuthAndAPIKey(t *testing.T) {
+	fresh, stale := codexModelsManifestCacheDurations(codexModelsManifestRequest{})
+	require.Equal(t, codexModelsManifestOAuthCacheTTL, fresh)
+	require.Equal(t, codexModelsManifestOAuthCacheStaleTTL, stale)
+
+	fresh, stale = codexModelsManifestCacheDurations(codexModelsManifestRequest{useAPIKeyUpstream: true})
+	require.Equal(t, codexModelsManifestCacheTTL, fresh)
+	require.Equal(t, codexModelsManifestCacheStaleTTL, stale)
+}
+
 func TestConvertOpenAIModelListToCodexManifest(t *testing.T) {
 	tests := []struct {
 		name string
