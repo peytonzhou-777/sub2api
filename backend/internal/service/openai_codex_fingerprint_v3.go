@@ -314,7 +314,8 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 		if len(threadSourceHashes) > 0 {
 			threadSourceHash = threadSourceHashes[0]
 		}
-		thresholds := s.codexFingerprintRotationThresholds(account.ID, original.sessionScopeHash, now)
+		epochPolicy := s.codexFingerprintEpochPolicy(ctx)
+		thresholds := buildCodexFingerprintRotationThresholds(epochPolicy, account.ID, original.sessionScopeHash, now)
 		rotationAllowed := true
 		if s.openaiWSPool != nil {
 			rotationAllowed = !s.openaiWSPool.SessionScopeRotationBusy(account.ID, original.sessionScopeHash)
@@ -341,7 +342,7 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 				MinAgeBefore:    thresholds.MinAgeBefore,
 				IdleBefore:      thresholds.IdleBefore,
 				MaxAgeBefore:    thresholds.MaxAgeBefore,
-				OldEpochCutoff:  now.Add(-s.codexFingerprintOldEpochGrace()),
+				OldEpochCutoff:  now.Add(-time.Duration(epochPolicy.OldEpochGraceHours) * time.Hour),
 			},
 		)
 		if err != nil {
@@ -701,29 +702,28 @@ func uniqueCodexFingerprintHashes(values ...string) []string {
 	return result
 }
 
-// codexFingerprintRotationThresholds 生成作用域独立的年龄、空闲和最长寿命门槛。
-func (s *OpenAIGatewayService) codexFingerprintRotationThresholds(accountID int64, scopeHash string, now time.Time) codexFingerprintRotationThresholds {
-	minAgeHours, maxAgeHours, idleMinutes, jitterHours := 72, 168, 120, 24
-	if s != nil && s.cfg != nil {
-		minAgeHours = s.cfg.Gateway.CodexFingerprintMinSessionAgeHours
-		maxAgeHours = s.cfg.Gateway.CodexFingerprintMaxSessionAgeHours
-		idleMinutes = s.cfg.Gateway.CodexFingerprintIdleGateMinutes
-		jitterHours = s.cfg.Gateway.CodexFingerprintRotationJitterHours
+// codexFingerprintEpochPolicy 在一次解析内冻结完整策略；动态设置缺失时回退静态配置。
+func (s *OpenAIGatewayService) codexFingerprintEpochPolicy(ctx context.Context) CodexFingerprintEpochPolicy {
+	if s != nil && s.settingService != nil {
+		return s.settingService.GetCodexFingerprintEpochPolicy(ctx)
 	}
-	if minAgeHours <= 0 {
-		minAgeHours = 72
+	fallback := &SettingService{}
+	if s != nil {
+		fallback.cfg = s.cfg
 	}
-	if maxAgeHours < minAgeHours {
-		maxAgeHours = 168
+	return fallback.codexFingerprintEpochPolicyFallback()
+}
+
+// buildCodexFingerprintRotationThresholds 生成作用域独立的年龄、空闲和最长寿命门槛。
+func buildCodexFingerprintRotationThresholds(policy CodexFingerprintEpochPolicy, accountID int64, scopeHash string, now time.Time) codexFingerprintRotationThresholds {
+	if ValidateCodexFingerprintEpochPolicy(policy) != nil {
+		policy = defaultCodexFingerprintEpochPolicy()
 	}
-	if idleMinutes <= 0 {
-		idleMinutes = 120
-	}
-	jitter := codexFingerprintRotationJitter(accountID, scopeHash, jitterHours)
+	jitter := codexFingerprintRotationJitter(accountID, scopeHash, policy.RotationJitterHours)
 	return codexFingerprintRotationThresholds{
-		MinAgeBefore: now.Add(-(time.Duration(minAgeHours)*time.Hour + jitter)),
-		IdleBefore:   now.Add(-time.Duration(idleMinutes) * time.Minute),
-		MaxAgeBefore: now.Add(-(time.Duration(maxAgeHours)*time.Hour + jitter)),
+		MinAgeBefore: now.Add(-(time.Duration(policy.MinSessionAgeHours)*time.Hour + jitter)),
+		IdleBefore:   now.Add(-time.Duration(policy.IdleGateMinutes) * time.Minute),
+		MaxAgeBefore: now.Add(-(time.Duration(policy.MaxSessionAgeHours)*time.Hour + jitter)),
 	}
 }
 
@@ -734,13 +734,6 @@ func codexFingerprintRotationJitter(accountID int64, scopeHash string, maxHours 
 	sum := sha256.Sum256([]byte(fmt.Sprintf("codex-fp-rotation-jitter:v1:%d:%s", accountID, strings.TrimSpace(scopeHash))))
 	seconds := binary.BigEndian.Uint64(sum[:8]) % uint64(time.Duration(maxHours)*time.Hour/time.Second)
 	return time.Duration(seconds) * time.Second
-}
-
-func (s *OpenAIGatewayService) codexFingerprintOldEpochGrace() time.Duration {
-	if s == nil || s.cfg == nil || s.cfg.Gateway.CodexFingerprintOldEpochGraceHours <= 0 {
-		return 48 * time.Hour
-	}
-	return time.Duration(s.cfg.Gateway.CodexFingerprintOldEpochGraceHours) * time.Hour
 }
 
 // codexFingerprintLogicalTurnSource 为同一逻辑请求生成一次 Turn 来源，跨账号重试复用。

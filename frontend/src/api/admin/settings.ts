@@ -686,6 +686,11 @@ export interface SystemSettings {
 
   // Gateway forwarding behavior
   enable_fingerprint_unification: boolean;
+  codex_fingerprint_min_session_age_hours: number;
+  codex_fingerprint_max_session_age_hours: number;
+  codex_fingerprint_rotation_jitter_hours: number;
+  codex_fingerprint_idle_gate_minutes: number;
+  codex_fingerprint_old_epoch_grace_hours: number;
   enable_metadata_passthrough: boolean;
   enable_cch_signing: boolean;
   enable_claude_oauth_system_prompt_injection: boolean;
@@ -1027,6 +1032,11 @@ export interface UpdateSettingsRequest {
   max_claude_code_version?: string;
   allow_ungrouped_key_scheduling?: boolean;
   enable_fingerprint_unification?: boolean;
+  codex_fingerprint_min_session_age_hours?: number;
+  codex_fingerprint_max_session_age_hours?: number;
+  codex_fingerprint_rotation_jitter_hours?: number;
+  codex_fingerprint_idle_gate_minutes?: number;
+  codex_fingerprint_old_epoch_grace_hours?: number;
   enable_metadata_passthrough?: boolean;
   enable_cch_signing?: boolean;
   enable_claude_oauth_system_prompt_injection?: boolean;

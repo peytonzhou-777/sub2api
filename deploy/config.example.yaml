@@ -276,10 +276,11 @@ gateway:
   codex_image_generation_bridge_enabled: false
   # Optional HMAC secret for account-scoped Codex fingerprint v3 derivation.
   # Codex 账号级 v3 指纹 HMAC 密钥；至少 32 字节，同一 HA 集群所有副本必须一致，
-    # 不同独立部署必须使用不同值。留空仅允许所有账号保持 off；启用账号会明确拒绝出站。
+  # 不同独立部署必须使用不同值。留空仅允许所有账号保持 off；启用账号会明确拒绝出站。
   codex_fingerprint_secret: ""
-  # Session 作用域至少存活 72 小时；空闲 2 小时后由新 Thread 触发常规轮换。
-  # 达到 7 天最长目标寿命后，新 Thread 可跳过空闲门；按账号与作用域增加 0-24h 抖动。
+  # 以下五项是管理员网关设置缺失时的静态回退值；后台保存后以数据库设置为准。
+  # Session 作用域至少存活 72 小时；空闲 2 小时后由新根 Thread 触发常规轮换。
+  # 达到 7 天最长目标寿命后，新根 Thread 可跳过空闲门；按账号与作用域增加 0-24h 抖动。
   codex_fingerprint_min_session_age_hours: 72
   codex_fingerprint_max_session_age_hours: 168
   codex_fingerprint_rotation_jitter_hours: 24

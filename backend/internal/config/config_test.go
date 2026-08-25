@@ -106,6 +106,29 @@ func TestLoadCodexFingerprintSessionAgeCompatibility(t *testing.T) {
 		_, err := Load()
 		require.ErrorContains(t, err, "codex_fingerprint_max_session_age_hours")
 	})
+
+	tests := []struct {
+		name string
+		yaml string
+		key  string
+	}{
+		{"最短寿命超过上限", "gateway:\n  codex_fingerprint_min_session_age_hours: 8761\n", "codex_fingerprint_min_session_age_hours"},
+		{"最长寿命超过上限", "gateway:\n  codex_fingerprint_max_session_age_hours: 8761\n", "codex_fingerprint_max_session_age_hours"},
+		{"轮换抖动超过上限", "gateway:\n  codex_fingerprint_rotation_jitter_hours: 8761\n", "codex_fingerprint_rotation_jitter_hours"},
+		{"空闲门槛超过上限", "gateway:\n  codex_fingerprint_idle_gate_minutes: 10081\n", "codex_fingerprint_idle_gate_minutes"},
+		{"旧epoch宽限超过上限", "gateway:\n  codex_fingerprint_old_epoch_grace_hours: 8761\n", "codex_fingerprint_old_epoch_grace_hours"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resetViperWithJWTSecret(t)
+			configFile := filepath.Join(t.TempDir(), "config.yaml")
+			require.NoError(t, os.WriteFile(configFile, []byte(test.yaml), 0o600))
+			t.Setenv("CONFIG_FILE", configFile)
+
+			_, err := Load()
+			require.ErrorContains(t, err, test.key)
+		})
+	}
 }
 
 func TestLoadCodexOutboundProfileDefaultsAndValidation(t *testing.T) {

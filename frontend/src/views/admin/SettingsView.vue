@@ -5545,6 +5545,130 @@
                 <Toggle v-model="form.enable_fingerprint_unification" />
               </div>
 
+              <!-- Codex Session epoch rotation -->
+              <div
+                class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-800/60"
+              >
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 class="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                      {{ t("admin.settings.gatewayForwarding.codexEpochRotationTitle") }}
+                    </h3>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.gatewayForwarding.codexEpochRotationHint") }}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    @click="resetCodexFingerprintEpochPolicy"
+                  >
+                    {{ t("admin.settings.gatewayForwarding.codexEpochRestoreDefaults") }}
+                  </button>
+                </div>
+                <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                  <div>
+                    <label class="input-label">{{
+                      t("admin.settings.gatewayForwarding.codexEpochMinAge")
+                    }}</label>
+                    <input
+                      v-model.number="form.codex_fingerprint_min_session_age_hours"
+                      type="number"
+                      min="1"
+                      max="8760"
+                      step="1"
+                      required
+                      class="input"
+                    />
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.gatewayForwarding.codexEpochMinAgeHint") }}
+                    </p>
+                  </div>
+                  <div>
+                    <label class="input-label">{{
+                      t("admin.settings.gatewayForwarding.codexEpochMaxAge")
+                    }}</label>
+                    <input
+                      v-model.number="form.codex_fingerprint_max_session_age_hours"
+                      type="number"
+                      :min="form.codex_fingerprint_min_session_age_hours"
+                      max="8760"
+                      step="1"
+                      required
+                      class="input"
+                    />
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.gatewayForwarding.codexEpochMaxAgeHint") }}
+                    </p>
+                  </div>
+                  <div>
+                    <label class="input-label">{{
+                      t("admin.settings.gatewayForwarding.codexEpochJitter")
+                    }}</label>
+                    <input
+                      v-model.number="form.codex_fingerprint_rotation_jitter_hours"
+                      type="number"
+                      min="0"
+                      max="8760"
+                      step="1"
+                      required
+                      class="input"
+                    />
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.gatewayForwarding.codexEpochJitterHint") }}
+                    </p>
+                  </div>
+                  <div>
+                    <label class="input-label">{{
+                      t("admin.settings.gatewayForwarding.codexEpochIdleGate")
+                    }}</label>
+                    <input
+                      v-model.number="form.codex_fingerprint_idle_gate_minutes"
+                      type="number"
+                      min="1"
+                      max="10080"
+                      step="1"
+                      required
+                      class="input"
+                    />
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.gatewayForwarding.codexEpochIdleGateHint") }}
+                    </p>
+                  </div>
+                  <div>
+                    <label class="input-label">{{
+                      t("admin.settings.gatewayForwarding.codexEpochOldGrace")
+                    }}</label>
+                    <input
+                      v-model.number="form.codex_fingerprint_old_epoch_grace_hours"
+                      type="number"
+                      min="1"
+                      max="8760"
+                      step="1"
+                      required
+                      class="input"
+                    />
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.gatewayForwarding.codexEpochOldGraceHint") }}
+                    </p>
+                  </div>
+                </div>
+                <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                  {{
+                    t("admin.settings.gatewayForwarding.codexEpochEffectiveRange", {
+                      min: form.codex_fingerprint_min_session_age_hours,
+                      minWithJitter:
+                        form.codex_fingerprint_min_session_age_hours +
+                        form.codex_fingerprint_rotation_jitter_hours,
+                      max: form.codex_fingerprint_max_session_age_hours,
+                      maxWithJitter:
+                        form.codex_fingerprint_max_session_age_hours +
+                        form.codex_fingerprint_rotation_jitter_hours,
+                    })
+                  }}
+                </p>
+              </div>
+
               <!-- Metadata Passthrough -->
               <div class="flex items-center justify-between">
                 <div>
@@ -10231,6 +10355,11 @@ const form = reactive<SettingsForm>({
   openai_advanced_scheduler_weight_session_sticky: "",
   // Gateway forwarding behavior
   enable_fingerprint_unification: true,
+  codex_fingerprint_min_session_age_hours: 72,
+  codex_fingerprint_max_session_age_hours: 168,
+  codex_fingerprint_rotation_jitter_hours: 24,
+  codex_fingerprint_idle_gate_minutes: 120,
+  codex_fingerprint_old_epoch_grace_hours: 48,
   enable_metadata_passthrough: false,
   enable_cch_signing: false,
   enable_claude_oauth_system_prompt_injection: true,
@@ -11238,6 +11367,42 @@ const codexSyncedVersionLabel = computed(() => {
   });
 });
 
+// 恢复经过后端约束校验的 Codex epoch 推荐默认值。
+function resetCodexFingerprintEpochPolicy(): void {
+  form.codex_fingerprint_min_session_age_hours = 72;
+  form.codex_fingerprint_max_session_age_hours = 168;
+  form.codex_fingerprint_rotation_jitter_hours = 24;
+  form.codex_fingerprint_idle_gate_minutes = 120;
+  form.codex_fingerprint_old_epoch_grace_hours = 48;
+}
+
+function validateCodexFingerprintEpochPolicy(): boolean {
+  const hourValues = [
+    form.codex_fingerprint_min_session_age_hours,
+    form.codex_fingerprint_max_session_age_hours,
+    form.codex_fingerprint_old_epoch_grace_hours,
+  ];
+  if (
+    hourValues.some(
+      (value) => !Number.isSafeInteger(value) || value < 1 || value > 8760,
+    )
+  ) {
+    return false;
+  }
+  if (
+    !Number.isSafeInteger(form.codex_fingerprint_rotation_jitter_hours) ||
+    form.codex_fingerprint_rotation_jitter_hours < 0 ||
+    form.codex_fingerprint_rotation_jitter_hours > 8760
+  ) {
+    return false;
+  }
+  return (
+    Number.isSafeInteger(form.codex_fingerprint_idle_gate_minutes) &&
+    form.codex_fingerprint_idle_gate_minutes >= 1 &&
+    form.codex_fingerprint_idle_gate_minutes <= 10080
+  );
+}
+
 async function loadSettings() {
   loading.value = true;
   loadFailed.value = false;
@@ -11505,6 +11670,21 @@ function findDuplicateDefaultSubscription(
 async function saveSettings() {
   saving.value = true;
   try {
+    if (!validateCodexFingerprintEpochPolicy()) {
+      appStore.showError(
+        t("admin.settings.gatewayForwarding.codexEpochRangeError"),
+      );
+      return;
+    }
+    if (
+      form.codex_fingerprint_max_session_age_hours <
+      form.codex_fingerprint_min_session_age_hours
+    ) {
+      appStore.showError(
+        t("admin.settings.gatewayForwarding.codexEpochMaxBeforeMinError"),
+      );
+      return;
+    }
     const normalizedTableDefaultPageSize = Math.floor(
       Number(form.table_default_page_size),
     );
@@ -11898,6 +12078,16 @@ async function saveSettings() {
       max_claude_code_version: form.max_claude_code_version,
       allow_ungrouped_key_scheduling: form.allow_ungrouped_key_scheduling,
       enable_fingerprint_unification: form.enable_fingerprint_unification,
+      codex_fingerprint_min_session_age_hours:
+        form.codex_fingerprint_min_session_age_hours,
+      codex_fingerprint_max_session_age_hours:
+        form.codex_fingerprint_max_session_age_hours,
+      codex_fingerprint_rotation_jitter_hours:
+        form.codex_fingerprint_rotation_jitter_hours,
+      codex_fingerprint_idle_gate_minutes:
+        form.codex_fingerprint_idle_gate_minutes,
+      codex_fingerprint_old_epoch_grace_hours:
+        form.codex_fingerprint_old_epoch_grace_hours,
       enable_metadata_passthrough: form.enable_metadata_passthrough,
       enable_cch_signing: form.enable_cch_signing,
       enable_claude_oauth_system_prompt_injection:

@@ -249,6 +249,11 @@ type SystemSettings struct {
 
 	// Gateway forwarding behavior
 	EnableFingerprintUnification           bool   // 是否统一 OAuth 账号的指纹头（默认 true）
+	CodexFingerprintMinSessionAgeHours     int    // Codex Session epoch 最短基础寿命（小时）
+	CodexFingerprintMaxSessionAgeHours     int    // Codex Session epoch 最长基础寿命（小时）
+	CodexFingerprintRotationJitterHours    int    // Codex Session epoch 确定性轮换抖动（小时）
+	CodexFingerprintIdleGateMinutes        int    // Codex Session scope 空闲轮换门槛（分钟）
+	CodexFingerprintOldEpochGraceHours     int    // 旧 epoch Thread 绑定保留宽限期（小时）
 	EnableMetadataPassthrough              bool   // 是否透传客户端原始 metadata（默认 false）
 	EnableCCHSigning                       bool   // 已废弃 no-op：新版 CLI 取消 cch 签名后网关不再注入/签名 cch，开关无效果
 	EnableClaudeOAuthSystemPromptInjection bool   // 是否对 Claude OAuth mimic 路径注入 Claude Code system blocks（默认 true）

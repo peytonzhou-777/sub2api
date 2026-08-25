@@ -216,6 +216,11 @@ type SystemSettings struct {
 
 	// Gateway forwarding behavior
 	EnableFingerprintUnification           bool   `json:"enable_fingerprint_unification"`
+	CodexFingerprintMinSessionAgeHours     int    `json:"codex_fingerprint_min_session_age_hours"`
+	CodexFingerprintMaxSessionAgeHours     int    `json:"codex_fingerprint_max_session_age_hours"`
+	CodexFingerprintRotationJitterHours    int    `json:"codex_fingerprint_rotation_jitter_hours"`
+	CodexFingerprintIdleGateMinutes        int    `json:"codex_fingerprint_idle_gate_minutes"`
+	CodexFingerprintOldEpochGraceHours     int    `json:"codex_fingerprint_old_epoch_grace_hours"`
 	EnableMetadataPassthrough              bool   `json:"enable_metadata_passthrough"`
 	EnableCCHSigning                       bool   `json:"enable_cch_signing"`
 	EnableClaudeOAuthSystemPromptInjection bool   `json:"enable_claude_oauth_system_prompt_injection"`

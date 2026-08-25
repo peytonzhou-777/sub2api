@@ -473,6 +473,21 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.EnableFingerprintUnification != after.EnableFingerprintUnification {
 		changed = append(changed, "enable_fingerprint_unification")
 	}
+	if before.CodexFingerprintMinSessionAgeHours != after.CodexFingerprintMinSessionAgeHours {
+		changed = append(changed, "codex_fingerprint_min_session_age_hours")
+	}
+	if before.CodexFingerprintMaxSessionAgeHours != after.CodexFingerprintMaxSessionAgeHours {
+		changed = append(changed, "codex_fingerprint_max_session_age_hours")
+	}
+	if before.CodexFingerprintRotationJitterHours != after.CodexFingerprintRotationJitterHours {
+		changed = append(changed, "codex_fingerprint_rotation_jitter_hours")
+	}
+	if before.CodexFingerprintIdleGateMinutes != after.CodexFingerprintIdleGateMinutes {
+		changed = append(changed, "codex_fingerprint_idle_gate_minutes")
+	}
+	if before.CodexFingerprintOldEpochGraceHours != after.CodexFingerprintOldEpochGraceHours {
+		changed = append(changed, "codex_fingerprint_old_epoch_grace_hours")
+	}
 	if before.EnableMetadataPassthrough != after.EnableMetadataPassthrough {
 		changed = append(changed, "enable_metadata_passthrough")
 	}

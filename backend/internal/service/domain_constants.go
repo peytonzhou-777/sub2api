@@ -648,6 +648,16 @@ const (
 	// Gateway Forwarding Behavior
 	// SettingKeyEnableFingerprintUnification 是否统一 OAuth 账号的 X-Stainless-* 指纹头（默认 true）
 	SettingKeyEnableFingerprintUnification = "enable_fingerprint_unification"
+	// SettingKeyCodexFingerprintMinSessionAgeHours Codex Session epoch 最短基础寿命（小时）。
+	SettingKeyCodexFingerprintMinSessionAgeHours = "codex_fingerprint_min_session_age_hours"
+	// SettingKeyCodexFingerprintMaxSessionAgeHours Codex Session epoch 最长基础寿命（小时）。
+	SettingKeyCodexFingerprintMaxSessionAgeHours = "codex_fingerprint_max_session_age_hours"
+	// SettingKeyCodexFingerprintRotationJitterHours Codex Session epoch 确定性轮换抖动（小时）。
+	SettingKeyCodexFingerprintRotationJitterHours = "codex_fingerprint_rotation_jitter_hours"
+	// SettingKeyCodexFingerprintIdleGateMinutes Codex Session scope 空闲轮换门槛（分钟）。
+	SettingKeyCodexFingerprintIdleGateMinutes = "codex_fingerprint_idle_gate_minutes"
+	// SettingKeyCodexFingerprintOldEpochGraceHours 旧 epoch Thread 绑定保留宽限期（小时）。
+	SettingKeyCodexFingerprintOldEpochGraceHours = "codex_fingerprint_old_epoch_grace_hours"
 	// SettingKeyEnableMetadataPassthrough 是否透传客户端原始 metadata.user_id（默认 false）
 	SettingKeyEnableMetadataPassthrough = "enable_metadata_passthrough"
 	// SettingKeyEnableCCHSigning 已废弃（no-op）：新版 Claude Code CLI 已取消 cch 签名字段，

@@ -2384,11 +2384,11 @@ func setDefaults() {
 	viper.SetDefault("gateway.codex_outbound_force_legacy", false)
 	viper.SetDefault("gateway.codex_image_generation_bridge_enabled", false)
 	viper.SetDefault("gateway.codex_fingerprint_secret", "")
-	viper.SetDefault("gateway.codex_fingerprint_min_session_age_hours", 72)
-	viper.SetDefault("gateway.codex_fingerprint_max_session_age_hours", 7*24)
-	viper.SetDefault("gateway.codex_fingerprint_rotation_jitter_hours", 24)
-	viper.SetDefault("gateway.codex_fingerprint_idle_gate_minutes", 120)
-	viper.SetDefault("gateway.codex_fingerprint_old_epoch_grace_hours", 48)
+	viper.SetDefault("gateway.codex_fingerprint_min_session_age_hours", CodexFingerprintMinSessionAgeHoursDefault)
+	viper.SetDefault("gateway.codex_fingerprint_max_session_age_hours", CodexFingerprintMaxSessionAgeHoursDefault)
+	viper.SetDefault("gateway.codex_fingerprint_rotation_jitter_hours", CodexFingerprintRotationJitterHoursDefault)
+	viper.SetDefault("gateway.codex_fingerprint_idle_gate_minutes", CodexFingerprintIdleGateMinutesDefault)
+	viper.SetDefault("gateway.codex_fingerprint_old_epoch_grace_hours", CodexFingerprintOldEpochGraceHoursDefault)
 	viper.SetDefault("gateway.openai_passthrough_allow_timeout_headers", false)
 	viper.SetDefault("gateway.openai_compact_model", "gpt-5.4")
 	viper.SetDefault("gateway.live.max_session_duration_seconds", 3600)
@@ -3388,17 +3388,32 @@ func (c *Config) Validate() error {
 	if c.Gateway.CodexFingerprintMinSessionAgeHours <= 0 {
 		return fmt.Errorf("gateway.codex_fingerprint_min_session_age_hours must be positive")
 	}
+	if c.Gateway.CodexFingerprintMinSessionAgeHours > CodexFingerprintSessionAgeHoursMax {
+		return fmt.Errorf("gateway.codex_fingerprint_min_session_age_hours must not exceed %d", CodexFingerprintSessionAgeHoursMax)
+	}
 	if c.Gateway.CodexFingerprintMaxSessionAgeHours < c.Gateway.CodexFingerprintMinSessionAgeHours {
 		return fmt.Errorf("gateway.codex_fingerprint_max_session_age_hours must be greater than or equal to min session age")
+	}
+	if c.Gateway.CodexFingerprintMaxSessionAgeHours > CodexFingerprintSessionAgeHoursMax {
+		return fmt.Errorf("gateway.codex_fingerprint_max_session_age_hours must not exceed %d", CodexFingerprintSessionAgeHoursMax)
 	}
 	if c.Gateway.CodexFingerprintRotationJitterHours < 0 {
 		return fmt.Errorf("gateway.codex_fingerprint_rotation_jitter_hours must be non-negative")
 	}
+	if c.Gateway.CodexFingerprintRotationJitterHours > CodexFingerprintRotationJitterMax {
+		return fmt.Errorf("gateway.codex_fingerprint_rotation_jitter_hours must not exceed %d", CodexFingerprintRotationJitterMax)
+	}
 	if c.Gateway.CodexFingerprintIdleGateMinutes <= 0 {
 		return fmt.Errorf("gateway.codex_fingerprint_idle_gate_minutes must be positive")
 	}
+	if c.Gateway.CodexFingerprintIdleGateMinutes > CodexFingerprintIdleGateMinutesMax {
+		return fmt.Errorf("gateway.codex_fingerprint_idle_gate_minutes must not exceed %d", CodexFingerprintIdleGateMinutesMax)
+	}
 	if c.Gateway.CodexFingerprintOldEpochGraceHours <= 0 {
 		return fmt.Errorf("gateway.codex_fingerprint_old_epoch_grace_hours must be positive")
+	}
+	if c.Gateway.CodexFingerprintOldEpochGraceHours > CodexFingerprintOldEpochGraceMax {
+		return fmt.Errorf("gateway.codex_fingerprint_old_epoch_grace_hours must not exceed %d", CodexFingerprintOldEpochGraceMax)
 	}
 	if c.Gateway.ImageNonstreamKeepaliveInterval < 0 {
 		return fmt.Errorf("gateway.image_nonstream_keepalive_interval must be non-negative")

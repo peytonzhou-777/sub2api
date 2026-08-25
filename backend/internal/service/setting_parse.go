@@ -900,6 +900,12 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	} else {
 		result.EnableFingerprintUnification = true // default: enabled (current behavior)
 	}
+	epochPolicy, epochPolicyErr := mergeCodexFingerprintEpochPolicy(settings, s.codexFingerprintEpochPolicyFallback())
+	if epochPolicyErr != nil {
+		slog.Warn("invalid codex fingerprint epoch policy settings; using static fallback", "error", epochPolicyErr)
+		epochPolicy = s.codexFingerprintEpochPolicyFallback()
+	}
+	applyCodexFingerprintEpochPolicy(result, epochPolicy)
 	result.EnableMetadataPassthrough = settings[SettingKeyEnableMetadataPassthrough] == "true"
 	result.EnableCCHSigning = settings[SettingKeyEnableCCHSigning] == "true"
 	if v, ok := settings[SettingKeyEnableClaudeOAuthSystemPromptInjection]; ok && v != "" {

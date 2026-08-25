@@ -33,6 +33,7 @@ func (o OmittedSettingKeys) dropFrom(updates map[string]string) {
 
 // UpdateSettings 更新系统设置
 func (s *SettingService) UpdateSettings(ctx context.Context, settings *SystemSettings) error {
+	s.ensureCodexFingerprintEpochPolicyDefaults(settings)
 	return s.UpdateSettingsOmitting(ctx, settings, nil)
 }
 
@@ -57,6 +58,7 @@ func (s *SettingService) UpdateSettingsOmitting(ctx context.Context, settings *S
 
 // UpdateSettingsWithAuthSourceDefaults persists system settings and auth-source defaults in a single write.
 func (s *SettingService) UpdateSettingsWithAuthSourceDefaults(ctx context.Context, settings *SystemSettings, authDefaults *AuthSourceDefaultSettings) error {
+	s.ensureCodexFingerprintEpochPolicyDefaults(settings)
 	return s.UpdateSettingsWithAuthSourceDefaultsOmitting(ctx, settings, authDefaults, nil)
 }
 
@@ -551,7 +553,20 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyBackendModeEnabled] = strconv.FormatBool(settings.BackendModeEnabled)
 
 	// Gateway forwarding behavior
+	epochPolicy := codexFingerprintEpochPolicyFromSystemSettings(settings)
+	if epochPolicy == (CodexFingerprintEpochPolicy{}) {
+		epochPolicy = s.codexFingerprintEpochPolicyFallback()
+		applyCodexFingerprintEpochPolicy(settings, epochPolicy)
+	}
+	if err := ValidateCodexFingerprintEpochPolicy(epochPolicy); err != nil {
+		return nil, infraerrors.BadRequest("INVALID_CODEX_FINGERPRINT_EPOCH_POLICY", err.Error())
+	}
 	updates[SettingKeyEnableFingerprintUnification] = strconv.FormatBool(settings.EnableFingerprintUnification)
+	updates[SettingKeyCodexFingerprintMinSessionAgeHours] = strconv.Itoa(epochPolicy.MinSessionAgeHours)
+	updates[SettingKeyCodexFingerprintMaxSessionAgeHours] = strconv.Itoa(epochPolicy.MaxSessionAgeHours)
+	updates[SettingKeyCodexFingerprintRotationJitterHours] = strconv.Itoa(epochPolicy.RotationJitterHours)
+	updates[SettingKeyCodexFingerprintIdleGateMinutes] = strconv.Itoa(epochPolicy.IdleGateMinutes)
+	updates[SettingKeyCodexFingerprintOldEpochGraceHours] = strconv.Itoa(epochPolicy.OldEpochGraceHours)
 	updates[SettingKeyEnableMetadataPassthrough] = strconv.FormatBool(settings.EnableMetadataPassthrough)
 	updates[SettingKeyEnableCCHSigning] = strconv.FormatBool(settings.EnableCCHSigning)
 	updates[SettingKeyEnableClaudeOAuthSystemPromptInjection] = strconv.FormatBool(settings.EnableClaudeOAuthSystemPromptInjection)
@@ -812,6 +827,7 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		clientDatelineNormalization:      settings.EnableClientDatelineNormalization,
 		expiresAt:                        time.Now().Add(gatewayForwardingCacheTTL).UnixNano(),
 	})
+	s.refreshCodexFingerprintEpochPolicyCache(settings)
 	s.antigravityUAVersionSF.Forget("antigravity_user_agent_version")
 	antigravityUserAgentVersion := antigravity.NormalizeUserAgentVersion(settings.AntigravityUserAgentVersion)
 	if antigravityUserAgentVersion == "" {

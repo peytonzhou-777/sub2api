@@ -261,6 +261,11 @@ type UpdateSettingsRequest struct {
 
 	// Gateway forwarding behavior
 	EnableFingerprintUnification           *bool   `json:"enable_fingerprint_unification"`
+	CodexFingerprintMinSessionAgeHours     *int    `json:"codex_fingerprint_min_session_age_hours"`
+	CodexFingerprintMaxSessionAgeHours     *int    `json:"codex_fingerprint_max_session_age_hours"`
+	CodexFingerprintRotationJitterHours    *int    `json:"codex_fingerprint_rotation_jitter_hours"`
+	CodexFingerprintIdleGateMinutes        *int    `json:"codex_fingerprint_idle_gate_minutes"`
+	CodexFingerprintOldEpochGraceHours     *int    `json:"codex_fingerprint_old_epoch_grace_hours"`
 	EnableMetadataPassthrough              *bool   `json:"enable_metadata_passthrough"`
 	EnableCCHSigning                       *bool   `json:"enable_cch_signing"`
 	EnableClaudeOAuthSystemPromptInjection *bool   `json:"enable_claude_oauth_system_prompt_injection"`
@@ -1752,6 +1757,36 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.EnableFingerprintUnification
 		}(),
+		CodexFingerprintMinSessionAgeHours: func() int {
+			if req.CodexFingerprintMinSessionAgeHours != nil {
+				return *req.CodexFingerprintMinSessionAgeHours
+			}
+			return previousSettings.CodexFingerprintMinSessionAgeHours
+		}(),
+		CodexFingerprintMaxSessionAgeHours: func() int {
+			if req.CodexFingerprintMaxSessionAgeHours != nil {
+				return *req.CodexFingerprintMaxSessionAgeHours
+			}
+			return previousSettings.CodexFingerprintMaxSessionAgeHours
+		}(),
+		CodexFingerprintRotationJitterHours: func() int {
+			if req.CodexFingerprintRotationJitterHours != nil {
+				return *req.CodexFingerprintRotationJitterHours
+			}
+			return previousSettings.CodexFingerprintRotationJitterHours
+		}(),
+		CodexFingerprintIdleGateMinutes: func() int {
+			if req.CodexFingerprintIdleGateMinutes != nil {
+				return *req.CodexFingerprintIdleGateMinutes
+			}
+			return previousSettings.CodexFingerprintIdleGateMinutes
+		}(),
+		CodexFingerprintOldEpochGraceHours: func() int {
+			if req.CodexFingerprintOldEpochGraceHours != nil {
+				return *req.CodexFingerprintOldEpochGraceHours
+			}
+			return previousSettings.CodexFingerprintOldEpochGraceHours
+		}(),
 		EnableMetadataPassthrough: func() bool {
 			if req.EnableMetadataPassthrough != nil {
 				return *req.EnableMetadataPassthrough
@@ -2055,6 +2090,16 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.CyberSessionBlockTTLSeconds
 		}(),
+	}
+	if err := service.ValidateCodexFingerprintEpochPolicy(service.CodexFingerprintEpochPolicy{
+		MinSessionAgeHours:  settings.CodexFingerprintMinSessionAgeHours,
+		MaxSessionAgeHours:  settings.CodexFingerprintMaxSessionAgeHours,
+		RotationJitterHours: settings.CodexFingerprintRotationJitterHours,
+		IdleGateMinutes:     settings.CodexFingerprintIdleGateMinutes,
+		OldEpochGraceHours:  settings.CodexFingerprintOldEpochGraceHours,
+	}); err != nil {
+		response.BadRequest(c, err.Error())
+		return
 	}
 
 	// req.AuthSourceXxxPlatformQuotas 为 nil 表示本次请求未包含该 source 的 quota 配置（保留 previousAuthSourceDefaults 中的值）；
@@ -2375,6 +2420,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		AllowUngroupedKeyScheduling:                            updatedSettings.AllowUngroupedKeyScheduling,
 		BackendModeEnabled:                                     updatedSettings.BackendModeEnabled,
 		EnableFingerprintUnification:                           updatedSettings.EnableFingerprintUnification,
+		CodexFingerprintMinSessionAgeHours:                     updatedSettings.CodexFingerprintMinSessionAgeHours,
+		CodexFingerprintMaxSessionAgeHours:                     updatedSettings.CodexFingerprintMaxSessionAgeHours,
+		CodexFingerprintRotationJitterHours:                    updatedSettings.CodexFingerprintRotationJitterHours,
+		CodexFingerprintIdleGateMinutes:                        updatedSettings.CodexFingerprintIdleGateMinutes,
+		CodexFingerprintOldEpochGraceHours:                     updatedSettings.CodexFingerprintOldEpochGraceHours,
 		EnableMetadataPassthrough:                              updatedSettings.EnableMetadataPassthrough,
 		EnableCCHSigning:                                       updatedSettings.EnableCCHSigning,
 		EnableClaudeOAuthSystemPromptInjection:                 updatedSettings.EnableClaudeOAuthSystemPromptInjection,

@@ -464,8 +464,9 @@ func TestCodexFingerprintSessionRotationThresholdsUseScopeAge(t *testing.T) {
 		CodexFingerprintMaxSessionAgeHours:  168,
 		CodexFingerprintRotationJitterHours: 0,
 		CodexFingerprintIdleGateMinutes:     120,
+		CodexFingerprintOldEpochGraceHours:  48,
 	}}}
-	thresholds := svc.codexFingerprintRotationThresholds(27, strings.Repeat("cd", 32), now)
+	thresholds := buildCodexFingerprintRotationThresholds(svc.codexFingerprintEpochPolicy(context.Background()), 27, strings.Repeat("cd", 32), now)
 	require.Equal(t, now.Add(-72*time.Hour), thresholds.MinAgeBefore)
 	require.Equal(t, now.Add(-168*time.Hour), thresholds.MaxAgeBefore)
 	require.Equal(t, now.Add(-2*time.Hour), thresholds.IdleBefore)
