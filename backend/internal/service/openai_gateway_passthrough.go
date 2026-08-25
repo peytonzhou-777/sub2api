@@ -1702,6 +1702,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			}
 			lineStartsClientOutput = forceFlushFailedEvent || openAIStreamDataStartsClientOutput(trimmedData, eventType)
 			lineStartsVisibleOutput = openAIStreamDataStartsVisibleOutput(trimmedData, eventType)
+			if lineStartsClientOutput {
+				markOpenAITimingFirstClientOutput(c, time.Now())
+			}
 			if lineStartsClientOutput && trimmedData != "[DONE]" && !openAIStreamEventTypeIsTerminal(eventType) {
 				semanticOutputSeen = true
 			}

@@ -19,6 +19,7 @@ type openAITimingTrace struct {
 	upstreamAttemptStarted time.Time
 	upstreamHeadersAt      time.Time
 	upstreamFirstEventAt   time.Time
+	firstClientOutputAt    time.Time
 	firstSemanticOutputAt  time.Time
 	firstClientWriteAt     time.Time
 	upstreamBodyDoneAt     time.Time
@@ -85,6 +86,15 @@ func markOpenAITimingFirstSemanticOutput(c *gin.Context, outputAt time.Time) {
 		return
 	}
 	trace.firstSemanticOutputAt = outputAt
+}
+
+// markOpenAITimingFirstClientOutput 记录首次满足 startsClientOutput 的结构性输出事件。
+func markOpenAITimingFirstClientOutput(c *gin.Context, outputAt time.Time) {
+	trace := openAITiming(c)
+	if trace == nil || !trace.firstClientOutputAt.IsZero() || outputAt.IsZero() {
+		return
+	}
+	trace.firstClientOutputAt = outputAt
 }
 
 func markOpenAITimingFirstClientWrite(c *gin.Context, writeAt time.Time) {
@@ -180,6 +190,7 @@ func logOpenAITiming(
 	appendDuration("forward_pre_upstream_ms", trace.forwardStartedAt, trace.upstreamAttemptStarted)
 	appendDuration("upstream_response_headers_ms", trace.upstreamAttemptStarted, trace.upstreamHeadersAt)
 	appendDuration("upstream_first_event_ms", trace.upstreamAttemptStarted, trace.upstreamFirstEventAt)
+	appendDuration("first_client_output_ms", trace.upstreamAttemptStarted, trace.firstClientOutputAt)
 	appendDuration("first_semantic_output_ms", trace.upstreamAttemptStarted, trace.firstSemanticOutputAt)
 	appendDuration("first_client_write_ms", trace.upstreamAttemptStarted, trace.firstClientWriteAt)
 	appendDuration("upstream_body_ms", trace.upstreamAttemptStarted, trace.upstreamBodyDoneAt)

@@ -616,6 +616,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
 			}
 			startsClientOutput := forceFlushFailedEvent || openAIStreamDataStartsClientOutput(data, eventType)
 			startsVisibleOutput := openAIStreamDataStartsVisibleOutput(data, eventType)
+			if startsClientOutput {
+				markOpenAITimingFirstClientOutput(c, time.Now())
+			}
 			if startsVisibleOutput {
 				markOpenAITimingFirstSemanticOutput(c, time.Now())
 			}

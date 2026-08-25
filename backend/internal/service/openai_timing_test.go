@@ -19,6 +19,8 @@ func TestOpenAITimingStagesAreFirstWins(t *testing.T) {
 	markOpenAITimingUpstreamResponse(c, base.Add(30*time.Millisecond), 200)
 	markOpenAITimingUpstreamFirstEvent(c, base.Add(40*time.Millisecond))
 	markOpenAITimingUpstreamFirstEvent(c, base.Add(50*time.Millisecond))
+	markOpenAITimingFirstClientOutput(c, base.Add(55*time.Millisecond))
+	markOpenAITimingFirstClientOutput(c, base.Add(65*time.Millisecond))
 	markOpenAITimingFirstSemanticOutput(c, base.Add(60*time.Millisecond))
 	markOpenAITimingFirstSemanticOutput(c, base.Add(70*time.Millisecond))
 	markOpenAITimingFirstClientWrite(c, base.Add(80*time.Millisecond))
@@ -37,6 +39,9 @@ func TestOpenAITimingStagesAreFirstWins(t *testing.T) {
 	}
 	if !trace.upstreamFirstEventAt.Equal(base.Add(40 * time.Millisecond)) {
 		t.Fatalf("first event = %v, want first event timestamp", trace.upstreamFirstEventAt)
+	}
+	if !trace.firstClientOutputAt.Equal(base.Add(55 * time.Millisecond)) {
+		t.Fatalf("client output = %v, want first client output timestamp", trace.firstClientOutputAt)
 	}
 	if !trace.firstSemanticOutputAt.Equal(base.Add(60 * time.Millisecond)) {
 		t.Fatalf("semantic output = %v, want first semantic output timestamp", trace.firstSemanticOutputAt)
