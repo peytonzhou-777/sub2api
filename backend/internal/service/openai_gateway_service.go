@@ -211,6 +211,11 @@ type OpenAIUsage struct {
 	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
 	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 	ImageOutputTokens        int `json:"image_output_tokens,omitempty"`
+	// UsageSource、CacheReadSource 和 CacheCreationSource 仅用于诊断上游 usage 字段路径。
+	// 不参与对外响应或计费金额计算。
+	UsageSource         string `json:"-"`
+	CacheReadSource     string `json:"-"`
+	CacheCreationSource string `json:"-"`
 }
 
 // OpenAIForwardResult represents the result of forwarding

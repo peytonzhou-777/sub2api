@@ -1135,7 +1135,7 @@ func extractOpenAIUsageFromJSONBytes(body []byte) (OpenAIUsage, bool) {
 		{usagePath: "data.response.usage", imageUsagePath: "data.response.tool_usage.image_gen"},
 	}
 	for _, candidate := range candidates {
-		if usage, ok := openAIUsageFromGJSON(gjson.GetBytes(body, candidate.usagePath)); ok {
+		if usage, ok := openAIUsageFromGJSONAtPath(gjson.GetBytes(body, candidate.usagePath), candidate.usagePath); ok {
 			mergeHostedImageGenToolUsage(gjson.GetBytes(body, candidate.imageUsagePath), &usage)
 			return usage, true
 		}
@@ -1214,6 +1214,10 @@ func (s *OpenAIGatewayService) bindHTTPResponseAccount(ctx context.Context, c *g
 }
 
 func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
+	return openAIUsageFromGJSONAtPath(value, "usage")
+}
+
+func openAIUsageFromGJSONAtPath(value gjson.Result, usagePath string) (OpenAIUsage, bool) {
 	if !value.Exists() || !value.IsObject() {
 		return OpenAIUsage{}, false
 	}
@@ -1245,7 +1249,25 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
 		CacheCreationInputTokens: cacheCreationTokens,
 		CacheReadInputTokens:     cacheReadTokens,
 		ImageOutputTokens:        int(imageOutputTokens),
+		UsageSource:              strings.TrimSpace(usagePath),
+		CacheReadSource:          openAICacheReadSourceFromUsage(value),
+		CacheCreationSource:      openAICacheCreationSourceFromUsage(value),
 	}, true
+}
+
+func openAICacheReadSourceFromUsage(value gjson.Result) string {
+	for _, path := range []string{
+		"input_tokens_details.cached_tokens",
+		"prompt_tokens_details.cached_tokens",
+		"cache_read_input_tokens",
+		"cache_read_tokens",
+		"cached_tokens",
+	} {
+		if value.Get(path).Exists() {
+			return path
+		}
+	}
+	return ""
 }
 
 func openAICacheReadTokensFromUsage(value gjson.Result) int {
@@ -1283,6 +1305,24 @@ func openAICacheCreationTokensFromUsage(value gjson.Result) int {
 		value.Get("cache_write_input_tokens"),
 		value.Get("cache_creation_tokens"),
 	)
+}
+
+func openAICacheCreationSourceFromUsage(value gjson.Result) string {
+	for _, path := range []string{
+		"input_tokens_details.cache_write_tokens",
+		"prompt_tokens_details.cache_write_tokens",
+		"input_tokens_details.cache_creation_tokens",
+		"prompt_tokens_details.cache_creation_tokens",
+		"cache_write_tokens",
+		"cache_creation_input_tokens",
+		"cache_write_input_tokens",
+		"cache_creation_tokens",
+	} {
+		if value.Get(path).Exists() {
+			return path
+		}
+	}
+	return ""
 }
 
 func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, originalModel, mappedModel string) (*openaiNonStreamingResult, error) {

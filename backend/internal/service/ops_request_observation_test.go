@@ -66,6 +66,46 @@ func TestOpsRequestObservationSanitizesSensitiveValuesAndHeaders(t *testing.T) {
 	require.GreaterOrEqual(t, obs.DurationMs, int64(1400))
 }
 
+func TestSetOpsOpenAIPromptCacheObservationUsesFinalOutboundIdentity(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	account := &Account{ID: 46, Type: AccountTypeOAuth, Platform: PlatformOpenAI}
+	snapshot := &CodexOutboundSnapshot{
+		accountID:           account.ID,
+		profile:             CodexOutboundProfileCLI0149,
+		transport:           "http",
+		requestKind:         "turn",
+		fingerprintMode:     string(codexFingerprintSession),
+		fingerprintVersion:  codexFingerprintAlgorithmV3,
+		sessionScopeHash:    "scope-hash",
+		sessionID:           "final-session",
+		sessionEpoch:        3,
+		sessionScopeVersion: 2,
+		sessionSlot:         1,
+		sessionSlotCount:    2,
+		promptCacheKey:      "final-cache-key",
+		model:               "gpt-5.6-sol",
+		serviceTier:         "priority",
+	}
+	SetOpsOpenAIRequestMetadata(c, []byte(`{"prompt_cache_key":"inbound-cache-key"}`))
+	SetOpsOpenAIPromptCacheObservation(c, account, snapshot, []byte(`{"model":"gpt-5.6-sol","input":[{"role":"user","content":"secret"}]}`), "")
+
+	obs := GetOpsRequestObservation(c, time.Now().UTC())
+	require.NotEmpty(t, obs.PromptCache.OutboundPromptCacheKeyHash)
+	require.NotEqual(t, "final-cache-key", obs.PromptCache.OutboundPromptCacheKeyHash)
+	require.NotEmpty(t, obs.PromptCache.OutboundBodyHash)
+	require.NotEmpty(t, obs.PromptCache.OutboundPrefixConfigHash)
+	require.Equal(t, int64(46), obs.PromptCache.OutboundAccountID)
+	require.Equal(t, "codex_cli_0_149_0", obs.PromptCache.OutboundProfile)
+	require.Equal(t, "scope-hash", obs.PromptCache.SessionScopeHash)
+	require.Equal(t, int64(3), obs.PromptCache.SessionEpoch)
+	require.Equal(t, 2, obs.PromptCache.SessionScopeVersion)
+	require.Equal(t, 1, obs.PromptCache.SessionSlot)
+	require.Equal(t, 2, obs.PromptCache.SessionSlotCount)
+	require.Equal(t, 1, obs.PromptCache.AttemptNumber)
+}
+
 func TestMarkOpsOpenAIForwardFailureUsesLastUpstreamOverload(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()

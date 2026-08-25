@@ -27,13 +27,14 @@ type OpenAIRecordUsageInput struct {
 	Subscription       *UserSubscription
 	InboundEndpoint    string
 	UpstreamEndpoint   string
-	UserAgent          string // 请求的 User-Agent
-	IPAddress          string // 请求的客户端 IP 地址
-	SessionID          string // 客户端显式会话标识（session_id / X-Session-Id 等请求头），仅用于用量行会话关联
-	SessionScopeHash   string // 内部 session scope 安全哈希
-	SessionSourceHash  string // 内部逻辑 source 安全哈希
-	PromptCacheKeyHash string // prompt_cache_key 安全哈希
-	IsSubagent         bool   // 是否为已识别的 Codex 子代理请求
+	UserAgent          string                       // 请求的 User-Agent
+	IPAddress          string                       // 请求的客户端 IP 地址
+	SessionID          string                       // 客户端显式会话标识（session_id / X-Session-Id 等请求头），仅用于用量行会话关联
+	SessionScopeHash   string                       // 内部 session scope 安全哈希
+	SessionSourceHash  string                       // 内部逻辑 source 安全哈希
+	PromptCacheKeyHash string                       // prompt_cache_key 安全哈希
+	PromptCache        OpenAIPromptCacheObservation // 最终出站缓存诊断摘要
+	IsSubagent         bool                         // 是否为已识别的 Codex 子代理请求
 	RequestPayloadHash string
 	APIKeyService      APIKeyQuotaUpdater
 	QuotaPlatform      string // user×platform quota platform resolved by the handler before async billing.
@@ -179,6 +180,89 @@ func openAIUsagePricingAt(input *OpenAIRecordUsageInput) time.Time {
 	return timezone.Now()
 }
 
+const openAIPromptCacheDiagnosticLargeInputTokens = 64 * 1024
+
+// logOpenAIPromptCacheUsage 记录最终出站缓存身份与上游 usage 的关联结果。
+// 大上下文未命中、cache creation 以及少量命中样本进入 info，其余命中仅保留既有 usage 记录。
+func logOpenAIPromptCacheUsage(input *OpenAIRecordUsageInput, uncachedInputTokens int) {
+	if input == nil || input.Result == nil {
+		return
+	}
+	result := input.Result
+	diagnostic := input.PromptCache
+	if diagnostic.OutboundBodyHash == "" && diagnostic.OutboundPromptCacheKeyHash == "" {
+		return
+	}
+	cacheReadTokens := result.Usage.CacheReadInputTokens
+	cacheCreationTokens := result.Usage.CacheCreationInputTokens
+	largeInput := result.Usage.InputTokens >= openAIPromptCacheDiagnosticLargeInputTokens ||
+		diagnostic.OutboundBodyBytes >= openAIPromptCacheDiagnosticLargeBodyBytes
+	sampled := false
+	if cacheReadTokens == 0 && cacheCreationTokens == 0 && !largeInput {
+		return
+	}
+	if cacheReadTokens > 0 && cacheCreationTokens == 0 && !largeInput {
+		sampled = shouldSampleOpenAIPromptCacheHit(result.RequestID, diagnostic.OutboundBodyHash)
+		if !sampled {
+			return
+		}
+	}
+
+	accountID := diagnostic.OutboundAccountID
+	if accountID <= 0 && input.Account != nil {
+		accountID = input.Account.ID
+	}
+	sessionScopeHash := strings.TrimSpace(diagnostic.SessionScopeHash)
+	if sessionScopeHash == "" {
+		sessionScopeHash = strings.TrimSpace(input.SessionScopeHash)
+	}
+	upstreamRequestID := ""
+	if result.ResponseHeaders != nil {
+		upstreamRequestID = strings.TrimSpace(result.ResponseHeaders.Get("x-request-id"))
+	}
+	logger.L().With(zap.String("component", "service.openai_gateway")).Info(
+		"openai.prompt_cache_usage",
+		zap.String("request_id", strings.TrimSpace(result.RequestID)),
+		zap.Int64("account_id", accountID),
+		zap.Bool("cache_hit", cacheReadTokens > 0),
+		zap.Bool("sampled", sampled),
+		zap.Int("total_input_tokens", result.Usage.InputTokens),
+		zap.Int("uncached_input_tokens", uncachedInputTokens),
+		zap.Int("cache_read_tokens", cacheReadTokens),
+		zap.Int("cache_creation_tokens", cacheCreationTokens),
+		zap.String("usage_source", result.Usage.UsageSource),
+		zap.String("cache_read_source", result.Usage.CacheReadSource),
+		zap.String("cache_creation_source", result.Usage.CacheCreationSource),
+		zap.String("inbound_prompt_cache_key_hash", input.PromptCacheKeyHash),
+		zap.String("outbound_prompt_cache_key_hash", diagnostic.OutboundPromptCacheKeyHash),
+		zap.String("outbound_body_hash", diagnostic.OutboundBodyHash),
+		zap.String("outbound_prefix_config_hash", diagnostic.OutboundPrefixConfigHash),
+		zap.Int("outbound_body_bytes", diagnostic.OutboundBodyBytes),
+		zap.String("outbound_profile", diagnostic.OutboundProfile),
+		zap.String("outbound_fallback_reason", diagnostic.OutboundFallbackReason),
+		zap.String("outbound_model", diagnostic.OutboundModel),
+		zap.String("outbound_request_kind", diagnostic.OutboundRequestKind),
+		zap.String("outbound_service_tier", diagnostic.OutboundServiceTier),
+		zap.String("outbound_transport", diagnostic.OutboundTransport),
+		zap.Int("attempt_number", diagnostic.AttemptNumber),
+		zap.String("fingerprint_mode", diagnostic.FingerprintMode),
+		zap.String("fingerprint_version", diagnostic.FingerprintVersion),
+		zap.String("session_id_hash", diagnostic.SessionIDHash),
+		zap.String("session_scope_hash", sessionScopeHash),
+		zap.Int64("session_epoch", diagnostic.SessionEpoch),
+		zap.Int("session_scope_version", diagnostic.SessionScopeVersion),
+		zap.Int("session_slot", diagnostic.SessionSlot),
+		zap.Int("session_slot_count", diagnostic.SessionSlotCount),
+		zap.String("upstream_model", strings.TrimSpace(result.UpstreamModel)),
+		zap.String("upstream_request_id", upstreamRequestID),
+	)
+}
+
+func shouldSampleOpenAIPromptCacheHit(requestID, bodyHash string) bool {
+	seed := hashSensitiveValueForLog(strings.TrimSpace(requestID) + ":" + strings.TrimSpace(bodyHash))
+	return len(seed) >= 2 && seed[0] == '0' && seed[1] >= '0' && seed[1] <= '3'
+}
+
 // RecordUsage records usage and deducts balance
 func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRecordUsageInput) error {
 	if input == nil {
@@ -206,6 +290,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if actualInputTokens < 0 {
 		actualInputTokens = 0
 	}
+	logOpenAIPromptCacheUsage(input, actualInputTokens)
 
 	// Calculate cost
 	tokens := UsageTokens{

@@ -252,6 +252,15 @@ func TestCodexOutboundStrictHTTPProjection(t *testing.T) {
 	require.Greater(t, metricsAfter.ZstdRequestsTotal, metricsBefore.ZstdRequestsTotal)
 }
 
+func TestCodexOutboundPrefixConfigHashIgnoresDynamicInput(t *testing.T) {
+	first := []byte(`{"model":"gpt-5.6-sol","instructions":"i","reasoning":{"effort":"medium"},"input":[{"role":"user","content":"first"}]}`)
+	second := []byte(`{"model":"gpt-5.6-sol","instructions":"i","reasoning":{"effort":"medium"},"input":[{"role":"user","content":"second"}]}`)
+	changed := []byte(`{"model":"gpt-5.6-sol","instructions":"i","reasoning":{"effort":"high"},"input":[{"role":"user","content":"second"}]}`)
+
+	require.Equal(t, codexOutboundPrefixConfigHash(first), codexOutboundPrefixConfigHash(second))
+	require.NotEqual(t, codexOutboundPrefixConfigHash(first), codexOutboundPrefixConfigHash(changed))
+}
+
 func TestAccountTestServiceCodexProbeUsesStrictOutboundProfile(t *testing.T) {
 	cfg := &config.Config{Gateway: config.GatewayConfig{CodexOutboundProfileDefault: CodexOutboundProfileCLI0149}}
 	probeService := &AccountTestService{cfg: cfg}

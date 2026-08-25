@@ -3459,6 +3459,9 @@ func TestExtractOpenAIUsageFromJSONBytes_AcceptsResponseAndChatUsageShapes(t *te
 	require.Equal(t, 5, usage.OutputTokens)
 	require.Equal(t, 2, usage.CacheReadInputTokens)
 	require.Equal(t, 4, usage.CacheCreationInputTokens)
+	require.Equal(t, "usage", usage.UsageSource)
+	require.Equal(t, "input_tokens_details.cached_tokens", usage.CacheReadSource)
+	require.Equal(t, "input_tokens_details.cache_write_tokens", usage.CacheCreationSource)
 
 	usage, ok = extractOpenAIUsageFromJSONBytes([]byte(`{"type":"response.completed","response":{"usage":{"prompt_tokens":13,"completion_tokens":7,"prompt_tokens_details":{"cached_tokens":4,"cache_creation_tokens":3}}}}`))
 	require.True(t, ok)

@@ -224,6 +224,13 @@ type CodexOutboundSnapshot struct {
 	accountID           int64
 	transport           string
 	requestKind         string
+	fingerprintMode     string
+	fingerprintVersion  string
+	sessionScopeHash    string
+	sessionEpoch        int64
+	sessionScopeVersion int
+	sessionSlot         int
+	sessionSlotCount    int
 	installationID      string
 	sessionID           string
 	threadID            string
@@ -362,6 +369,13 @@ func buildCodexOutboundSnapshot(c *gin.Context, account *Account, body []byte, t
 
 	ids := stagedCodexFingerprintIDsForAccount(c, account)
 	if ids != nil {
+		snapshot.fingerprintMode = string(ids.mode)
+		snapshot.fingerprintVersion = codexFingerprintAlgorithmV3
+		snapshot.sessionScopeHash = ids.sessionScopeHash
+		snapshot.sessionEpoch = ids.sessionEpoch
+		snapshot.sessionScopeVersion = ids.sessionScopeVersion
+		snapshot.sessionSlot = ids.sessionSlot
+		snapshot.sessionSlotCount = ids.sessionSlotCount
 		snapshot.installationID = ids.installationID
 		snapshot.sessionID = ids.sessionID
 		snapshot.threadID = ids.threadID
@@ -480,6 +494,7 @@ func (s *OpenAIGatewayService) prepareCodexOutboundBody(c *gin.Context, account 
 			defaultCodexOutboundMetrics.legacyRequests.Add(1)
 		}
 		stageCodexOutboundSnapshot(c, nil)
+		SetOpsOpenAIPromptCacheObservation(c, account, nil, body, "legacy_profile")
 		return body, nil, nil
 	}
 	order := codexHTTPResponseFieldOrder
@@ -500,6 +515,7 @@ func (s *OpenAIGatewayService) prepareCodexOutboundBody(c *gin.Context, account 
 		stageCodexOutboundFallback(c, &codexOutboundFallback{accountID: account.ID, reason: "unknown_top_level_field"})
 		defaultCodexOutboundMetrics.profileFallback.Add(1)
 		defaultCodexOutboundMetrics.legacyRequests.Add(1)
+		SetOpsOpenAIPromptCacheObservation(c, account, nil, body, "unknown_top_level_field")
 		logger.L().Warn("Codex 严格 profile 遇到未识别顶层字段，整请求回退 legacy",
 			zap.Int64("account_id", account.ID),
 			zap.String("profile", CodexOutboundProfileCLI0149),
@@ -543,7 +559,42 @@ func (s *OpenAIGatewayService) prepareCodexOutboundBody(c *gin.Context, account 
 	copied.orderedBody = append([]byte(nil), ordered...)
 	snapshot = &copied
 	stageCodexOutboundSnapshot(c, snapshot)
+	SetOpsOpenAIPromptCacheObservation(c, account, snapshot, ordered, "")
 	return ordered, snapshot, nil
+}
+
+// codexOutboundPrefixConfigHash 返回影响缓存前缀、但不包含动态 input 和 client_metadata 的配置摘要哈希。
+// input 会随多轮上下文增长，单独排除后可用于判断模型/工具/reasoning 等静态前缀是否漂移。
+func codexOutboundPrefixConfigHash(body []byte) string {
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return ""
+	}
+	paths := []string{
+		"type", "model", "instructions", "previous_response_id", "tools", "tool_choice",
+		"parallel_tool_calls", "reasoning", "store", "stream", "stream_options", "include",
+		"service_tier", "prompt_cache_key", "text",
+	}
+	material := make(map[string]json.RawMessage, len(paths))
+	for _, path := range paths {
+		value := gjson.GetBytes(body, path)
+		if !value.Exists() {
+			continue
+		}
+		raw := strings.TrimSpace(value.Raw)
+		if raw == "" || !json.Valid([]byte(raw)) {
+			encodedValue, err := json.Marshal(value.Value())
+			if err != nil {
+				continue
+			}
+			raw = string(encodedValue)
+		}
+		material[path] = json.RawMessage(raw)
+	}
+	encoded, err := json.Marshal(material)
+	if err != nil {
+		return ""
+	}
+	return hashSensitiveValueForLog(string(encoded))
 }
 
 // projectCodexOutboundBody 将同一份快照投影到 HTTP、WS 或 compact 请求体。
