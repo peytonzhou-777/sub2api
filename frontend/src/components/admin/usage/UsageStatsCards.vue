@@ -55,6 +55,8 @@
               </span>
             </span>
           </span>
+          <span>/</span>
+          <span>{{ t('usage.cacheRate') }}: <span :class="cacheRateClass">{{ formatCacheRate(cacheRate) }}</span></span>
         </p>
       </div>
     </div>
@@ -125,4 +127,20 @@ const formatTokens = (value: number) => {
 
 const cacheLabel = () => t('usage.cacheTotal')
 const cacheDetailLabel = () => t('usage.cacheBreakdown')
+
+// 缓存率按缓存 Token 占总 Token 的比例计算。
+const cacheRate = computed(() => {
+  const stats = props.stats
+  if (!stats) return 0
+  const totalTokens = stats.total_tokens || 0
+  return totalTokens > 0 ? (stats.total_cache_tokens || 0) / totalTokens : 0
+})
+
+const cacheRateClass = computed(() => {
+  if (cacheRate.value >= 0.9) return 'text-green-600 dark:text-green-400'
+  if (cacheRate.value >= 0.8) return 'text-yellow-600 dark:text-yellow-400'
+  return 'text-red-600 dark:text-red-400'
+})
+
+const formatCacheRate = (value: number) => `${(Math.max(0, Math.min(1, value)) * 100).toFixed(1)}%`
 </script>

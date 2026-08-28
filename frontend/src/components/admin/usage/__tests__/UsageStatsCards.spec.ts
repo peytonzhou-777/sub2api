@@ -10,6 +10,7 @@ const messages: Record<string, string> = {
   'usage.in': 'In',
   'usage.out': 'Out',
   'usage.cacheTotal': 'Cache',
+  'usage.cacheRate': 'Cache rate',
   'usage.cacheBreakdown': 'Cache Token Breakdown',
   'usage.cacheCreationTokensLabel': 'Cache Creation',
   'usage.cacheReadTokensLabel': 'Cache Read',
@@ -63,5 +64,58 @@ describe('UsageStatsCards', () => {
     expect(text).toContain('12')
     expect(text).toContain('Cache Read')
     expect(text).toContain('22')
+  })
+
+  it('shows cache rate with threshold colors', () => {
+    const wrapper = mount(UsageStatsCards, {
+      props: {
+        stats: {
+          ...stats,
+          total_input_tokens: 10,
+          total_tokens: 100,
+          total_cache_tokens: 90,
+          total_cache_creation_tokens: 0,
+          total_cache_read_tokens: 90,
+        },
+      },
+      global: {
+        stubs: { Icon: true },
+      },
+    })
+
+    const rate = wrapper.find('p span.text-green-600')
+    expect(rate.exists()).toBe(true)
+    expect(wrapper.text()).toContain('Cache rate: 90.0%')
+  })
+
+  it('uses yellow from 80% and red below 80%', async () => {
+    const wrapper = mount(UsageStatsCards, {
+      props: {
+        stats: {
+          ...stats,
+          total_input_tokens: 20,
+          total_tokens: 100,
+          total_cache_tokens: 80,
+          total_cache_creation_tokens: 0,
+          total_cache_read_tokens: 80,
+        },
+      },
+      global: {
+        stubs: { Icon: true },
+      },
+    })
+    expect(wrapper.find('p span.text-yellow-600').exists()).toBe(true)
+
+    await wrapper.setProps({
+      stats: {
+        ...stats,
+        total_input_tokens: 30,
+        total_tokens: 100,
+        total_cache_tokens: 70,
+        total_cache_creation_tokens: 0,
+        total_cache_read_tokens: 70,
+      },
+    })
+    expect(wrapper.find('p span.text-red-600').exists()).toBe(true)
   })
 })
