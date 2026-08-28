@@ -310,6 +310,8 @@ export default {
     cacheCreationTokensLabel: '缓存创建',
     cacheReadTokensLabel: '缓存读取',
     totalCost: '总消费',
+    spendingRankExact: '全站第 {rank} 名',
+    spendingRankTop: '全站前 {rank} 名',
     standardCost: '标准',
     actualCost: '实际',
     accountCost: '成本',

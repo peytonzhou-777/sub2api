@@ -570,6 +570,19 @@ func (s *SettingService) IsUserErrorViewAllowed(ctx context.Context) bool {
 	return vals[SettingKeyAllowUserViewErrorRequests] == "true"
 }
 
+// GetUserSpendingRankingThresholds 获取用户侧总消费排名展示档位。
+// 设置缺失或读取失败时回退默认档位，避免影响用量统计接口。
+func (s *SettingService) GetUserSpendingRankingThresholds(ctx context.Context) []int {
+	if s == nil || s.settingRepo == nil {
+		return defaultUserSpendingRankingThresholds()
+	}
+	raw, err := s.settingRepo.GetValue(ctx, SettingKeyUserSpendingRankingThresholds)
+	if err != nil {
+		return defaultUserSpendingRankingThresholds()
+	}
+	return parseUserSpendingRankingThresholdsSetting(raw)
+}
+
 // PublicSettingsInjectionPayload is the JSON shape embedded into HTML as
 // `window.__APP_CONFIG__` so the frontend can hydrate feature flags & site
 // config before the first XHR finishes.

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -408,6 +409,16 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 	stats.TotalAccountCost = nil
 	stats.UpstreamEndpoints = nil
 	stats.EndpointPaths = nil
+	stats.SpendingRank = nil
+	if h.settingService != nil {
+		if rank, rankErr := h.usageService.GetUserSpendingRank(
+			c.Request.Context(), parsed.Filters.UserID, parsed.StartTime, parsed.EndTime, h.settingService.GetUserSpendingRankingThresholds(c.Request.Context()),
+		); rankErr != nil {
+			slog.Warn("load user spending rank failed", "error", rankErr)
+		} else {
+			stats.SpendingRank = rank
+		}
+	}
 
 	response.Success(c, stats)
 }

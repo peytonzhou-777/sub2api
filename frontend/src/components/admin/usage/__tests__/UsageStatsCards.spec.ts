@@ -15,6 +15,8 @@ const messages: Record<string, string> = {
   'usage.cacheCreationTokensLabel': 'Cache Creation',
   'usage.cacheReadTokensLabel': 'Cache Read',
   'usage.totalCost': 'Total Cost',
+  'usage.spendingRankExact': 'Global rank #{rank}',
+  'usage.spendingRankTop': 'Top {rank} globally',
   'usage.accountCost': 'Cost',
   'usage.standardCost': 'Standard',
   'usage.avgDuration': 'Avg Duration',
@@ -117,5 +119,21 @@ describe('UsageStatsCards', () => {
       },
     })
     expect(wrapper.find('p span.text-red-600').exists()).toBe(true)
+  })
+
+  it('shows the configured global spending rank beside total cost', () => {
+    const wrapper = mount(UsageStatsCards, {
+      props: {
+        stats: {
+          ...stats,
+          spending_rank: { visibility: 'exact', rank: 7 },
+        },
+      },
+      global: {
+        stubs: { Icon: true },
+      },
+    })
+
+    expect(wrapper.text()).toContain('Global rank #{rank}')
   })
 })

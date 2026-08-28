@@ -1297,6 +1297,13 @@ export default {
       usageRecords: {
         title: 'Usage Records',
         description: 'Settings for usage and failed-request records visible to end users.',
+        spendingRankingTitle: 'Total spending ranking tiers',
+        spendingRankingDescription: 'Rank users by global actual spending in the selected time range. Users beyond the last tier are hidden.',
+        spendingRankingThresholds: 'Ranking tier limits',
+        spendingRankingExactTier: 'Exact rank limit',
+        spendingRankingTopTier: 'Top-N limit',
+        spendingRankingThresholdsHint: 'Enter the exact-rank limit followed by the top-N tiers (default: 20, 50, 100, 200).',
+        spendingRankingThresholdsInvalid: 'Ranking tiers must be 4 increasing integers between 1 and 10000.',
       },
       user_error_view: {
         label: 'Allow users to view their own error requests',

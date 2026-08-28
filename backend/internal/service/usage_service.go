@@ -461,3 +461,41 @@ func (s *UsageService) GetStatsWithFilters(ctx context.Context, filters usagesta
 	}
 	return stats, nil
 }
+
+// GetUserSpendingRank 获取当前用户在指定时间范围内的全站消费排名。
+// 查询只取最后一档以内的结果，用户接口不会暴露其他用户的身份或消费数据。
+func (s *UsageService) GetUserSpendingRank(ctx context.Context, userID int64, startTime, endTime time.Time, thresholds []int) (*usagestats.UserSpendingRank, error) {
+	if s == nil || s.usageRepo == nil || userID <= 0 || startTime.IsZero() || endTime.IsZero() {
+		return nil, nil
+	}
+	if normalized, err := validateUserSpendingRankingThresholds(thresholds); err == nil {
+		thresholds = normalized
+	} else {
+		thresholds = defaultUserSpendingRankingThresholds()
+	}
+	maxThreshold := thresholds[len(thresholds)-1]
+	ranking, err := s.usageRepo.GetUserSpendingRanking(ctx, startTime, endTime, maxThreshold)
+	if err != nil {
+		return nil, fmt.Errorf("get user spending rank: %w", err)
+	}
+	if ranking == nil {
+		return nil, nil
+	}
+	for index, item := range ranking.Ranking {
+		// 仅有正向实际消费的用户进入展示排名；不对账号状态做额外过滤。
+		if item.UserID != userID || item.ActualCost <= 0 {
+			continue
+		}
+		rank := index + 1
+		if rank <= thresholds[0] {
+			return &usagestats.UserSpendingRank{Visibility: "exact", Rank: int64(rank)}, nil
+		}
+		for _, topN := range thresholds[1:] {
+			if rank <= topN {
+				return &usagestats.UserSpendingRank{Visibility: "top_n", TopN: topN}, nil
+			}
+		}
+		return nil, nil
+	}
+	return nil, nil
+}

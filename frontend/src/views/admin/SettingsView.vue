@@ -6593,6 +6593,33 @@
                 <span class="toggle-slider"></span>
               </label>
             </div>
+            <!-- User spending ranking tiers -->
+            <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t('admin.settings.usageRecords.spendingRankingTitle') }}
+              </label>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.settings.usageRecords.spendingRankingDescription') }}
+              </p>
+              <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div v-for="(_, index) in form.user_spending_ranking_thresholds" :key="index">
+                  <label class="mb-1 block text-xs text-gray-500 dark:text-gray-400">
+                    {{ index === 0 ? t('admin.settings.usageRecords.spendingRankingExactTier') : t('admin.settings.usageRecords.spendingRankingTopTier') }}
+                  </label>
+                  <input
+                    v-model.number="form.user_spending_ranking_thresholds[index]"
+                    type="number"
+                    min="1"
+                    max="10000"
+                    step="1"
+                    class="input"
+                  />
+                </div>
+              </div>
+              <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.settings.usageRecords.spendingRankingThresholdsHint') }}
+              </p>
+            </div>
           </div>
         </div>
         </div>
@@ -9616,6 +9643,9 @@ const openaiFastPolicyLoaded = ref(false);
 const tablePageSizeMin = 5;
 const tablePageSizeMax = 1000;
 const tablePageSizeDefault = 20;
+const spendingRankingThresholdMin = 1;
+const spendingRankingThresholdMax = 10000;
+const defaultSpendingRankingThresholds = [20, 50, 100, 200];
 
 function defaultLoginAgreementDocuments(): LoginAgreementDocument[] {
   return [
@@ -10405,6 +10435,7 @@ const form = reactive<SettingsForm>({
   affiliate_enabled: false,
   // Allow user view error requests
   allow_user_view_error_requests: false,
+  user_spending_ranking_thresholds: [...defaultSpendingRankingThresholds],
 });
 
 // applyRegistrationCapacityIncrement 以当前实时用户数为基准换算绝对容量。
@@ -11718,6 +11749,24 @@ async function saveSettings() {
     form.table_default_page_size = normalizedTableDefaultPageSize;
     form.table_page_size_options = normalizedTablePageSizeOptions;
 
+    const normalizedSpendingRankingThresholds = form.user_spending_ranking_thresholds.map(
+      (value) => Math.floor(Number(value)),
+    );
+    if (
+      normalizedSpendingRankingThresholds.length !== 4 ||
+      normalizedSpendingRankingThresholds.some(
+        (value, index) =>
+          !Number.isInteger(value) ||
+          value < spendingRankingThresholdMin ||
+          value > spendingRankingThresholdMax ||
+          (index > 0 && value <= normalizedSpendingRankingThresholds[index - 1]),
+      )
+    ) {
+      appStore.showError(t('admin.settings.usageRecords.spendingRankingThresholdsInvalid'));
+      return;
+    }
+    form.user_spending_ranking_thresholds = normalizedSpendingRankingThresholds;
+
     const normalizedLoginAgreementDocuments =
       normalizeLoginAgreementDocumentsForSave();
     if (form.login_agreement_enabled && normalizedLoginAgreementDocuments.length === 0) {
@@ -11944,6 +11993,7 @@ async function saveSettings() {
       hide_ccs_import_button: form.hide_ccs_import_button,
       table_default_page_size: form.table_default_page_size,
       table_page_size_options: form.table_page_size_options,
+      user_spending_ranking_thresholds: form.user_spending_ranking_thresholds,
       custom_menu_items: form.custom_menu_items,
       custom_endpoints: form.custom_endpoints,
       frontend_url: form.frontend_url,

@@ -303,6 +303,16 @@ type UsageStats struct {
 	Endpoints                []EndpointStat `json:"endpoints,omitempty"`
 	UpstreamEndpoints        []EndpointStat `json:"upstream_endpoints,omitempty"`
 	EndpointPaths            []EndpointStat `json:"endpoint_paths,omitempty"`
+	// SpendingRank 是当前用户在所选时间范围内的全站消费排名；未达到展示条件时为空。
+	SpendingRank             *UserSpendingRank `json:"spending_rank,omitempty"`
+}
+
+// UserSpendingRank 描述用户消费排名的展示档位。
+// Visibility 为 exact 时使用 Rank，为 top_n 时使用 TopN。
+type UserSpendingRank struct {
+	Visibility string `json:"visibility"`
+	Rank       int64  `json:"rank,omitempty"`
+	TopN       int    `json:"top_n,omitempty"`
 }
 
 // PlatformUsage 表示某用户/某 API key 在单个"有效平台"维度的用量明细。

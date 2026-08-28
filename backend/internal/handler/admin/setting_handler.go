@@ -441,6 +441,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 
 		AccountSchedulingThresholds: settings.AccountSchedulingThresholds,
 		AllowUserViewErrorRequests:  settings.AllowUserViewErrorRequests,
+		UserSpendingRankingThresholds: settings.UserSpendingRankingThresholds,
 	}
 
 	// OpenAI fast policy (stored under a dedicated setting key)

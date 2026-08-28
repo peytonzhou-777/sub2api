@@ -1912,6 +1912,11 @@ export interface UsageStatsResponse {
   endpoints?: EndpointStat[]
   upstream_endpoints?: EndpointStat[]
   endpoint_paths?: EndpointStat[]
+  spending_rank?: {
+    visibility: 'exact' | 'top_n'
+    rank?: number
+    top_n?: number
+  }
 }
 
 // ==================== Trend & Chart Types ====================

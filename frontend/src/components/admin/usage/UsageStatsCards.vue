@@ -66,9 +66,17 @@
       </div>
       <div class="min-w-0 flex-1">
         <p class="text-xs font-medium text-gray-500">{{ t('usage.totalCost') }}</p>
-        <p class="text-xl font-bold text-green-600">
-          ${{ (stats?.total_actual_cost || 0).toFixed(4) }}
-        </p>
+        <div class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+          <p class="text-xl font-bold text-green-600">
+            ${{ (stats?.total_actual_cost || 0).toFixed(4) }}
+          </p>
+          <p
+            v-if="spendingRankLabel"
+            class="whitespace-nowrap text-xl font-bold text-green-600"
+          >
+            {{ spendingRankLabel }}
+          </p>
+        </div>
         <p class="text-xs text-gray-400">
           <template v-if="showAccountCost && totalAccountCost != null">
             <span class="text-orange-500">{{ t('usage.accountCost') }} ${{ totalAccountCost.toFixed(4) }}</span>
@@ -114,6 +122,18 @@ const totalAccountCost = computed(() => {
 })
 const showAccountCost = computed(() => props.showAccountCost)
 const strikeStandardCost = computed(() => props.strikeStandardCost)
+
+const spendingRankLabel = computed(() => {
+  const rank = (props.stats as UsageStatsResponse | null)?.spending_rank
+  if (!rank) return ''
+  if (rank.visibility === 'exact' && rank.rank) {
+    return t('usage.spendingRankExact', { rank: rank.rank })
+  }
+  if (rank.visibility === 'top_n' && rank.top_n) {
+    return t('usage.spendingRankTop', { rank: rank.top_n })
+  }
+  return ''
+})
 
 const formatDuration = (ms: number) =>
   ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(2)}s`

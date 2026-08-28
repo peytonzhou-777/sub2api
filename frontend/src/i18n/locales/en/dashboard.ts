@@ -305,6 +305,8 @@ export default {
     cacheCreationTokensLabel: 'Cache Creation',
     cacheReadTokensLabel: 'Cache Read',
     totalCost: 'Total Cost',
+    spendingRankExact: 'Global rank #{rank}',
+    spendingRankTop: 'Top {rank} globally',
     standardCost: 'Standard',
     actualCost: 'Actual',
     accountCost: 'Cost',
