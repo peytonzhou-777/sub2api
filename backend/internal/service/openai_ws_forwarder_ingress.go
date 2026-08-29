@@ -1264,7 +1264,6 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	currentImageBillingModel := firstPayload.imageBillingModel
 	currentImageSizeTier := firstPayload.imageSizeTier
 	currentImageInputSize := firstPayload.imageInputSize
-	currentPayloadBytes := firstPayload.payloadBytes
 	currentRequestedReasoningEffort := firstPayload.requestedReasoningEffort
 	isStrictAffinityTurn := func(payload []byte) bool {
 		if !storeDisabled {
@@ -2001,7 +2000,6 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		currentImageBillingModel = nextPayload.imageBillingModel
 		currentImageSizeTier = nextPayload.imageSizeTier
 		currentImageInputSize = nextPayload.imageInputSize
-		currentPayloadBytes = nextPayload.payloadBytes
 		currentRequestedReasoningEffort = nextPayload.requestedReasoningEffort
 		rejectedFieldRetryState = newOpenAIResponsesRejectedFieldRetryState(currentPayload)
 		storeDisabled = s.isOpenAIWSStoreDisabledInRequestRaw(currentPayload, account)

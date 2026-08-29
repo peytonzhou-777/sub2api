@@ -65,22 +65,27 @@ type codexFingerprintMode string
 
 const (
 	// codexFingerprintOff 不做任何收敛，原样透传客户端标识。
-	// 这是默认值：收敛是显式 opt-in 的（见 GetCodexFingerprintMode）。
+	// 仅用于管理员显式回滚/停用，不作为线上默认值。
 	codexFingerprintOff codexFingerprintMode = "off"
 	// codexFingerprintDevice 仅收敛 installation_id 为账号级恒定值。
 	// 上游看到 1 台设备 + 多会话（每用户各自的 session）。
+	// 仅保留兼容存量配置，线上维护主线不再扩展。
 	codexFingerprintDevice codexFingerprintMode = "device"
 	// codexFingerprintSession 收敛 installation_id + session_id，
 	// v3 的 session_id 按稳定客户端槽位隔离，thread_id 再按客户端原始
 	// session-id 确定性派生（每个真实客户端会话一个独立线程）。
 	// 上游看到 1 台设备 + 少量客户端会话 + N 线程。
+	// 线上默认模式：设备+Session。
 	codexFingerprintSession codexFingerprintMode = "session"
 	// codexFingerprintFull 收敛所有标识：installation_id + session_id + thread_id。
 	// v3 的 Session 仍按稳定客户端槽位共享，Thread 则继续按下游 API Key 隔离。
+	// 仅保留兼容存量配置，线上维护主线不再扩展。
 	codexFingerprintFull codexFingerprintMode = "full"
 )
 
 const (
+	// codexFingerprintDefaultMode 是 OAuth 账号缺失或非法配置时的线上默认值。
+	codexFingerprintDefaultMode  = codexFingerprintSession
 	codexFingerprintModeExtraKey = "codex_fingerprint_mode"
 	// codexFingerprintSeedExtraKey 仅用于拒绝旧版 extra 输入；真实 seed 只存专用列。
 	codexFingerprintSeedExtraKey          = "codex_fingerprint_seed"
@@ -92,14 +97,14 @@ const (
 
 func codexFingerprintModeFromExtra(extra map[string]any) codexFingerprintMode {
 	if extra == nil {
-		return codexFingerprintOff
+		return codexFingerprintDefaultMode
 	}
 	raw, _ := extra[codexFingerprintModeExtraKey].(string)
 	switch codexFingerprintMode(strings.TrimSpace(raw)) {
 	case codexFingerprintOff, codexFingerprintDevice, codexFingerprintSession, codexFingerprintFull:
 		return codexFingerprintMode(strings.TrimSpace(raw))
 	default:
-		return codexFingerprintOff
+		return codexFingerprintDefaultMode
 	}
 }
 
@@ -134,15 +139,9 @@ func sanitizedCodexFingerprintExtraUpdates(updates map[string]any) map[string]an
 
 // GetCodexFingerprintMode 从账号 extra JSON 读取指纹收敛模式。
 //
-// **收敛是显式 opt-in**：未设置、空值或非法值一律按 off 处理，只有管理员
-// 明确配置 device / session / full 才收敛。
-//
-// 历史：v0.1.175（#5553）把缺省值当作 session，导致升级后存量 OAuth 账号
-// （普遍没有这个 extra 键）的每个非透传请求都被静默改写 installation /
-// session / thread / turn / window 五类标识；#5555、#5556、#5582 报告的额度
-// 缩水都卡在该版本边界，并有"回退 v0.1.173 即恢复"与"新账号开收敛后降额"
-// 的 A/B 实测。上游的配额判定策略不可观测，因此这里取兼容安全的一侧：
-// 不显式 opt-in 就保持 v0.1.175 之前的客户端身份（#5610）。
+// 缺失、空值或非法值统一使用线上默认的 session（设备+Session）模式。
+// 显式 off 仍可作为紧急回滚/停用开关；device/full 仅兼容存量配置。
+// 线上账号统一为 OpenAI OAuth，因此该默认值会覆盖未写入 extra 的存量 OAuth 账号。
 func (a *Account) GetCodexFingerprintMode() codexFingerprintMode {
 	if a == nil || !a.IsOpenAIOAuthLike() {
 		return codexFingerprintOff

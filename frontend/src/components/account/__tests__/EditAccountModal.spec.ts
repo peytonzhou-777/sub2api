@@ -642,6 +642,24 @@ describe('EditAccountModal', () => {
     )
   })
 
+  it('defaults missing OAuth fingerprint mode to session and persists explicit off rollback', async () => {
+    const account = buildOpenAIOAuthParentAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    const mode = wrapper.get('[data-testid="edit-codex-fingerprint-mode-select"]')
+    expect((mode.element as HTMLSelectElement).value).toBe('session')
+
+    await mode.setValue('off')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_fingerprint_mode).toBe('off')
+  })
+
   it('hides the Codex namespace flatten toggle for non-OAuth OpenAI accounts', async () => {
     const account = buildAccount()
     const wrapper = mountModal(account)

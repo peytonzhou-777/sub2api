@@ -1774,8 +1774,9 @@ type CodexOutboundProfileOverride = '' | 'legacy' | 'codex_cli_0_149_0'
 const enableCodexOutboundProfile = ref(false)
 const codexOutboundProfileOverride = ref<CodexOutboundProfileOverride>('')
 const enableCodexFingerprintMode = ref(false)
-const codexFingerprintMode = ref<CodexFingerprintMode>('off')
-const codexSessionSlotCount = ref(2)
+// 批量编辑默认展示线上主线配置，但只有勾选启用后才会写入账号。
+const codexFingerprintMode = ref<CodexFingerprintMode>('session')
+const codexSessionSlotCount = ref(1)
 const enableCodexSubagentConcurrency = ref(false)
 const codexSubagentMaxInflight = ref(0)
 const codexFingerprintModeOptions = computed(() => [
@@ -2459,8 +2460,8 @@ watch(
       enableCodexOutboundProfile.value = false
       codexOutboundProfileOverride.value = ''
       enableCodexFingerprintMode.value = false
-      codexFingerprintMode.value = 'off'
-      codexSessionSlotCount.value = 2
+      codexFingerprintMode.value = 'session'
+      codexSessionSlotCount.value = 1
       enableCodexSubagentConcurrency.value = false
       codexSubagentMaxInflight.value = 0
       enableOpenAICompactMode.value = false

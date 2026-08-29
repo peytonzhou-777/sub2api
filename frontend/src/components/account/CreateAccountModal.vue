@@ -4278,8 +4278,9 @@ const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 type CodexOutboundProfileOverride = '' | 'legacy' | 'codex_cli_0_149_0'
 const codexOutboundProfileOverride = ref<CodexOutboundProfileOverride>('')
-const codexFingerprintMode = ref<CodexFingerprintMode>('off')
-const codexSessionSlotCount = ref(2)
+// 线上 OAuth 账号固定以设备+Session 为默认收敛模式；off 仅用于显式回滚。
+const codexFingerprintMode = ref<CodexFingerprintMode>('session')
+const codexSessionSlotCount = ref(1)
 const codexSubagentMaxInflight = ref(0)
 const codexFingerprintModeOptions = computed(() => [
   { value: 'off' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintOff') },
@@ -5197,8 +5198,8 @@ const resetForm = () => {
   codexCLIOnlyEnabled.value = false
   codexCLIOnlyAppServerEnabled.value = false
   codexOutboundProfileOverride.value = ''
-  codexFingerprintMode.value = 'off'
-  codexSessionSlotCount.value = 2
+  codexFingerprintMode.value = 'session'
+  codexSessionSlotCount.value = 1
   codexSubagentMaxInflight.value = 0
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
@@ -5299,13 +5300,9 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
   } else {
     delete extra.codex_cli_only_allow_app_server
   }
-  // 收敛是显式 opt-in：off 即默认值，不落键；device/session/full 必须显式写入，
-  // 否则管理员的选择会被当成默认而丢失（#5610）。
-  if (codexFingerprintMode.value !== 'off') {
-    extra.codex_fingerprint_mode = codexFingerprintMode.value
-  } else {
-    delete extra.codex_fingerprint_mode
-  }
+  // 默认写入 session（设备+Session）；off 也必须显式落键才能真正回滚，
+  // 因为后端缺失键会按 session 默认值解释，device/full 仅兼容存量配置。
+  extra.codex_fingerprint_mode = codexFingerprintMode.value
   if (form.type === 'oauth' && codexOutboundProfileOverride.value) {
     extra.codex_outbound_profile = codexOutboundProfileOverride.value
   } else {

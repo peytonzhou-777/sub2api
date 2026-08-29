@@ -3321,7 +3321,8 @@ const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 type CodexOutboundProfileOverride = '' | 'legacy' | 'codex_cli_0_149_0'
 const codexOutboundProfileOverride = ref<CodexOutboundProfileOverride>('')
-const codexFingerprintMode = ref<CodexFingerprintMode>('off')
+// 线上 OAuth 账号固定以设备+Session 为默认收敛模式；off 仅用于显式回滚。
+const codexFingerprintMode = ref<CodexFingerprintMode>('session')
 const codexSessionSlotCount = ref(1)
 const codexSubagentMaxInflight = ref(0)
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
@@ -3808,7 +3809,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   codexCLIOnlyEnabled.value = false
   codexCLIOnlyAppServerEnabled.value = false
   codexOutboundProfileOverride.value = ''
-  codexFingerprintMode.value = 'off'
+  codexFingerprintMode.value = 'session'
   codexSessionSlotCount.value = 1
   codexSubagentMaxInflight.value = 0
   codexImageToolMode.value = 'inherit'
@@ -3870,10 +3871,10 @@ const syncFormFromAccount = (newAccount: Account | null) => {
           : ''
       )
       const fpMode = extra?.codex_fingerprint_mode as string | undefined
-      // 缺省/非法值按 off 呈现，与后端 GetCodexFingerprintMode 的 opt-in 语义一致（#5610）
+      // 缺省/非法值按 session 呈现，与后端线上默认值保持一致；显式 off 仍保留。
       codexFingerprintMode.value = (['off', 'device', 'session', 'full'].includes(fpMode || '')
         ? fpMode as CodexFingerprintMode
-        : 'off')
+        : 'session')
       const slotCount = Number(extra?.codex_session_slot_count ?? 1)
       codexSessionSlotCount.value = Number.isInteger(slotCount) && slotCount >= 1 && slotCount <= 4
         ? slotCount
@@ -5334,19 +5335,16 @@ const handleSubmit = async () => {
         }
       }
 
-      // 指纹收敛模式：默认 off（不写入）；device/session/full 是显式 opt-in，
-      // 必须落键，否则管理员的选择会被后端当作"未设置"而回落到 off（#5610）。
+      // 指纹收敛模式：默认写入 session（设备+Session）；off 仅显式回滚，
+      // device/full 仅兼容存量配置。
       if (props.account.type === 'oauth') {
         if (codexOutboundProfileOverride.value) {
           newExtra.codex_outbound_profile = codexOutboundProfileOverride.value
         } else {
           delete newExtra.codex_outbound_profile
         }
-        if (codexFingerprintMode.value !== 'off') {
-          newExtra.codex_fingerprint_mode = codexFingerprintMode.value
-        } else {
-          delete newExtra.codex_fingerprint_mode
-        }
+        // off 也必须显式落键才能真正回滚；删除键会被后端解释为 session 默认值。
+        newExtra.codex_fingerprint_mode = codexFingerprintMode.value
         if (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') {
           newExtra.codex_session_slot_count = Math.max(1, Math.min(4, Math.trunc(codexSessionSlotCount.value || 1)))
         } else {

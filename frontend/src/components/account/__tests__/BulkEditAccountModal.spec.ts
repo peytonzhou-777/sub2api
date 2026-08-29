@@ -933,15 +933,20 @@ describe('BulkEditAccountModal', () => {
       selectedTypes: ['oauth']
     })
 
-    // 下拉框默认就是 off，用户只勾选「编辑该项」即提交——正是 issue 描述的操作路径。
+    // off 现在是显式回滚选项，用户选择后再勾选「编辑该项」即可覆盖旧配置。
     await wrapper.get('#bulk-edit-openai-codex-fingerprint-mode-enabled').setValue(true)
+    await wrapper
+      .get('[data-testid="bulk-codex-fingerprint-mode-select"]')
+      .setValue('off')
     await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
     await flushPromises()
 
     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
       extra: {
-        codex_fingerprint_mode: 'off'
+        codex_fingerprint_mode: 'off',
+        codex_session_slot_count: 1,
+        codex_subagent_max_inflight_per_session: 0
       }
     })
 
@@ -953,7 +958,7 @@ describe('BulkEditAccountModal', () => {
   })
 
   // 与兄弟字段 codex_cli_only 的写法对齐：关闭态同样落显式值，不靠省略表达。
-  it('OpenAI OAuth 批量编辑显式 opt-in 模式仍原样提交', async () => {
+  it('OpenAI OAuth 批量编辑显式选择的模式仍原样提交', async () => {
     const wrapper = mountModal({
       selectedPlatforms: ['openai'],
       selectedTypes: ['oauth']
@@ -968,7 +973,8 @@ describe('BulkEditAccountModal', () => {
 
     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
       extra: {
-        codex_fingerprint_mode: 'session'
+        codex_fingerprint_mode: 'session',
+        codex_session_slot_count: 1
       }
     })
   })
