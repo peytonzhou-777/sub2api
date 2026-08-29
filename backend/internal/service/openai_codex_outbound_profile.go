@@ -671,12 +671,6 @@ func projectCodexOutboundBody(body []byte, snapshot *CodexOutboundSnapshot, tran
 	return marshalOrderedCodexJSONWithReference(next, reference, order)
 }
 
-// marshalOrderedCodexJSON 保留每个值的原始 JSON 子树，仅重排顶层字段。
-// 未识别字段按稳定字典序追加，避免协议升级时静默丢失业务语义。
-func marshalOrderedCodexJSON(body []byte, order []string) ([]byte, error) {
-	return marshalOrderedCodexJSONWithReference(body, nil, order)
-}
-
 func unknownCodexOutboundTopLevelFields(body []byte, order []string) ([]string, error) {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.UseNumber()
@@ -758,17 +752,20 @@ func marshalOrderedCodexJSONWithReference(body []byte, reference []byte, order [
 
 	var out bytes.Buffer
 	out.Grow(len(body))
-	out.WriteByte('{')
+	_ = out.WriteByte('{')
 	for index, key := range keys {
 		if index > 0 {
-			out.WriteByte(',')
+			_ = out.WriteByte(',')
 		}
-		encodedKey, _ := json.Marshal(key)
-		out.Write(encodedKey)
-		out.WriteByte(':')
-		out.Write(bytes.TrimSpace(fields[key]))
+		encodedKey, err := json.Marshal(key)
+		if err != nil {
+			return nil, err
+		}
+		_, _ = out.Write(encodedKey)
+		_ = out.WriteByte(':')
+		_, _ = out.Write(bytes.TrimSpace(fields[key]))
 	}
-	out.WriteByte('}')
+	_ = out.WriteByte('}')
 	return out.Bytes(), nil
 }
 

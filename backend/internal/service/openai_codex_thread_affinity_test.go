@@ -42,10 +42,9 @@ func TestOpenAICodexThreadAffinityStagesOnlyHMACIndexes(t *testing.T) {
 		openAICodexThreadAliasHash([]byte(secret), "raw-session", "raw-parent"),
 		openAICodexThreadAliasHash([]byte(secret), "raw-session", "raw-fork"),
 	}, state.parentAliasHashes)
-	encoded, err := json.Marshal(state)
-	require.NoError(t, err)
-	require.NotContains(t, string(encoded), "raw-session")
-	require.NotContains(t, string(encoded), "raw-parent")
+	encoded := strings.Join(append([]string{state.selfAliasHash}, state.parentAliasHashes...), "\n")
+	require.NotContains(t, encoded, "raw-session")
+	require.NotContains(t, encoded, "raw-parent")
 }
 
 func TestOpenAICodexThreadAffinityMarkerOnlyNeverAuthorizesLineage(t *testing.T) {

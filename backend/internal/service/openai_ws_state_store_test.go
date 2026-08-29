@@ -165,6 +165,27 @@ func TestOpenAIWSStateStoreConnectionTargetIsolation(t *testing.T) {
 	require.False(t, ok)
 	_, ok = getOpenAIWSSessionConn(store, 9, "session_target", targetB)
 	require.False(t, ok)
+	}
+
+func TestOpenAIWSStateStore_HTTPResponseOwnerPersistsAcrossStoreInstances(t *testing.T) {
+	cache := &stubGatewayCache{}
+	ctx := context.Background()
+	groupID := int64(8)
+	writer := NewOpenAIWSStateStore(cache)
+
+	require.NoError(t, writer.BindHTTPResponseOwner(ctx, groupID, "resp_owned", 201, 301, time.Minute))
+	userID, apiKeyID, found, err := writer.GetHTTPResponseOwner(ctx, groupID, "resp_owned")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, int64(201), userID)
+	require.Equal(t, int64(301), apiKeyID)
+
+	reader := NewOpenAIWSStateStore(cache)
+	userID, apiKeyID, found, err = reader.GetHTTPResponseOwner(ctx, groupID, "resp_owned")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, int64(201), userID)
+	require.Equal(t, int64(301), apiKeyID)
 }
 
 func TestOpenAIWSStateStore_ResponseConnTTL(t *testing.T) {

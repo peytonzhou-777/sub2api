@@ -1153,6 +1153,9 @@ func (k oidcJWK) publicKey() (any, error) {
 		if x.BitLen() > curve.Params().BitSize || y.BitLen() > curve.Params().BitSize {
 			return nil, errors.New("ec point coordinate exceeds curve size")
 		}
+		if !curve.IsOnCurve(x, y) { //nolint:staticcheck // JWK 以裸坐标给出公钥；替换为 ecdsa.ParseUncompressedPublicKey 需改变点编码，待单独迁移
+			return nil, errors.New("ec point is not on curve")
+		}
 		encodedPoint := make([]byte, 1+2*coordinateSize)
 		encodedPoint[0] = 4
 		x.FillBytes(encodedPoint[1 : 1+coordinateSize])
@@ -1160,7 +1163,7 @@ func (k oidcJWK) publicKey() (any, error) {
 		if _, err := validationCurve.NewPublicKey(encodedPoint); err != nil {
 			return nil, fmt.Errorf("ec point is not on curve: %w", err)
 		}
-		return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+		return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil //nolint:staticcheck // 同上
 	default:
 		return nil, fmt.Errorf("unsupported jwk kty: %s", k.Kty)
 	}

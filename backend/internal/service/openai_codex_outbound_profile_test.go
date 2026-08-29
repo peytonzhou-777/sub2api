@@ -78,7 +78,9 @@ func decodeTopLevelJSONKeys(t *testing.T, body []byte) []string {
 	for decoder.More() {
 		key, err := decoder.Token()
 		require.NoError(t, err)
-		keys = append(keys, key.(string))
+		keyString, ok := key.(string)
+		require.True(t, ok)
+		keys = append(keys, keyString)
 		var value json.RawMessage
 		require.NoError(t, decoder.Decode(&value))
 	}

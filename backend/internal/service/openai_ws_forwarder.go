@@ -43,7 +43,8 @@ const (
 	openAIWSStoreDisabledConnModeAdaptive = "adaptive"
 	openAIWSStoreDisabledConnModeOff      = "off"
 
-	openAIWSMaxPrevResponseIDDeletePasses = 8
+	openAIWSIngressStagePreviousResponseNotFound = "previous_response_not_found"
+	openAIWSMaxPrevResponseIDDeletePasses        = 8
 )
 
 var openAIWSLogValueReplacer = strings.NewReplacer(
@@ -205,6 +206,19 @@ func openAIWSIngressTurnRetryReason(err error) string {
 	return turnErr.stage
 }
 
+// isOpenAIWSIngressPreviousResponseNotFound 识别尚未向下游输出的续链锚点失效，
+// 仅允许当前回合按协议恢复一次，不改变账号调度或 429 重试策略。
+func isOpenAIWSIngressPreviousResponseNotFound(err error) bool {
+	var turnErr *openAIWSIngressTurnError
+	if !errors.As(err, &turnErr) || turnErr == nil {
+		return false
+	}
+	if strings.TrimSpace(turnErr.stage) != openAIWSIngressStagePreviousResponseNotFound {
+		return false
+	}
+	return !turnErr.wroteDownstream
+}
+
 // NewOpenAIWSClientCloseError 创建一个客户端 WS 关闭错误。
 func NewOpenAIWSClientCloseError(statusCode coderws.StatusCode, reason string, err error) error {
 	return &OpenAIWSClientCloseError{
@@ -344,6 +358,15 @@ func (s *OpenAIGatewayService) openAIWSResponseStickyTTL() time.Duration {
 		}
 	}
 	return time.Hour
+}
+
+// openAIWSIngressPreviousResponseRecoveryEnabled 控制上游 previous_response_id
+// 丢失时的单次协议恢复；本地账号粘性与指纹边界仍由入口调度逻辑负责。
+func (s *OpenAIGatewayService) openAIWSIngressPreviousResponseRecoveryEnabled() bool {
+	if s != nil && s.cfg != nil {
+		return s.cfg.Gateway.OpenAIWS.IngressPreviousResponseRecoveryEnabled
+	}
+	return true
 }
 
 func (s *OpenAIGatewayService) openAIWSReadTimeout() time.Duration {

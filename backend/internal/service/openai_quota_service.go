@@ -86,6 +86,8 @@ type OpenAIQuotaUsage struct {
 	AdditionalRateLimits  []OpenAIAdditionalRateLimit  `json:"additional_rate_limits,omitempty"`
 	RateLimitResetCredits *OpenAIRateLimitResetCredits `json:"rate_limit_reset_credits,omitempty"`
 	FetchedAt             int64                        `json:"fetched_at"`
+	// autoResetCandidates 仅供后台自动重置流程使用，不暴露到 API 响应。
+	autoResetCandidates []openAIAutoResetCreditCandidate `json:"-"`
 }
 
 // OpenAIQuotaResetCredit captures the redeemed credit metadata returned by the
@@ -263,6 +265,7 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 
 	payload.FetchedAt = time.Now().Unix()
 	if details != nil {
+		payload.autoResetCandidates = details.AutoResetCandidates
 		hasDetailCount := details.AvailableCount != nil
 		if payload.RateLimitResetCredits == nil {
 			payload.RateLimitResetCredits = &OpenAIRateLimitResetCredits{}
@@ -450,6 +453,70 @@ func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (
 			"code", payload.Code,
 			"windows_reset", payload.WindowsReset,
 		)
+		return &payload, nil
+	}
+}
+
+// ResetCreditTargeted 使用固定卡 ID 与兑换 ID 执行自动消费，避免重试时
+// 重新选择其它额度卡或生成新的幂等键。
+func (s *OpenAIQuotaService) ResetCreditTargeted(ctx context.Context, accountID int64, creditID, redeemRequestID string) (*OpenAIQuotaResetResult, error) {
+	creditID = strings.TrimSpace(creditID)
+	redeemRequestID = strings.TrimSpace(redeemRequestID)
+	if creditID == "" || redeemRequestID == "" {
+		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_QUOTA_TARGETED_RESET_INVALID", "credit_id and redeem_request_id are required")
+	}
+	if s.accountRepo != nil {
+		acc, loadErr := s.accountRepo.GetByID(ctx, accountID)
+		if loadErr != nil {
+			return nil, infraerrors.Newf(http.StatusNotFound, "OPENAI_QUOTA_ACCOUNT_NOT_FOUND", "account not found: %v", loadErr)
+		}
+		if acc == nil {
+			return nil, infraerrors.New(http.StatusNotFound, "OPENAI_QUOTA_ACCOUNT_NOT_FOUND", "account not found")
+		}
+		if acc.IsShadow() {
+			return nil, ErrSparkShadowResetNotSupported
+		}
+	}
+	accessToken, chatGPTAccountID, proxyURL, fedRAMP, err := s.prepareUpstreamCall(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	client, err := s.newOpenAIQuotaRequestClient(ctx, proxyURL, accountID)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_CLIENT_ERROR", "failed to build upstream client: %v", err)
+	}
+	callCtx, cancel := context.WithTimeout(ctx, openaiQuotaUpstreamTimeout)
+	defer cancel()
+	agentIdentity := s.isAgentIdentityAccount(ctx, accountID)
+	for recovered := false; ; {
+		headers, expectedTaskID, headerErr := s.buildCodexQuotaHeaders(callCtx, accountID, accessToken, chatGPTAccountID, fedRAMP)
+		if headerErr != nil {
+			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_AUTH_FAILED", "failed to build upstream authentication: %v", headerErr)
+		}
+		headers["content-type"] = "application/json"
+		response, requestErr := client.Do(callCtx, http.MethodPost, chatGPTRateLimitResetURL, headers, map[string]string{
+			"redeem_request_id": redeemRequestID,
+			"credit_id":         creditID,
+		})
+		if requestErr != nil {
+			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_RESET_REQUEST_FAILED", "upstream request failed: %v", requestErr)
+		}
+		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+			if agentIdentity && !recovered && isAgentIdentityTaskInvalidHTTPResponse(response.StatusCode, response.Body) {
+				recovered = true
+				if recoverErr := s.recoverAgentIdentityTask(ctx, accountID, expectedTaskID); recoverErr != nil {
+					return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_AUTH_FAILED", "agent identity task recovery failed: %v", recoverErr)
+				}
+				continue
+			}
+			status := response.StatusCode
+			body := truncate(s.redactQuotaErrorBody(callCtx, accountID, string(response.Body)), 240)
+			return nil, infraerrors.Newf(mapUpstreamStatus(status), "OPENAI_QUOTA_RESET_UPSTREAM_ERROR", "upstream returned %d: %s", status, body)
+		}
+		var payload OpenAIQuotaResetResult
+		if decodeErr := json.Unmarshal(response.Body, &payload); decodeErr != nil {
+			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_UPSTREAM_ERROR", "decode upstream response: %v", decodeErr)
+		}
 		return &payload, nil
 	}
 }

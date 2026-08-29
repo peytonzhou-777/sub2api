@@ -29,7 +29,10 @@ func TestOpenAIAccountAdmissionQueuePrioritizesInteractiveAndAgesBackground(t *t
 	if err := queue.Enqueue(ctx, background, cfg); err != nil {
 		t.Fatalf("enqueue background: %v", err)
 	}
-	queueImpl := queue.(*openAIAccountAdmissionQueue)
+	queueImpl, ok := queue.(*openAIAccountAdmissionQueue)
+	if !ok {
+		t.Fatal("unexpected admission queue implementation")
+	}
 	if err := queueImpl.rdb.HSet(ctx, openAIAccountAdmissionKeys(background)[3], background.ID, now.Add(-6*time.Second).UnixMilli()).Err(); err != nil {
 		t.Fatalf("age background ticket: %v", err)
 	}
@@ -185,7 +188,10 @@ func TestOpenAIAccountAdmissionQueueCleansExpiredTicketsBeforeDepthCheck(t *test
 	cfg := service.DefaultOpenAIAccountAdmissionConfig()
 	cfg.MaxQueueDepthPerAccount = 1
 	fresh := service.OpenAIAccountAdmissionTicket{ID: "fresh", AccountID: 10, Class: service.OpenAIAdmissionInteractive, EnqueuedAt: now, Deadline: now.Add(time.Minute), EstimatedTokens: 1}
-	queueImpl := queue.(*openAIAccountAdmissionQueue)
+	queueImpl, ok := queue.(*openAIAccountAdmissionQueue)
+	if !ok {
+		t.Fatal("unexpected admission queue implementation")
+	}
 	keys := openAIAccountAdmissionKeys(fresh)
 	pipe := queueImpl.rdb.TxPipeline()
 	pipe.ZAdd(ctx, keys[0], redis.Z{Score: 1, Member: "expired"})

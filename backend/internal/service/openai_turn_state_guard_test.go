@@ -135,7 +135,7 @@ func TestOpenAIWSV2HandshakeStateIsNotCommittedBeforeValidOutput(t *testing.T) {
 
 	_, err := svc.forwardOpenAIWSV2(
 		context.Background(), c, account, request, "sk-test",
-		svc.getOpenAIWSProtocolResolver().Resolve(account), false, false,
+		"", svc.getOpenAIWSProtocolResolver().Resolve(account), false, false,
 		"gpt-5.1", "gpt-5.1", time.Now(), 1, "", nil,
 	)
 	require.Error(t, err)

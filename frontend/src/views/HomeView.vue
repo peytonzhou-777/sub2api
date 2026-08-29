@@ -38,6 +38,15 @@
             <Icon name="book" size="md" />
           </a>
           <router-link
+            v-if="showModelPlazaEntry"
+            to="/model-plaza"
+            class="flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
+            :title="t('nav.modelPlaza')"
+          >
+            <Icon name="grid" size="md" />
+            <span class="hidden sm:inline">{{ t('nav.modelPlaza') }}</span>
+          </router-link>
+          <router-link
             :to="isAuthenticated ? dashboardPath : '/login'"
             class="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
           >
@@ -85,6 +94,14 @@
         >
           <Icon name="book" size="md" />
         </a>
+        <router-link
+          v-if="showModelPlazaEntry"
+          to="/model-plaza"
+          class="codex-public-icon-button codex-desktop-only"
+          :title="t('nav.modelPlaza')"
+        >
+          <Icon name="grid" size="md" />
+        </router-link>
         <router-link :to="isAuthenticated ? dashboardPath : '/login'" class="codex-public-pill">
           {{ isAuthenticated ? t('home.dashboard') : t('home.login') }}
           <Icon name="arrowRight" size="sm" />
@@ -154,6 +171,7 @@ import HeroSloganCarousel from '@/components/public/HeroSloganCarousel.vue'
 import ResetRebateShowcase from '@/components/public/ResetRebateShowcase.vue'
 import SiteWordmark from '@/components/common/SiteWordmark.vue'
 import { sanitizeUrl } from '@/utils/url'
+import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -170,6 +188,13 @@ const hasHomeContent = computed(() => homeContent.value.trim().length > 0)
 const compactHomeEnabled = computed(() => appStore.cachedPublicSettings?.compact_home_enabled === true)
 const isHomeContentUrl = computed(() => /^https?:\/\//i.test(homeContent.value.trim()))
 const isAuthenticated = computed(() => authStore.isAuthenticated)
+const modelPlazaEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.modelPlaza))
+const modelPlazaRequiresAuth = computed(
+  () => appStore.cachedPublicSettings?.model_plaza_require_auth === true,
+)
+const showModelPlazaEntry = computed(
+  () => modelPlazaEnabled.value && (isAuthenticated.value || !modelPlazaRequiresAuth.value),
+)
 const dashboardPath = computed(() => authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
 const currentYear = new Date().getFullYear()
 
