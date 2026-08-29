@@ -996,6 +996,7 @@
         <div class="mb-3 flex items-center justify-between">
           <label class="input-label mb-0">{{ t('admin.accounts.openai.codexFingerprintMode') }}</label>
           <input
+            id="bulk-edit-openai-codex-fingerprint-mode-enabled"
             v-model="enableCodexFingerprintMode"
             type="checkbox"
             class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
@@ -2169,14 +2170,10 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
 
   if (enableCodexFingerprintMode.value) {
     const extra = ensureExtra()
-    // 批量更新使用 JSONB 顶层合并，off 必须显式写空值才能覆盖旧 opt-in。
-    if (codexFingerprintMode.value !== 'off') {
-      extra.codex_fingerprint_mode = codexFingerprintMode.value
-    } else {
-      extra.codex_fingerprint_mode = ''
-    }
-    if (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') {
-      extra.codex_session_slot_count = Math.max(1, Math.min(4, Math.trunc(codexSessionSlotCount.value || 1)))
+		// 批量更新使用 JSONB 顶层合并，关闭时也必须显式落键才能覆盖旧 opt-in。
+		extra.codex_fingerprint_mode = codexFingerprintMode.value
+		if (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') {
+			extra.codex_session_slot_count = Math.max(1, Math.min(4, Math.trunc(codexSessionSlotCount.value || 1)))
     } else {
       extra.codex_session_slot_count = 1
     }
@@ -2191,8 +2188,8 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
       }
     } else if (codexFingerprintMode.value === 'off' || codexFingerprintMode.value === 'device') {
       // 降低收敛程度时同步关闭旧阀门，避免以后重新切回 session 时意外复活。
-      extra.codex_subagent_max_inflight_per_session = 0
-    }
+			extra.codex_subagent_max_inflight_per_session = 0
+		}
   }
 
   if (enableOpenAICompactMode.value) {

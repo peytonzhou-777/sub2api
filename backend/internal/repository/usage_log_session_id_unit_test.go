@@ -31,7 +31,7 @@ func newSessionIDUsageLog(sessionID *string) *service.UsageLog {
 // TestPrepareUsageLogInsert_SessionIDArgWiring pins the session_id column to the
 // arg slice / arg-type table so the five INSERT column lists stay in sync.
 func TestPrepareUsageLogInsert_SessionIDArgWiring(t *testing.T) {
-	require.Len(t, usageLogInsertArgTypes, 67, "arg-type table must include session_id, safe observation hashes, subagent marker and latency stages")
+	require.Len(t, usageLogInsertArgTypes, 68, "arg-type table must include requested reasoning effort, session_id, safe observation hashes, subagent marker and latency stages")
 
 	sessionID := "sess-persisted-123"
 	prepared := prepareUsageLogInsert(newSessionIDUsageLog(&sessionID))
@@ -74,9 +74,40 @@ func TestPrepareUsageLogInsert_SubagentArgWiring(t *testing.T) {
 	require.Equal(t, "boolean", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-5])
 }
 
+func TestPrepareUsageLogInsert_RequestedReasoningEffortArgWiring(t *testing.T) {
+	requested := "max"
+	forwarded := "xhigh"
+	prepared := prepareUsageLogInsert(&service.UsageLog{
+		UserID:                   1,
+		APIKeyID:                 2,
+		AccountID:                3,
+		RequestID:                "req-requested-effort",
+		Model:                    "gpt-5.4",
+		ReasoningEffort:          &forwarded,
+		RequestedReasoningEffort: &requested,
+		CreatedAt:                time.Now().UTC(),
+	})
+
+	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
+	require.Equal(t, "text", usageLogInsertArgTypes[48], "requested_reasoning_effort must follow reasoning_effort")
+	require.Equal(t, "text", usageLogInsertArgTypes[47], "reasoning_effort arg type must stay text")
+
+	forwardedArg, ok := prepared.args[47].(sql.NullString)
+	require.True(t, ok)
+	require.True(t, forwardedArg.Valid)
+	require.Equal(t, forwarded, forwardedArg.String)
+
+	requestedArg, ok := prepared.args[48].(sql.NullString)
+	require.True(t, ok)
+	require.True(t, requestedArg.Valid)
+	require.Equal(t, requested, requestedArg.String)
+}
+
 // TestUsageLogInsertQueries_IncludeSessionID guards that every generated INSERT path
 // and the SELECT column list reference session_id.
 func TestUsageLogInsertQueries_IncludeSessionID(t *testing.T) {
+	require.Contains(t, usageLogSelectColumns, "requested_reasoning_effort",
+		"SELECT column list must include requested_reasoning_effort")
 	require.Contains(t, usageLogSelectColumns, "session_id",
 		"SELECT column list must include session_id")
 	require.Contains(t, usageLogSelectColumns, "is_subagent",
@@ -91,6 +122,7 @@ func TestUsageLogInsertQueries_IncludeSessionID(t *testing.T) {
 		map[string]usageLogInsertPrepared{key: prepared})
 	require.Contains(t, batchQuery, "session_id")
 	require.Contains(t, batchQuery, "is_subagent")
+	require.Contains(t, batchQuery, "requested_reasoning_effort")
 	// Two column references (INSERT column list + SELECT ... FROM input) plus the CTE def.
 	require.GreaterOrEqual(t, strings.Count(batchQuery, "session_id"), 3)
 	require.Len(t, batchArgs, len(prepared.args)+1,

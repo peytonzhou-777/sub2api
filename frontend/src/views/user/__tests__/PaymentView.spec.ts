@@ -3,9 +3,12 @@ import { flushPromises, shallowMount } from '@vue/test-utils'
 import PaymentView from '../PaymentView.vue'
 import { PAYMENT_RECOVERY_STORAGE_KEY } from '@/components/payment/paymentFlow'
 import { formatPaymentAmount } from '@/components/payment/currency'
+import AmountInput from '@/components/payment/AmountInput.vue'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import type { CheckoutInfoResponse, MethodLimit, RechargeBonusTier, SubscriptionPlan } from '@/types/payment'
+import en from '@/i18n/locales/en'
+import zh from '@/i18n/locales/zh'
 
 const routeState = vi.hoisted(() => ({
   path: '/purchase',
@@ -47,6 +50,7 @@ const showWarning = vi.hoisted(() => vi.fn())
 const getCheckoutInfo = vi.hoisted(() => vi.fn())
 const getRefundEligibleProviders = vi.hoisted(() => vi.fn())
 const bridgeInvoke = vi.hoisted(() => vi.fn())
+const translate = vi.hoisted(() => vi.fn((key: string) => key))
 
 vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')
@@ -66,10 +70,10 @@ vi.mock('vue-router', async () => {
 
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
-  return {
-    ...actual,
-    useI18n: () => ({
-      t: (key: string, params?: Record<string, unknown>) => {
+	return {
+		...actual,
+		useI18n: () => ({
+			t: (key: string, params?: Record<string, unknown>) => {
         if (key === 'payment.rechargeBonus.countdownDaysHours') {
           return `${params?.days}天${params?.hours}小时`
         }
@@ -103,12 +107,12 @@ vi.mock('vue-i18n', async () => {
         if (key === 'payment.account.depleted') {
           return '已用完'
         }
-        if (key === 'payment.account.depletedAt') {
-          return `${params?.time} 耗尽`
-        }
-        return key
-      },
-    }),
+			if (key === 'payment.account.depletedAt') {
+				return `${params?.time} 耗尽`
+			}
+			return translate(key, params)
+			},
+		}),
   }
 })
 
@@ -522,6 +526,43 @@ describe('PaymentView recharge bonus campaign', () => {
     const summaryPanel = wrapper.get('[data-test="payment-summary-panel"]').element
     const methodPanel = wrapper.get('[data-test="payment-method-panel"]').element
     expect(summaryPanel.compareDocumentPosition(methodPanel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+describe('PaymentView recharge rate preview', () => {
+  it('uses the selected payment method currency in both locale templates', async () => {
+    translate.mockClear()
+    routeState.path = '/purchase'
+    routeState.query = {}
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({
+      balance_recharge_multiplier: 0.5,
+      methods: {
+        stripe: {
+          ...checkoutInfoFixture().data.methods.wxpay,
+          currency: 'USD',
+        },
+      },
+    }))
+
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+    wrapper.getComponent(AmountInput).vm.$emit('update:modelValue', 10)
+    await flushPromises()
+
+    expect(translate).toHaveBeenCalledWith('payment.rechargeRatePreview', {
+      currency: 'USD',
+      usd: '0.50',
+    })
+    expect(en.payment.rechargeRatePreview).toBe('Current rate: 1 {currency} = {usd} USD')
+    expect(zh.payment.rechargeRatePreview).toBe('当前倍率：1 {currency} = {usd} USD')
   })
 })
 

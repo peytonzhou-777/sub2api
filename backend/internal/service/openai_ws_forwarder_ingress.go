@@ -206,6 +206,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		imageInputSize           string
 		payloadBytes             int
 		fingerprintIDs           *codexFingerprintIDs
+		requestedReasoningEffort *string
 	}
 	ingressSessionOriginalModel := ""
 
@@ -269,6 +270,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				nil,
 			)
 		}
+		requestedReasoningEffort := CanonicalRequestedReasoningEffort(normalized, strings.TrimSpace(values[1].String()))
 		if hooks != nil && (hooks.MaxReasoningEffort != "" || len(hooks.ReasoningEffortMappings) > 0) {
 			if capped, changed := ApplyOpenAIReasoningEffortPolicy(normalized, hooks.MaxReasoningEffort, hooks.ReasoningEffortMappings); changed {
 				normalized = capped
@@ -502,6 +504,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			imageInputSize:           imageInputSize,
 			payloadBytes:             len(normalized),
 			fingerprintIDs:           fingerprintIDs,
+			requestedReasoningEffort: requestedReasoningEffort,
 		}, nil
 	}
 
@@ -944,7 +947,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 
 	var rejectedFieldRetryState *openAIResponsesRejectedFieldRetryState
-	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string, fingerprintIDs *codexFingerprintIDs) (*OpenAIForwardResult, error) {
+	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string, fingerprintIDs *codexFingerprintIDs, requestedReasoningEffort *string) (*OpenAIForwardResult, error) {
 		responseModelObserver := &upstreamResponseModelObserver{}
 		if lease == nil {
 			return nil, errors.New("upstream websocket lease is nil")
@@ -1230,6 +1233,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					UpstreamResponseServiceTier:   responseModelObserver.ServiceTier(),
 					ServiceTier:                   resolvedOpenAIUpstreamServiceTierFromObserver(responseModelObserver, extractOpenAIServiceTierFromBody(payload)),
 					ReasoningEffort:               ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(payload, mappedModel, originalModel), payload, mappedModel),
+					RequestedReasoningEffort:      requestedReasoningEffort,
 					Stream:                        reqStream,
 					OpenAIWSMode:                  true,
 					UpstreamTerminalEvent:         terminalEvent,
@@ -1260,6 +1264,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	currentImageBillingModel := firstPayload.imageBillingModel
 	currentImageSizeTier := firstPayload.imageSizeTier
 	currentImageInputSize := firstPayload.imageInputSize
+	currentPayloadBytes := firstPayload.payloadBytes
+	currentRequestedReasoningEffort := firstPayload.requestedReasoningEffort
 	isStrictAffinityTurn := func(payload []byte) bool {
 		if !storeDisabled {
 			return false
@@ -1738,7 +1744,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				truncateOpenAIWSLogValue(connID, openAIWSIDValueMaxLen),
 			)
 		}
-		result, relayErr := sendAndRelay(turn, sessionLease, turnPayload, len(turnPayload), currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize, currentFingerprintIDs)
+		result, relayErr := sendAndRelay(turn, sessionLease, turnPayload, len(turnPayload), currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize, currentFingerprintIDs, currentRequestedReasoningEffort)
 		if relayErr != nil && isOpenAIWSIngressTurnRetryable(relayErr) {
 			recoveryStartedAt := time.Now()
 			s.recordOpenAIWSIngressRecoveryAttempt()
@@ -1793,7 +1799,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 							truncateOpenAIWSLogValue(connID, openAIWSIDValueMaxLen),
 						)
 					}
-					result, relayErr = sendAndRelay(turn, sessionLease, turnPayload, len(turnPayload), currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize, currentFingerprintIDs)
+					result, relayErr = sendAndRelay(turn, sessionLease, turnPayload, len(turnPayload), currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize, currentFingerprintIDs, currentRequestedReasoningEffort)
 				}
 				if relayErr == nil {
 					s.recordOpenAIWSIngressRecoverySuccess()
@@ -1995,6 +2001,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		currentImageBillingModel = nextPayload.imageBillingModel
 		currentImageSizeTier = nextPayload.imageSizeTier
 		currentImageInputSize = nextPayload.imageInputSize
+		currentPayloadBytes = nextPayload.payloadBytes
+		currentRequestedReasoningEffort = nextPayload.requestedReasoningEffort
 		rejectedFieldRetryState = newOpenAIResponsesRejectedFieldRetryState(currentPayload)
 		storeDisabled = s.isOpenAIWSStoreDisabledInRequestRaw(currentPayload, account)
 		if !storeDisabled {
