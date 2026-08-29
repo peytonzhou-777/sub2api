@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -22,9 +23,7 @@ func (s *OpenAIGatewayService) selectLegacyOpenAIAccountWithUserAffinity(ctx con
 	if selection, found, err := s.selectOpenAIUserAffinityResidentSlots(ctx, req); err != nil || found {
 		return selection, err
 	}
-	if selection, found, err := s.selectOpenAIUserAffinityPlacement(
-		ctx, groupID, requestedModel, excludedIDs, false, "", "", OpenAIUpstreamTransportHTTPSSE,
-	); err != nil || found {
+	if selection, found, err := s.selectOpenAIUserAffinityPlacementForRequest(ctx, req); err != nil || found {
 		if err == nil && selection != nil && selection.Account != nil {
 			if reserveErr := s.reserveOpenAIUserAffinityConversation(ctx, req, selection.Account.ID); reserveErr != nil {
 				if selection.ReleaseFunc != nil {
@@ -38,7 +37,7 @@ func (s *OpenAIGatewayService) selectLegacyOpenAIAccountWithUserAffinity(ctx con
 	result, err := s.selectAccountWithLoadAwareness(ctx, groupID, PlatformOpenAI, sessionHash, requestedModel, excludedIDs, false, "", true)
 	if err == nil && result != nil && result.Account != nil {
 		scopeKey := openAIUserAffinityScopeKey(groupID, false, "", "", OpenAIUpstreamTransportHTTPSSE)
-		_ = s.reserveOpenAIUserAffinityPlacement(ctx, result.Account.ID, scopeKey)
+		_ = s.reserveOpenAIUserAffinityPlacementForRequest(ctx, req, result.Account.ID, scopeKey)
 		if reserveErr := s.reserveOpenAIUserAffinityConversation(ctx, req, result.Account.ID); reserveErr != nil {
 			if result.ReleaseFunc != nil {
 				result.ReleaseFunc()
@@ -138,6 +137,14 @@ func readOpenAIUserAffinityQuotaAvailableRatio(extra map[string]any, window stri
 // selectOpenAIUserAffinityPlacement 在普通负载调度前恢复用户居住账号。
 // 账号已不可用时暂不清除归属，后续容量失败窗口负责决定是否搬迁。
 func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Context, groupID *int64, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, requiredCapability OpenAIEndpointCapability, requiredImageCapability OpenAIImagesCapability, requiredTransport OpenAIUpstreamTransport) (*AccountSelectionResult, bool, error) {
+	req := newOpenAIUserAffinityScheduleRequest(groupID, PlatformOpenAI, "", requestedModel,
+		requiredTransport, requiredCapability, requiredImageCapability, requireCompact, excludedIDs)
+	return s.selectOpenAIUserAffinityPlacementForRequest(ctx, req)
+}
+
+// selectOpenAIUserAffinityPlacementForRequest 在完整请求上下文下恢复用户居住账号。
+// 完整请求用于校验多槽位 projection 与 live slot 的 generation 一致性。
+func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacementForRequest(ctx context.Context, req OpenAIAccountScheduleRequest) (*AccountSelectionResult, bool, error) {
 	if s == nil || s.settingService == nil || s.accountRepo == nil {
 		return nil, false, nil
 	}
@@ -156,11 +163,26 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Con
 		return nil, false, nil
 	}
 	now := time.Now().UTC()
-	scopeKey := openAIUserAffinityScopeKey(groupID, requireCompact, requiredCapability, requiredImageCapability, requiredTransport)
+	scopeKey := openAIUserAffinityScopeKey(req.GroupID, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
 	placement, err := store.GetOpenAIUserPlacement(ctx, userID, scopeKey)
 	if err != nil {
 		return nil, false, err
 	}
+	if placement != nil && placement.Status == "active" && placement.AccountID != nil && now.Before(placement.ExpiresAt) {
+		// 多槽位模式下 placement 只是兼容投影，必须和当前 live slot 的账号及 generation 同时成立。
+		// Converge 会先过期 slot；若继续信任旧 projection，容量失败会卡在旧账号并持续返回 503。
+		if live, liveErr := s.openAIUserAffinityPlacementHasLiveSlot(ctx, req, placement, config, now); liveErr != nil {
+			return nil, true, liveErr
+		} else if !live {
+			slog.Warn("openai_user_affinity.stale_placement", "user_id", userID, "scope_key", scopeKey,
+				"account_id", *placement.AccountID, "placement_generation", placement.Generation,
+				"reason", "no_live_resident_slot")
+			ctx = context.WithValue(ctx, openAIUserAffinityStalePlacementContextKey{}, true)
+			placement = nil
+		}
+	}
+
+placementSelection:
 	if placement != nil && placement.Status == "active" && placement.AccountID != nil && now.Before(placement.ExpiresAt) {
 		incident := OpenAIUserAffinityIncidentIdentity{
 			UserID: userID, AccountID: *placement.AccountID, ScopeKey: placement.ScopeKey,
@@ -173,21 +195,27 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Con
 				return nil, true, authErr
 			}
 			if openAIUserAffinityMigrationStable(config, authorizedAt, now) {
-				return s.selectOpenAIUserAffinityMigrationTarget(ctx, groupID, requestedModel, excludedIDs, requireCompact, requiredCapability, requiredImageCapability, requiredTransport, "capacity_retry_threshold", config, now, placement, runtimeStore)
+				return s.selectOpenAIUserAffinityMigrationTarget(ctx, req.GroupID, req.RequestedModel, req.ExcludedIDs, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport, "capacity_retry_threshold", config, now, placement, runtimeStore)
 			}
 		}
-		if excludedIDs != nil {
-			if _, excluded := excludedIDs[*placement.AccountID]; excluded {
+		if req.ExcludedIDs != nil {
+			if _, excluded := req.ExcludedIDs[*placement.AccountID]; excluded {
 				if s.failOpenAIUserAffinityReentryLeader(ctx) {
-					return s.selectOpenAIUserAffinityPlacement(ctx, groupID, requestedModel, excludedIDs, requireCompact, requiredCapability, requiredImageCapability, requiredTransport)
+					return s.selectOpenAIUserAffinityPlacementForRequest(ctx, req)
 				}
 				if runtimeOK {
 					authorizedAt, failureErr := recordOpenAIUserAffinityCapacityFailure(ctx, runtimeStore, incident, "resident_account_excluded", config)
+					if errors.Is(failureErr, ErrOpenAIUserAffinityPlacementStale) {
+						// placement 在记录容量失败的并发窗口内消失，按 miss 继续新居民选号。
+						ctx = context.WithValue(ctx, openAIUserAffinityStalePlacementContextKey{}, true)
+						placement = nil
+						break placementSelection
+					}
 					if failureErr != nil {
 						return nil, true, failureErr
 					}
 					if openAIUserAffinityMigrationStable(config, authorizedAt, now) {
-						return s.selectOpenAIUserAffinityMigrationTarget(ctx, groupID, requestedModel, excludedIDs, requireCompact, requiredCapability, requiredImageCapability, requiredTransport, "capacity_retry_threshold", config, now, placement, runtimeStore)
+						return s.selectOpenAIUserAffinityMigrationTarget(ctx, req.GroupID, req.RequestedModel, req.ExcludedIDs, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport, "capacity_retry_threshold", config, now, placement, runtimeStore)
 					}
 				}
 				return nil, true, ErrNoAvailableAccounts
@@ -197,22 +225,28 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Con
 		if accountErr != nil {
 			return nil, true, accountErr
 		}
-		admission := s.classifyOpenAIUserAffinityResidentAdmission(ctx, account, groupID, requestedModel, requireCompact, requiredCapability, requiredImageCapability, requiredTransport)
+		admission := s.classifyOpenAIUserAffinityResidentAdmission(ctx, account, req.GroupID, req.RequestedModel, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
 		if admission == openAIUserAffinityResidentQuota7DExhausted || admission == openAIUserAffinityResidentPermanentUnavailable {
 			if !runtimeOK {
 				return nil, true, ErrNoAvailableAccounts
 			}
-			return s.selectOpenAIUserAffinityMigrationTarget(ctx, groupID, requestedModel, excludedIDs, requireCompact, requiredCapability, requiredImageCapability, requiredTransport, string(admission), config, now, placement, runtimeStore)
+			return s.selectOpenAIUserAffinityMigrationTarget(ctx, req.GroupID, req.RequestedModel, req.ExcludedIDs, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport, string(admission), config, now, placement, runtimeStore)
 		}
 		if admission != openAIUserAffinityResidentAllowed {
 			// 5h、RPM 和临时运行时门控只累计不同客户端请求，未达阈值不改变归属。
 			if runtimeOK {
 				authorizedAt, failureErr := recordOpenAIUserAffinityCapacityFailure(ctx, runtimeStore, incident, "resident_account_unavailable", config)
+				if errors.Is(failureErr, ErrOpenAIUserAffinityPlacementStale) {
+					// 同上：不要把可恢复的 placement 竞态暴露为客户端 503。
+					ctx = context.WithValue(ctx, openAIUserAffinityStalePlacementContextKey{}, true)
+					placement = nil
+					break placementSelection
+				}
 				if failureErr != nil {
 					return nil, true, failureErr
 				}
 				if openAIUserAffinityMigrationStable(config, authorizedAt, now) {
-					return s.selectOpenAIUserAffinityMigrationTarget(ctx, groupID, requestedModel, excludedIDs, requireCompact, requiredCapability, requiredImageCapability, requiredTransport, "capacity_retry_threshold", config, now, placement, runtimeStore)
+					return s.selectOpenAIUserAffinityMigrationTarget(ctx, req.GroupID, req.RequestedModel, req.ExcludedIDs, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport, "capacity_retry_threshold", config, now, placement, runtimeStore)
 				}
 			}
 			return nil, true, ErrNoAvailableAccounts
@@ -234,7 +268,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Con
 		return result, true, resultErr
 	}
 
-	newResidentExcluded, preferExistingAffinity := resolveOpenAIUserAffinityNewResidentPolicy(placement, excludedIDs)
+	newResidentExcluded, preferExistingAffinity := resolveOpenAIUserAffinityNewResidentPolicy(placement, req.ExcludedIDs)
 	newResidentExcluded, resetPending, err := s.applyOpenAIUserAffinityResetExclusions(ctx, userID, scopeKey, newResidentExcluded)
 	if err != nil {
 		return nil, true, err
@@ -242,7 +276,38 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Con
 	if resetPending {
 		preferExistingAffinity = false
 	}
-	return s.selectOpenAIUserAffinityNewResident(ctx, groupID, requestedModel, newResidentExcluded, requireCompact, requiredCapability, requiredImageCapability, requiredTransport, scopeKey, config, now, preferExistingAffinity)
+	return s.selectOpenAIUserAffinityNewResident(ctx, req.GroupID, req.RequestedModel, newResidentExcluded, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport, scopeKey, config, now, preferExistingAffinity)
+}
+
+// openAIUserAffinityPlacementHasLiveSlot 校验 placement 是否仍由 live resident slot 支撑。
+// 单槽兼容模式或旧仓储替身没有 slot 读能力时保留原有 placement 语义。
+func (s *OpenAIGatewayService) openAIUserAffinityPlacementHasLiveSlot(ctx context.Context, req OpenAIAccountScheduleRequest, placement *OpenAIUserPlacement, config OpenAIUserAffinityConfig, now time.Time) (bool, error) {
+	if placement == nil || placement.AccountID == nil || config.RuntimeResidentAccountSlotCount() <= 1 {
+		return true, nil
+	}
+	// 只要请求已经完成 API Key 认证，就应校验多槽位 projection；即使本次没有
+	// 稳定 SessionHash，也不能让陈旧 placement 把请求锁死在已过期账号上。
+	apiKeyID, _ := ctx.Value(ctxkey.APIKeyID).(int64)
+	if apiKeyID <= 0 {
+		return true, nil
+	}
+	store, ok := s.accountRepo.(OpenAIUserAffinityMultiSlotStore)
+	if !ok {
+		return true, nil
+	}
+	slots, err := store.ListOpenAIUserResidentSlots(ctx, placement.UserID, placement.ScopeKey)
+	if err != nil {
+		return false, err
+	}
+	for _, slot := range slots {
+		if slot.AccountID != *placement.AccountID || slot.Generation != placement.Generation ||
+			(slot.Status != OpenAIUserResidentSlotStatusActive && slot.Status != OpenAIUserResidentSlotStatusProvisional &&
+				slot.Status != OpenAIUserResidentSlotStatusReplacementPending) || !now.Before(slot.ExpiresAt) {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 // applyOpenAIUserAffinityResetExclusions 合并整组重置的全部原账号，并强制绕过触达优先直达 BestFit。
@@ -376,7 +441,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityNewResident(ctx context.C
 			account := accountByID[candidate.AccountID]
 			acquired, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
 			if acquireErr == nil && acquired != nil && acquired.Acquired {
-				if !s.reserveOpenAIUserAffinityPlacement(ctx, account.ID, scopeKey) {
+				if !s.reserveOpenAIUserAffinityPlacementForRequest(ctx, req, account.ID, scopeKey) {
 					if acquired.ReleaseFunc != nil {
 						acquired.ReleaseFunc()
 					}
@@ -472,6 +537,15 @@ func removeOpenAIUserAffinityCandidate(candidates []OpenAIUserAffinityCandidate,
 
 // reserveOpenAIUserAffinityPlacement 原子建立新居民归属、触达预留和账号长冷却。
 func (s *OpenAIGatewayService) reserveOpenAIUserAffinityPlacement(ctx context.Context, accountID int64, scopeKey string) bool {
+	return s.reserveOpenAIUserAffinityPlacementForRequest(ctx, OpenAIAccountScheduleRequest{}, accountID, scopeKey)
+}
+
+// openAIUserAffinityStalePlacementContextKey 标记本次请求已确认旧 projection 失效。
+type openAIUserAffinityStalePlacementContextKey struct{}
+
+// reserveOpenAIUserAffinityPlacementForRequest 在写入新归属前复核旧 projection。
+// 请求带有完整认证上下文时，缺失 live slot 的 active projection 视为陈旧并允许自愈覆盖。
+func (s *OpenAIGatewayService) reserveOpenAIUserAffinityPlacementForRequest(ctx context.Context, req OpenAIAccountScheduleRequest, accountID int64, scopeKey string) bool {
 	if s == nil || s.settingService == nil || s.accountRepo == nil || accountID <= 0 {
 		return false
 	}
@@ -489,8 +563,27 @@ func (s *OpenAIGatewayService) reserveOpenAIUserAffinityPlacement(ctx context.Co
 	}
 	current, err := store.GetOpenAIUserPlacement(ctx, userID, scopeKey)
 	now := time.Now().UTC()
-	if err != nil || current != nil && current.Status == "active" && current.AccountID != nil && now.Before(current.ExpiresAt) {
-		return err == nil && current != nil && current.AccountID != nil && *current.AccountID == accountID
+	stalePlacement, _ := ctx.Value(openAIUserAffinityStalePlacementContextKey{}).(bool)
+	if err != nil {
+		return false
+	}
+	if !stalePlacement && current != nil && current.Status == "active" && current.AccountID != nil && now.Before(current.ExpiresAt) {
+		if err != nil || current == nil || current.AccountID == nil {
+			return false
+		}
+		if *current.AccountID == accountID {
+			return true
+		}
+		// 完整请求下由 live slot 复核旧 projection；无 live slot 才允许覆盖。
+		if strings.TrimSpace(req.Platform) != "" {
+			live, liveErr := s.openAIUserAffinityPlacementHasLiveSlot(ctx, req, current, config, now)
+			if liveErr != nil || live {
+				return false
+			}
+			// 陈旧 projection 继续进入下方权威 assignment 流程。
+		} else {
+			return false
+		}
 	}
 	generation := int64(1)
 	assignmentReason := "new_resident"

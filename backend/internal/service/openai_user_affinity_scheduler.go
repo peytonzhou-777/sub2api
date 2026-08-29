@@ -69,7 +69,7 @@ func (s *defaultOpenAIAccountScheduler) selectOpenAIUserAffinity(ctx context.Con
 		}
 		return selection, found, err
 	}
-	selection, found, err := s.service.selectOpenAIUserAffinityPlacement(ctx, req.GroupID, req.RequestedModel, req.ExcludedIDs, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
+	selection, found, err := s.service.selectOpenAIUserAffinityPlacementForRequest(ctx, req)
 	if err != nil || !found || selection == nil || selection.Account == nil {
 		return selection, false, err
 	}
@@ -91,7 +91,7 @@ func (s *defaultOpenAIAccountScheduler) reserveOpenAIUserAffinitySelection(ctx c
 		return nil
 	}
 	scopeKey := openAIUserAffinityScopeKey(req.GroupID, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
-	_ = s.service.reserveOpenAIUserAffinityPlacement(ctx, selection.Account.ID, scopeKey)
+	_ = s.service.reserveOpenAIUserAffinityPlacementForRequest(ctx, req, selection.Account.ID, scopeKey)
 	return s.service.reserveOpenAIUserAffinityConversation(ctx, req, selection.Account.ID)
 }
 
@@ -145,10 +145,7 @@ func (s *OpenAIGatewayService) selectLegacyOpenAIUserAffinityPreflight(
 		}
 		return selection, found, err
 	}
-	selection, found, err := s.selectOpenAIUserAffinityPlacement(
-		ctx, req.GroupID, req.RequestedModel, req.ExcludedIDs, req.RequireCompact,
-		req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport,
-	)
+	selection, found, err := s.selectOpenAIUserAffinityPlacementForRequest(ctx, req)
 	if err != nil || !found {
 		return selection, found, err
 	}

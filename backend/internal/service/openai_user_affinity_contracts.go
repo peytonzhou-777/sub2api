@@ -2,8 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrOpenAIUserAffinityPlacementStale 表示归属投影在并发收敛期间已经失效。
+// 调度层应将其视为 placement miss 并重新选择，而不是转换成 503。
+var ErrOpenAIUserAffinityPlacementStale = errors.New("openai user affinity placement stale")
 
 // OpenAIUserAffinityStore 是账号仓储可选的用户粘性状态能力。
 // 通过可选接口接入，保持现有测试替身和非 OpenAI 调度调用方兼容。

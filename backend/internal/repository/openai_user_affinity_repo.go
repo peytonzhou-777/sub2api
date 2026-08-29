@@ -158,7 +158,27 @@ func (r *accountRepository) AssignOpenAIUserAffinityPlacement(ctx context.Contex
 		return false, currentErr
 	}
 	if currentErr == nil && currentStatus == "active" && currentAccount.Valid && now.Before(currentExpires) {
-		return currentAccount.Int64 == *placement.AccountID, nil
+		if currentAccount.Int64 == *placement.AccountID {
+			return true, nil
+		}
+		if config.RuntimeResidentAccountSlotCount() <= 1 {
+			return false, nil
+		}
+		// 多槽位模式下仅当旧 placement 仍有 live slot 时拒绝覆盖；
+		// slot 已被 Converge 过期而 projection 残留时允许本次原子 assignment 自愈。
+		var liveSlot bool
+		if err := scanSingleRow(ctx, exec, `
+			SELECT EXISTS (
+				SELECT 1 FROM openai_user_resident_slots
+				WHERE user_id = $1 AND scope_key = $2 AND account_id = $3
+				  AND status IN ('provisional', 'active', 'replacement_pending')
+				  AND expires_at > $4
+			)`, []any{placement.UserID, placement.ScopeKey, currentAccount.Int64, now}, &liveSlot); err != nil {
+			return false, err
+		}
+		if liveSlot {
+			return false, nil
+		}
 	}
 
 	if _, err := exec.ExecContext(ctx, `
@@ -498,6 +518,10 @@ func (r *accountRepository) RecordOpenAIUserAffinityCapacityFailure(ctx context.
 	if err := scanSingleRow(ctx, exec, `
 		SELECT capacity_failure_migration_threshold, capacity_failure_window_seconds
 		FROM accounts WHERE id = $1`, []any{incident.AccountID}, &accountThreshold, &accountWindow); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// 账号或归属在并发收敛期间已消失，交由调度层重新选居民。
+			return nil, service.ErrOpenAIUserAffinityPlacementStale
+		}
 		return nil, err
 	}
 	if accountThreshold.Valid && accountThreshold.Int64 > 0 {
@@ -552,6 +576,10 @@ func (r *accountRepository) RecordOpenAIUserAffinityCapacityFailure(ctx context.
 			SELECT account_id, generation, status FROM user_account_placements
 			WHERE user_id = $1 AND scope_key = $2 FOR UPDATE`,
 			[]any{incident.UserID, incident.ScopeKey}, &currentAccount, &currentGeneration, &currentStatus); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				// placement 已被另一条迁移/收敛事务移除，不应把数据库竞态暴露为 503。
+				return nil, service.ErrOpenAIUserAffinityPlacementStale
+			}
 			return nil, err
 		}
 		if !currentAccount.Valid || currentAccount.Int64 != incident.AccountID || currentGeneration != incident.Generation() || currentStatus != "active" {

@@ -125,6 +125,27 @@ func (r *accountRepository) ConvergeOpenAIUserResidentSlots(ctx context.Context,
 		  AND s.status = 'expired' AND b.status IN ('active', 'draining')`, userID, scopeKey, now); err != nil {
 		return err
 	}
+	if config.RuntimeResidentAccountSlotCount() > 1 {
+		// 多槽位 projection 必须由同账号同 generation 的 live slot 支撑；
+		// slot 收敛后及时过期孤立 placement，避免后续请求反复命中旧账号。
+		if _, err := exec.ExecContext(ctx, `
+			UPDATE user_account_placements p SET status = 'expired', expires_at = $3,
+				provisional_token = NULL, updated_at = $3
+			WHERE p.user_id = $1 AND p.scope_key = $2 AND p.status = 'active'
+			  AND EXISTS (
+				SELECT 1 FROM openai_user_resident_slots existing
+				WHERE existing.user_id = p.user_id AND existing.scope_key = p.scope_key
+			  )
+			  AND NOT EXISTS (
+				SELECT 1 FROM openai_user_resident_slots s
+				WHERE s.user_id = p.user_id AND s.scope_key = p.scope_key
+				  AND s.account_id = p.account_id AND s.generation = p.generation
+				  AND s.status IN ('provisional', 'active', 'replacement_pending')
+				  AND s.expires_at > $3
+			  )`, userID, scopeKey, now); err != nil {
+			return err
+		}
+	}
 	if _, err := exec.ExecContext(ctx, `
 		UPDATE openai_user_conversation_aliases a SET expires_at = LEAST(a.expires_at, b.expires_at)
 		FROM openai_user_conversation_bindings b
