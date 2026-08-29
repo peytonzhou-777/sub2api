@@ -333,6 +333,9 @@ type SystemSettings struct {
 
 	// 允许终端用户在用量页查看自己的失败请求
 	AllowUserViewErrorRequests bool
+
+	// 用户侧总消费排名展示档位，默认依次为第 20 名、前 50 名、前 100 名、前 200 名。
+	UserSpendingRankingThresholds []int
 }
 
 type DefaultSubscriptionSetting struct {

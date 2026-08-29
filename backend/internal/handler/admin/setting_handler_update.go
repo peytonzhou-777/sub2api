@@ -172,6 +172,7 @@ type UpdateSettingsRequest struct {
 	PurchaseSubscriptionURL     *string               `json:"purchase_subscription_url"`
 	TableDefaultPageSize        int                   `json:"table_default_page_size"`
 	TablePageSizeOptions        []int                 `json:"table_page_size_options"`
+	UserSpendingRankingThresholds []int               `json:"user_spending_ranking_thresholds"`
 	CustomMenuItems             *[]dto.CustomMenuItem `json:"custom_menu_items"`
 	CustomEndpoints             *[]dto.CustomEndpoint `json:"custom_endpoints"`
 
@@ -661,6 +662,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	}
 	if req.TablePageSizeOptions == nil {
 		req.TablePageSizeOptions = previousSettings.TablePageSizeOptions
+	}
+	if req.UserSpendingRankingThresholds == nil {
+		req.UserSpendingRankingThresholds = append([]int(nil), previousSettings.UserSpendingRankingThresholds...)
 	}
 	req.SMTPHost = strings.TrimSpace(req.SMTPHost)
 	req.SMTPUsername = strings.TrimSpace(req.SMTPUsername)
@@ -1698,6 +1702,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PurchaseSubscriptionURL:                purchaseURL,
 		TableDefaultPageSize:                   req.TableDefaultPageSize,
 		TablePageSizeOptions:                   req.TablePageSizeOptions,
+		UserSpendingRankingThresholds:          req.UserSpendingRankingThresholds,
 		CustomMenuItems:                        customMenuJSON,
 		CustomEndpoints:                        customEndpointsJSON,
 		DefaultConcurrency:                     req.DefaultConcurrency,
@@ -2549,6 +2554,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		CyberSessionBlockTTLSeconds:       updatedSettings.CyberSessionBlockTTLSeconds,
 		AccountSchedulingThresholds:       updatedSettings.AccountSchedulingThresholds,
 		AllowUserViewErrorRequests:        updatedSettings.AllowUserViewErrorRequests,
+		UserSpendingRankingThresholds:     updatedSettings.UserSpendingRankingThresholds,
 	}
 	if fastPolicy, err := h.settingService.GetOpenAIFastPolicySettings(c.Request.Context()); err != nil {
 		slog.Error("openai_fast_policy_settings_get_failed", "error", err)

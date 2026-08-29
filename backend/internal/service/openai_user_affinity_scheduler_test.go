@@ -926,6 +926,35 @@ func TestOpenAIGatewayService_UserAffinityDoesNotDependOnAdvancedScheduler(t *te
 	require.False(t, svc.isOpenAIAdvancedSchedulerEnabled(ctx))
 }
 
+func TestOpenAIGatewayService_StalePlacementWithoutLiveSlotFallsBackToNewResident(t *testing.T) {
+	now := time.Now().UTC()
+	scopeKey := openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE)
+	residentAccountID := int64(36281)
+	targetAccountID := int64(36282)
+	accounts := []Account{
+		{ID: targetAccountID, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1,
+			Extra: openAIUserAffinityTestQuotaExtra(now, 10)},
+	}
+	stats := map[int64]OpenAIUserAffinityCandidate{
+		targetAccountID: {AccountID: targetAccountID, Available5HRatio: 0.9, Available7DRatio: 0.9, Quota5HKnown: true, Quota7DKnown: true},
+	}
+	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t, nil, accounts, stats, 2)
+	repo.placement = &OpenAIUserPlacement{
+		UserID: 42, ScopeKey: scopeKey, AccountID: &residentAccountID, Generation: 4,
+		Status: "active", AssignedAt: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour),
+	}
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "gpt-5.1",
+		OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = "stale-placement-session"
+
+	selection, found, err := svc.selectOpenAIUserAffinityPlacementForRequest(ctx, req)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, selection)
+	require.Equal(t, targetAccountID, selection.Account.ID)
+	require.Len(t, repo.reservations, 1)
+}
+
 func TestOpenAIGatewayService_UserAffinityShadowRunsWithLegacyScheduler(t *testing.T) {
 	resetOpenAIAdvancedSchedulerSettingCacheForTest()
 	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()

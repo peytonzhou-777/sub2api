@@ -287,6 +287,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOpenAIAdvancedSchedulerWeightSessionSticky:         "",
 
 		SettingKeyAllowUserViewErrorRequests: "false",
+		SettingKeyUserSpendingRankingThresholds: "[20,50,100,200]",
 	}
 
 	return s.settingRepo.SetMultiple(ctx, defaults)
@@ -1026,6 +1027,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	}
 
 	result.AllowUserViewErrorRequests = settings[SettingKeyAllowUserViewErrorRequests] == "true" // default false
+	result.UserSpendingRankingThresholds = parseUserSpendingRankingThresholdsSetting(settings[SettingKeyUserSpendingRankingThresholds])
 
 	// Publish Grok default model_mapping options for accounts with empty mapping.
 	xai.SetRuntimeModelMappingOptions(xai.ModelMappingOptions{
@@ -1034,6 +1036,47 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	})
 
 	return result
+}
+
+// 用户消费排名配置的档位数量及允许范围。
+const (
+	userSpendingRankingTierCount = 4
+	userSpendingRankingMin       = 1
+	userSpendingRankingMax       = 10000
+)
+
+func defaultUserSpendingRankingThresholds() []int {
+	return []int{20, 50, 100, 200}
+}
+
+// parseUserSpendingRankingThresholdsSetting 解析持久化的排名档位；异常值回退默认配置。
+func parseUserSpendingRankingThresholdsSetting(raw string) []int {
+	var parsed []int
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &parsed); err != nil {
+		return defaultUserSpendingRankingThresholds()
+	}
+	normalized, err := validateUserSpendingRankingThresholds(parsed)
+	if err != nil {
+		return defaultUserSpendingRankingThresholds()
+	}
+	return normalized
+}
+
+// validateUserSpendingRankingThresholds 校验四档递增的排名阈值。
+func validateUserSpendingRankingThresholds(input []int) ([]int, error) {
+	if len(input) != userSpendingRankingTierCount {
+		return nil, infraerrors.BadRequest("INVALID_USER_SPENDING_RANKING_THRESHOLDS", "user spending ranking thresholds must contain exactly four values")
+	}
+	normalized := append([]int(nil), input...)
+	for i, value := range normalized {
+		if value < userSpendingRankingMin || value > userSpendingRankingMax {
+			return nil, infraerrors.BadRequest("INVALID_USER_SPENDING_RANKING_THRESHOLDS", fmt.Sprintf("user spending ranking threshold must be between %d and %d", userSpendingRankingMin, userSpendingRankingMax))
+		}
+		if i > 0 && value <= normalized[i-1] {
+			return nil, infraerrors.BadRequest("INVALID_USER_SPENDING_RANKING_THRESHOLDS", "user spending ranking thresholds must be strictly increasing")
+		}
+	}
+	return normalized, nil
 }
 
 func normalizeAffiliateRebateCreditType(value string) string {

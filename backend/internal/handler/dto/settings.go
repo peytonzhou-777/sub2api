@@ -373,6 +373,9 @@ type SystemSettings struct {
 
 	// 允许终端用户在用量页查看自己的失败请求
 	AllowUserViewErrorRequests bool `json:"allow_user_view_error_requests"`
+
+	// 用户侧总消费排名展示档位
+	UserSpendingRankingThresholds []int `json:"user_spending_ranking_thresholds"`
 }
 
 type DefaultSubscriptionSetting struct {

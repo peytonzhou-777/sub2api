@@ -818,6 +818,8 @@ export interface SystemSettings {
 
   // Allow user view error requests
   allow_user_view_error_requests: boolean;
+  // User-side spending ranking display tiers
+  user_spending_ranking_thresholds: number[];
 }
 
 export interface UpdateSettingsRequest {
@@ -1149,6 +1151,7 @@ export interface UpdateSettingsRequest {
   openai_fast_policy_settings?: OpenAIFastPolicySettings;
 
   allow_user_view_error_requests?: boolean;
+  user_spending_ranking_thresholds?: number[];
 }
 
 /**

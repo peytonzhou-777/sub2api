@@ -1297,6 +1297,13 @@ export default {
       usageRecords: {
         title: '使用记录',
         description: '与终端用户可见的用量及失败请求记录相关的设置。',
+        spendingRankingTitle: '总消费排名展示档位',
+        spendingRankingDescription: '按所选时间范围的全站实际消费排序。仅展示达到对应档位的用户，超过最后一档不展示。',
+        spendingRankingThresholds: '排名档位上限',
+        spendingRankingExactTier: '精确排名上限',
+        spendingRankingTopTier: '前 N 名上限',
+        spendingRankingThresholdsHint: '依次填写精确排名上限、前 N 名档位（默认 20、50、100、200）。',
+        spendingRankingThresholdsInvalid: '排名档位必须是 4 个递增的整数，范围为 1-10000。',
       },
       user_error_view: {
         label: '允许用户查看自己的错误请求',

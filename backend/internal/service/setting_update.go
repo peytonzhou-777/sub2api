@@ -645,6 +645,20 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 
 	updates[SettingKeyAllowUserViewErrorRequests] = strconv.FormatBool(settings.AllowUserViewErrorRequests)
+	rankingThresholdInput := settings.UserSpendingRankingThresholds
+	if rankingThresholdInput == nil {
+		rankingThresholdInput = defaultUserSpendingRankingThresholds()
+	}
+	normalizedRankingThresholds, err := validateUserSpendingRankingThresholds(rankingThresholdInput)
+	if err != nil {
+		return nil, err
+	}
+	settings.UserSpendingRankingThresholds = normalizedRankingThresholds
+	rankingThresholdsJSON, err := json.Marshal(normalizedRankingThresholds)
+	if err != nil {
+		return nil, fmt.Errorf("marshal user spending ranking thresholds: %w", err)
+	}
+	updates[SettingKeyUserSpendingRankingThresholds] = string(rankingThresholdsJSON)
 
 	return updates, nil
 }

@@ -756,6 +756,9 @@ const AdminAPIKeyPrefix = "admin-"
 // their own failed requests on the usage page. Default false (opt-in).
 const SettingKeyAllowUserViewErrorRequests = "allow_user_view_error_requests"
 
+// SettingKeyUserSpendingRankingThresholds 控制用户侧总消费排名展示档位。
+const SettingKeyUserSpendingRankingThresholds = "user_spending_ranking_thresholds"
+
 // 优惠码奖励类型常量
 const (
 	PromoCodeRewardTypeBalance       = "balance"

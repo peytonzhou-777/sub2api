@@ -207,6 +207,27 @@ describe('user UsageView', () => {
     expect(getAvailable).toHaveBeenCalled()
   })
 
+  it('defaults the time range to today', async () => {
+    const now = new Date()
+    const today = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('-')
+
+    mountUsageView()
+    await flushPromises()
+
+    expect(query).toHaveBeenCalledWith(expect.objectContaining({
+      start_date: today,
+      end_date: today,
+    }), expect.anything())
+    expect(getStats).toHaveBeenCalledWith(expect.objectContaining({
+      start_date: today,
+      end_date: today,
+    }))
+  })
+
   it('exports csv with current filters and without admin-only fields', async () => {
     const wrapper = mountUsageView()
     await flushPromises()

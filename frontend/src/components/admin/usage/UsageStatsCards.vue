@@ -55,6 +55,8 @@
               </span>
             </span>
           </span>
+          <span>/</span>
+          <span>{{ t('usage.cacheRate') }}: <span :class="cacheRateClass">{{ formatCacheRate(cacheRate) }}</span></span>
         </p>
       </div>
     </div>
@@ -64,9 +66,17 @@
       </div>
       <div class="min-w-0 flex-1">
         <p class="text-xs font-medium text-gray-500">{{ t('usage.totalCost') }}</p>
-        <p class="text-xl font-bold text-green-600">
-          ${{ (stats?.total_actual_cost || 0).toFixed(4) }}
-        </p>
+        <div class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+          <p class="text-xl font-bold text-green-600">
+            ${{ (stats?.total_actual_cost || 0).toFixed(4) }}
+          </p>
+          <p
+            v-if="spendingRankLabel"
+            class="whitespace-nowrap text-xl font-bold text-green-600"
+          >
+            {{ spendingRankLabel }}
+          </p>
+        </div>
         <p class="text-xs text-gray-400">
           <template v-if="showAccountCost && totalAccountCost != null">
             <span class="text-orange-500">{{ t('usage.accountCost') }} ${{ totalAccountCost.toFixed(4) }}</span>
@@ -113,6 +123,18 @@ const totalAccountCost = computed(() => {
 const showAccountCost = computed(() => props.showAccountCost)
 const strikeStandardCost = computed(() => props.strikeStandardCost)
 
+const spendingRankLabel = computed(() => {
+  const rank = (props.stats as UsageStatsResponse | null)?.spending_rank
+  if (!rank) return ''
+  if (rank.visibility === 'exact' && rank.rank) {
+    return t('usage.spendingRankExact', { rank: rank.rank })
+  }
+  if (rank.visibility === 'top_n' && rank.top_n) {
+    return t('usage.spendingRankTop', { rank: rank.top_n })
+  }
+  return ''
+})
+
 const formatDuration = (ms: number) =>
   ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(2)}s`
 
@@ -125,4 +147,20 @@ const formatTokens = (value: number) => {
 
 const cacheLabel = () => t('usage.cacheTotal')
 const cacheDetailLabel = () => t('usage.cacheBreakdown')
+
+// 缓存率按缓存 Token 占总 Token 的比例计算。
+const cacheRate = computed(() => {
+  const stats = props.stats
+  if (!stats) return 0
+  const totalTokens = stats.total_tokens || 0
+  return totalTokens > 0 ? (stats.total_cache_tokens || 0) / totalTokens : 0
+})
+
+const cacheRateClass = computed(() => {
+  if (cacheRate.value >= 0.9) return 'text-green-600 dark:text-green-400'
+  if (cacheRate.value >= 0.8) return 'text-yellow-600 dark:text-yellow-400'
+  return 'text-red-600 dark:text-red-400'
+})
+
+const formatCacheRate = (value: number) => `${(Math.max(0, Math.min(1, value)) * 100).toFixed(1)}%`
 </script>
