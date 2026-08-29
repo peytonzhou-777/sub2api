@@ -182,7 +182,6 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacementForRequest(ctx c
 		}
 	}
 
-placementSelection:
 	if placement != nil && placement.Status == "active" && placement.AccountID != nil && now.Before(placement.ExpiresAt) {
 		incident := OpenAIUserAffinityIncidentIdentity{
 			UserID: userID, AccountID: *placement.AccountID, ScopeKey: placement.ScopeKey,
@@ -209,7 +208,7 @@ placementSelection:
 						// placement 在记录容量失败的并发窗口内消失，按 miss 继续新居民选号。
 						ctx = context.WithValue(ctx, openAIUserAffinityStalePlacementContextKey{}, true)
 						placement = nil
-						break placementSelection
+						goto placementMiss
 					}
 					if failureErr != nil {
 						return nil, true, failureErr
@@ -240,7 +239,7 @@ placementSelection:
 					// 同上：不要把可恢复的 placement 竞态暴露为客户端 503。
 					ctx = context.WithValue(ctx, openAIUserAffinityStalePlacementContextKey{}, true)
 					placement = nil
-					break placementSelection
+					goto placementMiss
 				}
 				if failureErr != nil {
 					return nil, true, failureErr
@@ -268,6 +267,7 @@ placementSelection:
 		return result, true, resultErr
 	}
 
+placementMiss:
 	newResidentExcluded, preferExistingAffinity := resolveOpenAIUserAffinityNewResidentPolicy(placement, req.ExcludedIDs)
 	newResidentExcluded, resetPending, err := s.applyOpenAIUserAffinityResetExclusions(ctx, userID, scopeKey, newResidentExcluded)
 	if err != nil {
@@ -441,7 +441,9 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityNewResident(ctx context.C
 			account := accountByID[candidate.AccountID]
 			acquired, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
 			if acquireErr == nil && acquired != nil && acquired.Acquired {
-				if !s.reserveOpenAIUserAffinityPlacementForRequest(ctx, req, account.ID, scopeKey) {
+				reservationReq := newOpenAIUserAffinityScheduleRequest(groupID, PlatformOpenAI, "", requestedModel,
+					requiredTransport, requiredCapability, requiredImageCapability, requireCompact, excludedIDs)
+				if !s.reserveOpenAIUserAffinityPlacementForRequest(ctx, reservationReq, account.ID, scopeKey) {
 					if acquired.ReleaseFunc != nil {
 						acquired.ReleaseFunc()
 					}

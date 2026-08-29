@@ -3412,7 +3412,7 @@ func init() {
 	// user.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
 	user.DefaultRpmLimit = userDescRpmLimit.Default.(int)
 	// userDescResetRebateSkipCount is the schema descriptor for reset_rebate_skip_count field.
-	userDescResetRebateSkipCount := userFields[21].Descriptor()
+	userDescResetRebateSkipCount := userFields[22].Descriptor()
 	// user.DefaultResetRebateSkipCount holds the default value on creation for the reset_rebate_skip_count field.
 	user.DefaultResetRebateSkipCount = userDescResetRebateSkipCount.Default.(int64)
 	// user.ResetRebateSkipCountValidator is a validator for the "reset_rebate_skip_count" field. It is called by the builders before save.
