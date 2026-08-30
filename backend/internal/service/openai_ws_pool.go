@@ -63,6 +63,10 @@ type openAIWSAcquireRequest struct {
 	Account *Account
 	WSURL   string
 	Headers http.Header
+	// TransportScope 是完整 Account × Persona × Slot × Epoch × Credential
+	// Chain 快照。CPA WS 路径只允许在该作用域内复用连接。
+	TransportScope            OpenAITransportScope
+	TransportScopeFingerprint string
 	// FingerprintSessionScope 用于连接复用、轮换忙碌与清理的本地指纹 Session 边界。
 	FingerprintSessionScope string
 	// TopologyScope 从服务端权威快照计算，只用于本地连接兼容判定，不发送给上游。
@@ -254,13 +258,14 @@ type openAIWSConn struct {
 	id string
 	ws openAIWSClientConn
 
-	handshakeHeaders        http.Header
-	handshakeCompatibility  openAIWSHandshakeCompatibilityKey
-	routingAffinity         string
-	fingerprintSessionScope string
-	wsURL                   string
-	proxyURL                string
-	sessionAffinity         string
+	handshakeHeaders          http.Header
+	handshakeCompatibility    openAIWSHandshakeCompatibilityKey
+	routingAffinity           string
+	fingerprintSessionScope   string
+	transportScopeFingerprint string
+	wsURL                     string
+	proxyURL                  string
+	sessionAffinity           string
 
 	leaseCh   chan struct{}
 	closedCh  chan struct{}
@@ -567,6 +572,9 @@ func (c *openAIWSConn) matchesAcquireRequest(req openAIWSAcquireRequest, compati
 		return false
 	}
 	if stringsTrim(c.fingerprintSessionScope) != stringsTrim(req.FingerprintSessionScope) {
+		return false
+	}
+	if stringsTrim(c.transportScopeFingerprint) != stringsTrim(req.TransportScopeFingerprint) {
 		return false
 	}
 	return stringsTrim(c.sessionAffinity) == stringsTrim(req.SessionAffinity)
@@ -1714,7 +1722,11 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 			return nil, err
 		}
 	}
-	conn, status, handshakeHeaders, err := p.clientDialer.Dial(ctx, req.WSURL, headers, req.ProxyURL)
+	dialCtx := ctx
+	if req.TransportScope.ReadyForCPA(req.Account.ID) {
+		dialCtx = ContextWithOpenAITransportScope(ctx, req.TransportScope)
+	}
+	conn, status, handshakeHeaders, err := p.clientDialer.Dial(dialCtx, req.WSURL, headers, req.ProxyURL)
 	if err != nil {
 		var handshakeErr *openAIWSHandshakeError
 		var responseBody []byte
@@ -1741,6 +1753,7 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 	pooledConn.handshakeCompatibility = normalizeOpenAIWSHandshakeCompatibility(headers, req.TopologyScope)
 	pooledConn.routingAffinity = normalizeOpenAIWSRoutingAffinity(headers)
 	pooledConn.fingerprintSessionScope = strings.TrimSpace(req.FingerprintSessionScope)
+	pooledConn.transportScopeFingerprint = strings.TrimSpace(req.TransportScopeFingerprint)
 	pooledConn.wsURL = stringsTrim(req.WSURL)
 	pooledConn.proxyURL = stringsTrim(req.ProxyURL)
 	pooledConn.sessionAffinity = stringsTrim(req.SessionAffinity)

@@ -614,11 +614,12 @@ func TestOpenAIWSConnPool_AcquireNeverReusesAcrossIdentityBoundary(t *testing.T)
 
 	account := &Account{ID: 130, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 8}
 	baseReq := openAIWSAcquireRequest{
-		Account:                 account,
-		WSURL:                   "wss://chatgpt.com/backend-api/codex/responses",
-		ProxyURL:                "http://proxy-a.example:8080",
-		SessionAffinity:         "logical-session-a",
-		FingerprintSessionScope: "fingerprint-session-a:transport:ws",
+		Account:                   account,
+		WSURL:                     "wss://chatgpt.com/backend-api/codex/responses",
+		ProxyURL:                  "http://proxy-a.example:8080",
+		SessionAffinity:           "logical-session-a",
+		FingerprintSessionScope:   "fingerprint-session-a:transport:ws",
+		TransportScopeFingerprint: "transport-scope-a",
 		Headers: http.Header{
 			"OpenAI-Beta":             []string{"responses_websockets=2026-02-06"},
 			"X-Codex-Installation-Id": []string{"device-a"},
@@ -647,6 +648,7 @@ func TestOpenAIWSConnPool_AcquireNeverReusesAcrossIdentityBoundary(t *testing.T)
 		{name: "proxy", mutate: func(req *openAIWSAcquireRequest) { req.ProxyURL = "http://proxy-b.example:8080" }},
 		{name: "websocket url", mutate: func(req *openAIWSAcquireRequest) { req.WSURL = "wss://api.openai.com/v1/responses" }},
 		{name: "fingerprint session scope", mutate: func(req *openAIWSAcquireRequest) { req.FingerprintSessionScope = "fingerprint-session-b:transport:ws" }},
+		{name: "transport scope generation", mutate: func(req *openAIWSAcquireRequest) { req.TransportScopeFingerprint = "transport-scope-b" }},
 		{name: "fingerprint headers", mutate: func(req *openAIWSAcquireRequest) { req.Headers.Set("Session-Id", "session-b") }},
 		{name: "user agent", mutate: func(req *openAIWSAcquireRequest) { req.Headers.Set("User-Agent", "codex-cli/1.2.4") }},
 		{name: "originator", mutate: func(req *openAIWSAcquireRequest) { req.Headers.Set("Originator", "other_client") }},

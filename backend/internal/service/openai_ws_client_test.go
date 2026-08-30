@@ -25,6 +25,58 @@ func TestCoderOpenAIWSClientDialer_ProxyHTTPClientReuse(t *testing.T) {
 	require.NotSame(t, c1, c3, "不同代理地址应分离客户端")
 }
 
+func TestCoderOpenAIWSClientDialer_CPAClientIsScopedBySlotAndCredentialChain(t *testing.T) {
+	dialer := newDefaultOpenAIWSClientDialer()
+	impl, ok := dialer.(*coderOpenAIWSClientDialer)
+	require.True(t, ok)
+
+	base := OpenAITransportScope{
+		AccountID:         42,
+		Persona:           SessionPersonaCodexCLIStrict,
+		PersonaVersion:    "codex_cli_0_149_0",
+		SlotID:            0,
+		SessionEpoch:      3,
+		SlotGeneration:    2,
+		SlotSetGeneration: 4,
+		CredentialChainID: "codex-chain-1",
+		InstallationID:    "install-1",
+	}
+
+	c1, err := impl.cpaHTTPClient(base, "http://proxy-a.example:8080")
+	require.NoError(t, err)
+	c2, err := impl.cpaHTTPClient(base, "http://proxy-a.example:8080")
+	require.NoError(t, err)
+	require.Same(t, c1, c2, "同一完整作用域应复用 CPA WS HTTP 客户端")
+
+	otherSlot := base
+	otherSlot.SlotID = 1
+	c3, err := impl.cpaHTTPClient(otherSlot, "http://proxy-a.example:8080")
+	require.NoError(t, err)
+	require.NotSame(t, c1, c3, "不同 slot 不得复用 CPA WS HTTP 客户端")
+
+	otherChain := base
+	otherChain.CredentialChainID = "codex-chain-2"
+	c4, err := impl.cpaHTTPClient(otherChain, "http://proxy-a.example:8080")
+	require.NoError(t, err)
+	require.NotSame(t, c1, c4, "不同 credential chain 不得复用 CPA WS HTTP 客户端")
+
+	transport, ok := c1.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.NotNil(t, transport.DialTLSContext, "CPA WS 客户端必须使用 Chrome TLS 拨号器")
+	snapshot := impl.SnapshotTransportMetrics()
+	require.Equal(t, int64(1), snapshot.CPAClientCacheHits)
+	require.Equal(t, int64(3), snapshot.CPAClientCacheMisses)
+}
+
+func TestCoderOpenAIWSClientDialer_CPAClientRejectsIncompleteScope(t *testing.T) {
+	dialer := newDefaultOpenAIWSClientDialer()
+	impl, ok := dialer.(*coderOpenAIWSClientDialer)
+	require.True(t, ok)
+
+	_, err := impl.cpaHTTPClient(OpenAITransportScope{AccountID: 42}, "")
+	require.Error(t, err)
+}
+
 func TestCoderOpenAIWSClientDialer_ProxyHTTPClientInvalidURL(t *testing.T) {
 	dialer := newDefaultOpenAIWSClientDialer()
 	impl, ok := dialer.(*coderOpenAIWSClientDialer)

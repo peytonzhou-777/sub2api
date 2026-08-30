@@ -60,6 +60,15 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		wsHost,
 		wsPath,
 	)
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+	transportScope, _ := OpenAITransportScopeFromContext(ctx, account.ID)
+	transportScopeFingerprint := ""
+	if transportScope.ReadyForCPA(account.ID) {
+		transportScopeFingerprint = transportScope.OpenAICPAScopeFingerprint(proxyURL)
+	}
 	payload := s.buildOpenAIWSCreatePayload(reqBody, account)
 	payloadStrategy, removedKeys := applyOpenAIWSRetryPayloadStrategy(payload, attempt)
 	turnState := ""
@@ -193,23 +202,20 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 
 	markOpenAITimingUpstreamAttempt(c, time.Now())
 	lease, err := s.getOpenAIWSConnPool().Acquire(acquireCtx, openAIWSAcquireRequest{
-		Account:                 account,
-		WSURL:                   wsURL,
-		Headers:                 wsHeaders,
-		FingerprintSessionScope: stagedCodexFingerprintSessionScopeHash(c),
-		TopologyScope:           topologyScope,
+		Account:                   account,
+		WSURL:                     wsURL,
+		Headers:                   wsHeaders,
+		TransportScope:            transportScope,
+		TransportScopeFingerprint: transportScopeFingerprint,
+		FingerprintSessionScope:   stagedCodexFingerprintSessionScopeHash(c),
+		TopologyScope:             topologyScope,
 		HeadersFactory: func(factoryCtx context.Context, headers http.Header) (http.Header, error) {
 			return s.refreshOpenAIAgentIdentityHeaders(factoryCtx, account, headers)
 		},
 		PreferredConnID: preferredConnID,
 		ForceNewConn:    forceNewConn,
 		SessionAffinity: sessionHash,
-		ProxyURL: func() string {
-			if account.ProxyID != nil && account.Proxy != nil {
-				return account.Proxy.URL()
-			}
-			return ""
-		}(),
+		ProxyURL:        proxyURL,
 	})
 	if err != nil {
 		var agentDialErr *openAIWSDialError

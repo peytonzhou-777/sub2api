@@ -785,21 +785,27 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	connectionTarget = newOpenAIWSConnectionTarget(account, wsDecision.Transport, wsURL, wsHeaders, topologyScope)
 	// 首次解析 payload 时握手头尚未构造；现在按实际 fingerprint scope 重新解析首选连接。
 	refreshIngressRouteState(firstPayload)
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+	transportScope, _ := OpenAITransportScopeFromContext(ctx, account.ID)
+	transportScopeFingerprint := ""
+	if transportScope.ReadyForCPA(account.ID) {
+		transportScopeFingerprint = transportScope.OpenAICPAScopeFingerprint(proxyURL)
+	}
 	baseAcquireReq := openAIWSAcquireRequest{
-		Account:                 account,
-		WSURL:                   wsURL,
-		Headers:                 wsHeaders,
-		FingerprintSessionScope: stagedCodexFingerprintSessionScopeHash(c),
-		TopologyScope:           topologyScope,
+		Account:                   account,
+		WSURL:                     wsURL,
+		Headers:                   wsHeaders,
+		TransportScope:            transportScope,
+		TransportScopeFingerprint: transportScopeFingerprint,
+		FingerprintSessionScope:   stagedCodexFingerprintSessionScopeHash(c),
+		TopologyScope:             topologyScope,
 		HeadersFactory: func(factoryCtx context.Context, headers http.Header) (http.Header, error) {
 			return s.refreshOpenAIAgentIdentityHeaders(factoryCtx, account, headers)
 		},
-		ProxyURL: func() string {
-			if account.ProxyID != nil && account.Proxy != nil {
-				return account.Proxy.URL()
-			}
-			return ""
-		}(),
+		ProxyURL:        proxyURL,
 		SessionAffinity: sessionHash,
 		ForceNewConn:    false,
 	}

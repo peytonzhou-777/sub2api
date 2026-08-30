@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	openaiwsv2 "github.com/Wei-Shaw/sub2api/internal/service/openai_ws_v2"
 	coderws "github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -29,6 +30,8 @@ const (
 type OpenAIWSTransportMetricsSnapshot struct {
 	ProxyClientCacheHits   int64   `json:"proxy_client_cache_hits"`
 	ProxyClientCacheMisses int64   `json:"proxy_client_cache_misses"`
+	CPAClientCacheHits     int64   `json:"cpa_client_cache_hits"`
+	CPAClientCacheMisses   int64   `json:"cpa_client_cache_misses"`
 	TransportReuseRatio    float64 `json:"transport_reuse_ratio"`
 }
 
@@ -59,6 +62,7 @@ type openAIWSTransportMetricsDialer interface {
 func newDefaultOpenAIWSClientDialer() openAIWSClientDialer {
 	return &coderOpenAIWSClientDialer{
 		proxyClients: make(map[string]*openAIWSProxyClientEntry),
+		cpaClients:   make(map[string]*openAIWSCPAClientEntry),
 	}
 }
 
@@ -67,6 +71,11 @@ type coderOpenAIWSClientDialer struct {
 	proxyClients map[string]*openAIWSProxyClientEntry
 	proxyHits    atomic.Int64
 	proxyMisses  atomic.Int64
+
+	cpaMu      sync.Mutex
+	cpaClients map[string]*openAIWSCPAClientEntry
+	cpaHits    atomic.Int64
+	cpaMisses  atomic.Int64
 }
 
 // openAIWSHandshakeError keeps a bounded, non-logged HTTP error body so the
@@ -96,6 +105,12 @@ type openAIWSProxyClientEntry struct {
 	lastUsedUnixNano int64
 }
 
+type openAIWSCPAClientEntry struct {
+	client           *http.Client
+	lastUsedUnixNano int64
+	scopeFingerprint string
+}
+
 func (d *coderOpenAIWSClientDialer) Dial(
 	ctx context.Context,
 	wsURL string,
@@ -111,7 +126,13 @@ func (d *coderOpenAIWSClientDialer) Dial(
 		HTTPHeader:      cloneHeader(headers),
 		CompressionMode: coderws.CompressionContextTakeover,
 	}
-	if proxy := strings.TrimSpace(proxyURL); proxy != "" {
+	if scope, ok := openAITransportScopeFromContextAny(ctx); ok && isSecureOpenAIWSURL(targetURL) {
+		cpaClient, err := d.cpaHTTPClient(scope, proxyURL)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		opts.HTTPClient = cpaClient
+	} else if proxy := strings.TrimSpace(proxyURL); proxy != "" {
 		proxyClient, err := d.proxyHTTPClient(proxy)
 		if err != nil {
 			return nil, 0, nil, err
@@ -142,6 +163,123 @@ func (d *coderOpenAIWSClientDialer) Dial(
 		respHeaders = cloneHeader(resp.Header)
 	}
 	return &coderOpenAIWSClientConn{conn: conn}, 0, respHeaders, nil
+}
+
+func isSecureOpenAIWSURL(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(parsed.Scheme), "wss") ||
+		strings.EqualFold(strings.TrimSpace(parsed.Scheme), "https")
+}
+
+// cpaHTTPClient returns the dedicated HTTP/1.1 Upgrade transport used by a
+// complete OpenAI Persona scope. The underlying Chrome ClientHello profile is
+// shared with REST, but the client/connection cache is never shared with the
+// legacy proxy client or another Account × Persona × Slot × Epoch scope.
+func (d *coderOpenAIWSClientDialer) cpaHTTPClient(scope OpenAITransportScope, proxyURL string) (*http.Client, error) {
+	if d == nil {
+		return nil, errors.New("openai ws dialer is nil")
+	}
+	if !scope.ReadyForCPA(scope.AccountID) {
+		return nil, errors.New("incomplete OpenAI CPA transport scope")
+	}
+	normalizedProxy := strings.TrimSpace(proxyURL)
+	var parsedProxy *url.URL
+	if normalizedProxy != "" {
+		var err error
+		parsedProxy, err = url.Parse(normalizedProxy)
+		if err != nil || parsedProxy == nil || strings.TrimSpace(parsedProxy.Scheme) == "" || strings.TrimSpace(parsedProxy.Host) == "" {
+			if err == nil {
+				err = errors.New("proxy url has no scheme or host")
+			}
+			return nil, fmt.Errorf("invalid CPA proxy url: %w", err)
+		}
+	}
+	scopeFingerprint := scope.Fingerprint(tlsfingerprint.CPAChromeProfileVersion, normalizedProxy)
+	cacheKey := "cpa:" + scopeFingerprint
+	now := time.Now().UnixNano()
+
+	d.cpaMu.Lock()
+	defer d.cpaMu.Unlock()
+	if d.cpaClients == nil {
+		d.cpaClients = make(map[string]*openAIWSCPAClientEntry)
+	}
+	if entry := d.cpaClients[cacheKey]; entry != nil && entry.client != nil {
+		entry.lastUsedUnixNano = now
+		d.cpaHits.Add(1)
+		return entry.client, nil
+	}
+	d.cleanupCPAClientsLocked(now)
+
+	transport := &http.Transport{
+		MaxIdleConns:        openAIWSProxyTransportMaxIdleConns,
+		MaxIdleConnsPerHost: openAIWSProxyTransportMaxIdleConnsPerHost,
+		IdleConnTimeout:     openAIWSProxyTransportIdleConnTimeout,
+		TLSHandshakeTimeout: 10 * time.Second,
+		ForceAttemptHTTP2:   false,
+	}
+	transport.DialTLSContext = tlsfingerprint.NewCPAChromeWSH1Dialer(
+		parsedProxy,
+		tlsfingerprint.NewCPAChromeSessionCache(),
+	).DialTLSContextHTTP1
+	client := &http.Client{Transport: transport}
+	d.cpaClients[cacheKey] = &openAIWSCPAClientEntry{
+		client:           client,
+		lastUsedUnixNano: now,
+		scopeFingerprint: scopeFingerprint,
+	}
+	d.ensureCPAClientCapacityLocked()
+	d.cpaMisses.Add(1)
+	return client, nil
+}
+
+func (d *coderOpenAIWSClientDialer) cleanupCPAClientsLocked(nowUnixNano int64) {
+	if d == nil || len(d.cpaClients) == 0 {
+		return
+	}
+	now := time.Unix(0, nowUnixNano)
+	for key, entry := range d.cpaClients {
+		if entry == nil || entry.client == nil {
+			delete(d.cpaClients, key)
+			continue
+		}
+		lastUsed := time.Unix(0, entry.lastUsedUnixNano)
+		if now.Sub(lastUsed) > openAIWSProxyClientCacheIdleTTL {
+			closeOpenAIWSProxyClient(entry.client)
+			delete(d.cpaClients, key)
+		}
+	}
+}
+
+func (d *coderOpenAIWSClientDialer) ensureCPAClientCapacityLocked() {
+	if d == nil {
+		return
+	}
+	for len(d.cpaClients) > openAIWSProxyClientCacheMaxEntries {
+		var oldestKey string
+		var oldestLastUsed int64
+		hasOldest := false
+		for key, entry := range d.cpaClients {
+			lastUsed := int64(0)
+			if entry != nil {
+				lastUsed = entry.lastUsedUnixNano
+			}
+			if !hasOldest || lastUsed < oldestLastUsed {
+				hasOldest = true
+				oldestKey = key
+				oldestLastUsed = lastUsed
+			}
+		}
+		if !hasOldest {
+			return
+		}
+		if entry := d.cpaClients[oldestKey]; entry != nil {
+			closeOpenAIWSProxyClient(entry.client)
+		}
+		delete(d.cpaClients, oldestKey)
+	}
 }
 
 func (d *coderOpenAIWSClientDialer) proxyHTTPClient(proxy string) (*http.Client, error) {
@@ -252,16 +390,22 @@ func (d *coderOpenAIWSClientDialer) SnapshotTransportMetrics() OpenAIWSTransport
 	if d == nil {
 		return OpenAIWSTransportMetricsSnapshot{}
 	}
-	hits := d.proxyHits.Load()
-	misses := d.proxyMisses.Load()
+	proxyHits := d.proxyHits.Load()
+	proxyMisses := d.proxyMisses.Load()
+	cpaHits := d.cpaHits.Load()
+	cpaMisses := d.cpaMisses.Load()
+	hits := proxyHits + cpaHits
+	misses := proxyMisses + cpaMisses
 	total := hits + misses
 	reuseRatio := 0.0
 	if total > 0 {
 		reuseRatio = float64(hits) / float64(total)
 	}
 	return OpenAIWSTransportMetricsSnapshot{
-		ProxyClientCacheHits:   hits,
-		ProxyClientCacheMisses: misses,
+		ProxyClientCacheHits:   proxyHits,
+		ProxyClientCacheMisses: proxyMisses,
+		CPAClientCacheHits:     cpaHits,
+		CPAClientCacheMisses:   cpaMisses,
 		TransportReuseRatio:    reuseRatio,
 	}
 }

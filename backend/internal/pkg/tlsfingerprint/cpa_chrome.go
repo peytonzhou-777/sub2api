@@ -39,6 +39,7 @@ type CPAChromeDialer struct {
 	dialer       *net.Dialer
 	sessionCache utls.ClientSessionCache
 	requireH2    bool
+	nextProtos   []string
 }
 
 // NewCPAChromeDialer creates a context-aware Chrome TLS dialer.
@@ -51,6 +52,16 @@ func NewCPAChromeDialer(proxyURL *url.URL, sessionCache utls.ClientSessionCache,
 		sessionCache: sessionCache,
 		requireH2:    requireH2,
 	}
+}
+
+// NewCPAChromeWSH1Dialer returns a CPA Chrome dialer whose ALPN is pinned to
+// HTTP/1.1 for the WebSocket Upgrade handshake. The TLS ClientHello remains
+// the same Chrome profile; only the negotiated application protocol differs
+// from the HTTP/2 REST transport.
+func NewCPAChromeWSH1Dialer(proxyURL *url.URL, sessionCache utls.ClientSessionCache) *CPAChromeDialer {
+	dialer := NewCPAChromeDialer(proxyURL, sessionCache, false)
+	dialer.nextProtos = []string{"http/1.1"}
+	return dialer
 }
 
 // DialTLSContext implements the signature required by http2.Transport.
@@ -73,6 +84,9 @@ func (d *CPAChromeDialer) DialTLSContext(ctx context.Context, network, addr stri
 		host = parsedHost
 	}
 	utlsConfig := cloneUTLSConfig(cfg, host, d.sessionCache)
+	if len(d.nextProtos) > 0 {
+		utlsConfig.NextProtos = append([]string(nil), d.nextProtos...)
+	}
 	utlsConn := utls.UClient(conn, utlsConfig, utls.HelloChrome_Auto)
 	if err := utlsConn.HandshakeContext(ctx); err != nil {
 		_ = conn.Close()
@@ -84,6 +98,12 @@ func (d *CPAChromeDialer) DialTLSContext(ctx context.Context, network, addr stri
 		return nil, fmt.Errorf("CPA Chrome TLS negotiated %q, want h2", state.NegotiatedProtocol)
 	}
 	return utlsConn, nil
+}
+
+// DialTLSContextHTTP1 adapts the CPA dialer to net/http.Transport's TLS
+// callback signature for WebSocket HTTP/1.1 Upgrade handshakes.
+func (d *CPAChromeDialer) DialTLSContextHTTP1(ctx context.Context, network, addr string) (net.Conn, error) {
+	return d.DialTLSContext(ctx, network, addr, nil)
 }
 
 func cloneUTLSConfig(cfg *tls.Config, host string, cache utls.ClientSessionCache) *utls.Config {
