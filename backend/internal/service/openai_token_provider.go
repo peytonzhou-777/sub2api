@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,6 +20,23 @@ const (
 	openAILockMaxAttempts     = 5
 	openAILockJitterRatio     = 0.2
 	openAILockWarnThresholdMs = 250
+)
+
+var (
+	// ErrOpenAITokenBindingInvalid 表示请求绑定不能安全地定位到一个账号。
+	ErrOpenAITokenBindingInvalid = errors.New("openai token binding is invalid")
+	// ErrOpenAIPersonaCredentialChainMissing 表示 Persona 的独立授权链不存在。
+	ErrOpenAIPersonaCredentialChainMissing = errors.New("openai persona credential chain is missing")
+	// ErrOpenAIPersonaCredentialChainMismatch 表示绑定链 ID 与账号内的链不一致。
+	ErrOpenAIPersonaCredentialChainMismatch = errors.New("openai persona credential chain does not match binding")
+	// ErrOpenAIPersonaCredentialChainNotReady 表示独立授权链尚未处于可读状态。
+	ErrOpenAIPersonaCredentialChainNotReady = errors.New("openai persona credential chain is not ready")
+	// ErrOpenAIPersonaAccessTokenMissing 表示独立授权链没有 access_token。
+	ErrOpenAIPersonaAccessTokenMissing = errors.New("openai persona access_token is missing")
+	// ErrOpenAIPersonaCredentialChainExpired 表示独立授权链的 access_token 已过期。
+	ErrOpenAIPersonaCredentialChainExpired = errors.New("openai persona credential chain is expired")
+	// ErrOpenAIPersonaCredentialRefreshUnsupported 表示链级刷新尚未安全接入。
+	ErrOpenAIPersonaCredentialRefreshUnsupported = errors.New("openai persona credential refresh is not implemented")
 )
 
 // OpenAITokenRuntimeMetrics is a snapshot of refresh and lock contention metrics.
@@ -291,6 +309,339 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	}
 
 	return accessToken, nil
+}
+
+// GetAccessTokenForBinding 按 Account×Persona×credential chain 读取 access_token。
+// v1/v2 以及明确的 legacy-codex 绑定保持旧账号级路径；v3 的显式链（包括
+// strict Codex 与 OpenCode）只读取绑定链自己的凭据和命名空间缓存，不会回退到
+// 其他 Persona 的 refresh_token，也不会把链级刷新伪装成账号级刷新。
+func (p *OpenAITokenProvider) GetAccessTokenForBinding(
+	ctx context.Context,
+	account *Account,
+	binding SessionPersonaSlotBinding,
+) (string, error) {
+	if p == nil {
+		return "", errors.New("openai token provider is nil")
+	}
+	p.ensureMetrics()
+	if account == nil {
+		return "", errors.New("account is nil")
+	}
+	if account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
+		return "", errors.New("not an openai oauth account")
+	}
+
+	// 允许调用方只填写兼容别名 Persona 字段，但一旦存在账号 ID，
+	// 必须与实际取 token 的账号一致，避免错误绑定导致跨账号读取。
+	personaRaw := strings.TrimSpace(string(binding.PersonaID))
+	if personaRaw == "" {
+		personaRaw = strings.TrimSpace(string(binding.Persona.ID))
+	}
+	persona, ok := ParseSessionPersonaID(personaRaw)
+	if !ok {
+		return "", fmt.Errorf("%w: persona=%q", ErrOpenAITokenBindingInvalid, personaRaw)
+	}
+	binding.PersonaID = persona
+	binding.CredentialChainID = strings.TrimSpace(binding.CredentialChainID)
+	if binding.AccountID != 0 && binding.AccountID != account.ID {
+		return "", fmt.Errorf("%w: account_id=%d does not match account %d", ErrOpenAITokenBindingInvalid, binding.AccountID, account.ID)
+	}
+
+	// v1/v2 以及显式 legacy-codex 的 strict Codex 绑定必须沿用旧账号级
+	// refresh/cache 语义。这样历史双 Codex 账号不会因为新增入口而改变行为；
+	// 一旦绑定带有其他 chain ID，则进入 Account×Persona×chain 读取路径。
+	if persona == SessionPersonaCodexCLIStrict &&
+		(binding.Legacy || binding.EffectiveMappingVersion() < SessionPersonaScopeVersionV3 ||
+			(binding.SlotID == 0 && (binding.CredentialChainID == "" || binding.CredentialChainID == "legacy-codex"))) {
+		return p.GetAccessToken(ctx, account)
+	}
+
+	if !binding.Valid() {
+		return "", fmt.Errorf("%w: persona=%q slot=%d scope=%d", ErrOpenAITokenBindingInvalid, persona, binding.SlotID, binding.ScopeVersion)
+	}
+	if persona != SessionPersonaCodexCLIStrict && persona != SessionPersonaOpenCode {
+		return "", fmt.Errorf("%w: unsupported persona=%q", ErrOpenAITokenBindingInvalid, persona)
+	}
+	if binding.CredentialChainID == "" {
+		return "", fmt.Errorf("%w: persona=%q slot=%d", ErrOpenAIPersonaCredentialChainMissing, persona, binding.SlotID)
+	}
+	// Scheduler selections are intentionally lightweight snapshots and may not
+	// carry nested Account×Persona credential chains. Reload the authoritative
+	// row before resolving the requested Persona chain; never fall back to the
+	// account-level Codex row merely because the snapshot is incomplete.
+	if account.IsSchedulerSnapshot || account.findPersonaCredentialByChainID(persona, binding.SlotID, binding.CredentialChainID) == nil {
+		if p.accountRepo == nil {
+			if account.IsSchedulerSnapshot {
+				return "", fmt.Errorf("authoritative account repository is required for %s scheduler snapshot", persona)
+			}
+		} else {
+			authoritative, err := p.accountRepo.GetByID(ctx, account.ID)
+			if err != nil {
+				return "", fmt.Errorf("load authoritative %s account %d: %w", persona, account.ID, err)
+			}
+			if authoritative == nil || authoritative.ID != account.ID || !authoritative.IsOpenAIOAuth() {
+				return "", fmt.Errorf("authoritative account %d is not an OpenAI OAuth account", account.ID)
+			}
+			account = authoritative
+		}
+	}
+	return p.getPersonaAccessTokenForBinding(ctx, account, binding, persona)
+}
+
+// getPersonaAccessTokenForBinding 只访问绑定的 Persona 链。
+// 链级 OAuth refresh/CAS 尚未具备安全的持久化边界，因此过期或临近过期
+// 时明确报错，绝不调用旧的账号级 RefreshIfNeeded 或借用其他 Persona 的
+// refresh_token。
+func (p *OpenAITokenProvider) getPersonaAccessTokenForBinding(
+	ctx context.Context,
+	account *Account,
+	binding SessionPersonaSlotBinding,
+	persona SessionPersonaID,
+) (string, error) {
+	if binding.CredentialChainID == "" {
+		return "", fmt.Errorf("%w: persona=%q slot=%d", ErrOpenAIPersonaCredentialChainMissing, binding.PersonaID, binding.SlotID)
+	}
+
+	// A slot may retain more than one chain during OAuth rotation. Resolve by
+	// the requested chain ID first; selecting the first slot match would make
+	// map iteration order part of credential routing.
+	chain := account.findPersonaCredentialByChainID(persona, binding.SlotID, binding.CredentialChainID)
+	if chain == nil {
+		candidate := account.findPersonaCredential(persona, binding.SlotID)
+		if candidate == nil {
+			return "", fmt.Errorf("%w: persona=%q slot=%d chain=%q", ErrOpenAIPersonaCredentialChainMissing, persona, binding.SlotID, binding.CredentialChainID)
+		}
+		return "", fmt.Errorf("%w: persona=%q slot=%d requested_chain=%q stored_chain=%q", ErrOpenAIPersonaCredentialChainMismatch, persona, binding.SlotID, binding.CredentialChainID, strings.TrimSpace(openAIMapString(candidate, "credential_chain_id")))
+	}
+	if storedChainID := strings.TrimSpace(openAIMapString(chain, "credential_chain_id")); storedChainID == "" || storedChainID != binding.CredentialChainID {
+		return "", fmt.Errorf("%w: persona=%q slot=%d requested_chain=%q stored_chain=%q", ErrOpenAIPersonaCredentialChainMismatch, persona, binding.SlotID, binding.CredentialChainID, storedChainID)
+	}
+	if chainPersona := strings.TrimSpace(openAIMapString(chain, "persona")); chainPersona != "" {
+		parsedPersona, personaOK := ParseSessionPersonaID(chainPersona)
+		if !personaOK || parsedPersona != persona {
+			return "", fmt.Errorf("%w: chain=%q has persona=%q", ErrOpenAIPersonaCredentialChainMismatch, binding.CredentialChainID, chainPersona)
+		}
+	}
+	if chainAccountID := strings.TrimSpace(openAIMapString(chain, "chatgpt_account_id")); chainAccountID != "" {
+		accountID := strings.TrimSpace(account.GetChatGPTAccountID())
+		if accountID != "" && chainAccountID != accountID {
+			return "", fmt.Errorf("%w: chain=%q belongs to chatgpt account %q, account is %q", ErrOpenAIPersonaCredentialChainMismatch, binding.CredentialChainID, chainAccountID, accountID)
+		}
+	}
+	if rawSlot, hasSlot := chain["slot_id"]; hasSlot && parseSessionPersonaInt64(rawSlot) != int64(binding.SlotID) {
+		return "", fmt.Errorf("%w: chain=%q has slot=%d, binding slot=%d", ErrOpenAIPersonaCredentialChainMismatch, binding.CredentialChainID, parseSessionPersonaInt64(rawSlot), binding.SlotID)
+	}
+	if chainInstallationID := strings.TrimSpace(openAIMapString(chain, "installation_id")); chainInstallationID != "" && strings.TrimSpace(binding.InstallationID) != "" &&
+		chainInstallationID != strings.TrimSpace(binding.InstallationID) {
+		return "", fmt.Errorf("%w: chain=%q has installation_id=%q, binding has %q", ErrOpenAIPersonaCredentialChainMismatch, binding.CredentialChainID, chainInstallationID, strings.TrimSpace(binding.InstallationID))
+	}
+	if !openAIPersonaCredentialReady(chain) {
+		return "", fmt.Errorf("%w: persona=%q slot=%d chain=%q", ErrOpenAIPersonaCredentialChainNotReady, persona, binding.SlotID, binding.CredentialChainID)
+	}
+
+	expiresAt := openAIPersonaCredentialExpiry(chain)
+	if expiresAt != nil && !time.Now().Before(*expiresAt) {
+		if strings.TrimSpace(openAIMapString(chain, "refresh_token")) == "" {
+			return "", fmt.Errorf("%w: chain=%q has no independent refresh_token", ErrOpenAIPersonaCredentialChainExpired, binding.CredentialChainID)
+		}
+		return "", fmt.Errorf("%w: chain=%q; independent chain refresh is not implemented", ErrOpenAIPersonaCredentialChainExpired, binding.CredentialChainID)
+	}
+
+	cacheKey := OpenAITokenCacheKeyForBinding(account, binding)
+	if p.tokenCache != nil {
+		if token, err := p.tokenCache.GetAccessToken(ctx, cacheKey); err == nil && strings.TrimSpace(token) != "" {
+			slog.Debug("openai_persona_token_cache_hit", "account_id", account.ID, "persona", binding.PersonaID, "slot_id", binding.SlotID)
+			return token, nil
+		} else if err != nil {
+			slog.Warn("openai_persona_token_cache_get_failed", "account_id", account.ID, "persona", binding.PersonaID, "slot_id", binding.SlotID, "error", err)
+		}
+	}
+
+	// Cache 命中仍以命名空间为边界；没有缓存时只允许读取本链 access_token。
+	accessToken := strings.TrimSpace(openAIMapString(chain, "access_token"))
+	if accessToken == "" {
+		return "", fmt.Errorf("%w: persona=%q slot=%d chain=%q", ErrOpenAIPersonaAccessTokenMissing, persona, binding.SlotID, binding.CredentialChainID)
+	}
+
+	// 仍在有效期内但已进入旧 provider 的刷新窗口时，不能伪造链级刷新。
+	// TODO: 实现按 Account×Persona×credential_chain_id 隔离的 refresh/CAS、
+	// 持久化和失效审计后，再将此处改为独立链刷新。
+	if expiresAt != nil && time.Until(*expiresAt) <= openAITokenRefreshSkew {
+		return "", fmt.Errorf("%w: chain=%q expires_at=%s", ErrOpenAIPersonaCredentialRefreshUnsupported, binding.CredentialChainID, expiresAt.UTC().Format(time.RFC3339))
+	}
+
+	if p.tokenCache != nil {
+		ttl := 30 * time.Minute
+		if expiresAt != nil {
+			until := time.Until(*expiresAt)
+			switch {
+			case until > openAITokenCacheSkew:
+				ttl = until - openAITokenCacheSkew
+			case until > 0:
+				ttl = until
+			default:
+				// The expiry check above should have caught this. Keep the guard
+				// explicit so a clock boundary cannot create a stale cache entry.
+				return "", fmt.Errorf("%w: chain=%q", ErrOpenAIPersonaCredentialChainExpired, binding.CredentialChainID)
+			}
+		}
+		if err := p.tokenCache.SetAccessToken(ctx, cacheKey, accessToken, ttl); err != nil {
+			slog.Warn("openai_persona_token_cache_set_failed", "account_id", account.ID, "persona", binding.PersonaID, "slot_id", binding.SlotID, "error", err)
+		}
+	}
+
+	return accessToken, nil
+}
+
+// getOpenCodeAccessTokenForBinding 保留旧的内部别名，实际实现统一走 Persona
+// 通用读取逻辑，避免已有测试或同包调用依赖旧函数名。
+func (p *OpenAITokenProvider) getOpenCodeAccessTokenForBinding(
+	ctx context.Context,
+	account *Account,
+	binding SessionPersonaSlotBinding,
+) (string, error) {
+	return p.getPersonaAccessTokenForBinding(ctx, account, binding, SessionPersonaOpenCode)
+}
+
+// openAIPersonaCredentialReady interprets the optional readiness/state fields
+// used by imported credential-chain records without mutating the account map.
+func openAIPersonaCredentialReady(chain map[string]any) bool {
+	if chain == nil {
+		return false
+	}
+	if ready, ok := chain["ready"]; ok {
+		switch value := ready.(type) {
+		case bool:
+			if !value {
+				return false
+			}
+		case string:
+			if strings.EqualFold(strings.TrimSpace(value), "false") || strings.TrimSpace(value) == "0" {
+				return false
+			}
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(openAIMapString(chain, "state"))) {
+	case "", "ready":
+		return true
+	case "pending", "refreshing", "invalid", "revoked", "disabled":
+		return false
+	default:
+		// Unknown state is not treated as ready. Imported records must opt in
+		// explicitly once a state vocabulary is extended.
+		return false
+	}
+}
+
+func openAIPersonaCredentialExpiry(chain map[string]any) *time.Time {
+	if chain == nil {
+		return nil
+	}
+	if raw, ok := chain["expires_at"]; ok {
+		switch value := raw.(type) {
+		case time.Time:
+			copy := value
+			return &copy
+		case *time.Time:
+			if value != nil {
+				copy := *value
+				return &copy
+			}
+		}
+	}
+	// Reuse the account-level tolerant parser for RFC3339 and Unix seconds;
+	// this temporary wrapper only aliases the read-only map and never persists it.
+	return (&Account{Credentials: chain}).GetCredentialAsTime("expires_at")
+}
+
+// findPersonaCredentialByChainID resolves the exact chain in the account's
+// nested credential stores. It mirrors the supported imported shapes used by
+// the Persona resolver while adding the chain dimension required during
+// rotation.
+func (a *Account) findPersonaCredentialByChainID(
+	persona SessionPersonaID,
+	slotID int,
+	chainID string,
+) map[string]any {
+	if a == nil || a.Credentials == nil || slotID < 0 || strings.TrimSpace(chainID) == "" {
+		return nil
+	}
+	canonical, ok := ParseSessionPersonaID(string(persona))
+	if !ok {
+		return nil
+	}
+	chainID = strings.TrimSpace(chainID)
+	for _, key := range []string{openAIPersonaCredentialsKey, openAIOAuthCredentialChainsKey} {
+		raw, exists := a.Credentials[key]
+		if !exists {
+			continue
+		}
+		if found := findPersonaCredentialByChainIDInValue(raw, canonical, slotID, chainID); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func findPersonaCredentialByChainIDInValue(
+	raw any,
+	persona SessionPersonaID,
+	slotID int,
+	chainID string,
+) map[string]any {
+	switch value := raw.(type) {
+	case map[string]any:
+		if candidateChainID, hasChain := credentialChainIDFromMap(value); hasChain {
+			candidatePersona, hasPersona := credentialPersonaFromMap(value)
+			candidateSlot, hasSlot := credentialSlotIDFromMap(value)
+			if hasPersona && hasSlot && candidatePersona == persona && candidateSlot == slotID && candidateChainID == chainID {
+				return value
+			}
+		}
+		for _, item := range value {
+			if found := findPersonaCredentialByChainIDInValue(item, persona, slotID, chainID); found != nil {
+				return found
+			}
+		}
+	case map[string]string:
+		converted := make(map[string]any, len(value))
+		for key, item := range value {
+			converted[key] = item
+		}
+		return findPersonaCredentialByChainIDInValue(converted, persona, slotID, chainID)
+	case map[int]any:
+		for _, item := range value {
+			if found := findPersonaCredentialByChainIDInValue(item, persona, slotID, chainID); found != nil {
+				return found
+			}
+		}
+	case map[int]string:
+		for _, item := range value {
+			if found := findPersonaCredentialByChainIDInValue(item, persona, slotID, chainID); found != nil {
+				return found
+			}
+		}
+	case []any:
+		for _, item := range value {
+			if found := findPersonaCredentialByChainIDInValue(item, persona, slotID, chainID); found != nil {
+				return found
+			}
+		}
+	case string:
+		trimmed := strings.TrimSpace(value)
+		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+			var decoded any
+			if json.Unmarshal([]byte(trimmed), &decoded) == nil {
+				return findPersonaCredentialByChainIDInValue(decoded, persona, slotID, chainID)
+			}
+		}
+	case json.RawMessage:
+		var decoded any
+		if json.Unmarshal(value, &decoded) == nil {
+			return findPersonaCredentialByChainIDInValue(decoded, persona, slotID, chainID)
+		}
+	}
+	return nil
 }
 
 // disableAccountMissingRefreshToken 在请求路径上发现 OpenAI OAuth 账号

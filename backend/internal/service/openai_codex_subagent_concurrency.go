@@ -2,9 +2,13 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -36,8 +40,16 @@ func (s *OpenAIGatewayService) acquireCodexSubagentSlot(
 	if account == nil || ids == nil || !ids.isSubagent {
 		return func() {}, nil
 	}
+	// OpenCode has no Codex-style global/session subagent hard cap. Its
+	// subagent_depth and resource limits are Persona policy concerns; until the
+	// canonical lineage gate is wired, do not accidentally impose the legacy
+	// account-level Codex limit on an OpenCode request.
+	if isOpenCodePersonaBindingForAccount(ctx, account) {
+		return func() {}, nil
+	}
+	scopeHash := codexSubagentAdmissionScopeHash(ctx, account, ids)
 	if lease, _ := ctx.Value(codexSubagentAdmissionLeaseContextKey{}).(codexSubagentAdmissionLease); lease.accountID == account.ID &&
-		lease.scopeHash == ids.sessionScopeHash && lease.epoch == ids.sessionEpoch && lease.active != nil && lease.active.Load() {
+		lease.scopeHash == scopeHash && lease.epoch == ids.sessionEpoch && lease.active != nil && lease.active.Load() {
 		return func() {}, nil
 	}
 	limit := account.GetCodexSubagentMaxInflightPerSession()
@@ -51,12 +63,12 @@ func (s *OpenAIGatewayService) acquireCodexSubagentSlot(
 	deadline := startedAt.Add(s.codexSubagentQueueMaxWait(ctx))
 	for {
 		result, err := s.concurrencyService.AcquireCodexSubagentSlot(
-			ctx, account.ID, ids.sessionScopeHash, ids.sessionEpoch, limit,
+			ctx, account.ID, scopeHash, ids.sessionEpoch, limit,
 		)
 		if err != nil {
 			logger.L().Error("codex subagent concurrency acquire failed",
 				zap.Int64("account_id", account.ID),
-				zap.String("scope_hash", truncateCodexFingerprintHash(ids.sessionScopeHash)),
+				zap.String("scope_hash", truncateCodexFingerprintHash(scopeHash)),
 				zap.Int64("epoch", ids.sessionEpoch),
 				zap.Error(err),
 			)
@@ -66,7 +78,7 @@ func (s *OpenAIGatewayService) acquireCodexSubagentSlot(
 			if waited := time.Since(startedAt); waited >= 25*time.Millisecond {
 				logger.L().Info("codex subagent concurrency queued",
 					zap.Int64("account_id", account.ID),
-					zap.String("scope_hash", truncateCodexFingerprintHash(ids.sessionScopeHash)),
+					zap.String("scope_hash", truncateCodexFingerprintHash(scopeHash)),
 					zap.Int64("epoch", ids.sessionEpoch),
 					zap.Duration("wait", waited),
 				)
@@ -79,7 +91,7 @@ func (s *OpenAIGatewayService) acquireCodexSubagentSlot(
 		if !time.Now().Before(deadline) {
 			logger.L().Warn("codex subagent concurrency queue timeout",
 				zap.Int64("account_id", account.ID),
-				zap.String("scope_hash", truncateCodexFingerprintHash(ids.sessionScopeHash)),
+				zap.String("scope_hash", truncateCodexFingerprintHash(scopeHash)),
 				zap.Int64("epoch", ids.sessionEpoch),
 				zap.Int("limit", limit),
 				zap.Duration("wait", time.Since(startedAt)),
@@ -108,6 +120,9 @@ func (s *OpenAIGatewayService) TryAcquireCodexSessionAdmissionSlots(
 	if account == nil || tryAccount == nil {
 		return nil, false, errors.New("openai account admission slot dependencies unavailable")
 	}
+	if isOpenCodePersonaBindingForAccount(ctx, account) {
+		return tryAccount(ctx, account.ID, maxAccountConcurrency)
+	}
 	ids := stagedCodexFingerprintIDsForAccount(c, account)
 	limit := account.GetCodexSubagentMaxInflightPerSession()
 	if ids == nil || !ids.isSubagent || limit <= 0 {
@@ -116,8 +131,9 @@ func (s *OpenAIGatewayService) TryAcquireCodexSessionAdmissionSlots(
 	if s == nil || s.concurrencyService == nil {
 		return nil, false, errors.New("codex subagent concurrency cache is unavailable")
 	}
+	scopeHash := codexSubagentAdmissionScopeHash(ctx, account, ids)
 	subagentResult, err := s.concurrencyService.AcquireCodexSubagentSlot(
-		ctx, account.ID, ids.sessionScopeHash, ids.sessionEpoch, limit,
+		ctx, account.ID, scopeHash, ids.sessionEpoch, limit,
 	)
 	if err != nil {
 		return nil, false, err
@@ -138,7 +154,7 @@ func (s *OpenAIGatewayService) TryAcquireCodexSessionAdmissionSlots(
 		leaseState := &atomic.Bool{}
 		leaseState.Store(true)
 		lease := codexSubagentAdmissionLease{
-			accountID: account.ID, scopeHash: ids.sessionScopeHash, epoch: ids.sessionEpoch, active: leaseState,
+			accountID: account.ID, scopeHash: scopeHash, epoch: ids.sessionEpoch, active: leaseState,
 		}
 		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), codexSubagentAdmissionLeaseContextKey{}, lease))
 		return func() {
@@ -155,6 +171,45 @@ func (s *OpenAIGatewayService) TryAcquireCodexSessionAdmissionSlots(
 		}
 		releaseSubagent()
 	}, true, nil
+}
+
+func isOpenCodePersonaBindingForAccount(ctx context.Context, account *Account) bool {
+	if ctx == nil {
+		return false
+	}
+	binding, ok := SessionPersonaBindingFromContext(ctx)
+	if !ok || !IsOpenCodePersona(binding) {
+		return false
+	}
+	return binding.AccountID == 0 || account == nil || binding.AccountID == account.ID
+}
+
+// codexSubagentAdmissionScopeHash keeps the legacy fingerprint scope as the
+// base while adding Persona/slot generations when a binding is available. This
+// prevents Codex and OpenCode subagent limits from consuming one another's
+// capacity without changing unbound legacy requests.
+func codexSubagentAdmissionScopeHash(ctx context.Context, account *Account, ids *codexFingerprintIDs) string {
+	if ids == nil {
+		return ""
+	}
+	base := strings.TrimSpace(ids.sessionScopeHash)
+	if binding, ok := SessionPersonaBindingFromContext(ctx); ok &&
+		(binding.AccountID == 0 || account == nil || binding.AccountID == account.ID) &&
+		strings.TrimSpace(string(binding.PersonaID)) != "" {
+		seed := fmt.Sprintf("persona-subagent:v1|%d|%s|%d|%d|%d|%d|%s",
+			accountIDForSubagentScope(account, binding), binding.PersonaID, binding.SlotID,
+			binding.SlotGeneration, binding.SlotSetGeneration, binding.SessionEpoch, base)
+		digest := sha256.Sum256([]byte(seed))
+		return hex.EncodeToString(digest[:])
+	}
+	return base
+}
+
+func accountIDForSubagentScope(account *Account, binding SessionPersonaSlotBinding) int64 {
+	if account != nil {
+		return account.ID
+	}
+	return binding.AccountID
 }
 
 func (s *OpenAIGatewayService) codexSubagentQueueMaxWait(ctx context.Context) time.Duration {

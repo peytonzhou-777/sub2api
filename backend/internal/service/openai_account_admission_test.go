@@ -13,6 +13,7 @@ import (
 type openAIAdmissionQueueStub struct {
 	mu         sync.Mutex
 	enqueueErr error
+	gotTicket  OpenAIAccountAdmissionTicket
 	polls      []OpenAIAccountAdmissionPoll
 	pollErr    error
 	grantErr   error
@@ -20,7 +21,10 @@ type openAIAdmissionQueueStub struct {
 	gotJitter  time.Duration
 }
 
-func (s *openAIAdmissionQueueStub) Enqueue(context.Context, OpenAIAccountAdmissionTicket, OpenAIAccountAdmissionConfig) error {
+func (s *openAIAdmissionQueueStub) Enqueue(_ context.Context, ticket OpenAIAccountAdmissionTicket, _ OpenAIAccountAdmissionConfig) error {
+	s.mu.Lock()
+	s.gotTicket = ticket
+	s.mu.Unlock()
 	return s.enqueueErr
 }
 func (s *openAIAdmissionQueueStub) Poll(context.Context, OpenAIAccountAdmissionTicket, OpenAIAccountAdmissionConfig) (OpenAIAccountAdmissionPoll, error) {
@@ -53,6 +57,43 @@ func TestOpenAIAccountAdmissionMapsExpiredTicketToTimeout(t *testing.T) {
 	var admissionErr *OpenAIAccountAdmissionError
 	if !errors.As(err, &admissionErr) || admissionErr.Kind != OpenAIAdmissionErrorTimeout || admissionErr.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("expired ticket error = %#v", err)
+	}
+}
+
+func TestOpenAIAccountAdmissionCopiesPersonaSlotMetadataIntoTicket(t *testing.T) {
+	cfg := DefaultOpenAIAccountAdmissionConfig()
+	cfg.Enabled = true
+	cfg.QueueEnabled = true
+	queue := &openAIAdmissionQueueStub{}
+	svc := NewOpenAIAccountAdmissionService(nil, queue)
+
+	_, err := svc.Acquire(context.Background(), OpenAIAccountAdmissionRequest{
+		AccountID:         7,
+		Persona:           " OpenCode ",
+		SlotID:            1,
+		SlotGeneration:    4,
+		SlotSetGeneration: 9,
+		CredentialChainID: "chain-opencode-1",
+		MaxConcurrency:    1,
+		TryAcquireSlot: func(context.Context, int64, int) (func(), bool, error) {
+			return func() {}, true, nil
+		},
+	}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	queue.mu.Lock()
+	got := queue.gotTicket
+	queue.mu.Unlock()
+	if got.Persona != "opencode" {
+		t.Fatalf("ticket persona = %q, want canonical opencode", got.Persona)
+	}
+	if got.SlotID != 1 || got.SlotGeneration != 4 || got.SlotSetGeneration != 9 {
+		t.Fatalf("ticket slot metadata = %+v", got)
+	}
+	if got.CredentialChainID != "chain-opencode-1" {
+		t.Fatalf("ticket credential chain = %q", got.CredentialChainID)
 	}
 }
 

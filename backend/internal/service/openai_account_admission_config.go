@@ -30,19 +30,24 @@ type cachedOpenAIAccountAdmissionConfig struct {
 
 // OpenAIAccountAdmissionConfig 是账号选定后的全局准入配置，不提供逐账号覆盖。
 type OpenAIAccountAdmissionConfig struct {
-	Enabled                 bool   `json:"enabled"`
-	QueueEnabled            bool   `json:"queue_enabled"`
-	MaxWaitSeconds          int    `json:"max_wait_seconds"`
-	RequestsPerMinute       int    `json:"requests_per_minute"`
-	TokensPerMinute         int64  `json:"tokens_per_minute"`
-	DefaultOutputTokens     int64  `json:"default_output_tokens"`
-	JitterMinMS             int    `json:"jitter_min_ms"`
-	JitterMaxMS             int    `json:"jitter_max_ms"`
-	MaxQueueDepthPerAccount int    `json:"max_queue_depth_per_account"`
-	InteractiveBurst        int    `json:"interactive_burst"`
-	BackgroundAgingSeconds  int    `json:"background_aging_seconds"`
-	ConfigVersion           int64  `json:"config_version"`
-	UpdatedAt               string `json:"updated_at,omitempty"`
+	Enabled                 bool  `json:"enabled"`
+	QueueEnabled            bool  `json:"queue_enabled"`
+	MaxWaitSeconds          int   `json:"max_wait_seconds"`
+	RequestsPerMinute       int   `json:"requests_per_minute"`
+	TokensPerMinute         int64 `json:"tokens_per_minute"`
+	DefaultOutputTokens     int64 `json:"default_output_tokens"`
+	JitterMinMS             int   `json:"jitter_min_ms"`
+	JitterMaxMS             int   `json:"jitter_max_ms"`
+	MaxQueueDepthPerAccount int   `json:"max_queue_depth_per_account"`
+	InteractiveBurst        int   `json:"interactive_burst"`
+	BackgroundAgingSeconds  int   `json:"background_aging_seconds"`
+	// PersonaPolicies is optional for backward compatibility. When omitted,
+	// legacy top-level limits apply to every Persona. When present, the named
+	// Persona receives its own queue/RPM/capacity policy without changing the
+	// account aggregate semantics.
+	PersonaPolicies map[string]OpenAIPersonaAdmissionPolicy `json:"persona_policies,omitempty"`
+	ConfigVersion   int64                                   `json:"config_version"`
+	UpdatedAt       string                                  `json:"updated_at,omitempty"`
 }
 
 // DefaultOpenAIAccountAdmissionConfig 返回默认关闭且可直接启用的保守配置。
@@ -87,6 +92,15 @@ func ValidateOpenAIAccountAdmissionConfig(cfg OpenAIAccountAdmissionConfig) (Ope
 	}
 	if cfg.BackgroundAgingSeconds < 1 || cfg.BackgroundAgingSeconds > 120 {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", "background_aging_seconds must be between 1 and 120")
+	}
+	for rawPersona, policy := range cfg.PersonaPolicies {
+		persona, ok := ParseSessionPersonaID(rawPersona)
+		if !ok {
+			return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("unsupported persona policy %q", rawPersona))
+		}
+		if err := policy.validate(); err != nil {
+			return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("persona %q: %s", persona, err))
+		}
 	}
 	return cfg, nil
 }

@@ -189,7 +189,8 @@ func (a *Account) GetCodexSubagentMaxInflightPerSession() int {
 }
 
 // GetCodexSessionSlotCount 返回账号启用的收敛 Session 槽位数。
-// 缺失或非法值按 1 兼容；仅 session/full 模式生效。
+// 线上 OAuth/session 默认使用两个槽位；显式非法值仍回落到单槽位，
+// 以兼容历史配置和紧急回滚。仅 session/full 模式生效。
 func (a *Account) GetCodexSessionSlotCount() int {
 	if a == nil || !a.IsOpenAIOAuth() {
 		return 1
@@ -200,7 +201,7 @@ func (a *Account) GetCodexSessionSlotCount() int {
 	}
 	raw, ok := a.Extra[codexSessionSlotCountExtraKey]
 	if !ok || raw == nil {
-		return 1
+		return DefaultSessionPersonaSlotCount
 	}
 	value := 0
 	switch typed := raw.(type) {

@@ -29,14 +29,22 @@ var (
 
 // OpenAIAccountAdmissionTicket 只携带准入元数据，严禁在 Redis 队列保存请求正文。
 type OpenAIAccountAdmissionTicket struct {
-	ID               string
-	AccountID        int64
-	SessionScopeHash string
-	SessionEpoch     int64
-	Class            OpenAIAdmissionClass
-	EnqueuedAt       time.Time
-	Deadline         time.Time
-	EstimatedTokens  int64
+	ID        string
+	AccountID int64
+	// Persona/slot metadata is carried with the ticket so admission state can
+	// be isolated without putting request bodies into Redis. Empty Persona
+	// preserves the legacy account/session key layout.
+	Persona           string
+	SlotID            int
+	SlotGeneration    int64
+	SlotSetGeneration int64
+	CredentialChainID string
+	SessionScopeHash  string
+	SessionEpoch      int64
+	Class             OpenAIAdmissionClass
+	EnqueuedAt        time.Time
+	Deadline          time.Time
+	EstimatedTokens   int64
 }
 
 type OpenAIAccountAdmissionPoll struct {
@@ -58,13 +66,21 @@ type OpenAIAccountAdmissionQueue interface {
 }
 
 type OpenAIAccountAdmissionRequest struct {
-	AccountID        int64
-	SessionScopeHash string
-	SessionEpoch     int64
-	Class            OpenAIAdmissionClass
-	EstimatedTokens  int64
-	MaxConcurrency   int
-	TryAcquireSlot   func(context.Context, int64, int) (func(), bool, error)
+	AccountID int64
+	// Persona/slot metadata is copied into the queue ticket. CredentialChainID
+	// is retained for audit/correlation; key partitioning intentionally follows
+	// Persona and slot generations rather than the token chain.
+	Persona           string
+	SlotID            int
+	SlotGeneration    int64
+	SlotSetGeneration int64
+	CredentialChainID string
+	SessionScopeHash  string
+	SessionEpoch      int64
+	Class             OpenAIAdmissionClass
+	EstimatedTokens   int64
+	MaxConcurrency    int
+	TryAcquireSlot    func(context.Context, int64, int) (func(), bool, error)
 }
 
 type OpenAIAccountAdmissionResult struct {
@@ -156,6 +172,10 @@ func (s *OpenAIAccountAdmissionService) Acquire(ctx context.Context, req OpenAIA
 	deadline := started.Add(time.Duration(cfg.MaxWaitSeconds) * time.Second)
 	ticket := OpenAIAccountAdmissionTicket{
 		ID: uuid.NewString(), AccountID: req.AccountID,
+		Persona:           strings.ToLower(strings.TrimSpace(req.Persona)),
+		SlotID:            req.SlotID,
+		SlotGeneration:    req.SlotGeneration,
+		SlotSetGeneration: req.SlotSetGeneration, CredentialChainID: req.CredentialChainID,
 		SessionScopeHash: strings.ToLower(strings.TrimSpace(req.SessionScopeHash)), SessionEpoch: req.SessionEpoch,
 		Class:      req.Class,
 		EnqueuedAt: started, Deadline: deadline, EstimatedTokens: openAIAdmissionMaxInt64(req.EstimatedTokens, 1),

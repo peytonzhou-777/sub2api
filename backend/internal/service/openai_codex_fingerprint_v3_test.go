@@ -1360,3 +1360,14 @@ func TestAccountCodexSessionSlotCountRequiresSessionMode(t *testing.T) {
 	account.Extra[codexSessionSlotCountExtraKey] = 5
 	require.Equal(t, 1, account.GetCodexSessionSlotCount())
 }
+
+func TestAccountCodexSessionSlotCountDefaultsToTwoForOAuthSession(t *testing.T) {
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			codexFingerprintModeExtraKey: string(codexFingerprintSession),
+		},
+	}
+	require.Equal(t, DefaultSessionPersonaSlotCount, account.GetCodexSessionSlotCount())
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -150,10 +151,34 @@ var grantOpenAIAccountAdmissionScript = redis.NewScript(`
 func openAIAccountAdmissionKeys(ticket service.OpenAIAccountAdmissionTicket) []string {
 	tag := fmt.Sprintf("{%d}", ticket.AccountID)
 	queueScope := "account"
+	rateScope := "account"
+	if persona := normalizeOpenAIAdmissionPersona(ticket.Persona); persona != "" {
+		// Keep the account hash-tag so all keys for one account remain in the
+		// same Redis Cluster slot. Queues include slot generations so stale roots
+		// can be drained independently, while the RPM/TPM rate bucket stays on
+		// the stable Persona×slot identity and is not reset by enable/disable.
+		rateScope = fmt.Sprintf("persona:%s:slot:%d", persona, ticket.SlotID)
+		queueScope = fmt.Sprintf(
+			"%s:generation:%d:set_generation:%d",
+			rateScope,
+			ticket.SlotGeneration,
+			ticket.SlotSetGeneration,
+		)
+	}
 	if len(ticket.SessionScopeHash) == 64 && ticket.SessionEpoch > 0 {
-		queueScope = fmt.Sprintf("session:%s:%d", ticket.SessionScopeHash, ticket.SessionEpoch)
+		if rateScope == "account" {
+			queueScope = fmt.Sprintf("session:%s:%d", ticket.SessionScopeHash, ticket.SessionEpoch)
+		} else {
+			// Session order remains a sub-scope of the Persona slot queue; RPM/
+			// TPM debt remains shared by the stable Persona slot bucket.
+			queueScope += fmt.Sprintf(":session:%s:%d", ticket.SessionScopeHash, ticket.SessionEpoch)
+		}
 	}
 	prefix := "openai:admission:" + tag + ":" + queueScope
+	ratePrefix := "openai:admission:" + tag
+	if rateScope != "account" {
+		ratePrefix += ":" + rateScope
+	}
 	return []string{
 		prefix + ":interactive",
 		prefix + ":background",
@@ -165,8 +190,17 @@ func openAIAccountAdmissionKeys(ticket service.OpenAIAccountAdmissionTicket) []s
 		prefix + ":state",
 		prefix + ":burst_limit",
 		prefix + ":aging_ms",
-		"openai:admission:" + tag + ":rate_state",
+		ratePrefix + ":rate_state",
 	}
+}
+
+// normalizeOpenAIAdmissionPersona returns the canonical key segment. Persona
+// identifiers are internal contract values; replacing separators prevents a
+// malformed value from escaping its intended Redis key namespace.
+func normalizeOpenAIAdmissionPersona(raw string) string {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	value = strings.NewReplacer(":", "_", "{", "_", "}", "_").Replace(value)
+	return value
 }
 
 func (q *openAIAccountAdmissionQueue) Enqueue(ctx context.Context, ticket service.OpenAIAccountAdmissionTicket, cfg service.OpenAIAccountAdmissionConfig) error {

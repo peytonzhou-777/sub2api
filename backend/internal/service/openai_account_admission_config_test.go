@@ -43,6 +43,41 @@ func TestValidateOpenAIAccountAdmissionConfig(t *testing.T) {
 	}
 }
 
+func TestOpenAIAccountAdmissionConfigForPersona(t *testing.T) {
+	cfg := DefaultOpenAIAccountAdmissionConfig()
+	cfg.RequestsPerMinute = 10
+	cfg.TokensPerMinute = 1000
+	cfg.PersonaPolicies = map[string]OpenAIPersonaAdmissionPolicy{
+		" OpenCode ": {
+			RequestsPerMinute:       20,
+			TokensPerMinute:         2000,
+			MaxQueueDepthPerAccount: 7,
+		},
+	}
+
+	if _, err := ValidateOpenAIAccountAdmissionConfig(cfg); err != nil {
+		t.Fatalf("validate Persona policy: %v", err)
+	}
+	opencode := cfg.ForPersona(SessionPersonaOpenCode)
+	if opencode.RequestsPerMinute != 20 || opencode.TokensPerMinute != 2000 || opencode.MaxQueueDepthPerAccount != 7 {
+		t.Fatalf("unexpected OpenCode policy: %+v", opencode)
+	}
+	strict := cfg.ForPersona(SessionPersonaCodexCLIStrict)
+	if strict.RequestsPerMinute != 10 || strict.TokensPerMinute != 1000 || strict.MaxQueueDepthPerAccount != cfg.MaxQueueDepthPerAccount {
+		t.Fatalf("legacy strict policy changed: %+v", strict)
+	}
+}
+
+func TestValidateOpenAIAccountAdmissionConfigRejectsUnknownPersona(t *testing.T) {
+	cfg := DefaultOpenAIAccountAdmissionConfig()
+	cfg.PersonaPolicies = map[string]OpenAIPersonaAdmissionPolicy{
+		"unknown": {RequestsPerMinute: 1},
+	}
+	if _, err := ValidateOpenAIAccountAdmissionConfig(cfg); err == nil {
+		t.Fatal("expected unknown Persona policy to be rejected")
+	}
+}
+
 func TestOpenAIAccountAdmissionConfigVersionCAS(t *testing.T) {
 	repo := &openAIUserAffinitySettingRepoStub{values: map[string]string{}}
 	svc := NewSettingService(repo, nil)

@@ -1355,3 +1355,28 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 		return "", "", fmt.Errorf("unsupported account type: %s", account.Type)
 	}
 }
+
+// GetAccessTokenForRequest selects the credential chain from the immutable
+// request Persona binding when one is present. Legacy and non-Persona calls
+// intentionally retain the existing account-scoped token path.
+func (s *OpenAIGatewayService) GetAccessTokenForRequest(ctx context.Context, c *gin.Context, account *Account) (string, string, error) {
+	if account == nil {
+		return "", "", errors.New("account is nil")
+	}
+	binding, hasBinding := SessionPersonaBindingFromContextOrGin(ctx, c)
+	if hasBinding &&
+		(binding.AccountID == 0 || binding.AccountID == account.ID) &&
+		account.Type == AccountTypeOAuth {
+		if s == nil || s.openAITokenProvider == nil {
+			return "", "", errors.New("openai persona token provider is not configured")
+		}
+		if _, ok := ParseSessionPersonaID(string(binding.PersonaID)); ok {
+			token, err := s.openAITokenProvider.GetAccessTokenForBinding(ctx, account, binding)
+			if err != nil {
+				return "", "", err
+			}
+			return token, "oauth", nil
+		}
+	}
+	return s.GetAccessToken(ctx, account)
+}

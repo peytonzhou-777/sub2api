@@ -686,7 +686,11 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			zap.Float64("load_skew", scheduleDecision.LoadSkew),
 		)
 		account := selection.Account
-		if previousResponseID != "" && requestPlatform == service.PlatformOpenAI && !account.IsOpenAIApiKey() {
+		boundPersona, hasBoundPersona := service.SessionPersonaBindingFromGin(c)
+		boundOpenCodeContinuation := hasBoundPersona &&
+			(boundPersona.AccountID == 0 || boundPersona.AccountID == account.ID) &&
+			service.IsOpenCodePersona(boundPersona)
+		if previousResponseID != "" && requestPlatform == service.PlatformOpenAI && !account.IsOpenAIApiKey() && !boundOpenCodeContinuation {
 			// The public Responses HTTP API supports previous_response_id on API-key
 			// accounts. OAuth/SetupToken upstreams do not, so keep searching instead
 			// of silently deleting continuation state from a mixed account pool.
@@ -1927,6 +1931,144 @@ func (h *OpenAIGatewayHandler) acquireOpenAIAccountSlot(
 	return wrapReleaseOnDone(ctx, accountReleaseFunc), openAISlotAcquireOK
 }
 
+// resolveOpenAIPersonaAdmissionBinding attaches the request-scoped Persona
+// binding after fingerprint preparation. Existing bindings are authoritative
+// for continuations (including draining slots); a resolver-generated binding
+// is accepted only for an authorized v3 active slot. This keeps the legacy
+// v1/v2 double-Codex path account-scoped until the new-root mapper explicitly
+// emits a Persona-aware binding, and avoids silently moving a Thread between
+// Personas when its durable mapping is not available yet.
+func resolveOpenAIPersonaAdmissionBinding(
+	ctx context.Context,
+	c *gin.Context,
+	account *service.Account,
+	body ...[]byte,
+) (context.Context, service.SessionPersonaSlotBinding, bool) {
+	if ctx == nil || account == nil || !account.IsOpenAIOAuth() {
+		return ctx, service.SessionPersonaSlotBinding{}, false
+	}
+
+	// A binding already present on the request is the continuation/WS anchor.
+	// Never borrow it for another account selected during failover.
+	if binding, ok := service.SessionPersonaBindingFromContext(ctx); ok {
+		if binding.AccountID == 0 || binding.AccountID == account.ID {
+			if binding.AccountID == 0 {
+				binding.AccountID = account.ID
+			}
+			boundCtx := attachOpenAIPersonaBindingContext(ctx, c, binding)
+			return boundCtx, binding, true
+		}
+		// A prior failover attempt may have left a binding for another account
+		// in the derived context. Mask it before resolving the new selection.
+		ctx = service.ClearSessionPersonaBindingFromContext(ctx)
+		service.ClearSessionPersonaBindingFromGin(c)
+	}
+
+	// Keep compatibility with callers that attached the binding directly to
+	// the Gin request before deriving the admission context.
+	if binding, ok := service.SessionPersonaBindingFromGin(c); ok {
+		if binding.AccountID == 0 || binding.AccountID == account.ID {
+			if binding.AccountID == 0 {
+				binding.AccountID = account.ID
+			}
+			boundCtx := attachOpenAIPersonaBindingContext(ctx, c, binding)
+			return boundCtx, binding, true
+		}
+		service.ClearSessionPersonaBindingFromGin(c)
+		ctx = service.ClearSessionPersonaBindingFromContext(ctx)
+	}
+	// Without a durable Persona binding, strong continuation markers must not
+	// be treated as a fresh root. Keep the legacy path until the owning Thread
+	// mapping can be loaded; this is safer than inventing a cross-Persona move.
+	if len(body) > 0 && service.SessionPersonaRequestHasContinuation(c, body[0]) {
+		return ctx, service.SessionPersonaSlotBinding{}, false
+	}
+
+	binding, ok := service.ResolveSessionPersonaBindingForRequest(c, account)
+	if !ok {
+		return ctx, service.SessionPersonaSlotBinding{}, false
+	}
+	binding = binding.NormalizeLifecycle()
+	// Resolver output for the old v1/v2 scope is deliberately not attached:
+	// changing only the admission key would split existing legacy queues.
+	// Compatibility fallback slots likewise remain on the old path until a
+	// durable Persona-aware mapper owns their Thread state.
+	if binding.Legacy || binding.CompatibilityFallback ||
+		binding.EffectiveMappingVersion() != service.SessionPersonaScopeVersionV3 ||
+		!binding.AcceptsNewRoot() {
+		return ctx, service.SessionPersonaSlotBinding{}, false
+	}
+
+	boundCtx := attachOpenAIPersonaBindingContext(ctx, c, binding)
+	return boundCtx, binding, true
+}
+
+// attachOpenAIPersonaBindingContext keeps the existing Gin request context
+// visible to forwarders while retaining admission-only values (profit gate,
+// queue wait, and turn pricing) on the derived context. The service helper is
+// called first so all handler entry points use the same attach contract.
+func attachOpenAIPersonaBindingContext(
+	ctx context.Context,
+	c *gin.Context,
+	binding service.SessionPersonaSlotBinding,
+) context.Context {
+	boundCtx := service.ContextWithSessionPersonaBinding(ctx, binding)
+	if boundCtx != nil && c != nil && c.Request != nil {
+		_ = service.AttachSessionPersonaBindingToGin(c, binding)
+		c.Request = c.Request.WithContext(boundCtx)
+	}
+	return boundCtx
+}
+
+// populateOpenAIPersonaAdmissionRequest copies the auditable placement fields
+// into a ticket request. Keeping this in one helper prevents HTTP and WS paths
+// from drifting during the v2→v3 rollout.
+func populateOpenAIPersonaAdmissionRequest(
+	req *service.OpenAIAccountAdmissionRequest,
+	binding service.SessionPersonaSlotBinding,
+	useBinding bool,
+) {
+	if req == nil || !useBinding {
+		return
+	}
+	req.Persona = string(binding.PersonaID)
+	req.SlotID = binding.SlotID
+	req.SlotGeneration = binding.SlotGeneration
+	req.SlotSetGeneration = binding.SlotSetGeneration
+	req.CredentialChainID = binding.CredentialChainID
+}
+
+// applyOpenAIPersonaAdmissionPolicy freezes the effective queue/rate policy
+// and account concurrency for one Persona. Zero-valued Persona fields keep
+// inheriting the legacy global/account values through the service policy.
+func applyOpenAIPersonaAdmissionPolicy(
+	cfg service.OpenAIAccountAdmissionConfig,
+	binding service.SessionPersonaSlotBinding,
+	maxConcurrency int,
+) (service.OpenAIAccountAdmissionConfig, int) {
+	cfg = cfg.ForPersona(binding.PersonaID)
+	policy := cfg.EffectiveOpenAIPersonaPolicy(binding.PersonaID)
+	if policy.MaxConcurrency > 0 {
+		maxConcurrency = policy.MaxConcurrency
+	}
+	return cfg, maxConcurrency
+}
+
+// openAIPersonaLegacyCodexFallbackAvailable keeps the confirmed v2 transition
+// path alive when the preferred OpenCode slot is not authorized. It is only a
+// fallback for strict slot 0 with the historical account-level OAuth pair;
+// missing/disabled slots still fail closed for new roots.
+func openAIPersonaLegacyCodexFallbackAvailable(c *gin.Context, account *service.Account) bool {
+	if account == nil || !account.IsOpenAIOAuth() ||
+		strings.TrimSpace(account.GetOpenAIAccessToken()) == "" ||
+		strings.TrimSpace(account.GetOpenAIRefreshToken()) == "" {
+		return false
+	}
+	binding, ok := service.ResolveSessionPersonaBindingForNewRoot(c, account)
+	return ok && binding.PersonaID == service.SessionPersonaCodexCLIStrict &&
+		binding.SlotID == 0 && binding.CompatibilityFallback && binding.AcceptsNewRoot()
+}
+
 // acquireResponsesAccountSlotWithAdmission 只在 OpenAI 文本账号侧启用全局准入队列；
 // 关闭功能或非 OpenAI 账号时完整复用既有槽位等待和错误语义。
 func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
@@ -1939,7 +2081,64 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 	reqLog *zap.Logger,
 	body []byte,
 ) (func(), openAISlotAcquireResult) {
-	if h.accountAdmission == nil || selection == nil || selection.Account == nil || selection.Account.Platform != service.PlatformOpenAI {
+	if selection == nil || selection.Account == nil {
+		return h.acquireResponsesAccountSlot(c, groupID, sessionHash, selection, reqStream, streamStarted, reqLog)
+	}
+	account := selection.Account
+	// Persona binding is part of the forwarding contract, not only of the
+	// optional admission queue. Prepare it before any admission early return so
+	// disabling the queue cannot accidentally send an OpenCode request through
+	// the Codex adapter.
+	var personaBinding service.SessionPersonaSlotBinding
+	var hasPersonaBinding bool
+	ctx := service.ContextWithSelectionProfitGate(c.Request.Context(), selection)
+	if account.Platform == service.PlatformOpenAI && account.IsOpenAIOAuth() {
+		_, existingBinding := service.SessionPersonaBindingFromGin(c)
+		shouldPrepare := account.IsOpenAIPersonaMappingEnabled() &&
+			!service.SessionPersonaRequestHasContinuation(c, body)
+		if existingBinding || shouldPrepare {
+			if shouldPrepare {
+				if err := h.gatewayService.PrepareCodexFingerprintForAdmission(ctx, c, account, body, false); err != nil {
+					reqLog.Warn("openai.codex_fingerprint_persona_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+					h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "Codex session identity is temporarily unavailable", *streamStarted)
+					return nil, openAISlotAcquireFailed
+				}
+			}
+			ctx, personaBinding, hasPersonaBinding = resolveOpenAIPersonaAdmissionBinding(ctx, c, account, body)
+		}
+	}
+	// OpenCode continuation IDs require a durable client↔OpenCode mapping. Until
+	// that mapper is wired, reject an already-bound continuation explicitly so a
+	// Codex previous_response_id can never be copied onto the OpenCode wire.
+	if hasPersonaBinding && service.IsOpenCodePersona(personaBinding) &&
+		service.SessionPersonaRequestHasContinuation(c, body) {
+		if selection.Acquired && selection.ReleaseFunc != nil {
+			selection.ReleaseFunc()
+			selection.Acquired = false
+			selection.ReleaseFunc = nil
+		}
+		reqLog.Warn("openai.opencode_continuation_unsupported", zap.Int64("account_id", account.ID), zap.Int("slot_id", personaBinding.SlotID))
+		h.handleStreamingAwareError(c, http.StatusBadRequest, "invalid_request_error", "OpenCode Persona continuation is not supported until session mapping is available", *streamStarted)
+		return nil, openAISlotAcquireFailed
+	}
+	// Once the v3 Persona mapper is enabled, a new root must have an active,
+	// authorized slot. Do not silently fall back to the legacy account-level
+	// Codex path when both slots are draining/disabled/unready; that would make
+	// slot lifecycle changes invisible to admission and audit records.
+	if account.Platform == service.PlatformOpenAI && account.IsOpenAIOAuth() &&
+		account.IsOpenAIPersonaMappingEnabled() && !hasPersonaBinding &&
+		!service.SessionPersonaRequestHasContinuation(c, body) &&
+		!openAIPersonaLegacyCodexFallbackAvailable(c, account) {
+		if selection.Acquired && selection.ReleaseFunc != nil {
+			selection.ReleaseFunc()
+			selection.Acquired = false
+			selection.ReleaseFunc = nil
+		}
+		reqLog.Warn("openai.persona_new_root_unavailable", zap.Int64("account_id", account.ID))
+		h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No active OpenAI Persona slot is available", *streamStarted)
+		return nil, openAISlotAcquireFailed
+	}
+	if h.accountAdmission == nil || account.Platform != service.PlatformOpenAI {
 		return h.acquireResponsesAccountSlot(c, groupID, sessionHash, selection, reqStream, streamStarted, reqLog)
 	}
 	cfg, err := h.accountAdmission.Config(c.Request.Context())
@@ -1952,8 +2151,6 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 		return h.acquireResponsesAccountSlot(c, groupID, sessionHash, selection, reqStream, streamStarted, reqLog)
 	}
 
-	ctx := service.ContextWithSelectionProfitGate(c.Request.Context(), selection)
-	account := selection.Account
 	// 调度器可能已抢槽；启用统一准入后必须先释放，避免排队期间占用账号并发。
 	if selection.Acquired && selection.ReleaseFunc != nil {
 		selection.ReleaseFunc()
@@ -1964,14 +2161,21 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 	if selection.WaitPlan != nil && selection.WaitPlan.MaxConcurrency > 0 {
 		maxConcurrency = selection.WaitPlan.MaxConcurrency
 	}
-	estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, body, "", cfg.DefaultOutputTokens)
+	// Admission keys must keep the legacy device+Session scope even when the
+	// Persona mapper is disabled or a continuation lacks a durable binding.
+	// Reusing an already prepared snapshot keeps this call idempotent for v3
+	// roots that were staged above for forwarding.
 	if err := h.gatewayService.PrepareCodexFingerprintForAdmission(ctx, c, account, body, false); err != nil {
 		reqLog.Warn("openai.codex_fingerprint_admission_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 		h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "Codex session identity is temporarily unavailable", *streamStarted)
 		return nil, openAISlotAcquireFailed
 	}
+	estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, body, "", cfg.DefaultOutputTokens)
+	if hasPersonaBinding {
+		cfg, maxConcurrency = applyOpenAIPersonaAdmissionPolicy(cfg, personaBinding, maxConcurrency)
+	}
 	sessionScopeHash, sessionEpoch := service.CodexFingerprintAdmissionScope(c)
-	result, err := h.accountAdmission.Acquire(ctx, service.OpenAIAccountAdmissionRequest{
+	admissionRequest := service.OpenAIAccountAdmissionRequest{
 		AccountID:        account.ID,
 		SessionScopeHash: sessionScopeHash,
 		SessionEpoch:     sessionEpoch,
@@ -1983,7 +2187,9 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 				acquireCtx, c, account, limit, h.concurrencyHelper.TryAcquireAccountSlot,
 			)
 		},
-	}, cfg)
+	}
+	populateOpenAIPersonaAdmissionRequest(&admissionRequest, personaBinding, hasPersonaBinding)
+	result, err := h.accountAdmission.Acquire(ctx, admissionRequest, cfg)
 	if err != nil {
 		if c.Request.Context().Err() != nil {
 			return nil, openAISlotAcquireFailed
@@ -2619,6 +2825,72 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		// 等跨分组调度的门只存在于调度栈局部 ctx）；准入成功后并入连接 ctx。
 		admissionCtx := service.ContextWithSelectionProfitGate(ctx, selection)
 		accountReleaseFunc := selection.ReleaseFunc
+		var personaBinding service.SessionPersonaSlotBinding
+		var hasPersonaBinding bool
+		if account.Platform == service.PlatformOpenAI && account.IsOpenAIOAuth() {
+			_, existingBinding := service.SessionPersonaBindingFromGin(c)
+			shouldPrepare := account.IsOpenAIPersonaMappingEnabled() &&
+				!service.SessionPersonaRequestHasContinuation(c, wsAttemptMessage)
+			if existingBinding || shouldPrepare {
+				if shouldPrepare {
+					if prepareErr := h.gatewayService.PrepareCodexFingerprintForAdmission(admissionCtx, c, account, wsAttemptMessage, true); prepareErr != nil {
+						reqLog.Warn("openai.websocket_codex_fingerprint_persona_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(prepareErr))
+						closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "Codex session identity is temporarily unavailable")
+						return
+					}
+				}
+				admissionCtx, personaBinding, hasPersonaBinding = resolveOpenAIPersonaAdmissionBinding(admissionCtx, c, account, wsAttemptMessage)
+				if hasPersonaBinding && service.IsOpenCodePersona(personaBinding) &&
+					service.SessionPersonaRequestHasContinuation(c, wsAttemptMessage) {
+					if accountReleaseFunc != nil {
+						accountReleaseFunc()
+						accountReleaseFunc = nil
+					}
+					selection.Acquired = false
+					selection.ReleaseFunc = nil
+					reqLog.Warn("openai.websocket_opencode_continuation_unsupported", zap.Int64("account_id", account.ID), zap.Int("slot_id", personaBinding.SlotID))
+					closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "OpenCode Persona continuation is not supported until session mapping is available")
+					return
+				}
+				// An existing OpenCode Thread must not be silently remapped to
+				// strict Codex merely because the current WS bridge is Codex-shaped.
+				// Reject before admission/token/upstream work so the bound Persona,
+				// credential chain and Thread continuity remain auditable.
+				if hasPersonaBinding && service.IsOpenCodePersona(personaBinding) &&
+					!service.OpenCodePersonaTransportReady(service.SessionPersonaTransportWS) {
+					if accountReleaseFunc != nil {
+						accountReleaseFunc()
+						accountReleaseFunc = nil
+					}
+					selection.Acquired = false
+					selection.ReleaseFunc = nil
+					reqLog.Warn("openai.websocket_persona_transport_unavailable",
+						zap.Int64("account_id", account.ID),
+						zap.String("persona", string(personaBinding.PersonaID)),
+						zap.Int("slot_id", personaBinding.SlotID),
+					)
+					closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "OpenCode Persona WebSocket adapter is not enabled; retry over HTTP")
+					return
+				}
+			}
+		}
+		// A v3 new-root WS request must not escape to the legacy Codex bridge when
+		// no active authorized Persona slot exists. Existing continuations are
+		// handled by their persisted binding and are intentionally excluded here.
+		if account.Platform == service.PlatformOpenAI && account.IsOpenAIOAuth() &&
+			account.IsOpenAIPersonaMappingEnabled() && !hasPersonaBinding &&
+			!service.SessionPersonaRequestHasContinuation(c, wsAttemptMessage) &&
+			!openAIPersonaLegacyCodexFallbackAvailable(c, account) {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+				accountReleaseFunc = nil
+			}
+			selection.Acquired = false
+			selection.ReleaseFunc = nil
+			reqLog.Warn("openai.websocket_persona_new_root_unavailable", zap.Int64("account_id", account.ID))
+			closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "no active OpenAI Persona slot is available")
+			return
+		}
 		if h.accountAdmission != nil && account.Platform == service.PlatformOpenAI {
 			admissionCfg, cfgErr := h.accountAdmission.Config(admissionCtx)
 			if cfgErr != nil {
@@ -2627,19 +2899,25 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return
 			}
 			if admissionCfg.Enabled {
-				if selection.Acquired && accountReleaseFunc != nil {
-					accountReleaseFunc()
-				}
-				selection.Acquired = false
-				selection.ReleaseFunc = nil
-				estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, wsAttemptMessage, reqModel, admissionCfg.DefaultOutputTokens)
+				// Preserve the v1/v2 device+Session admission scope for legacy
+				// accounts and unbound continuations. A v3 root prepared above
+				// reuses its frozen snapshot instead of generating a second one.
 				if prepareErr := h.gatewayService.PrepareCodexFingerprintForAdmission(admissionCtx, c, account, wsAttemptMessage, true); prepareErr != nil {
 					reqLog.Warn("openai.websocket_codex_fingerprint_admission_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(prepareErr))
 					closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "Codex session identity is temporarily unavailable")
 					return
 				}
+				if selection.Acquired && accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				selection.Acquired = false
+				selection.ReleaseFunc = nil
+				if hasPersonaBinding {
+					admissionCfg, accountMaxConcurrency = applyOpenAIPersonaAdmissionPolicy(admissionCfg, personaBinding, accountMaxConcurrency)
+				}
+				estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, wsAttemptMessage, reqModel, admissionCfg.DefaultOutputTokens)
 				sessionScopeHash, sessionEpoch := service.CodexFingerprintAdmissionScope(c)
-				admissionResult, admissionErr := h.accountAdmission.Acquire(admissionCtx, service.OpenAIAccountAdmissionRequest{
+				admissionRequest := service.OpenAIAccountAdmissionRequest{
 					AccountID:        account.ID,
 					SessionScopeHash: sessionScopeHash,
 					SessionEpoch:     sessionEpoch,
@@ -2651,7 +2929,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 							acquireCtx, c, account, limit, h.concurrencyHelper.TryAcquireAccountSlot,
 						)
 					},
-				}, admissionCfg)
+				}
+				populateOpenAIPersonaAdmissionRequest(&admissionRequest, personaBinding, hasPersonaBinding)
+				admissionResult, admissionErr := h.accountAdmission.Acquire(admissionCtx, admissionRequest, admissionCfg)
 				if admissionErr != nil {
 					var typedErr *service.OpenAIAccountAdmissionError
 					var waitMS int64
@@ -2867,12 +3147,19 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			if !admissionCfg.Enabled {
 				return false, nil
 			}
-			estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, payload, model, admissionCfg.DefaultOutputTokens)
 			if prepareErr := h.gatewayService.PrepareCodexFingerprintForAdmission(admissionCtx, c, account, payload, true); prepareErr != nil {
 				return false, service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "Codex session identity is temporarily unavailable", prepareErr)
 			}
+			turnPersonaBinding := personaBinding
+			usePersonaBinding := hasPersonaBinding &&
+				(turnPersonaBinding.AccountID == 0 || turnPersonaBinding.AccountID == account.ID)
+			if usePersonaBinding {
+				admissionCtx = attachOpenAIPersonaBindingContext(admissionCtx, c, turnPersonaBinding)
+				admissionCfg, accountMaxConcurrency = applyOpenAIPersonaAdmissionPolicy(admissionCfg, turnPersonaBinding, accountMaxConcurrency)
+			}
+			estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, payload, model, admissionCfg.DefaultOutputTokens)
 			sessionScopeHash, sessionEpoch := service.CodexFingerprintAdmissionScope(c)
-			admissionResult, err := h.accountAdmission.Acquire(admissionCtx, service.OpenAIAccountAdmissionRequest{
+			admissionRequest := service.OpenAIAccountAdmissionRequest{
 				AccountID:        account.ID,
 				SessionScopeHash: sessionScopeHash,
 				SessionEpoch:     sessionEpoch,
@@ -2884,7 +3171,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 						acquireCtx, c, account, limit, h.concurrencyHelper.TryAcquireAccountSlot,
 					)
 				},
-			}, admissionCfg)
+			}
+			populateOpenAIPersonaAdmissionRequest(&admissionRequest, turnPersonaBinding, usePersonaBinding)
+			admissionResult, err := h.accountAdmission.Acquire(admissionCtx, admissionRequest, admissionCfg)
 			if err != nil {
 				var typedErr *service.OpenAIAccountAdmissionError
 				var waitMS int64

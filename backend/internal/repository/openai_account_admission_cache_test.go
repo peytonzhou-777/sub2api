@@ -17,6 +17,70 @@ func newOpenAIAdmissionTestCache(t *testing.T) service.OpenAIAccountAdmissionQue
 	return NewOpenAIAccountAdmissionQueue(redis.NewClient(&redis.Options{Addr: mr.Addr()}))
 }
 
+func TestOpenAIAccountAdmissionKeysKeepLegacyLayoutWithoutPersona(t *testing.T) {
+	ticket := service.OpenAIAccountAdmissionTicket{
+		AccountID:        17,
+		SessionScopeHash: strings.Repeat("a", 64),
+		SessionEpoch:     3,
+	}
+	keys := openAIAccountAdmissionKeys(ticket)
+	if got, want := keys[0], "openai:admission:{17}:session:"+strings.Repeat("a", 64)+":3:interactive"; got != want {
+		t.Fatalf("legacy interactive key = %q, want %q", got, want)
+	}
+	if got, want := keys[10], "openai:admission:{17}:rate_state"; got != want {
+		t.Fatalf("legacy rate key = %q, want %q", got, want)
+	}
+}
+
+func TestOpenAIAccountAdmissionKeysIsolatePersonaSlotGenerations(t *testing.T) {
+	base := service.OpenAIAccountAdmissionTicket{
+		AccountID:         17,
+		Persona:           " OpenCode ",
+		SlotID:            1,
+		SlotGeneration:    2,
+		SlotSetGeneration: 5,
+		CredentialChainID: "chain-a",
+		SessionScopeHash:  strings.Repeat("a", 64),
+		SessionEpoch:      3,
+	}
+	baseKeys := openAIAccountAdmissionKeys(base)
+	if !strings.Contains(baseKeys[0], "persona:opencode:slot:1:generation:2:set_generation:5:session:") {
+		t.Fatalf("persona queue key missing binding metadata: %q", baseKeys[0])
+	}
+	if got, want := baseKeys[10], "openai:admission:{17}:persona:opencode:slot:1:rate_state"; got != want {
+		t.Fatalf("persona rate key = %q, want %q", got, want)
+	}
+
+	variants := []service.OpenAIAccountAdmissionTicket{
+		func() service.OpenAIAccountAdmissionTicket { v := base; v.Persona = "codex_cli_strict"; return v }(),
+		func() service.OpenAIAccountAdmissionTicket { v := base; v.SlotID = 0; return v }(),
+		func() service.OpenAIAccountAdmissionTicket { v := base; v.SlotGeneration = 3; return v }(),
+		func() service.OpenAIAccountAdmissionTicket { v := base; v.SlotSetGeneration = 6; return v }(),
+	}
+	for i, variant := range variants {
+		variantKeys := openAIAccountAdmissionKeys(variant)
+		if variantKeys[0] == baseKeys[0] {
+			t.Fatalf("variant %d was not isolated in queue: %q", i, variantKeys[0])
+		}
+		if i < 2 && variantKeys[10] == baseKeys[10] {
+			t.Fatalf("variant %d was not isolated in rate bucket: %q", i, variantKeys[10])
+		}
+		if i >= 2 && variantKeys[10] != baseKeys[10] {
+			t.Fatalf("variant %d unexpectedly reset rate bucket: %q", i, variantKeys[10])
+		}
+	}
+
+	// Credential chains are intentionally metadata only here: RPM and queue
+	// semantics are partitioned by Persona/slot generation, not token refresh
+	// chain identity.
+	otherChain := base
+	otherChain.CredentialChainID = "chain-b"
+	otherChainKeys := openAIAccountAdmissionKeys(otherChain)
+	if otherChainKeys[0] != baseKeys[0] || otherChainKeys[10] != baseKeys[10] {
+		t.Fatalf("credential chain unexpectedly changed admission partition: queue=%q rate=%q", otherChainKeys[0], otherChainKeys[10])
+	}
+}
+
 func TestOpenAIAccountAdmissionQueuePrioritizesInteractiveAndAgesBackground(t *testing.T) {
 	ctx := context.Background()
 	queue := newOpenAIAdmissionTestCache(t)
@@ -146,6 +210,40 @@ func TestOpenAIAccountAdmissionQueueSeparatesSessionOrderButSharesAccountRate(t 
 	poll, err := queue.Poll(ctx, second, cfg)
 	if err != nil || !poll.Selected || poll.Delay < 900*time.Millisecond {
 		t.Fatalf("second session did not share account RPM debt: %+v, %v", poll, err)
+	}
+}
+
+func TestOpenAIAccountAdmissionQueueKeepsPersonaRateDebtAcrossSlotGenerations(t *testing.T) {
+	ctx := context.Background()
+	queue := newOpenAIAdmissionTestCache(t)
+	now := time.Now()
+	cfg := service.DefaultOpenAIAccountAdmissionConfig()
+	cfg.RequestsPerMinute = 60
+	first := service.OpenAIAccountAdmissionTicket{
+		ID: "generation-1", AccountID: 20, Persona: "opencode", SlotID: 1,
+		SlotGeneration: 1, SlotSetGeneration: 1,
+		Class: service.OpenAIAdmissionInteractive, EnqueuedAt: now, Deadline: now.Add(time.Minute), EstimatedTokens: 1,
+	}
+	second := first
+	second.ID = "generation-2"
+	second.SlotGeneration = 2
+	second.SlotSetGeneration = 2
+	for _, ticket := range []service.OpenAIAccountAdmissionTicket{first, second} {
+		if err := queue.Enqueue(ctx, ticket, cfg); err != nil {
+			t.Fatalf("enqueue %s: %v", ticket.ID, err)
+		}
+	}
+	poll, err := queue.Poll(ctx, first, cfg)
+	if err != nil || !poll.Selected {
+		t.Fatalf("first generation was not selected: %+v, %v", poll, err)
+	}
+	grant, err := queue.Grant(ctx, first, cfg, 0)
+	if err != nil || !grant.Granted {
+		t.Fatalf("first generation grant: %+v, %v", grant, err)
+	}
+	poll, err = queue.Poll(ctx, second, cfg)
+	if err != nil || !poll.Selected || poll.Delay < 900*time.Millisecond {
+		t.Fatalf("slot generation unexpectedly reset Persona rate debt: %+v, %v", poll, err)
 	}
 }
 

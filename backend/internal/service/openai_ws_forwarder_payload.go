@@ -85,6 +85,11 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	routingServiceTier string,
 ) (http.Header, openAIWSSessionHeaderResolution, error) {
 	headers := make(http.Header)
+	if binding, ok := SessionPersonaBindingFromContextOrGin(ctx, c); ok &&
+		IsOpenCodePersona(binding) &&
+		!OpenCodePersonaTransportReady(SessionPersonaTransportWS) {
+		return nil, openAIWSSessionHeaderResolution{}, ErrOpenCodePersonaWebSocketUnavailable
+	}
 	if account == nil || !account.IsOpenAIAgentIdentity() {
 		headers.Set("authorization", "Bearer "+token)
 	}

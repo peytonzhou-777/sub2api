@@ -91,6 +91,15 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	if account == nil {
 		return errors.New("account is nil")
 	}
+	if binding, ok := SessionPersonaBindingFromContextOrGin(ctx, c); ok &&
+		IsOpenCodePersona(binding) &&
+		!OpenCodePersonaTransportReady(SessionPersonaTransportWS) {
+		return NewOpenAIWSClientCloseError(
+			coderws.StatusPolicyViolation,
+			"OpenCode Persona WebSocket adapter is not enabled; retry over HTTP",
+			ErrOpenCodePersonaWebSocketUnavailable,
+		)
+	}
 	// A handler may reuse the same gin context across account failover attempts.
 	// Never let an OAuth attempt's response aliases leak into the next account.
 	setCodexToolNameReverse(c, nil)
