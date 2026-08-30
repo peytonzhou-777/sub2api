@@ -647,6 +647,33 @@ export default {
         codexFingerprintDevice: 'Device only (compatibility)',
         codexFingerprintSession: 'Device + Session (default)',
         codexFingerprintFull: 'Full convergence (compatibility)',
+        personaMapping: {
+          title: 'Persona mapping',
+          desc: 'Applies only to OpenAI OAuth. Legacy v2 keeps the existing dual-Codex slots; Persona v3 lets new roots use strict Codex or OpenCode by slot, while existing Threads never remap across Personas.',
+          mode: {
+            legacy_v2: 'Legacy v2',
+            persona_v3: 'Persona v3'
+          },
+          slot: 'slot {slot}',
+          persona: {
+            strictCodex: 'strict Codex',
+            openCode: 'OpenCode'
+          },
+          state: 'State',
+          states: {
+            active: 'active (accepts new roots)',
+            draining: 'draining (draining existing Threads)',
+            disabled: 'disabled'
+          },
+          authorization: 'Authorization',
+          authorizationStates: {
+            authorized: 'Authorized',
+            not_ready: 'Not ready',
+            missing: 'Not configured'
+          },
+          enable: 'Enable v3 mapping',
+          enableDesc: 'Only new roots are affected. Slot 1 must have an independent OpenCode OAuth chain; otherwise requests fall back to slot 0 strict Codex.'
+        },
         codexImageTool: 'Codex image bridge policy',
         codexImageToolDesc:
           'Controls the hosted image_generation bridge and client-declared image tools on Codex /responses text requests. Hosted auto-injection applies only to non-Responses Lite requests. Account policy takes precedence over channel and global settings; standalone image-generation endpoints are unaffected.',

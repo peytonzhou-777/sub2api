@@ -725,6 +725,33 @@ export default {
         codexFingerprintDevice: '仅设备（兼容）',
         codexFingerprintSession: '设备+Session（默认）',
         codexFingerprintFull: '完全收敛（兼容）',
+        personaMapping: {
+          title: 'Persona 映射',
+          desc: '仅对 OpenAI OAuth 生效。Legacy v2 保持现有双 Codex 槽位；启用 Persona v3 后，新根请求可按槽位使用 strict Codex 或 OpenCode，已有 Thread 不会跨 Persona 重映射。',
+          mode: {
+            legacy_v2: 'Legacy v2',
+            persona_v3: 'Persona v3'
+          },
+          slot: 'slot {slot}',
+          persona: {
+            strictCodex: 'strict Codex',
+            openCode: 'OpenCode'
+          },
+          state: '状态',
+          states: {
+            active: 'active（接收新根）',
+            draining: 'draining（排空旧 Thread）',
+            disabled: 'disabled（停用）'
+          },
+          authorization: '授权状态',
+          authorizationStates: {
+            authorized: '已授权',
+            not_ready: '未就绪',
+            missing: '未配置'
+          },
+          enable: '启用 v3 映射',
+          enableDesc: '启用后仅影响新根请求；slot 1 必须具备独立 OpenCode OAuth 授权链，否则自动回落 slot 0 strict Codex。'
+        },
         codexImageTool: 'Codex 图片桥接策略',
         codexImageToolDesc:
           '统一控制 Codex /responses 文本请求的 hosted image_generation 桥接和客户端图片工具声明。hosted 工具自动注入仅适用于非 Responses Lite 请求；账号级策略优先于渠道和全局配置，不影响独立图片生成接口。',

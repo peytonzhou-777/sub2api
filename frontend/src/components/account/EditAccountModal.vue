@@ -2167,6 +2167,84 @@
         </div>
       </div>
 
+      <!-- OpenAI Persona 映射（仅 OAuth） -->
+      <div
+        v-if="account?.platform === 'openai' && account?.type === 'oauth'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        data-testid="openai-persona-mapping"
+      >
+        <div class="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <label class="input-label mb-0">{{ t('admin.accounts.openai.personaMapping.title') }}</label>
+              <p class="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">
+                {{ t('admin.accounts.openai.personaMapping.desc') }}
+              </p>
+            </div>
+            <span
+              data-testid="openai-persona-mapping-mode"
+              class="shrink-0 rounded-full px-2 py-1 text-xs font-medium"
+              :class="openAIPersonaMappingEnabled
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                : 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-300'"
+            >
+              {{ t(`admin.accounts.openai.personaMapping.mode.${openAIPersonaMappingMode}`) }}
+            </span>
+          </div>
+
+          <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <div
+              v-for="slot in openAIPersonaSlots"
+              :key="slot.slotId"
+              :data-testid="`openai-persona-slot-${slot.slotId}`"
+              class="rounded-md border border-emerald-100 bg-white/80 p-3 dark:border-emerald-900/50 dark:bg-dark-800/70"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {{ t('admin.accounts.openai.personaMapping.slot', { slot: slot.slotId }) }}
+                </span>
+                <span class="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                  {{ t(`admin.accounts.openai.personaMapping.persona.${slot.personaKey}`) }}
+                </span>
+              </div>
+              <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span class="text-gray-500 dark:text-gray-400">{{ t('admin.accounts.openai.personaMapping.state') }}</span>
+                  <p class="mt-0.5 font-medium text-gray-800 dark:text-gray-200">
+                    {{ t(`admin.accounts.openai.personaMapping.states.${slot.state}`) }}
+                  </p>
+                </div>
+                <div>
+                  <span class="text-gray-500 dark:text-gray-400">{{ t('admin.accounts.openai.personaMapping.authorization') }}</span>
+                  <p
+                    class="mt-0.5 font-medium"
+                    :class="slot.authorization === 'authorized'
+                      ? 'text-emerald-700 dark:text-emerald-300'
+                      : 'text-amber-700 dark:text-amber-300'"
+                  >
+                    {{ t(`admin.accounts.openai.personaMapping.authorizationStates.${slot.authorization}`) }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 flex items-center justify-between gap-3 border-t border-emerald-100 pt-3 dark:border-emerald-900/50">
+            <div class="min-w-0">
+              <label class="input-label mb-0">{{ t('admin.accounts.openai.personaMapping.enable') }}</label>
+              <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                {{ t('admin.accounts.openai.personaMapping.enableDesc') }}
+              </p>
+            </div>
+            <Toggle
+              v-model="openAIPersonaMappingEnabled"
+              data-testid="openai-persona-mapping-toggle"
+              :aria-label="t('admin.accounts.openai.personaMapping.enable')"
+            />
+          </div>
+        </div>
+      </div>
+
       <!-- OpenAI 订阅档位手动覆盖（Plus/Pro/Free），仅 OAuth 非影子账号 -->
       <div
         v-if="account?.platform === 'openai' && account?.type === 'oauth' && !isSparkShadow"
@@ -3325,6 +3403,47 @@ const codexOutboundProfileOverride = ref<CodexOutboundProfileOverride>('')
 const codexFingerprintMode = ref<CodexFingerprintMode>('session')
 const codexSessionSlotCount = ref(1)
 const codexSubagentMaxInflight = ref(0)
+
+type OpenAIPersonaMappingMode = 'legacy_v2' | 'persona_v3'
+type OpenAIPersonaSlotState = 'active' | 'draining' | 'disabled'
+type OpenAIPersonaAuthorizationState = 'authorized' | 'not_ready' | 'missing'
+
+interface OpenAIPersonaSlotView {
+  slotId: 0 | 1
+  personaKey: 'strictCodex' | 'openCode'
+  state: OpenAIPersonaSlotState
+  authorization: OpenAIPersonaAuthorizationState
+}
+
+const openAIPersonaMappingEnabled = ref(false)
+const openAIPersonaSlotStates = reactive<Record<number, OpenAIPersonaSlotState>>({
+  0: 'active',
+  1: 'active'
+})
+const openAIPersonaSlotAuthorizations = reactive<Record<number, OpenAIPersonaAuthorizationState>>({
+  0: 'missing',
+  1: 'missing'
+})
+
+const openAIPersonaMappingMode = computed<OpenAIPersonaMappingMode>(() =>
+  openAIPersonaMappingEnabled.value ? 'persona_v3' : 'legacy_v2'
+)
+
+const openAIPersonaSlots = computed<OpenAIPersonaSlotView[]>(() => [
+  {
+    slotId: 0,
+    personaKey: 'strictCodex',
+    state: openAIPersonaSlotStates[0],
+    authorization: openAIPersonaSlotAuthorizations[0]
+  },
+  {
+    slotId: 1,
+    personaKey: 'openCode',
+    state: openAIPersonaSlotStates[1],
+    authorization: openAIPersonaSlotAuthorizations[1]
+  }
+])
+
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
 const codexImageToolMode = ref<CodexImageToolMode>('inherit')
 type AnthropicAPIKeyAuthScheme = 'x_api_key' | 'authorization_bearer'
@@ -3735,6 +3854,160 @@ const applyOpenAIModelMappingCredentials = (credentials: Record<string, unknown>
   }
 }
 
+function parseOptionalBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true' || normalized === '1') return true
+    if (normalized === 'false' || normalized === '0') return false
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) return value !== 0
+  return null
+}
+
+function normalizeOpenAIPersonaSlotState(value: unknown): OpenAIPersonaSlotState | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'active' || normalized === 'draining' || normalized === 'disabled') {
+    return normalized
+  }
+  return null
+}
+
+function getOpenAIPersonaSlotValue(raw: unknown, slotId: number): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const values = raw as Record<string, unknown>
+  return values[String(slotId)] ?? values[slotId]
+}
+
+function hasCredentialValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  return true
+}
+
+function findOpenAIPersonaCredential(
+  raw: unknown,
+  persona: 'codex_cli_strict' | 'opencode',
+  slotId: number
+): Record<string, unknown> | null {
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim()
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        return findOpenAIPersonaCredential(JSON.parse(trimmed), persona, slotId)
+      } catch {
+        return null
+      }
+    }
+    return null
+  }
+  if (Array.isArray(raw)) {
+    for (const value of raw) {
+      const found = findOpenAIPersonaCredential(value, persona, slotId)
+      if (found) return found
+    }
+    return null
+  }
+  if (!raw || typeof raw !== 'object') return null
+
+  const value = raw as Record<string, unknown>
+  const chainID = typeof value.credential_chain_id === 'string'
+    ? value.credential_chain_id.trim()
+    : ''
+  const personaValue = typeof value.persona_id === 'string'
+    ? value.persona_id
+    : typeof value.persona === 'string'
+      ? value.persona
+      : ''
+  const candidateSlot = Number(value.slot_id)
+  if (
+    chainID &&
+    personaValue.trim().toLowerCase() === persona &&
+    Number.isInteger(candidateSlot) &&
+    candidateSlot === slotId
+  ) {
+    return value
+  }
+
+  for (const nested of Object.values(value)) {
+    const found = findOpenAIPersonaCredential(nested, persona, slotId)
+    if (found) return found
+  }
+  return null
+}
+
+function resolveOpenAIPersonaAuthorization(
+  account: Account,
+  persona: 'codex_cli_strict' | 'opencode',
+  slotId: number
+): OpenAIPersonaAuthorizationState {
+  const credentials = (account.credentials as Record<string, unknown> | undefined) || {}
+  const chain = findOpenAIPersonaCredential(
+    credentials.persona_credentials ?? credentials.oauth_credential_chains,
+    persona,
+    slotId
+  )
+
+  if (chain) {
+    if (parseOptionalBoolean(chain.ready) === false) return 'not_ready'
+    const state = typeof chain.state === 'string' ? chain.state.trim().toLowerCase() : ''
+    if (state && state !== 'ready') return 'not_ready'
+    if (!hasCredentialValue(chain.credential_chain_id)) return 'not_ready'
+    if ('access_token' in chain && !hasCredentialValue(chain.access_token)) return 'not_ready'
+    if ('refresh_token' in chain && !hasCredentialValue(chain.refresh_token)) return 'not_ready'
+    return 'authorized'
+  }
+
+  // slot 0 keeps the legacy account-level OAuth credential as a valid
+  // compatibility source. OpenCode and strict non-zero slots never borrow it.
+  if (persona === 'codex_cli_strict' && slotId === 0) {
+    const status = account.credentials_status || {}
+    const hasAccess = status.has_access_token === true || hasCredentialValue(credentials.access_token)
+    const hasRefresh = status.has_refresh_token === true || hasCredentialValue(credentials.refresh_token)
+    if (hasAccess && hasRefresh) return 'authorized'
+    if (hasAccess || hasRefresh) return 'not_ready'
+  }
+  return 'missing'
+}
+
+function loadOpenAIPersonaMapping(newAccount: Account) {
+  openAIPersonaMappingEnabled.value = false
+  openAIPersonaSlotStates[0] = 'active'
+  openAIPersonaSlotStates[1] = 'active'
+  openAIPersonaSlotAuthorizations[0] = 'missing'
+  openAIPersonaSlotAuthorizations[1] = 'missing'
+
+  if (newAccount.platform !== 'openai' || newAccount.type !== 'oauth') return
+
+  const extra = (newAccount.extra as Record<string, unknown> | undefined) || {}
+  for (const key of ['openai_persona_mapping_enabled', 'openai_persona_mapping_active']) {
+    const explicit = parseOptionalBoolean(extra[key])
+    if (explicit !== null) {
+      openAIPersonaMappingEnabled.value = explicit
+      break
+    }
+  }
+  if (!openAIPersonaMappingEnabled.value) {
+    const version = Number(
+      extra.openai_persona_mapping_version ??
+      extra.openai_persona_scope_version ??
+      extra.persona_mapping_version
+    )
+    openAIPersonaMappingEnabled.value = Number.isInteger(version) && version >= 3
+  }
+
+  const stateMap = extra.openai_persona_slot_states
+  const enabledMap = extra.openai_persona_slot_enabled
+  for (const slotId of [0, 1]) {
+    openAIPersonaSlotStates[slotId] =
+      normalizeOpenAIPersonaSlotState(getOpenAIPersonaSlotValue(stateMap, slotId)) ||
+      (parseOptionalBoolean(getOpenAIPersonaSlotValue(enabledMap, slotId)) === false ? 'draining' : 'active')
+  }
+  openAIPersonaSlotAuthorizations[0] = resolveOpenAIPersonaAuthorization(newAccount, 'codex_cli_strict', 0)
+  openAIPersonaSlotAuthorizations[1] = resolveOpenAIPersonaAuthorization(newAccount, 'opencode', 1)
+}
+
 const syncFormFromAccount = (newAccount: Account | null) => {
   if (!newAccount) {
     return
@@ -3779,7 +4052,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   // Load mixed scheduling setting (only for antigravity accounts)
   mixedScheduling.value = false
   allowOverages.value = false
-	const extra = newAccount.extra as Record<string, unknown> | undefined
+  const extra = newAccount.extra as Record<string, unknown> | undefined
+	loadOpenAIPersonaMapping(newAccount)
 	mixedScheduling.value = extra?.mixed_scheduling === true
 	allowOverages.value = extra?.allow_overages === true
 	autoPause5hThreshold.value = typeof extra?.auto_pause_5h_threshold === 'number' ? extra.auto_pause_5h_threshold * 100 : null
@@ -5357,6 +5631,18 @@ const handleSubmit = async () => {
           newExtra.codex_subagent_max_inflight_per_session = Math.min(64, Math.trunc(codexSubagentMaxInflight.value))
         } else {
           delete newExtra.codex_subagent_max_inflight_per_session
+        }
+
+        // Persona 映射仅通过显式账号开关启用；缺省保持 legacy v2，
+        // 避免现有双 Codex 槽位在管理页保存其他字段时被隐式改写。
+        newExtra.openai_persona_mapping_enabled = openAIPersonaMappingEnabled.value
+        delete newExtra.openai_persona_mapping_active
+        if (openAIPersonaMappingEnabled.value) {
+          newExtra.openai_persona_mapping_version = 3
+        } else {
+          delete newExtra.openai_persona_mapping_version
+          delete newExtra.openai_persona_scope_version
+          delete newExtra.persona_mapping_version
         }
       }
 

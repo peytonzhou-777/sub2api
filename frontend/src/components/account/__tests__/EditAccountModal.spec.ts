@@ -660,6 +660,68 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_fingerprint_mode).toBe('off')
   })
 
+  it('renders OpenAI Persona mapping state and persists an explicit v3 enablement', async () => {
+    const account = buildOpenAIOAuthParentAccount()
+    account.credentials = {
+      access_token: 'oauth-token',
+      refresh_token: 'oauth-refresh',
+      persona_credentials: [
+        {
+          persona_id: 'opencode',
+          slot_id: 1,
+          credential_chain_id: 'opencode-chain',
+          ready: true,
+          state: 'ready'
+        }
+      ]
+    }
+    account.credentials_status = { has_access_token: true, has_refresh_token: true }
+    account.extra = {
+      openai_persona_slot_states: { '0': 'active', '1': 'active' }
+    }
+    updateAccountMock.mockReset()
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+
+    expect(wrapper.get('[data-testid="openai-persona-mapping"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="openai-persona-mapping-mode"]').text()).toContain('legacy_v2')
+    expect(wrapper.get('[data-testid="openai-persona-slot-0"]').text()).toContain('authorized')
+    expect(wrapper.get('[data-testid="openai-persona-slot-1"]').text()).toContain('authorized')
+
+    await wrapper.get('[data-testid="openai-persona-mapping-toggle"]').trigger('click')
+    expect(wrapper.get('[data-testid="openai-persona-mapping-mode"]').text()).toContain('persona_v3')
+
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).toMatchObject({
+      openai_persona_mapping_enabled: true,
+      openai_persona_mapping_version: 3
+    })
+    wrapper.unmount()
+  })
+
+  it('persists an explicit legacy override when disabling Persona v3 mapping', async () => {
+    const account = buildOpenAIOAuthParentAccount()
+    account.extra = {
+      openai_persona_mapping_enabled: true,
+      openai_persona_mapping_version: 3,
+      openai_persona_mapping_active: true
+    }
+    updateAccountMock.mockReset()
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="openai-persona-mapping-toggle"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    const extra = updateAccountMock.mock.calls[0]?.[1]?.extra
+    expect(extra?.openai_persona_mapping_enabled).toBe(false)
+    expect(extra).not.toHaveProperty('openai_persona_mapping_version')
+    expect(extra).not.toHaveProperty('openai_persona_mapping_active')
+    wrapper.unmount()
+  })
+
   it('hides the Codex namespace flatten toggle for non-OAuth OpenAI accounts', async () => {
     const account = buildAccount()
     const wrapper = mountModal(account)
