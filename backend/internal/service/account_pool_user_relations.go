@@ -52,6 +52,10 @@ func (s *AccountPoolService) ListForUser(ctx context.Context, enabledEpoch strin
 	if s == nil || s.userRelationReader == nil || userID <= 0 {
 		return nil, ErrAccountPoolUserRelationUnavailable
 	}
+	access, query, err := s.prepareUserAccountPoolQuery(ctx, userID, query)
+	if err != nil {
+		return nil, err
+	}
 	relations, err := s.userRelationReader.ListAccountPoolUserRelations(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list account pool user relations: %w", err)
@@ -70,6 +74,7 @@ func (s *AccountPoolService) ListForUser(ctx context.Context, enabledEpoch strin
 	if err != nil {
 		return nil, err
 	}
+	result.GroupOptions = append([]AccountPoolGroupOption{}, access.VisibleGroups...)
 	for i := range result.Items {
 		relation := relationByAccount[result.Items[i].ID]
 		result.Items[i].IsCurrentResidence = relation.IsCurrentResidence

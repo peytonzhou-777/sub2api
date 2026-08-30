@@ -48,6 +48,27 @@ func TestParseAccountPoolQueryAcceptsPrimaryResidenceFilter(t *testing.T) {
 	}
 }
 
+func TestParseAccountPoolQueryAcceptsGroupFilter(t *testing.T) {
+	c := newAccountPoolQueryContext(t, "/api/v1/account-pool?group_id=12")
+	_, _, query, ok := parseAccountPoolQuery(c)
+	if !ok || query.GroupID == nil || *query.GroupID != 12 {
+		t.Fatalf("分组筛选参数不正确: query=%+v ok=%v", query, ok)
+	}
+}
+
+func TestParseAccountPoolQueryRejectsInvalidGroupFilter(t *testing.T) {
+	for _, target := range []string{
+		"/api/v1/account-pool?group_id=0",
+		"/api/v1/account-pool?group_id=abc",
+		"/api/v1/account-pool?group_id=1&group_id=2",
+	} {
+		c := newAccountPoolQueryContext(t, target)
+		if _, _, _, ok := parseAccountPoolQuery(c); ok {
+			t.Fatalf("非法分组筛选参数不应通过校验: %s", target)
+		}
+	}
+}
+
 func TestParseAccountPoolQueryRejectsUnknownUserRelation(t *testing.T) {
 	c := newAccountPoolQueryContext(t, "/api/v1/account-pool?relation=reserved_only")
 	if _, _, _, ok := parseAccountPoolQuery(c); ok {

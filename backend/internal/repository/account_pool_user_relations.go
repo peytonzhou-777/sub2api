@@ -147,6 +147,27 @@ func filterAccountPoolIDsByRelation(ids []int64, query service.AccountPoolListQu
 	return filtered
 }
 
+func filterAccountPoolIDsByAllowedIDs(ids []int64, query service.AccountPoolListQuery) []int64 {
+	if query.AllowedAccountIDs == nil {
+		return ids
+	}
+	allowed := make(map[int64]struct{}, len(query.AllowedAccountIDs))
+	for _, accountID := range query.AllowedAccountIDs {
+		allowed[accountID] = struct{}{}
+	}
+	filtered := make([]int64, 0, len(ids))
+	for _, accountID := range ids {
+		if _, ok := allowed[accountID]; ok {
+			filtered = append(filtered, accountID)
+		}
+	}
+	return filtered
+}
+
+func accountPoolIDAllowed(allowedIDs []int64, accountID int64) bool {
+	return allowedIDs == nil || slices.Contains(allowedIDs, accountID)
+}
+
 func accountPoolIDInList(ids []int64, accountID int64) bool {
 	return slices.Contains(ids, accountID)
 }

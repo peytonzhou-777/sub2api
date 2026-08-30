@@ -20,6 +20,15 @@
               <p v-if="invalidSearch" class="mt-1 text-sm text-red-600">{{ t('accountPool.invalidId') }}</p>
             </div>
             <Select
+              v-if="page.group_options.length > 1"
+              :model-value="groupFilter"
+              class="w-full sm:w-52"
+              data-test="group-filter"
+              :options="groupOptions"
+              :aria-label="t('accountPool.groupFilter')"
+              @update:model-value="changeGroup"
+            />
+            <Select
               :model-value="statusFilter"
               class="w-full sm:w-44"
               :options="statusOptions"
@@ -190,10 +199,11 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
-const page = ref<AccountPoolPage>({ items: [], total: 0, page: 1, page_size: getPersistedPageSize(), pages: 1 })
+const page = ref<AccountPoolPage>({ items: [], total: 0, page: 1, page_size: getPersistedPageSize(), pages: 1, group_options: [] })
 const loading = ref(false)
 const searchInput = ref('')
 const submittedId = ref('')
+const groupFilter = ref<number | ''>('')
 const statusFilter = ref<AccountPoolStatusCode | ''>('')
 const relationFilter = ref<AccountPoolRelationFilter | ''>('')
 const sortBy = ref<AccountPoolSortBy>('id')
@@ -231,6 +241,10 @@ const relationOptions = computed(() => [
   { value: 'current_residence', label: t('accountPool.relations.currentResidence') },
   { value: 'seven_day_contact', label: t('accountPool.relations.sevenDayContact') },
   { value: 'historical_contact', label: t('accountPool.relations.historicalContact') },
+])
+const groupOptions = computed(() => [
+  { value: '', label: t('accountPool.allGroups') },
+  ...page.value.group_options.map(group => ({ value: group.id, label: group.name })),
 ])
 
 function platformOf(account: AccountPoolPage['items'][number]): AccountPlatform {
@@ -321,6 +335,7 @@ async function load(force = false, targetPage = page.value.page) {
       page: submittedId.value ? 1 : targetPage,
       pageSize: page.value.page_size,
       accountId: submittedId.value || undefined,
+      groupId: groupFilter.value || undefined,
       status: statusFilter.value,
       relation: relationFilter.value,
       sortBy: sortBy.value,
@@ -329,7 +344,15 @@ async function load(force = false, targetPage = page.value.page) {
       signal: controller.signal,
     })
     if (current !== sequence) return
-    if (result.data) page.value = result.data
+    if (result.data) {
+      page.value = result.data
+      if (groupFilter.value !== '' && !result.data.group_options.some(group => group.id === groupFilter.value)) {
+        groupFilter.value = ''
+        etag.value = ''
+        void load(true, 1)
+        return false
+      }
+    }
     if (result.etag) etag.value = result.etag
     lastLoadedAt.value = Date.now()
     return true
@@ -361,6 +384,14 @@ function changePageSize(size: number) {
 
 function changeStatus(value: string | number | boolean | null) {
   statusFilter.value = String(value ?? '') as AccountPoolStatusCode | ''
+  page.value = { ...page.value, page: 1 }
+  etag.value = ''
+  void load(true, 1)
+}
+
+function changeGroup(value: string | number | boolean | null) {
+  const numericValue = typeof value === 'number' ? value : Number(value)
+  groupFilter.value = Number.isInteger(numericValue) && numericValue > 0 ? numericValue : ''
   page.value = { ...page.value, page: 1 }
   etag.value = ''
   void load(true, 1)

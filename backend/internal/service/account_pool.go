@@ -30,6 +30,7 @@ var (
 	ErrAccountPoolPersonalUsageNotFound    = errors.New("account pool personal usage account not found")
 	ErrAccountPoolPersonalUsageUnsupported = errors.New("account pool personal usage unsupported")
 	ErrAccountPoolPersonalUsageUnavailable = errors.New("account pool personal usage unavailable")
+	ErrAccountPoolUserAccessUnavailable    = errors.New("account pool user access unavailable")
 )
 
 type AccountPoolFreshness string
@@ -96,16 +97,36 @@ type PublicAccountPoolAccount struct {
 }
 
 type AccountPoolPage struct {
-	Items    []PublicAccountPoolAccount `json:"items"`
-	Total    int64                      `json:"total"`
-	Page     int                        `json:"page"`
-	PageSize int                        `json:"page_size"`
-	Pages    int                        `json:"pages"`
+	Items        []PublicAccountPoolAccount `json:"items"`
+	Total        int64                      `json:"total"`
+	Page         int                        `json:"page"`
+	PageSize     int                        `json:"page_size"`
+	Pages        int                        `json:"pages"`
+	GroupOptions []AccountPoolGroupOption   `json:"group_options"`
+}
+
+// AccountPoolGroupOption 是当前用户可见的号池分组选项，只暴露 ID 和名称。
+type AccountPoolGroupOption struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// AccountPoolUserAccess 是号池请求所需的用户可见分组与账号 ID 投影。
+type AccountPoolUserAccess struct {
+	VisibleGroups []AccountPoolGroupOption
+	AccountIDs    []int64
+}
+
+// AccountPoolUserAccessReader 读取当前用户实时可见的号池分组和账号范围。
+type AccountPoolUserAccessReader interface {
+	GetAccountPoolUserAccess(ctx context.Context, userID int64, groupID *int64) (*AccountPoolUserAccess, error)
 }
 
 // AccountPoolListQuery 是号池快照与数据库降级共用的只读查询条件。
 type AccountPoolListQuery struct {
 	AccountID          *int64
+	GroupID            *int64
+	AllowedAccountIDs  []int64
 	Status             string
 	SortBy             string
 	SortOrder          string
@@ -239,6 +260,7 @@ type AccountPoolService struct {
 	now                 func() time.Time
 	personalUsageReader AccountPoolPersonalUsageReader
 	userRelationReader  AccountPoolUserRelationReader
+	userAccessReader    AccountPoolUserAccessReader
 	residentStatsReader AccountPoolResidentStatsReader
 	personalUsageMu     sync.Mutex
 	personalUsageCache  map[string]accountPoolPersonalUsageCacheEntry
@@ -387,7 +409,7 @@ func (s *AccountPoolService) List(ctx context.Context, enabledEpoch string, page
 func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context, page, pageSize int, query AccountPoolListQuery) (*AccountPoolPage, error) {
 	now := s.now().UTC()
 	// ID 查询及普通 ID 排序仍使用数据库分页；状态条件需要按公开派生状态统一计算。
-	if query.Relation == "" && (query.AccountID != nil || (query.Status == "" && query.SortBy == AccountPoolSortByID)) {
+	if query.AllowedAccountIDs == nil && query.Relation == "" && (query.AccountID != nil || (query.Status == "" && query.SortBy == AccountPoolSortByID)) {
 		records, total, err := s.source.ListAccountPoolPage(ctx, page, pageSize, query.AccountID, query.SortOrder)
 		if err != nil {
 			return nil, fmt.Errorf("account pool database fallback: %w", err)
@@ -424,6 +446,8 @@ func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context
 			break
 		}
 	}
+	items = filterAccountPoolItemsByAllowedIDs(items, query.AllowedAccountIDs)
+	items = filterAccountPoolItemsByAccountID(items, query.AccountID)
 	items = filterAccountPoolItemsByStatus(items, query.Status)
 	items = filterAccountPoolItemsByRelation(items, query)
 	sortAccountPoolItems(items, query.SortBy, query.SortOrder)
@@ -465,6 +489,35 @@ func filterAccountPoolItemsByStatus(items []PublicAccountPoolAccount, status str
 	return filtered
 }
 
+func filterAccountPoolItemsByAllowedIDs(items []PublicAccountPoolAccount, allowedIDs []int64) []PublicAccountPoolAccount {
+	if allowedIDs == nil {
+		return items
+	}
+	allowed := make(map[int64]struct{}, len(allowedIDs))
+	for _, accountID := range allowedIDs {
+		allowed[accountID] = struct{}{}
+	}
+	filtered := make([]PublicAccountPoolAccount, 0, len(items))
+	for _, item := range items {
+		if _, ok := allowed[item.ID]; ok {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func filterAccountPoolItemsByAccountID(items []PublicAccountPoolAccount, accountID *int64) []PublicAccountPoolAccount {
+	if accountID == nil {
+		return items
+	}
+	for _, item := range items {
+		if item.ID == *accountID {
+			return []PublicAccountPoolAccount{item}
+		}
+	}
+	return []PublicAccountPoolAccount{}
+}
+
 func sortAccountPoolItems(items []PublicAccountPoolAccount, sortBy, sortOrder string) {
 	desc := sortOrder == AccountPoolSortDesc
 	sort.SliceStable(items, func(i, j int) bool {
@@ -489,9 +542,13 @@ func (s *AccountPoolService) GetPersonalUsage(ctx context.Context, enabledEpoch 
 	if s == nil || enabledEpoch == "" || userID <= 0 || accountID <= 0 {
 		return nil, ErrAccountPoolPersonalUsageNotFound
 	}
-	page, err := s.List(ctx, enabledEpoch, 1, 1, AccountPoolListQuery{
+	_, query, err := s.prepareUserAccountPoolQuery(ctx, userID, AccountPoolListQuery{
 		AccountID: &accountID, SortBy: AccountPoolSortByID, SortOrder: AccountPoolSortDesc,
 	})
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.List(ctx, enabledEpoch, 1, 1, query)
 	if err != nil {
 		return nil, err
 	}
@@ -606,7 +663,7 @@ func newAccountPoolPage(items []PublicAccountPoolAccount, total int64, page, pag
 	if pages < 1 {
 		pages = 1
 	}
-	return &AccountPoolPage{Items: items, Total: total, Page: page, PageSize: pageSize, Pages: pages}
+	return &AccountPoolPage{Items: items, Total: total, Page: page, PageSize: pageSize, Pages: pages, GroupOptions: []AccountPoolGroupOption{}}
 }
 
 func (s *AccountPoolService) readConcurrency(ctx context.Context, records []AccountPoolSourceRecord) (map[int64]int, error) {

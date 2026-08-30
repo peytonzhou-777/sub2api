@@ -92,6 +92,21 @@ func TestAccountPoolSnapshotSortsAndFiltersByPublicStatus(t *testing.T) {
 	if err != nil || total != 2 || len(got) != 1 || got[0].ID != 3 {
 		t.Fatalf("用户关系筛选必须在快照分页前完成: total=%d items=%+v err=%v", total, got, err)
 	}
+
+	got, total, err = cache.ReadAccountPoolPage(ctx, "epoch-sort", 1, 1, service.AccountPoolListQuery{
+		AllowedAccountIDs: []int64{1, 3}, SortBy: service.AccountPoolSortByID, SortOrder: service.AccountPoolSortDesc,
+	})
+	if err != nil || total != 2 || len(got) != 1 || got[0].ID != 3 {
+		t.Fatalf("用户可见账号筛选必须在快照分页前完成: total=%d items=%+v err=%v", total, got, err)
+	}
+
+	accountID = int64(2)
+	got, total, err = cache.ReadAccountPoolPage(ctx, "epoch-sort", 1, 20, service.AccountPoolListQuery{
+		AccountID: &accountID, AllowedAccountIDs: []int64{1, 3}, SortBy: service.AccountPoolSortByID, SortOrder: service.AccountPoolSortDesc,
+	})
+	if err != nil || total != 0 || len(got) != 0 {
+		t.Fatalf("账号精确搜索不得绕过用户可见范围: total=%d items=%+v err=%v", total, got, err)
+	}
 }
 
 func TestAccountPoolBuildLockRenewalRequiresOwner(t *testing.T) {

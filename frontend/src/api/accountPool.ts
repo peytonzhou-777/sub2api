@@ -6,6 +6,11 @@ export type AccountPoolSortBy = 'id' | 'status'
 export type AccountPoolSortOrder = 'asc' | 'desc'
 export type AccountPoolRelationFilter = 'current_residence' | 'primary_residence' | 'seven_day_contact' | 'historical_contact'
 
+export interface AccountPoolGroupOption {
+  id: number
+  name: string
+}
+
 export interface AccountPoolAccount {
   id: number
   platform: string
@@ -56,6 +61,7 @@ export interface AccountPoolPage {
   page: number
   page_size: number
   pages: number
+  group_options: AccountPoolGroupOption[]
 }
 
 export interface AccountPoolPersonalUsageWindow {
@@ -81,6 +87,7 @@ export async function listAccountPool(options: {
   page: number
   pageSize: number
   accountId?: string
+  groupId?: number
   status?: AccountPoolStatusCode | ''
   relation?: AccountPoolRelationFilter | ''
   sortBy: AccountPoolSortBy
@@ -93,6 +100,7 @@ export async function listAccountPool(options: {
       page: options.page,
       page_size: options.pageSize,
       ...(options.accountId ? { account_id: options.accountId } : {}),
+      ...(options.groupId ? { group_id: options.groupId } : {}),
       ...(options.status ? { status: options.status } : {}),
       ...(options.relation ? { relation: options.relation } : {}),
       sort_by: options.sortBy,

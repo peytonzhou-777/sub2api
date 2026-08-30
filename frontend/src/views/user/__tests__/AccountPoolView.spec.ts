@@ -42,6 +42,7 @@ const emptyPage = (pageSize = 20) => ({
   page: 1,
   page_size: pageSize,
   pages: Math.ceil(40 / pageSize),
+  group_options: [],
 })
 
 const PaginationStub = {
@@ -54,7 +55,7 @@ const SelectStub = {
   inheritAttrs: false,
   props: ['modelValue', 'options', 'ariaLabel'],
   emits: ['update:modelValue'],
-  template: '<button :data-test="$attrs[\'data-test\'] || \'status-filter\'" @click="$emit(\'update:modelValue\', $attrs[\'data-test\'] ? \'seven_day_contact\' : \'error\')">select</button>',
+  template: '<button :data-test="$attrs[\'data-test\'] || \'status-filter\'" @click="$emit(\'update:modelValue\', $attrs[\'data-test\'] === \'group-filter\' ? 2 : ($attrs[\'data-test\'] ? \'seven_day_contact\' : \'error\'))">select</button>',
 }
 
 function mountView() {
@@ -114,6 +115,35 @@ describe('AccountPoolView', () => {
 
     expect(localStorage.getItem('table-page-size')).toBe('50')
     expect(listAccountPool.mock.calls[1][0]).toMatchObject({ page: 1, pageSize: 50 })
+    wrapper.unmount()
+  })
+
+  it('仅多个可见分组显示筛选器，并在切换时携带分组参数', async () => {
+    const groupOptions = [{ id: 1, name: '公开分组' }, { id: 2, name: '专属分组' }]
+    listAccountPool.mockImplementation(async (options: { pageSize: number }) => ({
+      data: { ...emptyPage(options.pageSize), group_options: groupOptions },
+      notModified: false,
+    }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="group-filter"]')).toBeTruthy()
+    await wrapper.get('[data-test="group-filter"]').trigger('click')
+    await flushPromises()
+
+    expect(listAccountPool.mock.calls[1][0]).toMatchObject({ page: 1, groupId: 2 })
+    wrapper.unmount()
+  })
+
+  it('只有一个可见分组时不显示分组筛选器', async () => {
+    listAccountPool.mockResolvedValueOnce({
+      data: { ...emptyPage(), group_options: [{ id: 1, name: '公开分组' }] },
+      notModified: false,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="group-filter"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -192,6 +222,7 @@ describe('AccountPoolView', () => {
         page: 1,
         page_size: 20,
         pages: 1,
+        group_options: [],
       },
       notModified: false,
     })
@@ -248,6 +279,7 @@ describe('AccountPoolView', () => {
           page: 1,
           page_size: 20,
           pages: 1,
+          group_options: [],
         },
         notModified: false,
       })
@@ -306,6 +338,7 @@ describe('AccountPoolView', () => {
         page: 1,
         page_size: 20,
         pages: 1,
+        group_options: [],
       },
       notModified: false,
     })

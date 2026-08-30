@@ -988,6 +988,8 @@ export default {
     deletedOrMissing: '账号已删除或不存在',
     total: '共 {total} 个账号',
     allStatus: '全部状态',
+    allGroups: '全部分组',
+    groupFilter: '筛选可见分组',
     statusFilter: '筛选账号状态',
     relationFilter: '筛选我的账号关系',
     querySevenDayUsage: '查询七日个人用量',

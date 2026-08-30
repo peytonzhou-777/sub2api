@@ -104,7 +104,7 @@ func (h *AccountPoolHandler) PersonalUsage(c *gin.Context) {
 func parseAccountPoolQuery(c *gin.Context) (int, int, service.AccountPoolListQuery, bool) {
 	query := c.Request.URL.Query()
 	allowed := map[string]struct{}{
-		"page": {}, "page_size": {}, "account_id": {}, "status": {}, "sort_by": {}, "sort_order": {}, "relation": {},
+		"page": {}, "page_size": {}, "account_id": {}, "group_id": {}, "status": {}, "sort_by": {}, "sort_order": {}, "relation": {},
 	}
 	for key, values := range query {
 		if _, exists := allowed[key]; !exists || len(values) != 1 {
@@ -133,6 +133,14 @@ func parseAccountPoolQuery(c *gin.Context) (int, int, service.AccountPoolListQue
 			return 0, 0, service.AccountPoolListQuery{}, false
 		}
 		result.AccountID = &value
+		page = 1
+	}
+	if raw, exists := query["group_id"]; exists {
+		value, ok := parsePositiveASCIIInt(raw[0], 0)
+		if !ok {
+			return 0, 0, service.AccountPoolListQuery{}, false
+		}
+		result.GroupID = &value
 		page = 1
 	}
 	if raw, exists := query["status"]; exists {

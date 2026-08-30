@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -117,6 +118,46 @@ type accountPoolUserRelationReaderStub struct {
 	err       error
 }
 
+type accountPoolUserAccessReaderStub struct {
+	access  *AccountPoolUserAccess
+	byGroup map[int64]*AccountPoolUserAccess
+	err     error
+}
+
+type accountPoolVisibilityUserRepoStub struct {
+	UserRepository
+	user *User
+}
+
+func (r accountPoolVisibilityUserRepoStub) GetByID(context.Context, int64) (*User, error) {
+	return r.user, nil
+}
+
+type accountPoolVisibilityGroupRepoStub struct {
+	GroupRepository
+	groups     []Group
+	accountIDs map[int64][]int64
+}
+
+func (r accountPoolVisibilityGroupRepoStub) ListActive(context.Context) ([]Group, error) {
+	return r.groups, nil
+}
+
+func (r accountPoolVisibilityGroupRepoStub) GetAccountIDsByGroupIDs(_ context.Context, groupIDs []int64) ([]int64, error) {
+	seen := make(map[int64]struct{})
+	for _, groupID := range groupIDs {
+		for _, accountID := range r.accountIDs[groupID] {
+			seen[accountID] = struct{}{}
+		}
+	}
+	result := make([]int64, 0, len(seen))
+	for accountID := range seen {
+		result = append(result, accountID)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
+	return result, nil
+}
+
 type accountPoolResidentStatsReaderStub struct {
 	stats       map[int64]AccountPoolResidentStats
 	err         error
@@ -126,6 +167,19 @@ type accountPoolResidentStatsReaderStub struct {
 
 func (r accountPoolUserRelationReaderStub) ListAccountPoolUserRelations(context.Context, int64) ([]AccountPoolUserRelation, error) {
 	return r.relations, r.err
+}
+
+func (r accountPoolUserAccessReaderStub) GetAccountPoolUserAccess(_ context.Context, _ int64, groupID *int64) (*AccountPoolUserAccess, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	if groupID != nil && r.byGroup != nil {
+		if access, ok := r.byGroup[*groupID]; ok {
+			return access, nil
+		}
+		return &AccountPoolUserAccess{VisibleGroups: r.access.VisibleGroups, AccountIDs: []int64{}}, nil
+	}
+	return r.access, nil
 }
 
 func (r *accountPoolResidentStatsReaderStub) ListAccountPoolResidentStats(_ context.Context, accountIDs []int64, activeSince time.Time) (map[int64]AccountPoolResidentStats, error) {
@@ -171,6 +225,18 @@ func (c *accountPoolPersonalUsageCacheStub) WriteAccountPoolGeneration(context.C
 func (c *accountPoolPersonalUsageCacheStub) ReadAccountPoolPage(_ context.Context, _ string, _ int, _ int, query AccountPoolListQuery) ([]PublicAccountPoolAccount, int64, error) {
 	if query.AccountID == nil || *query.AccountID != c.item.ID {
 		return []PublicAccountPoolAccount{}, 0, nil
+	}
+	if query.AllowedAccountIDs != nil {
+		allowed := false
+		for _, accountID := range query.AllowedAccountIDs {
+			if accountID == c.item.ID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return []PublicAccountPoolAccount{}, 0, nil
+		}
 	}
 	return []PublicAccountPoolAccount{c.item}, 1, nil
 }
@@ -247,6 +313,10 @@ func TestAccountPoolListForUserFiltersBeforePaginationAndProjectsRelations(t *te
 		{AccountID: 12, IsSevenDayContact: true, IsHistoricalContact: true},
 		{AccountID: 13, IsHistoricalContact: true},
 	}})
+	svc.SetUserAccessReader(accountPoolUserAccessReaderStub{access: &AccountPoolUserAccess{
+		VisibleGroups: []AccountPoolGroupOption{{ID: 1, Name: "公开分组"}},
+		AccountIDs:    []int64{11, 12, 13},
+	}})
 	svc.SetResidentStatsReader(&accountPoolResidentStatsReaderStub{})
 
 	page, err := svc.ListForUser(context.Background(), "epoch-a", 42, 1, 1, AccountPoolListQuery{
@@ -277,6 +347,139 @@ func TestAccountPoolListForUserFiltersBeforePaginationAndProjectsRelations(t *te
 	})
 	if err != nil || len(page.Items) != 1 || page.Items[0].ID != 11 || !page.Items[0].IsPrimaryResidence {
 		t.Fatalf("首选居住账号筛选不完整: page=%+v err=%v", page, err)
+	}
+}
+
+func TestAccountPoolListForUserFiltersVisibleGroupsBeforePagination(t *testing.T) {
+	source := &accountPoolBuildSource{records: []AccountPoolSourceRecord{
+		{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive},
+		{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive},
+		{ID: 3, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive},
+		{ID: 4, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive},
+	}}
+	svc := NewAccountPoolService(source, nil, nil, AccountPoolOptions{})
+	svc.SetUserRelationReader(accountPoolUserRelationReaderStub{})
+	svc.SetUserAccessReader(accountPoolUserAccessReaderStub{
+		access: &AccountPoolUserAccess{
+			VisibleGroups: []AccountPoolGroupOption{{ID: 10, Name: "公开分组"}, {ID: 20, Name: "专属分组"}},
+			AccountIDs:    []int64{1, 3, 4},
+		},
+		byGroup: map[int64]*AccountPoolUserAccess{
+			10: {VisibleGroups: []AccountPoolGroupOption{{ID: 10, Name: "公开分组"}, {ID: 20, Name: "专属分组"}}, AccountIDs: []int64{1, 4}},
+			20: {VisibleGroups: []AccountPoolGroupOption{{ID: 10, Name: "公开分组"}, {ID: 20, Name: "专属分组"}}, AccountIDs: []int64{3}},
+		},
+	})
+	svc.SetResidentStatsReader(&accountPoolResidentStatsReaderStub{})
+
+	page, err := svc.ListForUser(context.Background(), "epoch-a", 42, 1, 2, AccountPoolListQuery{
+		SortBy: AccountPoolSortByID, SortOrder: AccountPoolSortDesc,
+	})
+	if err != nil {
+		t.Fatalf("按用户可见分组列出号池: %v", err)
+	}
+	if page.Total != 3 || len(page.Items) != 2 || page.Items[0].ID != 4 || page.Items[1].ID != 3 {
+		t.Fatalf("可见账号必须在分页前过滤: page=%+v", page)
+	}
+	if len(page.GroupOptions) != 2 || page.GroupOptions[0].ID != 10 || page.GroupOptions[1].ID != 20 {
+		t.Fatalf("应返回用户可见分组选项: %+v", page.GroupOptions)
+	}
+
+	groupID := int64(10)
+	page, err = svc.ListForUser(context.Background(), "epoch-a", 42, 1, 20, AccountPoolListQuery{
+		GroupID: &groupID, SortBy: AccountPoolSortByID, SortOrder: AccountPoolSortAsc,
+	})
+	if err != nil || page.Total != 2 || len(page.Items) != 2 || page.Items[0].ID != 1 || page.Items[1].ID != 4 {
+		t.Fatalf("指定分组应进一步收窄账号范围: page=%+v err=%v", page, err)
+	}
+
+	unknownGroupID := int64(99)
+	page, err = svc.ListForUser(context.Background(), "epoch-a", 42, 1, 20, AccountPoolListQuery{
+		GroupID: &unknownGroupID, SortBy: AccountPoolSortByID, SortOrder: AccountPoolSortDesc,
+	})
+	if err != nil || page.Total != 0 || len(page.Items) != 0 {
+		t.Fatalf("不可见分组不得返回账号: page=%+v err=%v", page, err)
+	}
+}
+
+func TestAccountPoolGroupVisibilityRules(t *testing.T) {
+	allowed := map[int64]struct{}{2: {}}
+	tests := []struct {
+		name                 string
+		groupID              int64
+		exclusive            bool
+		restrictPublicGroups bool
+		wantVisible          bool
+	}{
+		{name: "普通分组默认可见", groupID: 1, wantVisible: true},
+		{name: "专属分组未授权不可见", groupID: 3, exclusive: true},
+		{name: "专属分组已授权可见", groupID: 2, exclusive: true, wantVisible: true},
+		{name: "受限用户普通分组需授权", groupID: 1, restrictPublicGroups: true},
+		{name: "受限用户已授权普通分组可见", groupID: 2, restrictPublicGroups: true, wantVisible: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := accountPoolGroupVisible(Group{ID: test.groupID, IsExclusive: test.exclusive}, allowed, test.restrictPublicGroups)
+			if got != test.wantVisible {
+				t.Fatalf("可见性错误: got=%v want=%v", got, test.wantVisible)
+			}
+		})
+	}
+}
+
+func TestAPIKeyServiceAccountPoolUserAccessUsesVisibleGroups(t *testing.T) {
+	groupRepo := accountPoolVisibilityGroupRepoStub{
+		groups: []Group{
+			{ID: 1, Name: "公开分组"},
+			{ID: 2, Name: "专属分组", IsExclusive: true},
+			{ID: 3, Name: "其他专属分组", IsExclusive: true},
+		},
+		accountIDs: map[int64][]int64{
+			1: {101, 102},
+			2: {102, 103},
+			3: {104},
+		},
+	}
+	userRepo := accountPoolVisibilityUserRepoStub{user: &User{ID: 42, AllowedGroups: []int64{2}}}
+	svc := NewAPIKeyService(nil, userRepo, groupRepo, nil, nil, nil, nil)
+
+	access, err := svc.GetAccountPoolUserAccess(context.Background(), 42, nil)
+	if err != nil {
+		t.Fatalf("读取用户可见号池范围: %v", err)
+	}
+	if len(access.VisibleGroups) != 2 || access.VisibleGroups[0].ID != 1 || access.VisibleGroups[1].ID != 2 {
+		t.Fatalf("普通分组和已授权专属分组应可见: %+v", access.VisibleGroups)
+	}
+	if len(access.AccountIDs) != 3 || access.AccountIDs[0] != 101 || access.AccountIDs[1] != 102 || access.AccountIDs[2] != 103 {
+		t.Fatalf("多分组账号应按并集去重: %v", access.AccountIDs)
+	}
+
+	selectedGroupID := int64(2)
+	access, err = svc.GetAccountPoolUserAccess(context.Background(), 42, &selectedGroupID)
+	if err != nil || len(access.AccountIDs) != 2 || access.AccountIDs[0] != 102 || access.AccountIDs[1] != 103 {
+		t.Fatalf("选择专属分组应只返回该分组账号: access=%+v err=%v", access, err)
+	}
+
+	selectedGroupID = 3
+	access, err = svc.GetAccountPoolUserAccess(context.Background(), 42, &selectedGroupID)
+	if err != nil || len(access.AccountIDs) != 0 {
+		t.Fatalf("未授权专属分组不得返回账号: access=%+v err=%v", access, err)
+	}
+
+	userRepo.user.RestrictPublicGroups = true
+	access, err = svc.GetAccountPoolUserAccess(context.Background(), 42, nil)
+	if err != nil || len(access.VisibleGroups) != 1 || access.VisibleGroups[0].ID != 2 {
+		t.Fatalf("受限用户只能看到授权分组: access=%+v err=%v", access, err)
+	}
+}
+
+func TestAccountPoolPersonalUsageRejectsInaccessibleAccount(t *testing.T) {
+	cache := &accountPoolPersonalUsageCacheStub{item: PublicAccountPoolAccount{ID: 7, Platform: PlatformOpenAI, Type: AccountTypeOAuth}}
+	svc := NewAccountPoolService(nil, cache, nil, AccountPoolOptions{})
+	svc.SetUserAccessReader(accountPoolUserAccessReaderStub{access: &AccountPoolUserAccess{AccountIDs: []int64{8}}})
+	svc.SetPersonalUsageReader(&accountPoolPersonalUsageReaderStub{stats: &AccountPoolPersonalUsageStats{}})
+
+	if _, err := svc.GetPersonalUsage(context.Background(), "epoch-a", 42, 7); !errors.Is(err, ErrAccountPoolPersonalUsageNotFound) {
+		t.Fatalf("不可见账号不得查询个人用量，err=%v", err)
 	}
 }
 
@@ -591,6 +794,7 @@ func TestAccountPoolPersonalUsageUsesLocalWindowsAndPrivateCache(t *testing.T) {
 	svc := NewAccountPoolService(nil, cache, nil, AccountPoolOptions{})
 	svc.now = func() time.Time { return now }
 	svc.SetPersonalUsageReader(reader)
+	svc.SetUserAccessReader(accountPoolUserAccessReaderStub{access: &AccountPoolUserAccess{AccountIDs: []int64{7}}})
 
 	value, err := svc.GetPersonalUsage(context.Background(), "epoch-a", 42, 7)
 	if err != nil {
@@ -622,6 +826,7 @@ func TestAccountPoolPersonalUsageRejectsUnsupportedAccount(t *testing.T) {
 	reader := &accountPoolPersonalUsageReaderStub{stats: &AccountPoolPersonalUsageStats{}}
 	svc := NewAccountPoolService(nil, cache, nil, AccountPoolOptions{})
 	svc.SetPersonalUsageReader(reader)
+	svc.SetUserAccessReader(accountPoolUserAccessReaderStub{access: &AccountPoolUserAccess{AccountIDs: []int64{8}}})
 	if _, err := svc.GetPersonalUsage(context.Background(), "epoch-a", 42, 8); !errors.Is(err, ErrAccountPoolPersonalUsageUnsupported) {
 		t.Fatalf("非 OpenAI/Anthropic 账号应拒绝个人用量，err=%v", err)
 	}
@@ -640,6 +845,7 @@ func TestAccountPoolPersonalUsageMergesConcurrentQueries(t *testing.T) {
 	svc := NewAccountPoolService(nil, cache, nil, AccountPoolOptions{})
 	svc.now = func() time.Time { return now }
 	svc.SetPersonalUsageReader(reader)
+	svc.SetUserAccessReader(accountPoolUserAccessReaderStub{access: &AccountPoolUserAccess{AccountIDs: []int64{9}}})
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 8)

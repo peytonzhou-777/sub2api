@@ -984,6 +984,8 @@ export default {
     deletedOrMissing: 'Account was deleted or does not exist',
     total: '{total} accounts',
     allStatus: 'All statuses',
+    allGroups: 'All groups',
+    groupFilter: 'Filter visible groups',
     statusFilter: 'Filter account status',
     relationFilter: 'Filter my account relationship',
     querySevenDayUsage: 'Query 7-day personal usage',
