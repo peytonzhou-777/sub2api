@@ -78,6 +78,10 @@ const (
 	openAIUserAffinityResidentPermanentUnavailable openAIUserAffinityResidentAdmission = "permanent_unavailable"
 )
 
+func isOpenAIUserAffinityResidentHardUnavailable(admission openAIUserAffinityResidentAdmission) bool {
+	return admission == openAIUserAffinityResidentPermanentUnavailable || admission == openAIUserAffinityResidentQuota7DExhausted
+}
+
 // classifyOpenAIUserAffinityResidentAdmission 区分需累计客户端重试的临时失败与可直接搬迁的永久失败。
 func (s *OpenAIGatewayService) classifyOpenAIUserAffinityResidentAdmission(ctx context.Context, account *Account, groupID *int64, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability, requiredImageCapability OpenAIImagesCapability, requiredTransport OpenAIUpstreamTransport) openAIUserAffinityResidentAdmission {
 	if account == nil || account.Platform != PlatformOpenAI || !account.IsOpenAICompatible() || account.Status != StatusActive || !account.Schedulable {
@@ -135,7 +139,7 @@ func readOpenAIUserAffinityQuotaAvailableRatio(extra map[string]any, window stri
 }
 
 // selectOpenAIUserAffinityPlacement 在普通负载调度前恢复用户居住账号。
-// 账号已不可用时暂不清除归属，后续容量失败窗口负责决定是否搬迁。
+// 账号明确硬不可用时立即脱离常驻槽位，临时容量问题仍交给重试窗口处理。
 func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacement(ctx context.Context, groupID *int64, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, requiredCapability OpenAIEndpointCapability, requiredImageCapability OpenAIImagesCapability, requiredTransport OpenAIUpstreamTransport) (*AccountSelectionResult, bool, error) {
 	req := newOpenAIUserAffinityScheduleRequest(groupID, PlatformOpenAI, "", requestedModel,
 		requiredTransport, requiredCapability, requiredImageCapability, requireCompact, excludedIDs)
@@ -225,11 +229,35 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityPlacementForRequest(ctx c
 			return nil, true, accountErr
 		}
 		admission := s.classifyOpenAIUserAffinityResidentAdmission(ctx, account, req.GroupID, req.RequestedModel, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
-		if admission == openAIUserAffinityResidentQuota7DExhausted || admission == openAIUserAffinityResidentPermanentUnavailable {
-			if !runtimeOK {
-				return nil, true, ErrNoAvailableAccounts
+		if isOpenAIUserAffinityResidentHardUnavailable(admission) {
+			// 单槽兼容投影也不能继续锁住硬错误账号；先标记旧 projection 陈旧，再走新居民选号。
+			if req.ExcludedIDs == nil {
+				req.ExcludedIDs = make(map[int64]struct{})
+			} else {
+				req.ExcludedIDs = cloneExcludedAccountIDs(req.ExcludedIDs)
 			}
-			return s.selectOpenAIUserAffinityMigrationTarget(ctx, req.GroupID, req.RequestedModel, req.ExcludedIDs, req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport, string(admission), config, now, placement, runtimeStore)
+			req.ExcludedIDs[*placement.AccountID] = struct{}{}
+			if maintenance, maintenanceOK := s.accountRepo.(OpenAIUserAffinityResidentSlotMaintenanceStore); maintenanceOK {
+				if slotStore, slotStoreOK := s.accountRepo.(OpenAIUserAffinityMultiSlotStore); slotStoreOK {
+					slots, slotErr := slotStore.ListOpenAIUserResidentSlots(ctx, placement.UserID, placement.ScopeKey)
+					if slotErr != nil {
+						return nil, true, slotErr
+					}
+					for _, slot := range slots {
+						if slot.AccountID == *placement.AccountID && slot.Generation == placement.Generation &&
+							slot.Status != OpenAIUserResidentSlotStatusDraining && now.Before(slot.ExpiresAt) {
+							if _, evictErr := maintenance.EvictOpenAIUserResidentSlot(ctx, placement.UserID, placement.ScopeKey,
+								slot.ID, slot.AccountID, slot.Generation, "account_unavailable", now); evictErr != nil {
+								return nil, true, evictErr
+							}
+							break
+						}
+					}
+				}
+			}
+			ctx = context.WithValue(ctx, openAIUserAffinityStalePlacementContextKey{}, true)
+			placement = nil
+			goto placementMiss
 		}
 		if admission != openAIUserAffinityResidentAllowed {
 			// 5h、RPM 和临时运行时门控只累计不同客户端请求，未达阈值不改变归属。

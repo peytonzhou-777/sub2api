@@ -54,7 +54,7 @@
                   <select v-if="scopeOptions.length > 1" v-model="inspectedScopeKey" class="input max-w-72 font-mono text-xs">
                     <option v-for="scopeKey in scopeOptions" :key="scopeKey" :value="scopeKey">{{ scopeKey }}</option>
                   </select>
-                  <button class="btn btn-danger btn-sm" :disabled="resetting || !inspectedScopeKey" @click="resetUser">{{ t('admin.accounts.userAffinity.reset') }}</button>
+                  <button class="btn btn-danger btn-sm" :disabled="resetting || !inspectedUserId" @click="resetUser">{{ t('admin.accounts.userAffinity.reset') }}</button>
                 </div>
               </div>
               <div class="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -190,10 +190,10 @@ async function inspectUser(userId: number, scopeKey: string) {
 }
 
 async function resetUser() {
-  if (!inspectedUserId.value || !inspectedScopeKey.value) return
+  if (!inspectedUserId.value) return
   resetting.value = true
   try {
-    await adminAPI.accounts.resetOpenAIUserAffinityPlacement(inspectedUserId.value, inspectedScopeKey.value)
+    await adminAPI.accounts.resetOpenAIUserAffinityPlacement(inspectedUserId.value, '', false, true)
     appStore.showSuccess(t('common.saved'))
     await load()
   } catch (error) {

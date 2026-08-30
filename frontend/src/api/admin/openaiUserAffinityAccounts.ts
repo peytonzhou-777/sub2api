@@ -93,9 +93,10 @@ export async function getOpenAIUserAffinityUserDetail(userId: number): Promise<O
   return data
 }
 
-export async function resetOpenAIUserAffinityPlacement(userId: number, scopeKey: string, excludeSourceAccount = false): Promise<void> {
+export async function resetOpenAIUserAffinityPlacement(userId: number, scopeKey: string, excludeSourceAccount = false, allScopes = false): Promise<void> {
   await apiClient.post(`/admin/accounts/user-affinity/${userId}/reset`, {
-    scope_key: scopeKey,
+    scope_key: allScopes ? '' : scopeKey,
+    all_scopes: allScopes,
     exclude_source_account: excludeSourceAccount
   })
 }

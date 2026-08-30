@@ -12,7 +12,8 @@ import (
 )
 
 type resetOpenAIUserAffinityRequest struct {
-	ScopeKey      string `json:"scope_key" binding:"required"`
+	ScopeKey      string `json:"scope_key"`
+	AllScopes     bool   `json:"all_scopes"`
 	ExcludeSource bool   `json:"exclude_source_account"`
 }
 
@@ -76,8 +77,8 @@ func (h *AccountHandler) ResetOpenAIUserAffinityPlacement(c *gin.Context) {
 		return
 	}
 	var req resetOpenAIUserAffinityRequest
-	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.ScopeKey) == "" {
-		response.BadRequest(c, "scope_key is required")
+	if err := c.ShouldBindJSON(&req); err != nil || (!req.AllScopes && strings.TrimSpace(req.ScopeKey) == "") {
+		response.BadRequest(c, "scope_key is required unless all_scopes is true")
 		return
 	}
 	subject, ok := middleware.GetAuthSubjectFromContext(c)
@@ -89,7 +90,11 @@ func (h *AccountHandler) ResetOpenAIUserAffinityPlacement(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if response.ErrorFrom(c, adminService.ResetOpenAIUserAffinityPlacement(c.Request.Context(), userID, subject.UserID, req.ScopeKey, req.ExcludeSource)) {
+	scopeKey := strings.TrimSpace(req.ScopeKey)
+	if req.AllScopes {
+		scopeKey = ""
+	}
+	if response.ErrorFrom(c, adminService.ResetOpenAIUserAffinityPlacement(c.Request.Context(), userID, subject.UserID, scopeKey, req.ExcludeSource)) {
 		return
 	}
 	response.Success(c, gin.H{"user_id": userID, "reset": true})

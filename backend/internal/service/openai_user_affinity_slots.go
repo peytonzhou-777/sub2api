@@ -25,7 +25,8 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlots(ctx context
 	if !ok {
 		return nil, false, nil
 	}
-	if maintenance, maintenanceOK := s.accountRepo.(OpenAIUserAffinityResidentSlotMaintenanceStore); maintenanceOK {
+	maintenance, maintenanceOK := s.accountRepo.(OpenAIUserAffinityResidentSlotMaintenanceStore)
+	if maintenanceOK {
 		if err := maintenance.ConvergeOpenAIUserResidentSlots(ctx, identity.userID, identity.scopeKey, config, time.Now().UTC()); err != nil {
 			return nil, true, err
 		}
@@ -44,6 +45,10 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlots(ctx context
 	now := time.Now().UTC()
 	activeSlots := make([]OpenAIUserResidentSlot, 0, len(slots))
 	occupiedSlots := make([]OpenAIUserResidentSlot, 0, len(slots))
+	hardExcluded := cloneExcludedAccountIDs(resetExcluded)
+	if hardExcluded == nil {
+		hardExcluded = make(map[int64]struct{}, len(slots))
+	}
 	for _, slot := range slots {
 		if slot.Status == OpenAIUserResidentSlotStatusDraining {
 			occupiedSlots = append(occupiedSlots, slot)
@@ -54,6 +59,21 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlots(ctx context
 		}
 		if slot.Status == OpenAIUserResidentSlotStatusActive || slot.Status == OpenAIUserResidentSlotStatusProvisional ||
 			slot.Status == OpenAIUserResidentSlotStatusReplacementPending {
+			admission, admissionErr := s.openAIUserAffinityResidentSlotAdmission(ctx, req, &slot)
+			if admissionErr != nil {
+				return nil, true, admissionErr
+			}
+			if isOpenAIUserAffinityResidentHardUnavailable(admission) {
+				// 硬不可用账号不能继续占用常驻槽位，否则所有槽位都会被错误状态卡住。
+				if maintenanceOK {
+					if _, evictErr := maintenance.EvictOpenAIUserResidentSlot(ctx, identity.userID, identity.scopeKey,
+						slot.ID, slot.AccountID, slot.Generation, "account_unavailable", now); evictErr != nil {
+						return nil, true, evictErr
+					}
+				}
+				hardExcluded[slot.AccountID] = struct{}{}
+				continue
+			}
 			activeSlots = append(activeSlots, slot)
 			occupiedSlots = append(occupiedSlots, slot)
 		}
@@ -118,7 +138,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlots(ctx context
 	}
 
 	if len(activeSlots) < config.RuntimeResidentAccountSlotCount() {
-		selection, handled, fillErr := s.fillOpenAIUserAffinityResidentSlot(ctx, req, config, identity, occupiedSlots, activeSlots, resetExcluded, !resetPending)
+		selection, handled, fillErr := s.fillOpenAIUserAffinityResidentSlot(ctx, req, config, identity, occupiedSlots, activeSlots, hardExcluded, !resetPending)
 		if selection != nil || !handled || fillErr != nil && !errors.Is(fillErr, ErrNoAvailableAccounts) {
 			return selection, handled, fillErr
 		}

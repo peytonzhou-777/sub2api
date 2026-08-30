@@ -280,7 +280,7 @@ func (r *accountRepository) ResetOpenAIUserAffinityPlacement(ctx context.Context
 	}
 	scopeKey = strings.TrimSpace(scopeKey)
 	if scopeKey == "" {
-		return errors.New("scope_key is required")
+		return r.resetOpenAIUserAffinityAllScopes(ctx, userID, actorAdminID, excludeSource)
 	}
 	tx, err := r.client.Tx(ctx)
 	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
@@ -463,6 +463,50 @@ func (r *accountRepository) ResetOpenAIUserAffinityPlacement(ctx context.Context
 	}
 	if tx != nil {
 		return tx.Commit()
+	}
+	return nil
+}
+
+// resetOpenAIUserAffinityAllScopes 兼容旧的单 scope 重置实现，覆盖用户已经出现过的所有 affinity scope。
+func (r *accountRepository) resetOpenAIUserAffinityAllScopes(ctx context.Context, userID, actorAdminID int64, excludeSource bool) error {
+	if r == nil || r.sql == nil || userID <= 0 {
+		return errors.New("openai user affinity storage unavailable")
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT scope_key FROM user_account_placements WHERE user_id = $1
+		UNION
+		SELECT scope_key FROM openai_user_resident_slots WHERE user_id = $1
+		UNION
+		SELECT scope_key FROM openai_user_conversation_bindings WHERE user_id = $1
+		UNION
+		SELECT scope_key FROM openai_user_conversation_aliases WHERE user_id = $1
+		UNION
+		SELECT scope_key FROM openai_user_active_routes WHERE user_id = $1
+		UNION
+		SELECT scope_key FROM openai_user_affinity_reset_exclusions WHERE user_id = $1
+		ORDER BY scope_key`, userID)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	scopeKeys := make([]string, 0)
+	for rows.Next() {
+		var scopeKey string
+		if err := rows.Scan(&scopeKey); err != nil {
+			return err
+		}
+		scopeKey = strings.TrimSpace(scopeKey)
+		if scopeKey != "" {
+			scopeKeys = append(scopeKeys, scopeKey)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, scopeKey := range scopeKeys {
+		if err := r.ResetOpenAIUserAffinityPlacement(ctx, userID, actorAdminID, scopeKey, excludeSource); err != nil {
+			return err
+		}
 	}
 	return nil
 }

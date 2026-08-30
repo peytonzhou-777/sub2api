@@ -114,9 +114,7 @@ func (s *adminServiceImpl) ResetOpenAIUserAffinityPlacement(ctx context.Context,
 		return errors.New("openai user affinity admin storage unavailable")
 	}
 	scopeKey = strings.TrimSpace(scopeKey)
-	if scopeKey == "" {
-		return errors.New("scope_key is required")
-	}
+	// 空 scope 表示管理员对该用户执行全 scope 重置；仓储负责枚举并逐 scope 原子清理。
 	if !excludeSource && s.settingService != nil {
 		config, err := s.settingService.GetOpenAIUserAffinityConfig(ctx)
 		if err != nil {

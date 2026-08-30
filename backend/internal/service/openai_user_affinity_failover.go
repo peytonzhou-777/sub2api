@@ -31,7 +31,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversationFailover(
 		PlacementGeneration: binding.SlotGeneration, ConversationHash: binding.ConversationHash,
 		ResidentSlotID: binding.ResidentSlotID, SlotGeneration: binding.SlotGeneration,
 	}
-	eligible := sourceAdmission == openAIUserAffinityResidentPermanentUnavailable || sourceAdmission == openAIUserAffinityResidentQuota7DExhausted
+	eligible := isOpenAIUserAffinityResidentHardUnavailable(sourceAdmission)
 	if !eligible {
 		authorizedAt, err := runtimeStore.RecordOpenAIUserAffinityCapacityFailure(
 			ctx, incident, openAIUserAffinityRequestIDHash(ctx), "conversation_account_unavailable", config,
@@ -119,7 +119,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversationFailover(
 			ConversationHash: binding.ConversationHash, SourceAccountID: binding.AccountID,
 			SourceResidentSlotID: binding.ResidentSlotID, SourceSlotGeneration: binding.SlotGeneration,
 			TargetAccountID: slot.AccountID, TargetResidentSlotID: slot.ID, TargetSlotGeneration: slot.Generation,
-			ProvisionalToken: uuid.NewString(), Config: config,
+			ProvisionalToken: uuid.NewString(), DetachSource: isOpenAIUserAffinityResidentHardUnavailable(sourceAdmission), Config: config,
 		})
 		if reserveErr != nil || !reserved || transition == nil {
 			if release != nil {
@@ -143,7 +143,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversationFailover(
 		return selection, true, selectionErr
 	}
 	if allSlotsFailed && len(activeSlots) >= config.RuntimeResidentAccountSlotCount() && len(activeSlots) > 0 {
-		return s.selectOpenAIUserAffinitySlotReplacement(ctx, req, config, identity, binding, slots, activeSlots, checkedSlots)
+		return s.selectOpenAIUserAffinitySlotReplacement(ctx, req, config, identity, binding, sourceAdmission, slots, activeSlots, checkedSlots)
 	}
 	return nil, true, ErrNoAvailableAccounts
 }
@@ -162,6 +162,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinitySlotReplacement(
 	config OpenAIUserAffinityConfig,
 	identity openAIUserConversationIdentity,
 	binding *OpenAIUserConversationBinding,
+	sourceAdmission openAIUserAffinityResidentAdmission,
 	allSlots, activeSlots []OpenAIUserResidentSlot,
 	checkedSlots []OpenAIUserResidentSlotVersion,
 ) (*AccountSelectionResult, bool, error) {
@@ -170,6 +171,15 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinitySlotReplacement(
 		return nil, true, ErrNoAvailableAccounts
 	}
 	victim := activeSlots[len(activeSlots)-1]
+	if isOpenAIUserAffinityResidentHardUnavailable(sourceAdmission) {
+		for _, slot := range activeSlots {
+			if slot.ID == binding.ResidentSlotID {
+				// 硬不可用源槽位优先被替换，避免把健康槽位错误地作为牺牲槽位。
+				victim = slot
+				break
+			}
+		}
+	}
 	excluded := cloneExcludedAccountIDs(req.ExcludedIDs)
 	if excluded == nil {
 		excluded = make(map[int64]struct{}, len(allSlots))

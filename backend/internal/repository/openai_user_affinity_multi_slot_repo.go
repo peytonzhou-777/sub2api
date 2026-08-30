@@ -206,6 +206,129 @@ func (r *accountRepository) ConvergeOpenAIUserResidentSlots(ctx context.Context,
 	return nil
 }
 
+// EvictOpenAIUserResidentSlot 将确认不可恢复的账号从常驻槽位中摘除，并释放该槽位的接入资格。
+func (r *accountRepository) EvictOpenAIUserResidentSlot(ctx context.Context, userID int64, scopeKey string, slotID, accountID, generation int64, reason string, now time.Time) (bool, error) {
+	if r == nil || r.client == nil || r.sql == nil || userID <= 0 || slotID <= 0 || accountID <= 0 || generation <= 0 {
+		return false, errors.New("openai user affinity storage unavailable")
+	}
+	scopeKey = normalizeOpenAIUserAffinityScopeKey(scopeKey)
+	tx, err := r.client.Tx(ctx)
+	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+		return false, err
+	}
+	exec := r.sql
+	if tx != nil {
+		defer func() { _ = tx.Rollback() }()
+		exec = tx.Client()
+	}
+	now = now.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	lockKey := fmt.Sprintf("%d:%s", userID, scopeKey)
+	if _, err := exec.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, lockKey); err != nil {
+		return false, err
+	}
+	var currentAccountID, currentGeneration int64
+	var status string
+	err = scanSingleRow(ctx, exec, `
+		SELECT account_id, generation, status
+		FROM openai_user_resident_slots
+		WHERE id = $1 AND user_id = $2 AND scope_key = $3
+		FOR UPDATE`, []any{slotID, userID, scopeKey}, &currentAccountID, &currentGeneration, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		if tx != nil {
+			if commitErr := tx.Commit(); commitErr != nil {
+				return false, commitErr
+			}
+		}
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if currentAccountID != accountID || currentGeneration != generation ||
+		(status != service.OpenAIUserResidentSlotStatusActive &&
+			status != service.OpenAIUserResidentSlotStatusProvisional &&
+			status != service.OpenAIUserResidentSlotStatusReplacementPending) {
+		if tx != nil {
+			if commitErr := tx.Commit(); commitErr != nil {
+				return false, commitErr
+			}
+		}
+		return false, nil
+	}
+	result, err := exec.ExecContext(ctx, `
+		UPDATE openai_user_resident_slots SET status = 'draining', provisional_token = NULL, updated_at = $6
+		WHERE id = $1 AND user_id = $2 AND scope_key = $3 AND account_id = $4 AND generation = $5
+		  AND status IN ('provisional', 'active', 'replacement_pending')`,
+		slotID, userID, scopeKey, accountID, generation, now)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if affected == 0 {
+		if tx != nil {
+			if commitErr := tx.Commit(); commitErr != nil {
+				return false, commitErr
+			}
+		}
+		return false, nil
+	}
+	if _, err := exec.ExecContext(ctx, `
+		UPDATE openai_user_conversation_bindings SET status = 'draining', updated_at = $4
+		WHERE user_id = $1 AND scope_key = $2 AND resident_slot_id = $3 AND status = 'active'`,
+		userID, scopeKey, slotID, now); err != nil {
+		return false, err
+	}
+	if _, err := exec.ExecContext(ctx, `
+		UPDATE openai_user_active_routes SET
+			resident_slot_id = CASE WHEN resident_slot_id = $3 AND account_id = $4 AND slot_generation = $5 THEN NULL ELSE resident_slot_id END,
+			account_id = CASE WHEN resident_slot_id = $3 AND account_id = $4 AND slot_generation = $5 THEN NULL ELSE account_id END,
+			slot_generation = CASE WHEN resident_slot_id = $3 AND account_id = $4 AND slot_generation = $5 THEN NULL ELSE slot_generation END,
+			claimed_at = CASE WHEN resident_slot_id = $3 AND account_id = $4 AND slot_generation = $5 THEN NULL ELSE claimed_at END,
+			active_until = CASE WHEN resident_slot_id = $3 AND account_id = $4 AND slot_generation = $5 THEN NULL ELSE active_until END,
+			pending_resident_slot_id = CASE WHEN pending_resident_slot_id = $3 AND pending_account_id = $4 AND pending_slot_generation = $5 THEN NULL ELSE pending_resident_slot_id END,
+			pending_account_id = CASE WHEN pending_resident_slot_id = $3 AND pending_account_id = $4 AND pending_slot_generation = $5 THEN NULL ELSE pending_account_id END,
+			pending_slot_generation = CASE WHEN pending_resident_slot_id = $3 AND pending_account_id = $4 AND pending_slot_generation = $5 THEN NULL ELSE pending_slot_generation END,
+			pending_claimed_at = CASE WHEN pending_resident_slot_id = $3 AND pending_account_id = $4 AND pending_slot_generation = $5 THEN NULL ELSE pending_claimed_at END,
+			pending_token = CASE WHEN pending_resident_slot_id = $3 AND pending_account_id = $4 AND pending_slot_generation = $5 THEN NULL ELSE pending_token END,
+			pending_expires_at = CASE WHEN pending_resident_slot_id = $3 AND pending_account_id = $4 AND pending_slot_generation = $5 THEN NULL ELSE pending_expires_at END,
+			updated_at = $6
+		WHERE user_id = $1 AND scope_key = $2`,
+		userID, scopeKey, slotID, accountID, generation, now); err != nil {
+		return false, err
+	}
+	if _, err := exec.ExecContext(ctx, `
+		UPDATE account_user_contacts SET reservation_kind = NULL, reservation_token = NULL,
+			reservation_until = NULL, updated_at = $3
+		WHERE account_id = $1 AND user_id = $2`, accountID, userID, now); err != nil {
+		return false, err
+	}
+	if _, err := exec.ExecContext(ctx, `
+		DELETE FROM openai_user_active_routes
+		WHERE user_id = $1 AND scope_key = $2 AND account_id IS NULL AND pending_account_id IS NULL`, userID, scopeKey); err != nil {
+		return false, err
+	}
+	if _, err := exec.ExecContext(ctx, `
+		INSERT INTO user_account_placement_events
+			(user_id, scope_key, placement_generation, source_account_id, event_type,
+			 reason, effective_source, resident_slot_id)
+		VALUES ($1, $2, $3, $4, 'slot_evicted', $5, 'global', $6)`,
+		userID, scopeKey, generation, accountID, strings.TrimSpace(reason), slotID); err != nil {
+		return false, err
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
 // ListOpenAIUserResidentSlots 从权威数据库读取用户在单个 scope 下的槽位。
 func (r *accountRepository) ListOpenAIUserResidentSlots(ctx context.Context, userID int64, scopeKey string) ([]service.OpenAIUserResidentSlot, error) {
 	if r == nil || r.sql == nil {
@@ -860,6 +983,33 @@ func (r *accountRepository) ReserveOpenAIUserConversationFailover(ctx context.Co
 	if err != nil || affected == 0 {
 		return nil, false, err
 	}
+	if reservation.DetachSource {
+		if _, err := exec.ExecContext(ctx, `
+			UPDATE openai_user_resident_slots SET status = 'draining', provisional_token = NULL, updated_at = $2
+			WHERE id = $1 AND account_id = $3 AND generation = $4
+			  AND status IN ('provisional', 'active', 'replacement_pending')`,
+			reservation.SourceResidentSlotID, now, reservation.SourceAccountID, reservation.SourceSlotGeneration); err != nil {
+			return nil, false, err
+		}
+		if _, err := exec.ExecContext(ctx, `
+			UPDATE account_user_contacts SET reservation_kind = NULL, reservation_token = NULL,
+				reservation_until = NULL, updated_at = $3
+			WHERE account_id = $1 AND user_id = $2`, reservation.SourceAccountID, reservation.UserID, now); err != nil {
+			return nil, false, err
+		}
+		if err := cleanupOpenAIUserActiveRoute(ctx, exec, reservation.UserID, reservation.ScopeKey, now); err != nil {
+			return nil, false, err
+		}
+		if _, err := exec.ExecContext(ctx, `
+			INSERT INTO user_account_placement_events
+				(user_id, scope_key, placement_generation, source_account_id, event_type,
+				 reason, effective_source, resident_slot_id)
+			VALUES ($1, $2, $3, $4, 'slot_evicted', 'permanent_source_unavailable', 'global', $5)`,
+			reservation.UserID, reservation.ScopeKey, reservation.SourceSlotGeneration,
+			reservation.SourceAccountID, reservation.SourceResidentSlotID); err != nil {
+			return nil, false, err
+		}
+	}
 	if tx != nil {
 		if err := tx.Commit(); err != nil {
 			return nil, false, err
@@ -871,7 +1021,7 @@ func (r *accountRepository) ReserveOpenAIUserConversationFailover(ctx context.Co
 		AccountID: reservation.TargetAccountID, SlotGeneration: reservation.TargetSlotGeneration,
 		ProvisionalToken: reservation.ProvisionalToken, Failover: true,
 		SourceAccountID: reservation.SourceAccountID, SourceSlotID: reservation.SourceResidentSlotID,
-		SourceGeneration: reservation.SourceSlotGeneration, Config: reservation.Config,
+		SourceGeneration: reservation.SourceSlotGeneration, DetachSource: reservation.DetachSource, Config: reservation.Config,
 	}, true, nil
 }
 
@@ -1380,13 +1530,17 @@ func (r *accountRepository) commitOpenAIUserConversationFailover(ctx context.Con
 		transition.SourceSlotID, transition.SourceGeneration, now); err != nil {
 		return false, err
 	}
+	failoverReason := "capacity_retry_threshold"
+	if transition.DetachSource {
+		failoverReason = "permanent_source_unavailable"
+	}
 	if _, err := exec.ExecContext(ctx, `
 		INSERT INTO user_account_placement_events
 			(user_id, scope_key, placement_generation, source_account_id, target_account_id,
 			 event_type, reason, config_version, effective_source, resident_slot_id)
-		VALUES ($1, $2, $3, $4, $5, 'conversation_migrated', 'capacity_retry_threshold', $6, 'global', $7)`,
+		VALUES ($1, $2, $3, $4, $5, 'conversation_migrated', $6, $7, 'global', $8)`,
 		transition.UserID, normalizeOpenAIUserAffinityScopeKey(transition.ScopeKey), transition.SlotGeneration,
-		transition.SourceAccountID, transition.AccountID, transition.Config.ConfigVersion, transition.ResidentSlotID); err != nil {
+		transition.SourceAccountID, transition.AccountID, failoverReason, transition.Config.ConfigVersion, transition.ResidentSlotID); err != nil {
 		return false, err
 	}
 	if transition.Replacement {

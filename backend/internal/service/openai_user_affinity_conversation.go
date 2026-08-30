@@ -157,13 +157,6 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		}
 		return nil, false, nil
 	}
-	if binding.Status == "provisional" || !binding.FirstOutputCommitted {
-		// leader 首输出前不允许同会话 follower 向上游发送。
-		if bindingSource == "codex_parent" {
-			return nil, true, ErrOpenAICodexParentThreadPending
-		}
-		return nil, true, ErrNoAvailableAccounts
-	}
 	excluded := false
 	if req.ExcludedIDs != nil {
 		_, excluded = req.ExcludedIDs[binding.AccountID]
@@ -174,6 +167,41 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 	}
 	admission := s.classifyOpenAIUserAffinityResidentAdmission(ctx, account, req.GroupID, req.RequestedModel,
 		req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
+	if binding.Status == "provisional" || !binding.FirstOutputCommitted {
+		// 首输出前若账号已确认不可恢复，先回滚旧预留，避免 provisional 绑定永久占住会话。
+		if bindingSource == "codex_parent" {
+			if excluded || isOpenAIUserAffinityResidentHardUnavailable(admission) {
+				return nil, true, ErrOpenAICodexParentThreadUnavailable
+			}
+			return nil, true, ErrOpenAICodexParentThreadPending
+		}
+		if isOpenAIUserAffinityResidentHardUnavailable(admission) {
+			rolledBack, rollbackErr := store.RollbackOpenAIUserConversationBinding(ctx, OpenAIUserConversationTransition{
+				BindingID: binding.ID, UserID: binding.UserID, APIKeyID: binding.APIKeyID,
+				ScopeKey: binding.ScopeKey, ConversationHash: binding.ConversationHash,
+				ResidentSlotID: binding.ResidentSlotID, AccountID: binding.AccountID,
+				SlotGeneration: binding.SlotGeneration, ProvisionalToken: binding.ProvisionalToken,
+				Config: config,
+			})
+			if rollbackErr != nil {
+				return nil, true, rollbackErr
+			}
+			if rolledBack {
+				if maintenance, maintenanceOK := s.accountRepo.(OpenAIUserAffinityResidentSlotMaintenanceStore); maintenanceOK {
+					if _, evictErr := maintenance.EvictOpenAIUserResidentSlot(ctx, binding.UserID, binding.ScopeKey,
+						binding.ResidentSlotID, binding.AccountID, binding.SlotGeneration, "account_unavailable", time.Now().UTC()); evictErr != nil {
+						return nil, true, evictErr
+					}
+				}
+				if selection, found, selectErr := s.selectOpenAIUserAffinityResidentSlots(ctx, req); found || selectErr != nil {
+					return selection, found, selectErr
+				}
+				return nil, false, nil
+			}
+		}
+		// leader 首输出前不允许同会话 follower 向上游发送。
+		return nil, true, ErrNoAvailableAccounts
+	}
 	if excluded || admission != openAIUserAffinityResidentAllowed {
 		if bindingSource == "codex_parent" {
 			// 父线程命中后属于硬锁；父账号不可用时不得把派生请求投递到其他账号。

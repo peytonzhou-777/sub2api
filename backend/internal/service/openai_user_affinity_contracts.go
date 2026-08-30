@@ -29,6 +29,7 @@ type OpenAIUserAffinityMultiSlotStore interface {
 // OpenAIUserAffinityResidentSlotMaintenanceStore 让配置减槽和 TTL 缩短按当前 scope 幂等收敛。
 type OpenAIUserAffinityResidentSlotMaintenanceStore interface {
 	ConvergeOpenAIUserResidentSlots(ctx context.Context, userID int64, scopeKey string, config OpenAIUserAffinityConfig, now time.Time) error
+	EvictOpenAIUserResidentSlot(ctx context.Context, userID int64, scopeKey string, slotID, accountID, generation int64, reason string, now time.Time) (bool, error)
 }
 
 // OpenAIUserAffinityResetExclusionStore 提供管理员整组重置后的一次性账号排除事实。
@@ -304,6 +305,7 @@ type OpenAIUserConversationTransition struct {
 	SourceGeneration   int64
 	Replacement        bool
 	ReplacementSlotID  int64
+	DetachSource       bool
 	ResponseAliasHash  string
 	ManageActiveRoute  bool
 	ActiveRoutePending bool
@@ -323,6 +325,7 @@ type OpenAIUserConversationFailoverReservation struct {
 	TargetResidentSlotID int64
 	TargetSlotGeneration int64
 	ProvisionalToken     string
+	DetachSource         bool
 	Config               OpenAIUserAffinityConfig
 }
 

@@ -11,6 +11,7 @@ import (
 type openAIUserAffinityAdminStoreStub struct {
 	AccountRepository
 	excludeSource bool
+	scopeKey      string
 }
 
 func (s *openAIUserAffinityAdminStoreStub) ListOpenAIUserAffinityResidents(context.Context, int64, int, int) ([]OpenAIUserAffinityResident, int64, error) {
@@ -19,7 +20,8 @@ func (s *openAIUserAffinityAdminStoreStub) ListOpenAIUserAffinityResidents(conte
 func (s *openAIUserAffinityAdminStoreStub) GetOpenAIUserAffinityUserDetail(context.Context, int64, int) (*OpenAIUserAffinityUserDetail, error) {
 	return nil, nil
 }
-func (s *openAIUserAffinityAdminStoreStub) ResetOpenAIUserAffinityPlacement(_ context.Context, _, _ int64, _ string, excludeSource bool) error {
+func (s *openAIUserAffinityAdminStoreStub) ResetOpenAIUserAffinityPlacement(_ context.Context, _, _ int64, scopeKey string, excludeSource bool) error {
+	s.scopeKey = scopeKey
 	s.excludeSource = excludeSource
 	return nil
 }
@@ -198,5 +200,27 @@ func TestOpenAIUserAffinityManualResetUsesConfiguredSourceExclusion(t *testing.T
 	}
 	if !store.excludeSource {
 		t.Fatal("configured source exclusion was not applied")
+	}
+}
+
+func TestOpenAIUserAffinityManualResetAllowsAllScopes(t *testing.T) {
+	config := DefaultOpenAIUserAffinityConfig()
+	raw, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("marshal config: %v", err)
+	}
+	settingRepo := &openAIUserAffinitySettingRepoStub{values: map[string]string{
+		SettingKeyOpenAIUserAffinityScheduling: string(raw),
+	}}
+	store := &openAIUserAffinityAdminStoreStub{}
+	adminService := &adminServiceImpl{
+		accountRepo: store, settingService: NewSettingService(settingRepo, nil),
+	}
+
+	if err := adminService.ResetOpenAIUserAffinityPlacement(context.Background(), 42, 7, "", false); err != nil {
+		t.Fatalf("reset all scopes: %v", err)
+	}
+	if store.scopeKey != "" {
+		t.Fatalf("all-scope reset must pass an empty scope key, got %q", store.scopeKey)
 	}
 }
