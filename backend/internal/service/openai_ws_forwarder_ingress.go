@@ -975,7 +975,21 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		turnStart := time.Now()
 		wroteDownstream := false
 		sawUpstreamEvent := false
-		if err := lease.WriteJSONWithContextTimeout(ctx, json.RawMessage(payload), s.openAIWSWriteTimeout()); err != nil {
+		wirePayload := payload
+		if binding, ok := SessionPersonaBindingFromContextOrGin(ctx, c); ok &&
+			IsOpenCodePersona(binding) && OpenCodePersonaTransportReady(SessionPersonaTransportWS) {
+			var projectErr error
+			wirePayload, projectErr = PrepareOpenCodeOutboundBody(payload, SessionPersonaTransportWS, false)
+			if projectErr != nil {
+				return nil, wrapOpenAIWSIngressTurnError(
+					"project_opencode_request",
+					fmt.Errorf("prepare OpenCode websocket request: %w", projectErr),
+					false,
+				)
+			}
+		}
+		payloadBytes = len(wirePayload)
+		if err := lease.WriteJSONWithContextTimeout(ctx, json.RawMessage(wirePayload), s.openAIWSWriteTimeout()); err != nil {
 			return nil, wrapOpenAIWSIngressTurnError(
 				"write_upstream",
 				fmt.Errorf("write upstream websocket request: %w", err),

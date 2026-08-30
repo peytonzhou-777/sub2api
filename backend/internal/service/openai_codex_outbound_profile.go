@@ -778,7 +778,18 @@ func (s *OpenAIGatewayService) marshalCodexOutboundWSPayload(
 	requestKind string,
 ) ([]byte, error) {
 	raw, err := marshalOpenAIUpstreamJSON(payload)
-	if err != nil || s.resolveCodexOutboundProfileForRequest(c, account) != CodexOutboundProfileCLI0149 {
+	if err != nil {
+		return raw, err
+	}
+	// OpenCode uses the same Responses WebSocket envelope/event schema as the
+	// selected upstream route, but its identity and body contract are distinct
+	// from strict Codex. Project it before the Codex profile serializer so no
+	// Codex metadata or compression markers leak into the OpenCode slot.
+	if binding, ok := SessionPersonaBindingFromContextOrGin(context.Background(), c); ok &&
+		IsOpenCodePersona(binding) && OpenCodePersonaTransportReady(SessionPersonaTransportWS) {
+		return PrepareOpenCodeOutboundBody(raw, SessionPersonaTransportWS, false)
+	}
+	if s.resolveCodexOutboundProfileForRequest(c, account) != CodexOutboundProfileCLI0149 {
 		return raw, err
 	}
 	snapshot := stagedCodexOutboundSnapshot(c, account)

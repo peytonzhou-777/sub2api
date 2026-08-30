@@ -85,8 +85,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	routingServiceTier string,
 ) (http.Header, openAIWSSessionHeaderResolution, error) {
 	headers := make(http.Header)
-	if binding, ok := SessionPersonaBindingFromContextOrGin(ctx, c); ok &&
-		IsOpenCodePersona(binding) &&
+	personaBinding, hasPersonaBinding := SessionPersonaBindingFromContextOrGin(ctx, c)
+	isOpenCodePersona := hasPersonaBinding && IsOpenCodePersona(personaBinding)
+	if isOpenCodePersona &&
 		!OpenCodePersonaTransportReady(SessionPersonaTransportWS) {
 		return nil, openAIWSSessionHeaderResolution{}, ErrOpenCodePersonaWebSocketUnavailable
 	}
@@ -125,7 +126,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	// 实际请求因头差异落进不同的连接池兼容分桶。
 	applyOpenAICodexBetaFeatures(c, account, headers)
 	// OAuth 账号：将 apiKeyID 混入 session 标识符，防止跨用户会话碰撞。
-	if account != nil && account.UsesOpenAICodexProtocol() {
+	if account != nil && account.UsesOpenAICodexProtocol() && !isOpenCodePersona {
 		apiKeyID := getAPIKeyIDFromContext(c)
 		if sessionResolution.SessionID != "" {
 			headers.Set("session_id", isolateOpenAIUpstreamSessionID(apiKeyID, codexAccountIdentitySource(c, account), sessionResolution.SessionID))
@@ -154,7 +155,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		if err := resolveAndSetOpenAIChatGPTAccountHeaders(ctx, s.accountRepo, headers, account); err != nil {
 			return nil, sessionResolution, fmt.Errorf("resolve chatgpt account headers: %w", err)
 		}
-		headers.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
+		if !isOpenCodePersona {
+			headers.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
+		}
 	}
 
 	betaValue := openAIWSBetaV2Value
@@ -181,7 +184,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	applyStagedCodexFingerprintHeaders(c, account, headers)
 	// 终态收口：WS 握手与 HTTP 出站共用同一套身份语义，账号级自定义 UA 同样作为
 	// 管理员显式配置传入（上面写进 headers 的值只在强制统一被关闭时才参与配对）。
-	if account != nil && account.UsesOpenAICodexProtocol() {
+	if account != nil && account.UsesOpenAICodexProtocol() && !isOpenCodePersona {
 		enforceCodexIdentityHeadersWithUA(headers, s.codexIdentityOverrideUA(account))
 	}
 
@@ -192,6 +195,11 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	s.finalizeCodexOutboundHeaders(
 		c, account, headers, false, string(decision.Transport), routingModel, routingServiceTier,
 	)
+	if isOpenCodePersona && OpenCodePersonaTransportReady(SessionPersonaTransportWS) {
+		// Apply after all compatibility/finalization logic so Codex headers,
+		// routing hints, and beta values cannot win over the OpenCode contract.
+		ApplyOpenCodeWebSocketHeaders(headers, personaBinding, "", "", "")
+	}
 	logOpenAIRoutingDiagnostics(
 		ctx,
 		account,
