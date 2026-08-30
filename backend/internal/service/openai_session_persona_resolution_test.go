@@ -119,6 +119,58 @@ func TestResolveSessionPersonaBindingForNewRootUsesOpenCodeWhenReady(t *testing.
 	}
 }
 
+func TestResolveSessionPersonaBindingForNewRootCodexClientPrefersStrictCodex(t *testing.T) {
+	account := newSessionPersonaOAuthAccount()
+	account.Extra[openAIPersonaMappingEnabledExtraKey] = true
+	c := newSessionPersonaResolverTestContext(newSessionPersonaResolverIDs(SessionPersonaScopeVersionV3, 1, 2))
+	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.149.0 (Linux; x86_64)")
+	c.Request.Header.Set("originator", "codex_cli_rs")
+
+	binding, ok := ResolveSessionPersonaBindingForNewRoot(c, account)
+	if !ok {
+		t.Fatal("Codex new-root resolver rejected an eligible strict Codex slot")
+	}
+	if binding.PersonaID != SessionPersonaCodexCLIStrict || binding.SlotID != 0 {
+		t.Fatalf("Codex binding = %+v, want strict Codex slot 0", binding)
+	}
+	if binding.CompatibilityFallback || binding.Mapping != SessionPersonaMappingPersonaV3 {
+		t.Fatalf("Codex preference was incorrectly marked as compatibility fallback: %+v", binding)
+	}
+}
+
+func TestResolveSessionPersonaBindingForNewRootCodexPreferenceFallsBackToExistingOrder(t *testing.T) {
+	account := newSessionPersonaOAuthAccount()
+	account.Extra[openAIPersonaMappingEnabledExtraKey] = true
+	account.Extra[openAIPersonaSlotStateExtraKey] = map[string]any{
+		"0": string(SessionPersonaSlotStateDraining),
+	}
+	c := newSessionPersonaResolverTestContext(newSessionPersonaResolverIDs(SessionPersonaScopeVersionV3, 1, 2))
+	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.149.0 (Linux; x86_64)")
+	c.Request.Header.Set("originator", "codex_cli_rs")
+
+	binding, ok := ResolveSessionPersonaBindingForNewRoot(c, account)
+	if !ok {
+		t.Fatal("Codex resolver did not fall back after strict Codex became unavailable")
+	}
+	if binding.PersonaID != SessionPersonaOpenCode || binding.SlotID != 1 {
+		t.Fatalf("fallback binding = %+v, want OpenCode slot 1", binding)
+	}
+}
+
+func TestResolveSessionPersonaBindingForNewRootNonCodexPrefersOpenCode(t *testing.T) {
+	account := newSessionPersonaOAuthAccount()
+	account.Extra[openAIPersonaMappingEnabledExtraKey] = true
+	c := newSessionPersonaResolverTestContext(newSessionPersonaResolverIDs(SessionPersonaScopeVersionV3, 0, 2))
+
+	binding, ok := ResolveSessionPersonaBindingForNewRoot(c, account)
+	if !ok {
+		t.Fatal("non-Codex new-root resolver rejected an eligible OpenCode slot")
+	}
+	if binding.PersonaID != SessionPersonaOpenCode || binding.SlotID != 1 {
+		t.Fatalf("non-Codex binding = %+v, want OpenCode slot 1", binding)
+	}
+}
+
 func TestResolveSessionPersonaBindingForNewRootKeepsOpenCodeWhenSlotZeroDisabled(t *testing.T) {
 	account := newSessionPersonaOAuthAccount()
 	account.Extra[openAIPersonaSlotStateExtraKey] = map[string]any{

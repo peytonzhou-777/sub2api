@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/gin-gonic/gin"
 )
 
@@ -70,10 +71,18 @@ func ResolveSessionPersonaBindingForNewRoot(c *gin.Context, account *Account) (S
 		mappingVersion = SessionPersonaScopeVersionV3
 	}
 
-	// Keep the fingerprint-selected slot first, then prefer strict Codex slot 0
-	// as the compatibility anchor, and finally inspect any remaining legacy
-	// slots. Every candidate is checked against its real lifecycle state.
+	// Persona v3 has a client-family preference before falling back to the
+	// fingerprint-selected order:
+	//   - non-Codex clients prefer OpenCode slot 1;
+	//   - official Codex clients prefer strict Codex slot 0 when it is eligible
+	//     for a new root (active, authorized, and transport-ready).
+	//
+	// The candidate loop below is still the source of truth for lifecycle and
+	// credential checks. If the preferred Persona is not eligible, selection
+	// returns to the historical fingerprint/slot order without remapping an
+	// existing Thread.
 	candidateSlots := make([]int, 0, slotCount+1)
+	codexClientPreferred := mappingEnabled && isCodexPersonaClientRequest(c)
 	appendCandidate := func(slotID int) {
 		if slotID < 0 || slotID >= slotCount {
 			return
@@ -84,6 +93,13 @@ func ResolveSessionPersonaBindingForNewRoot(c *gin.Context, account *Account) (S
 			}
 		}
 		candidateSlots = append(candidateSlots, slotID)
+	}
+	if mappingEnabled {
+		if codexClientPreferred {
+			appendCandidate(0)
+		} else {
+			appendCandidate(1)
+		}
 	}
 	appendCandidate(preferredSlot)
 	appendCandidate(0)
@@ -124,13 +140,26 @@ func ResolveSessionPersonaBindingForNewRoot(c *gin.Context, account *Account) (S
 		// candidate is unavailable is a legacy compatibility fallback. A
 		// healthy OpenCode slot must remain a first-class v3 mapping even when
 		// fingerprint preference points at a disabled/unready slot 0.
-		if binding.PersonaID == SessionPersonaCodexCLIStrict && binding.SlotID == 0 && preferredSlot != 0 {
+		if binding.PersonaID == SessionPersonaCodexCLIStrict && binding.SlotID == 0 && preferredSlot != 0 && !codexClientPreferred {
 			binding.CompatibilityFallback = true
 			binding.Mapping = SessionPersonaMappingCompatibility
 		}
 		return binding, true
 	}
 	return SessionPersonaSlotBinding{}, false
+}
+
+// isCodexPersonaClientRequest identifies the official Codex client family for
+// v3 new-root preference. Unknown, generic, and third-party clients are
+// intentionally treated as non-Codex so they prefer OpenCode when available.
+func isCodexPersonaClientRequest(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	return openai.IsCodexOfficialClientByHeaders(
+		c.GetHeader("User-Agent"),
+		c.GetHeader("originator"),
+	)
 }
 
 // ResolveSessionPersonaBindingForExistingThread validates and preserves a
