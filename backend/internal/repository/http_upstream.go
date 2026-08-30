@@ -125,12 +125,16 @@ type openAIHTTP2Settings struct {
 // upstreamClientEntry 上游客户端缓存条目
 // 记录客户端实例及其元数据，用于连接池管理和淘汰策略
 type upstreamClientEntry struct {
-	client       *http.Client // HTTP 客户端实例
-	proxyKey     string       // 代理标识（用于检测代理变更）
-	poolKey      string       // 连接池配置标识（用于检测配置变更）
-	protocolMode string       // 协议模式（default/openai_h1/openai_h2/openai_h1_fallback）
-	lastUsed     int64        // 最后使用时间戳（纳秒），用于 LRU 淘汰
-	inFlight     int64        // 当前进行中的请求数，>0 时不可淘汰
+	client                  *http.Client // HTTP 客户端实例
+	proxyKey                string       // 代理标识（用于检测代理变更）
+	poolKey                 string       // 连接池配置标识（用于检测配置变更）
+	protocolMode            string       // 协议模式（default/openai_h1/openai_h2/openai_h1_fallback）
+	transportManagerID      string       // CPA Transport manager 标识
+	transportGeneration     uint64       // CPA Transport manager 代际
+	scopeFingerprint        string       // Account × Persona × Slot × Epoch 等作用域摘要
+	transportProfileVersion string       // TLS Profile 版本
+	lastUsed                int64        // 最后使用时间戳（纳秒），用于 LRU 淘汰
+	inFlight                int64        // 当前进行中的请求数，>0 时不可淘汰
 }
 
 type openAIHTTP2FallbackState struct {
@@ -163,6 +167,11 @@ type httpUpstreamService struct {
 	clients map[string]*upstreamClientEntry // 客户端缓存池，key 由隔离策略决定
 	// OpenAI 走 HTTP/HTTPS 代理时的 H2->H1 回退状态（key=标准化 proxyKey）
 	openAIHTTP2Fallbacks sync.Map
+	// openAICPAManager 只服务于具备完整 Persona/slot v3 作用域的 OAuth 请求。
+	// manager 轮换时旧 manager 进入 draining，绝不接收新连接。
+	openAICPAManagerMu         sync.Mutex
+	openAICPAManager           *openAITransportManager
+	openAICPAManagerGeneration atomic.Uint64
 }
 
 // NewHTTPUpstream 创建通用 HTTP 上游服务
@@ -255,6 +264,13 @@ func (s *httpUpstreamService) DoWithTLS(req *http.Request, proxyURL string, acco
 	upstreamProfile := service.HTTPUpstreamProfileDefault
 	if req != nil {
 		upstreamProfile = service.HTTPUpstreamProfileFromContext(req.Context())
+	}
+	// 已完成 Persona v3 绑定的 OpenAI OAuth 请求进入 CPA 专用 Transport。
+	// 旧 v1/v2 或不完整绑定继续走原有兼容路径，避免迁移期间破坏历史请求。
+	if req != nil && upstreamProfile == service.HTTPUpstreamProfileOpenAI && s.openAICPATransportEnabled() {
+		if scope, ok := service.OpenAITransportScopeFromContext(req.Context(), accountID); ok {
+			return s.doOpenAICPA(req, proxyURL, accountID, accountConcurrency, scope)
+		}
 	}
 
 	targetHost := ""
