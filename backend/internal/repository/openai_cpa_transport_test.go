@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"context"
+	"net/http"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -8,6 +10,81 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"golang.org/x/net/http2"
 )
+
+func TestDoWithTLSRoutesCompletePersonaScopeToCPAManager(t *testing.T) {
+	cfg := &config.Config{
+		Gateway: config.GatewayConfig{
+			OpenAIHTTP2: config.GatewayOpenAIHTTP2Config{Enabled: true},
+		},
+	}
+	svc := &httpUpstreamService{cfg: cfg, clients: make(map[string]*upstreamClientEntry)}
+	binding := service.SessionPersonaSlotBinding{
+		AccountID:         42,
+		SlotID:            1,
+		SlotCount:         2,
+		MappingVersion:    service.SessionPersonaScopeVersionV3,
+		PersonaID:         service.SessionPersonaOpenCode,
+		PersonaVersion:    "1.18.23",
+		CredentialChainID: "chain-opencode",
+		InstallationID:    "install-opencode",
+		State:             service.SessionPersonaSlotStateActive,
+		Enabled:           true,
+		Authorized:        true,
+		SessionEpoch:      1,
+		SlotGeneration:    1,
+		SlotSetGeneration: 1,
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://api.openai.com/v1/responses", nil)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	ctx := service.WithHTTPUpstreamProfile(req.Context(), service.HTTPUpstreamProfileOpenAI)
+	ctx = service.ContextWithSessionPersonaBinding(ctx, binding)
+	req = req.WithContext(ctx)
+
+	manager := svc.ensureOpenAICPAManager()
+	settings := svc.applyProfilePoolSettings(svc.resolvePoolSettings(svc.getIsolationMode(), 1), service.HTTPUpstreamProfileOpenAI)
+	poolKey := buildPoolKey(settings, upstreamProtocolModeOpenAICPAH2) + "|profile:" + tlsfingerprint.CPAChromeProfileVersion
+	fingerprint := openAITransportScopeFingerprint(service.OpenAITransportScope{
+		AccountID:         binding.AccountID,
+		Persona:           binding.PersonaID,
+		PersonaVersion:    binding.PersonaVersion,
+		SlotID:            binding.SlotID,
+		SessionEpoch:      binding.SessionEpoch,
+		SlotGeneration:    binding.SlotGeneration,
+		SlotSetGeneration: binding.SlotSetGeneration,
+		CredentialChainID: binding.CredentialChainID,
+		InstallationID:    binding.InstallationID,
+	}, directProxyKey, poolKey)
+	routed := false
+	manager.clients["cpa:"+fingerprint] = &upstreamClientEntry{
+		client: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			routed = true
+			return &http.Response{StatusCode: http.StatusNoContent, Header: make(http.Header), Body: http.NoBody}, nil
+		})},
+		proxyKey:                directProxyKey,
+		poolKey:                 poolKey,
+		protocolMode:            upstreamProtocolModeOpenAICPAH2,
+		transportManagerID:      manager.id,
+		transportGeneration:     manager.generation,
+		scopeFingerprint:        fingerprint,
+		transportProfileVersion: tlsfingerprint.CPAChromeProfileVersion,
+	}
+
+	resp, err := svc.DoWithTLS(req, "", binding.AccountID, 1, &tlsfingerprint.Profile{Name: "legacy-input-is-ignored"})
+	if err != nil {
+		t.Fatalf("CPA-routed request failed: %v", err)
+	}
+	if resp == nil || !routed {
+		t.Fatal("complete Persona scope did not use the CPA manager")
+	}
+	if len(svc.clients) != 0 {
+		t.Fatal("CPA-routed request populated the legacy account/proxy client cache")
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatalf("close response body: %v", err)
+	}
+}
 
 func TestOpenAICPATransportIsolatedByScopeAndManagerGeneration(t *testing.T) {
 	cfg := &config.Config{
