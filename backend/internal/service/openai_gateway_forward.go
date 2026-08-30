@@ -113,14 +113,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	wsDecision := s.getOpenAIWSProtocolResolver().Resolve(account)
 	// 仅允许 WS 入站请求走 WS 上游，避免出现 HTTP -> WS 协议混用。
 	wsDecision = resolveOpenAIWSDecisionByClientTransport(wsDecision, GetOpenAIClientTransport(c))
-	// OpenCode rollout starts with the HTTP adapter. Until its dedicated WS
-	// event translator is enabled, keep the Persona on the deterministic HTTP
-	// path instead of silently sending Codex WS frames upstream.
+	// OpenCode currently advertises the HTTP Persona contract. If a future
+	// rollout enables its dedicated WS adapter, this branch will stop forcing
+	// HTTP; until then never send Codex-shaped frames upstream.
 	personaBinding, hasPersonaBinding := SessionPersonaBindingFromContextOrGin(ctx, c)
 	isOpenCodePersona := hasPersonaBinding && IsOpenCodePersona(personaBinding)
 	if isOpenCodePersona {
 		wsDecision.Transport = OpenAIUpstreamTransportHTTPSSE
-		wsDecision.Reason = "opencode_http_rollout"
+		wsDecision.Reason = "opencode_http_contract"
 	}
 	passthroughEnabled := account.IsOpenAIPassthroughEnabled()
 	if isOpenCodePersona {
@@ -1369,8 +1369,23 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			return nil, fmt.Errorf("prepare Codex outbound request: %w", outboundErr)
 		}
 	} else if isOpenCodePersona {
+		// OpenCode owns a separate client-thread/session namespace. Persist the
+		// pair before serializing the request so a retry or continuation can only
+		// reuse the same Account×Persona×Slot×Epoch×Credential Chain scope.
+		var mappingErr error
+		personaBinding, mappingErr = s.EnsureOpenCodeThreadMapping(ctx, c, personaBinding, body)
+		if mappingErr != nil {
+			return nil, fmt.Errorf("ensure OpenCode thread mapping: %w", mappingErr)
+		}
+		if c != nil {
+			_ = AttachSessionPersonaBindingToGin(c, personaBinding)
+		}
+		body, mappingErr = s.RewriteOpenCodeContinuation(ctx, c, personaBinding, body)
+		if mappingErr != nil {
+			return nil, fmt.Errorf("rewrite OpenCode continuation: %w", mappingErr)
+		}
 		var outboundErr error
-		body, outboundErr = PrepareOpenCodeOutboundBody(body, SessionPersonaTransportHTTP, isOpenAIResponsesCompactPath(c))
+		body, outboundErr = PrepareOpenCodeOutboundBodyWithMappedContinuation(body, SessionPersonaTransportHTTP, isOpenAIResponsesCompactPath(c))
 		if outboundErr != nil {
 			return nil, fmt.Errorf("prepare OpenCode outbound request: %w", outboundErr)
 		}

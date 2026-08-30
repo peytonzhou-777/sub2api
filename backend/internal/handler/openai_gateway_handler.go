@@ -687,6 +687,21 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		)
 		account := selection.Account
 		boundPersona, hasBoundPersona := service.SessionPersonaBindingFromGin(c)
+		// A continuation may enter without a request-scoped binding. Resolve its
+		// client response ID before applying the account-level OAuth gate so an
+		// OpenCode response can stay on its original slot/epoch/credential chain.
+		if previousResponseID != "" && !hasBoundPersona && account.IsOpenAIOAuth() {
+			mappedBinding, mapped, mappingErr := h.gatewayService.ResolveOpenAIPersonaBindingForClientResponse(
+				c.Request.Context(), subject.UserID, apiKey.ID, previousResponseID, account,
+			)
+			if mappingErr != nil {
+				reqLog.Warn("openai.persona_response_mapping_lookup_failed", zap.Int64("account_id", account.ID), zap.Error(mappingErr))
+			} else if mapped {
+				_ = service.AttachSessionPersonaBindingToGin(c, mappedBinding)
+				boundPersona = mappedBinding
+				hasBoundPersona = true
+			}
+		}
 		boundOpenCodeContinuation := hasBoundPersona &&
 			(boundPersona.AccountID == 0 || boundPersona.AccountID == account.ID) &&
 			service.IsOpenCodePersona(boundPersona)
@@ -2107,20 +2122,9 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 			ctx, personaBinding, hasPersonaBinding = resolveOpenAIPersonaAdmissionBinding(ctx, c, account, body)
 		}
 	}
-	// OpenCode continuation IDs require a durable client↔OpenCode mapping. Until
-	// that mapper is wired, reject an already-bound continuation explicitly so a
-	// Codex previous_response_id can never be copied onto the OpenCode wire.
-	if hasPersonaBinding && service.IsOpenCodePersona(personaBinding) &&
-		service.SessionPersonaRequestHasContinuation(c, body) {
-		if selection.Acquired && selection.ReleaseFunc != nil {
-			selection.ReleaseFunc()
-			selection.Acquired = false
-			selection.ReleaseFunc = nil
-		}
-		reqLog.Warn("openai.opencode_continuation_unsupported", zap.Int64("account_id", account.ID), zap.Int("slot_id", personaBinding.SlotID))
-		h.handleStreamingAwareError(c, http.StatusBadRequest, "invalid_request_error", "OpenCode Persona continuation is not supported until session mapping is available", *streamStarted)
-		return nil, openAISlotAcquireFailed
-	}
+	// OpenCode continuation IDs are resolved from the durable client↔Persona
+	// mapper before account admission. The forwarder performs the final exact
+	// scope lookup and fails closed if the mapping is missing or conflicting.
 	// Once the v3 Persona mapper is enabled, a new root must have an active,
 	// authorized slot. Do not silently fall back to the legacy account-level
 	// Codex path when both slots are draining/disabled/unready; that would make
@@ -2829,6 +2833,17 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		var hasPersonaBinding bool
 		if account.Platform == service.PlatformOpenAI && account.IsOpenAIOAuth() {
 			_, existingBinding := service.SessionPersonaBindingFromGin(c)
+			if previousResponseID != "" && !existingBinding {
+				mappedBinding, mapped, mappingErr := h.gatewayService.ResolveOpenAIPersonaBindingForClientResponse(
+					c.Request.Context(), subject.UserID, apiKey.ID, previousResponseID, account,
+				)
+				if mappingErr != nil {
+					reqLog.Warn("openai.websocket_persona_response_mapping_lookup_failed", zap.Int64("account_id", account.ID), zap.Error(mappingErr))
+				} else if mapped {
+					_ = service.AttachSessionPersonaBindingToGin(c, mappedBinding)
+					existingBinding = true
+				}
+			}
 			shouldPrepare := account.IsOpenAIPersonaMappingEnabled() &&
 				!service.SessionPersonaRequestHasContinuation(c, wsAttemptMessage)
 			if existingBinding || shouldPrepare {
@@ -2840,18 +2855,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					}
 				}
 				admissionCtx, personaBinding, hasPersonaBinding = resolveOpenAIPersonaAdmissionBinding(admissionCtx, c, account, wsAttemptMessage)
-				if hasPersonaBinding && service.IsOpenCodePersona(personaBinding) &&
-					service.SessionPersonaRequestHasContinuation(c, wsAttemptMessage) {
-					if accountReleaseFunc != nil {
-						accountReleaseFunc()
-						accountReleaseFunc = nil
-					}
-					selection.Acquired = false
-					selection.ReleaseFunc = nil
-					reqLog.Warn("openai.websocket_opencode_continuation_unsupported", zap.Int64("account_id", account.ID), zap.Int("slot_id", personaBinding.SlotID))
-					closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "OpenCode Persona continuation is not supported until session mapping is available")
-					return
-				}
 				// An existing OpenCode Thread must not be silently remapped to
 				// strict Codex merely because the current WS bridge is Codex-shaped.
 				// Reject before admission/token/upstream work so the bound Persona,

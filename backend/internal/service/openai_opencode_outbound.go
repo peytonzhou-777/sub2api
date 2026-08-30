@@ -15,14 +15,15 @@ const (
 	// OpenCode release and must not be inherited from Codex WS headers.
 	OpenCodeResponsesWebSocketProtocolHeader = "responses_websockets=2026-02-06"
 	openCodePersonaSessionIDHeader           = "session-id"
-	// The gateway rollout enables the OpenCode HTTP adapter first. Keep the
-	// source-compatible WS helper available for phase 4, but do not route live
-	// WS requests into the Codex-only bridge before its event/pool adapter lands.
+	// The OpenCode source-compatible Persona currently advertises HTTP only.
+	// Keep the WS adapter implementation behind a readiness gate until the
+	// source contract and dedicated upstream pool are both enabled; requests
+	// fail closed instead of borrowing the strict Codex bridge.
 	openCodeWebSocketAdapterEnabled = false
 )
 
-// ErrOpenCodePersonaWebSocketUnavailable identifies the intentional HTTP-first
-// rollout guard. Existing OpenCode Threads must fail closed rather than being
+// ErrOpenCodePersonaWebSocketUnavailable identifies a disabled OpenCode WS
+// rollout. Existing OpenCode Threads must fail closed rather than being
 // silently remapped to the strict Codex Persona.
 var ErrOpenCodePersonaWebSocketUnavailable = errors.New("OpenCode Persona WebSocket adapter is not enabled")
 
@@ -152,6 +153,18 @@ func isOpenCodeInheritedIdentityHeader(lowerKey string) bool {
 // OpenCode wire contract. It strips Codex-only identity/transport metadata and
 // does not copy client session IDs or turn-state blobs.
 func PrepareOpenCodeOutboundBody(body []byte, transport SessionPersonaTransport, compact bool) ([]byte, error) {
+	return prepareOpenCodeOutboundBody(body, transport, compact, false)
+}
+
+// PrepareOpenCodeOutboundBodyWithMappedContinuation is used only after the
+// gateway has resolved a client previous_response_id through the durable
+// Account×Persona×Slot×Epoch×Credential Chain mapper. The mapped ID may cross
+// the OpenCode wire; an untrusted client continuation may not.
+func PrepareOpenCodeOutboundBodyWithMappedContinuation(body []byte, transport SessionPersonaTransport, compact bool) ([]byte, error) {
+	return prepareOpenCodeOutboundBody(body, transport, compact, true)
+}
+
+func prepareOpenCodeOutboundBody(body []byte, transport SessionPersonaTransport, compact, mappedContinuation bool) ([]byte, error) {
 	if len(body) == 0 {
 		return body, nil
 	}
@@ -166,7 +179,7 @@ func PrepareOpenCodeOutboundBody(body []byte, transport SessionPersonaTransport,
 	// another continuation marker. OpenCode IDs are deliberately separate, and
 	// forwarding the raw value would cross Persona state, so fail closed until a
 	// durable mapping/compaction checkpoint is available.
-	if sessionPersonaValueHasContinuation(payload, 0) {
+	if sessionPersonaValueHasContinuation(payload, 0) && !mappedContinuation {
 		return nil, ErrOpenCodePersonaContinuationUnsupported
 	}
 	for _, key := range []string{

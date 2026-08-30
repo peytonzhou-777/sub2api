@@ -674,6 +674,22 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
 				line = "data: " + data
 				eventType = effectiveOpenAISSEEventType(dataBytes, eventType)
 			}
+			if binding, bindingOK := SessionPersonaBindingFromGin(c); bindingOK && IsOpenCodePersona(binding) {
+				projectedData, projectedID, projectErr := s.ProjectOpenCodeResponseJSON(ctx, c, binding, dataBytes)
+				if projectErr != nil {
+					streamEarlyErr = fmt.Errorf("project OpenCode SSE response identity: %w", projectErr)
+					return
+				}
+				if projectedID != "" {
+					responseID = projectedID
+				}
+				if !bytes.Equal(projectedData, dataBytes) {
+					dataBytes = projectedData
+					data = string(projectedData)
+					line = "data: " + data
+					eventType = effectiveOpenAISSEEventType(dataBytes, eventType)
+				}
+			}
 			if sanitizedData, sanitized := sanitizeOpenAIResponseFailedEventForClient(
 				dataBytes,
 				eventType,
@@ -1706,6 +1722,13 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 		return nil, fmt.Errorf("restore OpenAI namespace response: %w", err)
 	}
 	body = restoreCodexToolNamesFromContext(c, body)
+	if binding, ok := SessionPersonaBindingFromGin(c); ok && IsOpenCodePersona(binding) {
+		projected, _, projectErr := s.ProjectOpenCodeResponseJSON(ctx, c, binding, body)
+		if projectErr != nil {
+			return nil, fmt.Errorf("project OpenCode response identity: %w", projectErr)
+		}
+		body = projected
+	}
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	// Codex 协议要求 /responses/compact JSON 响应携带 x-codex-turn-state
 	// （codex-api/src/endpoint/compact.rs 从响应头捕获），显式回传。
@@ -1812,6 +1835,13 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 			bodyText = s.replaceModelInSSEBody(bodyText, mappedModel, originalModel)
 		}
 		body = []byte(bodyText)
+	}
+	if binding, bindingOK := SessionPersonaBindingFromGin(c); bindingOK && IsOpenCodePersona(binding) {
+		projected, _, projectErr := s.ProjectOpenCodeResponseJSON(c.Request.Context(), c, binding, body)
+		if projectErr != nil {
+			return nil, fmt.Errorf("project OpenCode SSE response identity: %w", projectErr)
+		}
+		body = projected
 	}
 
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)

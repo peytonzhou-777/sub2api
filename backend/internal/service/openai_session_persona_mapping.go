@@ -60,11 +60,11 @@ func (a *Account) IsOpenAIPersonaMappingEnabled() bool {
 	return a.GetOpenAIPersonaMappingVersion() >= SessionPersonaScopeVersionV3
 }
 
-// SessionPersonaMappingKey returns a non-secret, deterministic key for a
-// Persona binding. It is intentionally separate from the Codex fingerprint
-// scope hash so changing the fingerprint algorithm cannot silently remap a
-// Thread across Persona boundaries.
-func SessionPersonaMappingKey(binding SessionPersonaSlotBinding) string {
+// SessionPersonaMappingScopeKey returns the non-secret, deterministic scope
+// key used by persistent client↔Persona ID mappings. CredentialChainID is part
+// of the scope so an OAuth rotation cannot reuse an old OpenCode ID under a
+// newly authorized chain.
+func SessionPersonaMappingScopeKey(binding SessionPersonaSlotBinding) string {
 	binding = binding.NormalizeLifecycle()
 	seed := strings.Join([]string{
 		"openai-persona-map:v3",
@@ -74,10 +74,17 @@ func SessionPersonaMappingKey(binding SessionPersonaSlotBinding) string {
 		formatInt64(binding.SessionEpoch),
 		formatInt64(binding.SlotGeneration),
 		formatInt64(binding.SlotSetGeneration),
+		strings.TrimSpace(binding.CredentialChainID),
 		strings.TrimSpace(binding.ClientThreadID),
 	}, "|")
 	digest := sha256.Sum256([]byte(seed))
 	return "pm_" + hex.EncodeToString(digest[:16])
+}
+
+// SessionPersonaMappingKey is retained as the public compatibility name for
+// callers that only need the v3 scope key.
+func SessionPersonaMappingKey(binding SessionPersonaSlotBinding) string {
+	return SessionPersonaMappingScopeKey(binding)
 }
 
 // GetOpenAIPersonaInstallationID returns the installation identity owned by a

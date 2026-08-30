@@ -978,8 +978,28 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		wirePayload := payload
 		if binding, ok := SessionPersonaBindingFromContextOrGin(ctx, c); ok &&
 			IsOpenCodePersona(binding) && OpenCodePersonaTransportReady(SessionPersonaTransportWS) {
+			var mappingErr error
+			binding, mappingErr = s.EnsureOpenCodeThreadMapping(ctx, c, binding, payload)
+			if mappingErr != nil {
+				return nil, wrapOpenAIWSIngressTurnError(
+					"map_opencode_thread",
+					fmt.Errorf("ensure OpenCode websocket thread mapping: %w", mappingErr),
+					false,
+				)
+			}
+			if c != nil {
+				_ = AttachSessionPersonaBindingToGin(c, binding)
+			}
+			wirePayload, mappingErr = s.RewriteOpenCodeContinuation(ctx, c, binding, payload)
+			if mappingErr != nil {
+				return nil, wrapOpenAIWSIngressTurnError(
+					"map_opencode_continuation",
+					fmt.Errorf("rewrite OpenCode websocket continuation: %w", mappingErr),
+					false,
+				)
+			}
 			var projectErr error
-			wirePayload, projectErr = PrepareOpenCodeOutboundBody(payload, SessionPersonaTransportWS, false)
+			wirePayload, projectErr = PrepareOpenCodeOutboundBodyWithMappedContinuation(wirePayload, SessionPersonaTransportWS, false)
 			if projectErr != nil {
 				return nil, wrapOpenAIWSIngressTurnError(
 					"project_opencode_request",
@@ -1197,6 +1217,21 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					if corrected, changed := s.toolCorrector.CorrectToolCallsInSSEBytes(upstreamMessage); changed {
 						upstreamMessage = corrected
 					}
+				}
+				if binding, bindingOK := SessionPersonaBindingFromContextOrGin(ctx, c); bindingOK && IsOpenCodePersona(binding) {
+					projectedMessage, projectedID, projectErr := s.ProjectOpenCodeResponseJSON(ctx, c, binding, upstreamMessage)
+					if projectErr != nil {
+						return nil, wrapOpenAIWSIngressTurnErrorAfterEvent(
+							"project_opencode_response",
+							fmt.Errorf("project OpenCode websocket response identity: %w", projectErr),
+							wroteDownstream,
+							sawUpstreamEvent,
+						)
+					}
+					if projectedID != "" {
+						responseID = projectedID
+					}
+					upstreamMessage = projectedMessage
 				}
 				replayCollector.AddEvent(eventType, upstreamMessage)
 				if err := writeClientMessage(upstreamMessage); err != nil {
