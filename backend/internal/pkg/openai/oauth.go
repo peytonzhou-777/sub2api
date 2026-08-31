@@ -41,12 +41,22 @@ const (
 
 // OAuthSession stores OAuth flow state for OpenAI
 type OAuthSession struct {
-	State        string    `json:"state"`
-	CodeVerifier string    `json:"code_verifier"`
-	ClientID     string    `json:"client_id,omitempty"`
-	ProxyURL     string    `json:"proxy_url,omitempty"`
-	RedirectURI  string    `json:"redirect_uri"`
-	CreatedAt    time.Time `json:"created_at"`
+	State                    string    `json:"state"`
+	CodeVerifier             string    `json:"code_verifier"`
+	ClientID                 string    `json:"client_id,omitempty"`
+	ProxyURL                 string    `json:"proxy_url,omitempty"`
+	RedirectURI              string    `json:"redirect_uri"`
+	CreatedAt                time.Time `json:"created_at"`
+	AccountID                int64     `json:"account_id,omitempty"`
+	PersonaID                string    `json:"persona_id,omitempty"`
+	SlotID                   int       `json:"slot_id,omitempty"`
+	CredentialChainID        string    `json:"credential_chain_id,omitempty"`
+	InstallationID           string    `json:"installation_id,omitempty"`
+	SlotGeneration           int64     `json:"slot_generation,omitempty"`
+	SlotSetGeneration        int64     `json:"slot_set_generation,omitempty"`
+	ExpectedChatGPTAccountID string    `json:"expected_chatgpt_account_id,omitempty"`
+	UserAgent                string    `json:"user_agent,omitempty"`
+	Originator               string    `json:"originator,omitempty"`
 }
 
 // SessionStore manages OAuth sessions in memory
@@ -188,6 +198,20 @@ func BuildAuthorizationURLForPlatform(state, codeChallenge, redirectURI, platfor
 	}
 
 	clientID, codexFlow := OAuthClientConfigByPlatform(platform)
+	return BuildAuthorizationURLWithClient(state, codeChallenge, redirectURI, clientID, codexFlow, "")
+}
+
+// BuildAuthorizationURLWithClient builds an OAuth URL for a fixed client
+// profile. Persona-bound callers use this helper so the browser flow cannot
+// silently fall back to another application's identity.
+func BuildAuthorizationURLWithClient(state, codeChallenge, redirectURI, clientID string, codexFlow bool, originator string) string {
+	if redirectURI == "" {
+		redirectURI = DefaultRedirectURI
+	}
+	clientID = strings.TrimSpace(clientID)
+	if clientID == "" {
+		clientID = ClientID
+	}
 
 	params := url.Values{}
 	params.Set("response_type", "code")
@@ -201,6 +225,9 @@ func BuildAuthorizationURLForPlatform(state, codeChallenge, redirectURI, platfor
 	params.Set("id_token_add_organizations", "true")
 	if codexFlow {
 		params.Set("codex_cli_simplified_flow", "true")
+	}
+	if originator = strings.TrimSpace(originator); originator != "" {
+		params.Set("originator", originator)
 	}
 
 	return fmt.Sprintf("%s?%s", AuthorizeURL, params.Encode())

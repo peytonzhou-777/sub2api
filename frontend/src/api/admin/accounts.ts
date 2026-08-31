@@ -788,6 +788,67 @@ export async function refreshOpenAIToken(
   return data
 }
 
+export interface OpenAIPersonaOAuthSlotStatus {
+  slot_id: 0 | 1
+  persona: 'codex_cli_strict' | 'opencode'
+  state: 'active' | 'draining' | 'disabled'
+  enabled: boolean
+  authorized: boolean
+  credential_chain_id?: string
+  slot_generation: number
+  slot_set_generation: number
+  chatgpt_account_id?: string
+  oauth_client_id?: string
+  installation_id?: string
+  access_token_expires_at?: string
+}
+
+export interface OpenAIPersonaOAuthStatus {
+  mapping_mode: 'legacy_v2' | 'persona_v3'
+  slots: OpenAIPersonaOAuthSlotStatus[]
+}
+
+export interface OpenAIPersonaAuthURLResult {
+  auth_url: string
+  session_id: string
+}
+
+export async function getOpenAIPersonaOAuthStatus(id: number): Promise<OpenAIPersonaOAuthStatus> {
+  const { data } = await apiClient.get<OpenAIPersonaOAuthStatus>(`/admin/openai/accounts/${id}/persona-oauth`)
+  return data
+}
+
+export async function generateOpenAIPersonaAuthUrl(
+  id: number,
+  slotId: 0 | 1
+): Promise<OpenAIPersonaAuthURLResult> {
+  const { data } = await apiClient.post<OpenAIPersonaAuthURLResult>(
+    `/admin/openai/accounts/${id}/persona-slots/${slotId}/oauth/generate-auth-url`,
+    {}
+  )
+  return data
+}
+
+export async function exchangeOpenAIPersonaCode(
+  id: number,
+  slotId: 0 | 1,
+  payload: { session_id: string; code: string; state: string }
+): Promise<Account> {
+  const { data } = await apiClient.post<Account>(
+    `/admin/openai/accounts/${id}/persona-slots/${slotId}/oauth/exchange-code`,
+    payload
+  )
+  return data
+}
+
+export async function refreshOpenAIPersonaToken(id: number, slotId: 0 | 1): Promise<Account> {
+  const { data } = await apiClient.post<Account>(
+    `/admin/openai/accounts/${id}/persona-slots/${slotId}/oauth/refresh`,
+    {}
+  )
+  return data
+}
+
 /**
  * Batch operation result type
  */
@@ -1082,6 +1143,10 @@ export const accountsAPI = {
   generateAuthUrl,
   exchangeCode,
   refreshOpenAIToken,
+  getOpenAIPersonaOAuthStatus,
+  generateOpenAIPersonaAuthUrl,
+  exchangeOpenAIPersonaCode,
+  refreshOpenAIPersonaToken,
   batchCreate,
   batchUpdateCredentials,
   bulkUpdate,

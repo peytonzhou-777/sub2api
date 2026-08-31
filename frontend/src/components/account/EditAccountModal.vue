@@ -2226,6 +2226,16 @@
                   </p>
                 </div>
               </div>
+              <button
+                type="button"
+                class="btn btn-secondary mt-3 w-full text-xs"
+                :data-testid="`openai-persona-slot-${slot.slotId}-oauth`"
+                @click="emit('authorizePersona', slot.slotId)"
+              >
+                {{ slot.authorization === 'authorized'
+                  ? t('admin.accounts.openai.personaMapping.oauth.reauthorize')
+                  : t('admin.accounts.openai.personaMapping.oauth.authorize') }}
+              </button>
             </div>
           </div>
 
@@ -3080,6 +3090,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
   updated: [account: Account]
+  authorizePersona: [slotId: 0 | 1]
 }>()
 
 const { t } = useI18n()
@@ -4006,6 +4017,27 @@ function loadOpenAIPersonaMapping(newAccount: Account) {
   }
   openAIPersonaSlotAuthorizations[0] = resolveOpenAIPersonaAuthorization(newAccount, 'codex_cli_strict', 0)
   openAIPersonaSlotAuthorizations[1] = resolveOpenAIPersonaAuthorization(newAccount, 'opencode', 1)
+  void loadOpenAIPersonaOAuthStatus(newAccount)
+}
+
+let openAIPersonaStatusRequest = 0
+async function loadOpenAIPersonaOAuthStatus(account: Account) {
+  const requestID = ++openAIPersonaStatusRequest
+  try {
+    const status = await adminAPI.accounts.getOpenAIPersonaOAuthStatus(account.id)
+    if (requestID !== openAIPersonaStatusRequest || props.account?.id !== account.id) return
+    openAIPersonaMappingEnabled.value = status.mapping_mode === 'persona_v3'
+    for (const slot of status.slots) {
+      openAIPersonaSlotStates[slot.slot_id] = slot.state
+      openAIPersonaSlotAuthorizations[slot.slot_id] = slot.authorized
+        ? 'authorized'
+        : slot.credential_chain_id
+          ? 'not_ready'
+          : 'missing'
+    }
+  } catch {
+    // Keep the redacted account snapshot as a compatibility fallback.
+  }
 }
 
 const syncFormFromAccount = (newAccount: Account | null) => {
