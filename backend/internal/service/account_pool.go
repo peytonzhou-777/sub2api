@@ -13,7 +13,8 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-const AccountPoolSchemaVersion = 5
+// Persona 槽位有效容量已进入公开快照，升级版本以淘汰旧并发语义缓存。
+const AccountPoolSchemaVersion = 6
 
 const (
 	AccountPoolSortByID     = "id"
@@ -262,6 +263,7 @@ type AccountPoolService struct {
 	userRelationReader  AccountPoolUserRelationReader
 	userAccessReader    AccountPoolUserAccessReader
 	residentStatsReader AccountPoolResidentStatsReader
+	settingService      *SettingService
 	personalUsageMu     sync.Mutex
 	personalUsageCache  map[string]accountPoolPersonalUsageCacheEntry
 	personalUsageSF     singleflight.Group
@@ -302,6 +304,14 @@ func (s *AccountPoolService) SetPersonalUsageReader(reader AccountPoolPersonalUs
 	s.personalUsageReader = reader
 }
 
+// SetSettingService 注入 Persona 容量策略读取器。
+func (s *AccountPoolService) SetSettingService(settings *SettingService) {
+	if s == nil {
+		return
+	}
+	s.settingService = settings
+}
+
 // Reconcile 构建完整新代次；只有缓存全部写入成功后才由缓存实现切换当前指针。
 func (s *AccountPoolService) Reconcile(ctx context.Context, generation, enabledEpoch string) error {
 	if s == nil || s.source == nil || s.cache == nil {
@@ -326,6 +336,7 @@ func (s *AccountPoolService) Reconcile(ctx context.Context, generation, enabledE
 		<-renewalDone
 	}()
 
+	admissionCfg := s.openAIAdmissionConfig(buildCtx)
 	items := make([]PublicAccountPoolAccount, 0, s.options.BuildBatchSize)
 	afterID := int64(0)
 	for {
@@ -354,10 +365,10 @@ func (s *AccountPoolService) Reconcile(ctx context.Context, generation, enabledE
 			return fmt.Errorf("read account pool resident stats: %w", residentErr)
 		}
 		for _, record := range records {
-			item := s.mapPublicAccount(record, counts, now)
+			item := s.mapPublicAccount(record, counts, now, admissionCfg)
 			applyAccountPoolResidentStats(&item, record, residentStats)
 			if previous, ok := previousCapacities[record.ID]; ok {
-				previous.MaxConcurrency = record.Concurrency
+				previous.MaxConcurrency = effectiveAccountPoolRecordConcurrency(record, admissionCfg)
 				item.Capacity = previous
 			}
 			items = append(items, item)
@@ -408,6 +419,7 @@ func (s *AccountPoolService) List(ctx context.Context, enabledEpoch string, page
 
 func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context, page, pageSize int, query AccountPoolListQuery) (*AccountPoolPage, error) {
 	now := s.now().UTC()
+	admissionCfg := s.openAIAdmissionConfig(ctx)
 	// ID 查询及普通 ID 排序仍使用数据库分页；状态条件需要按公开派生状态统一计算。
 	if query.AllowedAccountIDs == nil && query.Relation == "" && (query.AccountID != nil || (query.Status == "" && query.SortBy == AccountPoolSortByID)) {
 		records, total, err := s.source.ListAccountPoolPage(ctx, page, pageSize, query.AccountID, query.SortOrder)
@@ -418,7 +430,7 @@ func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context
 		if residentErr != nil {
 			return nil, fmt.Errorf("read account pool resident stats: %w", residentErr)
 		}
-		items := s.mapAccountPoolFallbackRecords(records, residentStats, now)
+		items := s.mapAccountPoolFallbackRecords(records, residentStats, now, admissionCfg)
 		if query.Status != "" {
 			items = filterAccountPoolItemsByStatus(items, query.Status)
 			total = int64(len(items))
@@ -440,7 +452,7 @@ func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context
 		if residentErr != nil {
 			return nil, fmt.Errorf("read account pool resident stats: %w", residentErr)
 		}
-		items = append(items, s.mapAccountPoolFallbackRecords(records, residentStats, now)...)
+		items = append(items, s.mapAccountPoolFallbackRecords(records, residentStats, now, admissionCfg)...)
 		afterID = records[len(records)-1].ID
 		if !hasMore {
 			break
@@ -460,10 +472,10 @@ func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context
 	return newAccountPoolPage(items[start:end], total, page, pageSize), nil
 }
 
-func (s *AccountPoolService) mapAccountPoolFallbackRecords(records []AccountPoolSourceRecord, residentStats map[int64]AccountPoolResidentStats, now time.Time) []PublicAccountPoolAccount {
+func (s *AccountPoolService) mapAccountPoolFallbackRecords(records []AccountPoolSourceRecord, residentStats map[int64]AccountPoolResidentStats, now time.Time, admissionCfg OpenAIAccountAdmissionConfig) []PublicAccountPoolAccount {
 	items := make([]PublicAccountPoolAccount, 0, len(records))
 	for _, record := range records {
-		item := s.mapPublicAccount(record, nil, now)
+		item := s.mapPublicAccount(record, nil, now, admissionCfg)
 		applyAccountPoolResidentStats(&item, record, residentStats)
 		// 数据库降级只展示基础字段，不能把持久化观测冒充当前动态状态。
 		item.UsageWindows = []PublicAccountPoolUsageWindow{}
@@ -735,8 +747,12 @@ func readAccountPoolRenewalError(result <-chan error) error {
 	}
 }
 
-func (s *AccountPoolService) mapPublicAccount(record AccountPoolSourceRecord, counts map[int64]int, now time.Time) PublicAccountPoolAccount {
-	capacity := PublicAccountPoolCapacity{MaxConcurrency: record.Concurrency, State: AccountPoolFreshnessUnavailable}
+func (s *AccountPoolService) mapPublicAccount(record AccountPoolSourceRecord, counts map[int64]int, now time.Time, admissionConfigs ...OpenAIAccountAdmissionConfig) PublicAccountPoolAccount {
+	admissionCfg := DefaultOpenAIAccountAdmissionConfig()
+	if len(admissionConfigs) > 0 {
+		admissionCfg = admissionConfigs[0]
+	}
+	capacity := PublicAccountPoolCapacity{MaxConcurrency: effectiveAccountPoolRecordConcurrency(record, admissionCfg), State: AccountPoolFreshnessUnavailable}
 	if current, ok := counts[record.ID]; ok {
 		capacity.CurrentConcurrency = &current
 		capacity.ObservedAt = accountPoolTimePtr(now)
@@ -764,6 +780,24 @@ func (s *AccountPoolService) mapPublicAccount(record AccountPoolSourceRecord, co
 		UsageWindows:    s.mapUsageWindows(record, now), ResetCount: resetCount, ResetCountState: resetState,
 		Status: mapAccountPoolStatus(record, now),
 	}
+}
+
+func (s *AccountPoolService) openAIAdmissionConfig(ctx context.Context) OpenAIAccountAdmissionConfig {
+	cfg := DefaultOpenAIAccountAdmissionConfig()
+	if s != nil && s.settingService != nil {
+		if current, err := s.settingService.GetOpenAIAccountAdmissionConfig(ctx); err == nil {
+			cfg = current
+		}
+	}
+	return cfg
+}
+
+func effectiveAccountPoolRecordConcurrency(record AccountPoolSourceRecord, cfg OpenAIAccountAdmissionConfig) int {
+	account := &Account{
+		ID: record.ID, Platform: record.Platform, Type: record.Type,
+		Concurrency: record.Concurrency, Credentials: record.Credentials, Extra: record.Extra,
+	}
+	return EffectiveOpenAIAccountAdmissionCapacity(account, cfg)
 }
 
 // publicAccountPoolAuthMode 提取管理员平台徽章所需的非敏感认证模式。

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -36,6 +38,9 @@ const (
 	// API-key-scoped client WebSocket ingress leases use a shorter TTL than
 	// ordinary request slots, because idle ingress sessions do not hold a turn slot.
 	openAIWSIngressLeaseKeyPrefix  = "concurrency:openai_ws_ingress:api_key:"
+	openAIPersonaSlotKeyPrefix     = "concurrency:openai_persona:account:"
+	openAIPersonaWSLeaseKeyPrefix  = "concurrency:openai_persona_ws:account:"
+	openAISubagentDepthKeyPrefix   = "lineage:openai_subagent_depth:account:"
 	codexSubagentSlotKeyPrefix     = "concurrency:codex_subagent:account:"
 	openAIWSIngressLeaseTTLSeconds = 60
 	liveLeaseTTLSeconds            = 60
@@ -405,6 +410,27 @@ func liveAPIKeySlotKey(apiKeyID int64) string {
 
 func openAIWSIngressLeaseKey(apiKeyID int64) string {
 	return fmt.Sprintf("%s%d", openAIWSIngressLeaseKeyPrefix, apiKeyID)
+}
+
+func openAIPersonaSlotKey(accountID int64, persona string, slotID int) string {
+	return fmt.Sprintf("%s%d:persona:%s:slot:%d", openAIPersonaSlotKeyPrefix, accountID, normalizeOpenAIPersonaKey(persona), slotID)
+}
+
+func openAIPersonaWSLeaseKey(accountID int64, persona string, slotID int) string {
+	return fmt.Sprintf("%s%d:persona:%s:slot:%d", openAIPersonaWSLeaseKeyPrefix, accountID, normalizeOpenAIPersonaKey(persona), slotID)
+}
+
+func openAISubagentDepthKey(accountID int64, persona string, slotID int, sessionScopeHash string, epoch int64, threadScopeHash string) string {
+	return fmt.Sprintf("%s%d:persona:%s:slot:%d:scope:%s:epoch:%d:thread:%s",
+		openAISubagentDepthKeyPrefix, accountID, normalizeOpenAIPersonaKey(persona), slotID, sessionScopeHash, epoch, threadScopeHash)
+}
+
+func normalizeOpenAIPersonaKey(persona string) string {
+	persona = strings.ToLower(strings.TrimSpace(persona))
+	if persona == "" {
+		return "legacy"
+	}
+	return strings.NewReplacer(":", "_", " ", "_", "/", "_").Replace(persona)
 }
 
 func codexSubagentSlotKey(accountID int64, sessionScopeHash string, epoch int64) string {
@@ -795,6 +821,73 @@ func (c *concurrencyCache) ReleaseOpenAIWSIngressLease(ctx context.Context, apiK
 		return nil
 	}
 	return c.rdb.ZRem(ctx, openAIWSIngressLeaseKey(apiKeyID), leaseID).Err()
+}
+
+// AcquireOpenAIPersonaSlot 按 Account×Persona×Slot 隔离实际运行并发。
+func (c *concurrencyCache) AcquireOpenAIPersonaSlot(ctx context.Context, accountID int64, persona string, slotID, maxConcurrency int, requestID string) (bool, error) {
+	return c.acquireOpenAIPersonaLease(ctx, openAIPersonaSlotKey(accountID, persona, slotID), accountID, slotID, maxConcurrency, c.slotTTLSeconds, requestID)
+}
+
+func (c *concurrencyCache) RefreshOpenAIPersonaSlot(ctx context.Context, accountID int64, persona string, slotID int, requestID string) (bool, error) {
+	return c.refreshOpenAIPersonaLease(ctx, openAIPersonaSlotKey(accountID, persona, slotID), accountID, slotID, c.slotTTLSeconds, requestID)
+}
+
+func (c *concurrencyCache) ReleaseOpenAIPersonaSlot(ctx context.Context, accountID int64, persona string, slotID int, requestID string) error {
+	return c.releaseOpenAIPersonaLease(ctx, openAIPersonaSlotKey(accountID, persona, slotID), accountID, slotID, requestID)
+}
+
+// AcquireOpenAIPersonaWSLease 限制一个 Persona 槽位持有的客户端 WS 数量。
+func (c *concurrencyCache) AcquireOpenAIPersonaWSLease(ctx context.Context, accountID int64, persona string, slotID, maxConnections int, leaseID string) (bool, error) {
+	return c.acquireOpenAIPersonaLease(ctx, openAIPersonaWSLeaseKey(accountID, persona, slotID), accountID, slotID, maxConnections, openAIWSIngressLeaseTTLSeconds, leaseID)
+}
+
+func (c *concurrencyCache) RefreshOpenAIPersonaWSLease(ctx context.Context, accountID int64, persona string, slotID int, leaseID string) (bool, error) {
+	return c.refreshOpenAIPersonaLease(ctx, openAIPersonaWSLeaseKey(accountID, persona, slotID), accountID, slotID, openAIWSIngressLeaseTTLSeconds, leaseID)
+}
+
+func (c *concurrencyCache) ReleaseOpenAIPersonaWSLease(ctx context.Context, accountID int64, persona string, slotID int, leaseID string) error {
+	return c.releaseOpenAIPersonaLease(ctx, openAIPersonaWSLeaseKey(accountID, persona, slotID), accountID, slotID, leaseID)
+}
+
+func (c *concurrencyCache) acquireOpenAIPersonaLease(ctx context.Context, key string, accountID int64, slotID, limit, ttlSeconds int, leaseID string) (bool, error) {
+	if c == nil || c.rdb == nil || accountID <= 0 || slotID < 0 || limit <= 0 || leaseID == "" {
+		return false, nil
+	}
+	result, err := acquireOpenAIWSIngressLeaseScript.Run(ctx, c.rdb, []string{key}, limit, ttlSeconds, leaseID).Int()
+	return result == 1, err
+}
+
+func (c *concurrencyCache) refreshOpenAIPersonaLease(ctx context.Context, key string, accountID int64, slotID, ttlSeconds int, leaseID string) (bool, error) {
+	if c == nil || c.rdb == nil || accountID <= 0 || slotID < 0 || leaseID == "" {
+		return false, nil
+	}
+	result, err := refreshOpenAIWSIngressLeaseScript.Run(ctx, c.rdb, []string{key}, ttlSeconds, leaseID).Int()
+	return result == 1, err
+}
+
+func (c *concurrencyCache) releaseOpenAIPersonaLease(ctx context.Context, key string, accountID int64, slotID int, leaseID string) error {
+	if c == nil || c.rdb == nil || accountID <= 0 || slotID < 0 || leaseID == "" {
+		return nil
+	}
+	return c.rdb.ZRem(ctx, key, leaseID).Err()
+}
+
+func (c *concurrencyCache) GetOpenAISubagentDepth(ctx context.Context, accountID int64, persona string, slotID int, sessionScopeHash string, epoch int64, threadScopeHash string) (int, bool, error) {
+	if c == nil || c.rdb == nil || accountID <= 0 || slotID < 0 || len(sessionScopeHash) != 64 || epoch <= 0 || len(threadScopeHash) != 64 {
+		return 0, false, nil
+	}
+	value, err := c.rdb.Get(ctx, openAISubagentDepthKey(accountID, persona, slotID, sessionScopeHash, epoch, threadScopeHash)).Int()
+	if errors.Is(err, redis.Nil) {
+		return 0, false, nil
+	}
+	return value, err == nil, err
+}
+
+func (c *concurrencyCache) SetOpenAISubagentDepth(ctx context.Context, accountID int64, persona string, slotID int, sessionScopeHash string, epoch int64, threadScopeHash string, depth int) error {
+	if c == nil || c.rdb == nil || accountID <= 0 || slotID < 0 || len(sessionScopeHash) != 64 || epoch <= 0 || len(threadScopeHash) != 64 || depth < 0 {
+		return nil
+	}
+	return c.rdb.Set(ctx, openAISubagentDepthKey(accountID, persona, slotID, sessionScopeHash, epoch, threadScopeHash), depth, time.Duration(c.slotTTLSeconds)*time.Second).Err()
 }
 
 // AcquireCodexSubagentSlot 使用独立 ZSET 统计活动子代理，不计入账号或用户调度负载。

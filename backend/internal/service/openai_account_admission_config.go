@@ -33,8 +33,12 @@ type OpenAIAccountAdmissionConfig struct {
 	Enabled                 bool  `json:"enabled"`
 	QueueEnabled            bool  `json:"queue_enabled"`
 	MaxWaitSeconds          int   `json:"max_wait_seconds"`
+	MaxConcurrency          int   `json:"max_concurrency,omitempty"`
 	RequestsPerMinute       int   `json:"requests_per_minute"`
 	TokensPerMinute         int64 `json:"tokens_per_minute"`
+	MaxSubagents            int   `json:"max_subagents,omitempty"`
+	SubagentDepth           int   `json:"subagent_depth,omitempty"`
+	MaxActiveWebSockets     int   `json:"max_active_websockets,omitempty"`
 	DefaultOutputTokens     int64 `json:"default_output_tokens"`
 	JitterMinMS             int   `json:"jitter_min_ms"`
 	JitterMaxMS             int   `json:"jitter_max_ms"`
@@ -74,6 +78,18 @@ func ValidateOpenAIAccountAdmissionConfig(cfg OpenAIAccountAdmissionConfig) (Ope
 	}
 	if cfg.RequestsPerMinute < 0 || cfg.RequestsPerMinute > 100000 {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", "requests_per_minute must be between 0 and 100000")
+	}
+	if cfg.MaxConcurrency < 0 || cfg.MaxConcurrency > maxPersonaPolicyConcurrency {
+		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("max_concurrency must be between 0 and %d", maxPersonaPolicyConcurrency))
+	}
+	if cfg.MaxSubagents < 0 || cfg.MaxSubagents > maxPersonaPolicySubagents {
+		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("max_subagents must be between 0 and %d", maxPersonaPolicySubagents))
+	}
+	if cfg.SubagentDepth < 0 || cfg.SubagentDepth > maxPersonaPolicyDepth {
+		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("subagent_depth must be between 0 and %d", maxPersonaPolicyDepth))
+	}
+	if cfg.MaxActiveWebSockets < 0 || cfg.MaxActiveWebSockets > maxPersonaPolicyWS {
+		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("max_active_websockets must be between 0 and %d", maxPersonaPolicyWS))
 	}
 	if cfg.TokensPerMinute < 0 || cfg.TokensPerMinute > 100000000 {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", "tokens_per_minute must be between 0 and 100000000")

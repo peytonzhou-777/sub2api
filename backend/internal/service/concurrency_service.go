@@ -77,15 +77,98 @@ type CodexSubagentConcurrencyCache interface {
 	ReleaseCodexSubagentSlot(ctx context.Context, accountID int64, sessionScopeHash string, epoch int64, requestID string) error
 }
 
+// OpenAIPersonaConcurrencyCache 提供 Persona 槽位的请求并发与 WS 连接租约。
+type OpenAIPersonaConcurrencyCache interface {
+	AcquireOpenAIPersonaSlot(ctx context.Context, accountID int64, persona string, slotID, maxConcurrency int, requestID string) (bool, error)
+	RefreshOpenAIPersonaSlot(ctx context.Context, accountID int64, persona string, slotID int, requestID string) (bool, error)
+	ReleaseOpenAIPersonaSlot(ctx context.Context, accountID int64, persona string, slotID int, requestID string) error
+	AcquireOpenAIPersonaWSLease(ctx context.Context, accountID int64, persona string, slotID, maxConnections int, leaseID string) (bool, error)
+	RefreshOpenAIPersonaWSLease(ctx context.Context, accountID int64, persona string, slotID int, leaseID string) (bool, error)
+	ReleaseOpenAIPersonaWSLease(ctx context.Context, accountID int64, persona string, slotID int, leaseID string) error
+}
+
+// OpenAISubagentLineageCache 保存同一 Persona Session 内的线程深度。
+type OpenAISubagentLineageCache interface {
+	GetOpenAISubagentDepth(ctx context.Context, accountID int64, persona string, slotID int, sessionScopeHash string, epoch int64, threadScopeHash string) (int, bool, error)
+	SetOpenAISubagentDepth(ctx context.Context, accountID int64, persona string, slotID int, sessionScopeHash string, epoch int64, threadScopeHash string, depth int) error
+}
+
 const (
 	openAIWSIngressLeaseTTL             = 60 * time.Second
 	openAIWSIngressLeaseRefreshInterval = 20 * time.Second
 	openAIWSIngressLeaseOperationTO     = 2 * time.Second
 	codexSubagentSlotRefreshInterval    = 20 * time.Second
 	codexSubagentSlotOperationTO        = 2 * time.Second
+	openAIPersonaSlotRefreshInterval    = 20 * time.Second
+	openAIPersonaSlotOperationTO        = 2 * time.Second
 )
 
 var ErrOpenAIWSIngressLeaseLost = errors.New("openai websocket ingress lease lost")
+var ErrOpenAIPersonaWSLeaseLost = errors.New("openai persona websocket lease lost")
+
+// OpenAIPersonaWSLease 保持 Persona×Slot 的 WS 容量租约，并在失去租约时取消连接上下文。
+type OpenAIPersonaWSLease struct {
+	ctx       context.Context
+	cancel    context.CancelCauseFunc
+	cache     OpenAIPersonaConcurrencyCache
+	accountID int64
+	persona   string
+	slotID    int
+	leaseID   string
+	stopOnce  sync.Once
+	stopCh    chan struct{}
+	doneCh    chan struct{}
+}
+
+func (l *OpenAIPersonaWSLease) Context() context.Context {
+	if l == nil || l.ctx == nil {
+		return context.Background()
+	}
+	return l.ctx
+}
+
+func (l *OpenAIPersonaWSLease) Release() {
+	if l == nil {
+		return
+	}
+	l.stopOnce.Do(func() {
+		close(l.stopCh)
+		<-l.doneCh
+		releaseCtx, cancel := context.WithTimeout(context.Background(), openAIPersonaSlotOperationTO)
+		defer cancel()
+		if err := l.cache.ReleaseOpenAIPersonaWSLease(releaseCtx, l.accountID, l.persona, l.slotID, l.leaseID); err != nil {
+			logger.L().Warn("openai persona websocket lease release failed", zap.Int64("account_id", l.accountID), zap.String("persona", l.persona), zap.Int("slot_id", l.slotID), zap.Error(err))
+		}
+	})
+}
+
+func (l *OpenAIPersonaWSLease) refreshLoop() {
+	defer close(l.doneCh)
+	ticker := time.NewTicker(openAIWSIngressLeaseRefreshInterval)
+	defer ticker.Stop()
+	lastConfirmedAt := time.Now()
+	for {
+		select {
+		case <-l.ctx.Done():
+			return
+		case <-l.stopCh:
+			return
+		case <-ticker.C:
+			refreshCtx, cancel := context.WithTimeout(context.Background(), openAIPersonaSlotOperationTO)
+			owned, err := l.cache.RefreshOpenAIPersonaWSLease(refreshCtx, l.accountID, l.persona, l.slotID, l.leaseID)
+			cancel()
+			if err == nil && owned {
+				lastConfirmedAt = time.Now()
+				continue
+			}
+			if err == nil || time.Since(lastConfirmedAt) >= openAIWSIngressLeaseTTL {
+				l.cancel(ErrOpenAIPersonaWSLeaseLost)
+				return
+			}
+			logger.L().Warn("openai persona websocket lease refresh failed", zap.Int64("account_id", l.accountID), zap.String("persona", l.persona), zap.Int("slot_id", l.slotID), zap.Error(err))
+		}
+	}
+}
 
 // OpenAIWSIngressLease keeps a Redis-backed ingress lease alive and cancels
 // its context if Redis cannot confirm ownership for a full lease lifetime.
@@ -300,6 +383,136 @@ func (s *ConcurrencyService) AcquireOpenAIWSIngressLease(ctx context.Context, ap
 	}
 	go lease.refreshLoop()
 	return lease, true, nil
+}
+
+// AcquireOpenAIPersonaWSLease 获取 Account×Persona×Slot 的长连接容量。
+func (s *ConcurrencyService) AcquireOpenAIPersonaWSLease(
+	ctx context.Context,
+	accountID int64,
+	persona SessionPersonaID,
+	slotID int,
+	maxConnections int,
+) (*OpenAIPersonaWSLease, bool, error) {
+	if maxConnections <= 0 {
+		return nil, true, nil
+	}
+	if s == nil || s.cache == nil || accountID <= 0 || slotID < 0 {
+		return nil, false, errors.New("openai persona websocket lease cache is unavailable")
+	}
+	cache, ok := s.cache.(OpenAIPersonaConcurrencyCache)
+	if !ok {
+		return nil, false, errors.New("openai persona websocket lease cache is unsupported")
+	}
+	leaseID := generateRequestID()
+	baseCtx := context.Background()
+	if ctx != nil {
+		baseCtx = context.WithoutCancel(ctx)
+	} else {
+		ctx = context.Background()
+	}
+	operationCtx, cancel := context.WithTimeout(baseCtx, openAIPersonaSlotOperationTO)
+	acquired, err := cache.AcquireOpenAIPersonaWSLease(operationCtx, accountID, string(persona), slotID, maxConnections, leaseID)
+	cancel()
+	if err != nil || !acquired {
+		return nil, acquired, err
+	}
+	leaseCtx, leaseCancel := context.WithCancelCause(ctx)
+	lease := &OpenAIPersonaWSLease{
+		ctx: leaseCtx, cancel: leaseCancel, cache: cache,
+		accountID: accountID, persona: string(persona), slotID: slotID, leaseID: leaseID,
+		stopCh: make(chan struct{}), doneCh: make(chan struct{}),
+	}
+	go lease.refreshLoop()
+	return lease, true, nil
+}
+
+// AcquireOpenAIPersonaSlot 获取 Persona 槽位的请求并发许可。
+func (s *ConcurrencyService) AcquireOpenAIPersonaSlot(
+	ctx context.Context,
+	accountID int64,
+	persona SessionPersonaID,
+	slotID int,
+	maxConcurrency int,
+) (*AcquireResult, error) {
+	if maxConcurrency <= 0 {
+		return &AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
+	}
+	if s == nil || s.cache == nil || accountID <= 0 || slotID < 0 {
+		return nil, errors.New("openai persona concurrency cache is unavailable")
+	}
+	cache, ok := s.cache.(OpenAIPersonaConcurrencyCache)
+	if !ok {
+		return nil, errors.New("openai persona concurrency cache is unsupported")
+	}
+	requestID := generateRequestID()
+	baseCtx := context.Background()
+	if ctx != nil {
+		baseCtx = context.WithoutCancel(ctx)
+	} else {
+		ctx = context.Background()
+	}
+	operationCtx, cancel := context.WithTimeout(baseCtx, openAIPersonaSlotOperationTO)
+	acquired, err := cache.AcquireOpenAIPersonaSlot(operationCtx, accountID, string(persona), slotID, maxConcurrency, requestID)
+	cancel()
+	if err != nil || !acquired {
+		return &AcquireResult{Acquired: acquired}, err
+	}
+	stopCh := make(chan struct{})
+	doneCh := make(chan struct{})
+	go func() {
+		defer close(doneCh)
+		ticker := time.NewTicker(openAIPersonaSlotRefreshInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-stopCh:
+				return
+			case <-ticker.C:
+				refreshCtx, refreshCancel := context.WithTimeout(context.Background(), openAIPersonaSlotOperationTO)
+				owned, refreshErr := cache.RefreshOpenAIPersonaSlot(refreshCtx, accountID, string(persona), slotID, requestID)
+				refreshCancel()
+				if refreshErr != nil || !owned {
+					logger.L().Warn("openai persona concurrency slot refresh failed", zap.Int64("account_id", accountID), zap.String("persona", string(persona)), zap.Int("slot_id", slotID), zap.Error(refreshErr))
+				}
+			}
+		}
+	}()
+	var releaseOnce sync.Once
+	return &AcquireResult{Acquired: true, ReleaseFunc: func() {
+		releaseOnce.Do(func() {
+			close(stopCh)
+			<-doneCh
+			releaseCtx, releaseCancel := context.WithTimeout(context.Background(), openAIPersonaSlotOperationTO)
+			defer releaseCancel()
+			if releaseErr := cache.ReleaseOpenAIPersonaSlot(releaseCtx, accountID, string(persona), slotID, requestID); releaseErr != nil {
+				logger.L().Warn("openai persona concurrency slot release failed", zap.Int64("account_id", accountID), zap.String("persona", string(persona)), zap.Int("slot_id", slotID), zap.Error(releaseErr))
+			}
+		})
+	}}, nil
+}
+
+func (s *ConcurrencyService) GetOpenAISubagentDepth(ctx context.Context, accountID int64, persona SessionPersonaID, slotID int, sessionScopeHash string, epoch int64, threadScopeHash string) (int, bool, error) {
+	if s == nil || s.cache == nil {
+		return 0, false, errors.New("openai subagent lineage cache is unavailable")
+	}
+	cache, ok := s.cache.(OpenAISubagentLineageCache)
+	if !ok {
+		return 0, false, errors.New("openai subagent lineage cache is unsupported")
+	}
+	return cache.GetOpenAISubagentDepth(ctx, accountID, string(persona), slotID, sessionScopeHash, epoch, threadScopeHash)
+}
+
+func (s *ConcurrencyService) SetOpenAISubagentDepth(ctx context.Context, accountID int64, persona SessionPersonaID, slotID int, sessionScopeHash string, epoch int64, threadScopeHash string, depth int) error {
+	if s == nil || s.cache == nil {
+		return errors.New("openai subagent lineage cache is unavailable")
+	}
+	cache, ok := s.cache.(OpenAISubagentLineageCache)
+	if !ok {
+		return errors.New("openai subagent lineage cache is unsupported")
+	}
+	return cache.SetOpenAISubagentDepth(ctx, accountID, string(persona), slotID, sessionScopeHash, epoch, threadScopeHash, depth)
 }
 
 // AcquireCodexSubagentSlot 尝试立即获取分布式子代理槽位，不进入账号等待队列。

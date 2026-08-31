@@ -64,6 +64,7 @@ type AccountHandler struct {
 	grokImportProber        grokImportProber
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
 	ollamaCloudUsage        *service.OllamaCloudUsageService
+	settingService          *service.SettingService
 }
 
 // SetUpstreamBillingProbeService attaches the optional remote billing probe service.
@@ -73,6 +74,11 @@ func (h *AccountHandler) SetUpstreamBillingProbeService(probe *service.UpstreamB
 
 func (h *AccountHandler) SetOllamaCloudUsageService(usage *service.OllamaCloudUsageService) {
 	h.ollamaCloudUsage = usage
+}
+
+// SetSettingService 注入全站 Persona 准入配置读取器。
+func (h *AccountHandler) SetSettingService(settings *service.SettingService) {
+	h.settingService = settings
 }
 
 // NewAccountHandler creates a new admin account handler
@@ -191,6 +197,7 @@ type CheckMixedChannelRequest struct {
 type AccountWithConcurrency struct {
 	*dto.Account
 	CurrentConcurrency   int                                 `json:"current_concurrency"`
+	EffectiveConcurrency int                                 `json:"effective_concurrency"`
 	SchedulerScore       *AccountSchedulerScore              `json:"scheduler_score,omitempty"`
 	SchedulerScores      []AccountSchedulerGroupScore        `json:"scheduler_scores,omitempty"`
 	CodexOutboundProfile *service.CodexOutboundProfileStatus `json:"codex_outbound_profile,omitempty"`
@@ -228,6 +235,7 @@ func (h *AccountHandler) buildAccountResponseWithRuntime(ctx context.Context, ac
 	item := AccountWithConcurrency{
 		Account:              h.accountResponseFromService(account),
 		CurrentConcurrency:   0,
+		EffectiveConcurrency: h.effectiveAccountConcurrency(ctx, account),
 		CodexOutboundProfile: service.CodexOutboundProfileStatusForAccount(account),
 	}
 	if account == nil {
@@ -679,6 +687,7 @@ func (h *AccountHandler) List(c *gin.Context) {
 		item := AccountWithConcurrency{
 			Account:              h.accountResponseFromService(acc),
 			CurrentConcurrency:   concurrencyCounts[acc.ID],
+			EffectiveConcurrency: h.effectiveAccountConcurrency(c.Request.Context(), acc),
 			SchedulerScore:       schedulerScores[acc.ID],
 			SchedulerScores:      schedulerGroupScores[acc.ID],
 			CodexOutboundProfile: service.CodexOutboundProfileStatusForAccount(acc),
@@ -721,6 +730,19 @@ func (h *AccountHandler) List(c *gin.Context) {
 	}
 
 	response.Paginated(c, result, total, page, pageSize)
+}
+
+func (h *AccountHandler) effectiveAccountConcurrency(ctx context.Context, account *service.Account) int {
+	if account == nil {
+		return 0
+	}
+	cfg := service.DefaultOpenAIAccountAdmissionConfig()
+	if h != nil && h.settingService != nil {
+		if current, err := h.settingService.GetOpenAIAccountAdmissionConfig(ctx); err == nil {
+			cfg = current
+		}
+	}
+	return service.EffectiveOpenAIAccountAdmissionCapacity(account, cfg)
 }
 
 func buildAccountsListETag(

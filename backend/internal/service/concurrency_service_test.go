@@ -80,6 +80,53 @@ type codexSubagentConcurrencyCacheForTest struct {
 	acquireAfter   int
 }
 
+type openAIPersonaConcurrencyCacheForTest struct {
+	stubConcurrencyCacheForTest
+	acquired          bool
+	accountID         int64
+	persona           string
+	slotID            int
+	limit             int
+	leaseID           string
+	releaseSlotCalls  int
+	releaseWSCalls    int
+	lineageDepthByKey map[string]int
+}
+
+func (c *openAIPersonaConcurrencyCacheForTest) AcquireOpenAIPersonaSlot(_ context.Context, accountID int64, persona string, slotID, limit int, leaseID string) (bool, error) {
+	c.accountID, c.persona, c.slotID, c.limit, c.leaseID = accountID, persona, slotID, limit, leaseID
+	return c.acquired, nil
+}
+func (c *openAIPersonaConcurrencyCacheForTest) RefreshOpenAIPersonaSlot(_ context.Context, _ int64, _ string, _ int, _ string) (bool, error) {
+	return true, nil
+}
+func (c *openAIPersonaConcurrencyCacheForTest) ReleaseOpenAIPersonaSlot(_ context.Context, _ int64, _ string, _ int, _ string) error {
+	c.releaseSlotCalls++
+	return nil
+}
+func (c *openAIPersonaConcurrencyCacheForTest) AcquireOpenAIPersonaWSLease(_ context.Context, accountID int64, persona string, slotID, limit int, leaseID string) (bool, error) {
+	c.accountID, c.persona, c.slotID, c.limit, c.leaseID = accountID, persona, slotID, limit, leaseID
+	return c.acquired, nil
+}
+func (c *openAIPersonaConcurrencyCacheForTest) RefreshOpenAIPersonaWSLease(_ context.Context, _ int64, _ string, _ int, _ string) (bool, error) {
+	return true, nil
+}
+func (c *openAIPersonaConcurrencyCacheForTest) ReleaseOpenAIPersonaWSLease(_ context.Context, _ int64, _ string, _ int, _ string) error {
+	c.releaseWSCalls++
+	return nil
+}
+func (c *openAIPersonaConcurrencyCacheForTest) GetOpenAISubagentDepth(_ context.Context, _ int64, _ string, _ int, _ string, _ int64, threadScopeHash string) (int, bool, error) {
+	depth, ok := c.lineageDepthByKey[threadScopeHash]
+	return depth, ok, nil
+}
+func (c *openAIPersonaConcurrencyCacheForTest) SetOpenAISubagentDepth(_ context.Context, _ int64, _ string, _ int, _ string, _ int64, threadScopeHash string, depth int) error {
+	if c.lineageDepthByKey == nil {
+		c.lineageDepthByKey = make(map[string]int)
+	}
+	c.lineageDepthByKey[threadScopeHash] = depth
+	return nil
+}
+
 func (c *codexSubagentConcurrencyCacheForTest) AcquireCodexSubagentSlot(_ context.Context, accountID int64, scopeHash string, epoch int64, maxConcurrency int, requestID string) (bool, error) {
 	c.acquireCalls++
 	c.accountID = accountID
@@ -130,6 +177,8 @@ func (c *ingressLeaseCacheForTest) ReleaseOpenAIWSIngressLease(ctx context.Conte
 var _ ConcurrencyCache = (*stubConcurrencyCacheForTest)(nil)
 var _ OpenAIWSIngressLeaseCache = (*ingressLeaseCacheForTest)(nil)
 var _ CodexSubagentConcurrencyCache = (*codexSubagentConcurrencyCacheForTest)(nil)
+var _ OpenAIPersonaConcurrencyCache = (*openAIPersonaConcurrencyCacheForTest)(nil)
+var _ OpenAISubagentLineageCache = (*openAIPersonaConcurrencyCacheForTest)(nil)
 
 func (c *stubConcurrencyCacheForTest) AcquireAccountSlot(_ context.Context, _ int64, _ int, _ string) (bool, error) {
 	return c.acquireResult, c.acquireErr
@@ -680,6 +729,45 @@ func TestAcquireCodexSubagentSlotUsesIndependentLeaseAndReleasesOnce(t *testing.
 	require.Equal(t, 1, cache.releaseCalls)
 }
 
+func TestAcquireOpenAIPersonaSlotAndWSLeaseUseIndependentScopes(t *testing.T) {
+	cache := &openAIPersonaConcurrencyCacheForTest{acquired: true}
+	svc := NewConcurrencyService(cache)
+
+	result, err := svc.AcquireOpenAIPersonaSlot(context.Background(), 42, SessionPersonaOpenCode, 1, 3)
+	require.NoError(t, err)
+	require.True(t, result.Acquired)
+	require.Equal(t, int64(42), cache.accountID)
+	require.Equal(t, string(SessionPersonaOpenCode), cache.persona)
+	require.Equal(t, 1, cache.slotID)
+	require.Equal(t, 3, cache.limit)
+	result.ReleaseFunc()
+	require.Equal(t, 1, cache.releaseSlotCalls)
+
+	lease, acquired, err := svc.AcquireOpenAIPersonaWSLease(context.Background(), 42, SessionPersonaOpenCode, 1, 2)
+	require.NoError(t, err)
+	require.True(t, acquired)
+	require.NotNil(t, lease)
+	lease.Release()
+	require.NoError(t, lease.Context().Err(), "主动释放用于 failover 时不能取消连接上下文")
+	require.Equal(t, 1, cache.releaseWSCalls)
+}
+
+func TestEnforceOpenAISubagentDepthPersistsLineage(t *testing.T) {
+	cache := &openAIPersonaConcurrencyCacheForTest{acquired: true, lineageDepthByKey: make(map[string]int)}
+	svc := &OpenAIGatewayService{concurrencyService: NewConcurrencyService(cache)}
+	account := &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	binding := SessionPersonaSlotBinding{AccountID: 42, PersonaID: SessionPersonaOpenCode, SlotID: 1}
+	scopeHash := strings.Repeat("ab", 32)
+
+	root := &codexFingerprintIDs{threadID: "root", sessionScopeHash: scopeHash, sessionEpoch: 7}
+	require.NoError(t, svc.enforceOpenAISubagentDepth(context.Background(), account, binding, root, 1))
+	child := &codexFingerprintIDs{threadID: "child", parentThreadID: "root", isSubagent: true, sessionScopeHash: scopeHash, sessionEpoch: 7}
+	require.NoError(t, svc.enforceOpenAISubagentDepth(context.Background(), account, binding, child, 1))
+	grandchild := &codexFingerprintIDs{threadID: "grandchild", parentThreadID: "child", isSubagent: true, sessionScopeHash: scopeHash, sessionEpoch: 7}
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, svc.enforceOpenAISubagentDepth(context.Background(), account, binding, grandchild, 1), &failoverErr)
+}
+
 func TestAcquireCodexSubagentSlotLimitReturnsLocalNonSchedulingFailure(t *testing.T) {
 	cache := &codexSubagentConcurrencyCacheForTest{acquired: false}
 	svc := &OpenAIGatewayService{
@@ -749,13 +837,13 @@ func TestTryAcquireCodexSessionAdmissionSlotsQueuesBeforeAccountSlot(t *testing.
 		return func() {}, true, nil
 	}
 
-	release, acquired, err := svc.TryAcquireCodexSessionAdmissionSlots(context.Background(), c, account, 8, tryAccount)
+	release, acquired, err := svc.TryAcquireCodexSessionAdmissionSlots(context.Background(), c, account, 8, 0, tryAccount)
 	require.NoError(t, err)
 	require.False(t, acquired)
 	require.Nil(t, release)
 	require.Zero(t, accountAcquireCalls, "子代理槽满时不能先占账号总槽位")
 
-	release, acquired, err = svc.TryAcquireCodexSessionAdmissionSlots(context.Background(), c, account, 8, tryAccount)
+	release, acquired, err = svc.TryAcquireCodexSessionAdmissionSlots(context.Background(), c, account, 8, 0, tryAccount)
 	require.NoError(t, err)
 	require.True(t, acquired)
 	require.Equal(t, 1, accountAcquireCalls)

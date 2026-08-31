@@ -1004,7 +1004,7 @@ var ProviderSet = wire.NewSet(
 )
 
 // ProvideAccountPoolService 使用部署配置创建号池快照服务。
-func ProvideAccountPoolService(source AccountPoolSource, cache AccountPoolSnapshotCache, concurrency *ConcurrencyService, usageLogRepo UsageLogRepository, accountRepo AccountRepository, apiKeyService *APIKeyService, cfg *config.Config) *AccountPoolService {
+func ProvideAccountPoolService(source AccountPoolSource, cache AccountPoolSnapshotCache, concurrency *ConcurrencyService, usageLogRepo UsageLogRepository, accountRepo AccountRepository, apiKeyService *APIKeyService, settings *SettingService, cfg *config.Config) *AccountPoolService {
 	pool := NewAccountPoolService(source, cache, concurrency, AccountPoolOptions{
 		BuildBatchSize: cfg.AccountPool.BuildBatchSize,
 		SnapshotTTL:    time.Duration(cfg.AccountPool.SnapshotTTLMinutes) * time.Minute,
@@ -1021,6 +1021,7 @@ func ProvideAccountPoolService(source AccountPoolSource, cache AccountPoolSnapsh
 		pool.SetResidentStatsReader(reader)
 	}
 	pool.SetUserAccessReader(apiKeyService)
+	pool.SetSettingService(settings)
 	return pool
 }
 

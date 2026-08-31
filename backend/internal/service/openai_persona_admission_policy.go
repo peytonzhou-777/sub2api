@@ -56,8 +56,12 @@ func (p OpenAIPersonaAdmissionPolicy) validate() error {
 // settings. The returned policy is a value copy and safe to attach to a ticket.
 func (cfg OpenAIAccountAdmissionConfig) EffectiveOpenAIPersonaPolicy(persona SessionPersonaID) OpenAIPersonaAdmissionPolicy {
 	policy := OpenAIPersonaAdmissionPolicy{
+		MaxConcurrency:          cfg.MaxConcurrency,
 		RequestsPerMinute:       cfg.RequestsPerMinute,
 		TokensPerMinute:         cfg.TokensPerMinute,
+		MaxSubagents:            cfg.MaxSubagents,
+		SubagentDepth:           cfg.SubagentDepth,
+		MaxActiveWebSockets:     cfg.MaxActiveWebSockets,
 		MaxQueueDepthPerAccount: cfg.MaxQueueDepthPerAccount,
 	}
 	id := strings.ToLower(strings.TrimSpace(string(persona)))
@@ -96,6 +100,61 @@ func (cfg OpenAIAccountAdmissionConfig) EffectiveOpenAIPersonaPolicy(persona Ses
 		}
 	}
 	return policy
+}
+
+// EffectiveOpenAIPersonaPolicyForAccount 把 Persona 的 0 值继承解析到
+// 具体账号与全站 WS 配置。调用方拿到的是可直接用于运行时准入的快照。
+func (cfg OpenAIAccountAdmissionConfig) EffectiveOpenAIPersonaPolicyForAccount(
+	account *Account,
+	persona SessionPersonaID,
+	globalMaxActiveWebSockets int,
+) OpenAIPersonaAdmissionPolicy {
+	policy := cfg.EffectiveOpenAIPersonaPolicy(persona)
+	if policy.MaxConcurrency <= 0 {
+		policy.MaxConcurrency = legacyOpenAIAccountConcurrency(account)
+	}
+	if policy.MaxSubagents <= 0 && persona == SessionPersonaCodexCLIStrict && account != nil {
+		policy.MaxSubagents = account.GetCodexSubagentMaxInflightPerSession()
+	}
+	if policy.MaxActiveWebSockets <= 0 && globalMaxActiveWebSockets > 0 {
+		policy.MaxActiveWebSockets = globalMaxActiveWebSockets
+	}
+	return policy
+}
+
+// EffectiveOpenAIAccountAdmissionCapacity 返回调度、账号页与号池共同使用的
+// 新根容量。v3 账号按 active 且授权就绪槽位求和；旧账号保持原并发语义。
+func EffectiveOpenAIAccountAdmissionCapacity(account *Account, cfg OpenAIAccountAdmissionConfig) int {
+	legacy := legacyOpenAIAccountConcurrency(account)
+	if account == nil || !account.IsOpenAI() || !account.IsOpenAIOAuth() || !account.IsOpenAIPersonaMappingEnabled() {
+		return legacy
+	}
+
+	capacity := 0
+	for slotID := 0; slotID < DefaultSessionPersonaSlotCount; slotID++ {
+		persona, err := ResolveDefaultSessionPersona(slotID)
+		if err != nil || account.GetOpenAIPersonaSlotState(slotID) != SessionPersonaSlotStateActive ||
+			!account.GetOpenAIPersonaSlotEnabled(slotID) {
+			continue
+		}
+		authorized := account.HasOpenAIPersonaCredential(persona.ID, slotID)
+		if !authorized && persona.ID == SessionPersonaCodexCLIStrict && slotID == 0 {
+			authorized = strings.TrimSpace(account.GetOpenAIAccessToken()) != "" &&
+				strings.TrimSpace(account.GetOpenAIRefreshToken()) != ""
+		}
+		if !authorized {
+			continue
+		}
+		capacity += cfg.EffectiveOpenAIPersonaPolicyForAccount(account, persona.ID, 0).MaxConcurrency
+	}
+	return capacity
+}
+
+func legacyOpenAIAccountConcurrency(account *Account) int {
+	if account != nil && account.Concurrency > 0 {
+		return account.Concurrency
+	}
+	return 1
 }
 
 // ForPersona 返回带 Persona 限制的 admission 配置快照。旧字段仍保留，

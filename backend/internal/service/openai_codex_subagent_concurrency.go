@@ -40,19 +40,16 @@ func (s *OpenAIGatewayService) acquireCodexSubagentSlot(
 	if account == nil || ids == nil || !ids.isSubagent {
 		return func() {}, nil
 	}
-	// OpenCode has no Codex-style global/session subagent hard cap. Its
-	// subagent_depth and resource limits are Persona policy concerns; until the
-	// canonical lineage gate is wired, do not accidentally impose the legacy
-	// account-level Codex limit on an OpenCode request.
-	if isOpenCodePersonaBindingForAccount(ctx, account) {
-		return func() {}, nil
+	binding, policy := s.effectiveOpenAIPersonaAdmissionPolicy(ctx, account)
+	if err := s.enforceOpenAISubagentDepth(ctx, account, binding, ids, policy.SubagentDepth); err != nil {
+		return nil, err
 	}
 	scopeHash := codexSubagentAdmissionScopeHash(ctx, account, ids)
 	if lease, _ := ctx.Value(codexSubagentAdmissionLeaseContextKey{}).(codexSubagentAdmissionLease); lease.accountID == account.ID &&
 		lease.scopeHash == scopeHash && lease.epoch == ids.sessionEpoch && lease.active != nil && lease.active.Load() {
 		return func() {}, nil
 	}
-	limit := account.GetCodexSubagentMaxInflightPerSession()
+	limit := policy.MaxSubagents
 	if limit <= 0 {
 		return func() {}, nil
 	}
@@ -115,30 +112,61 @@ func (s *OpenAIGatewayService) TryAcquireCodexSessionAdmissionSlots(
 	c *gin.Context,
 	account *Account,
 	maxAccountConcurrency int,
+	maxPersonaConcurrency int,
 	tryAccount func(context.Context, int64, int) (func(), bool, error),
 ) (func(), bool, error) {
 	if account == nil || tryAccount == nil {
 		return nil, false, errors.New("openai account admission slot dependencies unavailable")
 	}
-	if isOpenCodePersonaBindingForAccount(ctx, account) {
-		return tryAccount(ctx, account.ID, maxAccountConcurrency)
-	}
 	ids := stagedCodexFingerprintIDsForAccount(c, account)
-	limit := account.GetCodexSubagentMaxInflightPerSession()
-	if ids == nil || !ids.isSubagent || limit <= 0 {
-		return tryAccount(ctx, account.ID, maxAccountConcurrency)
+	binding, policy := s.effectiveOpenAIPersonaAdmissionPolicy(ctx, account)
+	if maxPersonaConcurrency > 0 {
+		policy.MaxConcurrency = maxPersonaConcurrency
 	}
 	if s == nil || s.concurrencyService == nil {
-		return nil, false, errors.New("codex subagent concurrency cache is unavailable")
+		return nil, false, errors.New("openai persona concurrency cache is unavailable")
+	}
+	if err := s.enforceOpenAISubagentDepth(ctx, account, binding, ids, policy.SubagentDepth); err != nil {
+		return nil, false, err
+	}
+
+	releasePersona := func() {}
+	if binding.EffectiveMappingVersion() >= SessionPersonaScopeVersionV3 {
+		personaResult, err := s.concurrencyService.AcquireOpenAIPersonaSlot(
+			ctx, account.ID, binding.PersonaID, binding.SlotID, policy.MaxConcurrency,
+		)
+		if err != nil || personaResult == nil || !personaResult.Acquired {
+			return nil, false, err
+		}
+		if personaResult.ReleaseFunc != nil {
+			releasePersona = personaResult.ReleaseFunc
+		}
+	}
+
+	limit := policy.MaxSubagents
+	if ids == nil || !ids.isSubagent || limit <= 0 {
+		releaseAccount, acquired, acquireErr := tryAccount(ctx, account.ID, maxAccountConcurrency)
+		if acquireErr != nil || !acquired {
+			releasePersona()
+			return nil, acquired, acquireErr
+		}
+		return func() {
+			if releaseAccount != nil {
+				releaseAccount()
+			}
+			releasePersona()
+		}, true, nil
 	}
 	scopeHash := codexSubagentAdmissionScopeHash(ctx, account, ids)
 	subagentResult, err := s.concurrencyService.AcquireCodexSubagentSlot(
 		ctx, account.ID, scopeHash, ids.sessionEpoch, limit,
 	)
 	if err != nil {
+		releasePersona()
 		return nil, false, err
 	}
 	if subagentResult == nil || !subagentResult.Acquired {
+		releasePersona()
 		return nil, false, nil
 	}
 	releaseSubagent := subagentResult.ReleaseFunc
@@ -148,6 +176,7 @@ func (s *OpenAIGatewayService) TryAcquireCodexSessionAdmissionSlots(
 	releaseAccount, acquired, err := tryAccount(ctx, account.ID, maxAccountConcurrency)
 	if err != nil || !acquired {
 		releaseSubagent()
+		releasePersona()
 		return nil, acquired, err
 	}
 	if c != nil && c.Request != nil {
@@ -163,6 +192,7 @@ func (s *OpenAIGatewayService) TryAcquireCodexSessionAdmissionSlots(
 				releaseAccount()
 			}
 			releaseSubagent()
+			releasePersona()
 		}, true, nil
 	}
 	return func() {
@@ -170,7 +200,76 @@ func (s *OpenAIGatewayService) TryAcquireCodexSessionAdmissionSlots(
 			releaseAccount()
 		}
 		releaseSubagent()
+		releasePersona()
 	}, true, nil
+}
+
+func (s *OpenAIGatewayService) effectiveOpenAIPersonaAdmissionPolicy(ctx context.Context, account *Account) (SessionPersonaSlotBinding, OpenAIPersonaAdmissionPolicy) {
+	binding, ok := SessionPersonaBindingFromContext(ctx)
+	if !ok || binding.AccountID != 0 && account != nil && binding.AccountID != account.ID {
+		persona, _ := ResolveDefaultSessionPersona(0)
+		binding = SessionPersonaSlotBinding{AccountID: accountIDForSubagentScope(account, SessionPersonaSlotBinding{}), SlotID: 0, PersonaID: persona.ID, Persona: persona}
+	}
+	cfg := DefaultOpenAIAccountAdmissionConfig()
+	if s != nil && s.settingService != nil {
+		if current, err := s.settingService.GetOpenAIAccountAdmissionConfig(ctx); err == nil {
+			cfg = current
+		}
+	}
+	globalWS := 0
+	if s != nil && s.cfg != nil {
+		globalWS = s.cfg.Gateway.OpenAIWS.MaxConnsPerAccount
+	}
+	return binding, cfg.EffectiveOpenAIPersonaPolicyForAccount(account, binding.PersonaID, globalWS)
+}
+
+// EffectiveOpenAIPersonaAdmissionPolicy 返回 handler 可直接执行的 Persona 策略快照。
+func (s *OpenAIGatewayService) EffectiveOpenAIPersonaAdmissionPolicy(ctx context.Context, account *Account, binding SessionPersonaSlotBinding) OpenAIPersonaAdmissionPolicy {
+	if binding.Valid() {
+		ctx = ContextWithSessionPersonaBinding(ctx, binding)
+	}
+	_, policy := s.effectiveOpenAIPersonaAdmissionPolicy(ctx, account)
+	return policy
+}
+
+// enforceOpenAISubagentDepth 通过持久化线程深度约束父子代理层级。
+func (s *OpenAIGatewayService) enforceOpenAISubagentDepth(ctx context.Context, account *Account, binding SessionPersonaSlotBinding, ids *codexFingerprintIDs, maxDepth int) error {
+	if maxDepth <= 0 || account == nil || ids == nil || strings.TrimSpace(ids.threadID) == "" {
+		return nil
+	}
+	if s == nil || s.concurrencyService == nil || len(ids.sessionScopeHash) != 64 || ids.sessionEpoch <= 0 {
+		return newCodexSubagentConcurrencyStoreError()
+	}
+	threadHash := hashOpenAISubagentThread(ids.threadID)
+	depth := 0
+	if ids.isSubagent {
+		parentID := strings.TrimSpace(ids.parentThreadID)
+		if parentID == "" {
+			parentID = strings.TrimSpace(ids.forkedThreadID)
+		}
+		if parentID != "" {
+			parentDepth, found, err := s.concurrencyService.GetOpenAISubagentDepth(ctx, account.ID, binding.PersonaID, binding.SlotID, ids.sessionScopeHash, ids.sessionEpoch, hashOpenAISubagentThread(parentID))
+			if err != nil {
+				return newCodexSubagentConcurrencyStoreError()
+			}
+			if found {
+				depth = parentDepth
+			}
+		}
+		depth++
+		if depth > maxDepth {
+			return newCodexSubagentDepthLimitError(maxDepth)
+		}
+	}
+	if err := s.concurrencyService.SetOpenAISubagentDepth(ctx, account.ID, binding.PersonaID, binding.SlotID, ids.sessionScopeHash, ids.sessionEpoch, threadHash, depth); err != nil {
+		return newCodexSubagentConcurrencyStoreError()
+	}
+	return nil
+}
+
+func hashOpenAISubagentThread(threadID string) string {
+	digest := sha256.Sum256([]byte(strings.TrimSpace(threadID)))
+	return hex.EncodeToString(digest[:])
 }
 
 func isOpenCodePersonaBindingForAccount(ctx context.Context, account *Account) bool {
@@ -245,6 +344,15 @@ func newCodexSubagentConcurrencyLimitError() *UpstreamFailoverError {
 		ClientMessage:       "Subagent concurrency limit exceeded, please retry later",
 		LocalRequestFailure: true,
 	}
+}
+
+func newCodexSubagentDepthLimitError(limit int) *UpstreamFailoverError {
+	err := newCodexSubagentConcurrencyLimitError()
+	err.ClientMessage = fmt.Sprintf("Subagent depth exceeds the Persona limit of %d", limit)
+	err.ResponseBody, _ = json.Marshal(map[string]any{"error": map[string]any{
+		"type": "rate_limit_error", "code": "openai_subagent_depth_limit", "message": err.ClientMessage,
+	}})
+	return err
 }
 
 func newCodexSubagentConcurrencyStoreError() *UpstreamFailoverError {

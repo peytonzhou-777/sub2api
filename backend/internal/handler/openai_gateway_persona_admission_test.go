@@ -131,9 +131,10 @@ func TestApplyOpenAIPersonaAdmissionPolicy(t *testing.T) {
 		},
 	}
 
-	got, maxConcurrency := applyOpenAIPersonaAdmissionPolicy(cfg, openAIPersonaAdmissionTestBinding(), 12)
-	if maxConcurrency != 3 {
-		t.Fatalf("Persona max concurrency = %d, want 3", maxConcurrency)
+	account := &service.Account{Concurrency: 12}
+	got, accountConcurrency, personaConcurrency := applyOpenAIPersonaAdmissionPolicy(cfg, account, openAIPersonaAdmissionTestBinding(), 12)
+	if accountConcurrency != 12 || personaConcurrency != 3 {
+		t.Fatalf("effective concurrency = account %d persona %d, want 12/3", accountConcurrency, personaConcurrency)
 	}
 	if got.RequestsPerMinute != 20 || got.TokensPerMinute != 2000 || got.MaxQueueDepthPerAccount != 7 {
 		t.Fatalf("Persona rate/queue policy not applied: %+v", got)
