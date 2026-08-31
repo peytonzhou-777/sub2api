@@ -23,4 +23,11 @@ describe('recurring credits api', () => {
     await recurringCreditAction(7, 'make-finite', 4, 6)
     expect(post).toHaveBeenCalledWith('/admin/credits/recurring-grants/7/make-finite', { expected_version: 4, count: 6, configuration: undefined })
   })
+
+  it('passes hour-based immediate validity through unchanged', async () => {
+    post.mockResolvedValue({ data: {} })
+    const immediate = { ...payload, schedule_type: 'immediate' as const, validity_hours: 6, day_of_month: undefined }
+    await previewRecurringCredit(immediate)
+    expect(post).toHaveBeenCalledWith('/admin/credits/recurring-grants/preview', immediate, { params: undefined })
+  })
 })

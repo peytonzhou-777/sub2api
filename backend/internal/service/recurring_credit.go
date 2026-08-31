@@ -32,6 +32,9 @@ const (
 	RecurringCreditEligibilityLegacy          = "period_usage_or_recharge"
 	RecurringCreditEligibilityRollingActivity = "rolling_30d_activity_v1"
 	recurringCreditActivityPeriod             = 30 * 24 * time.Hour
+	// 立即执行任务有效期上限同时保留天、小时两种兼容口径。
+	recurringCreditMaxValidityDays  = 36500
+	recurringCreditMaxValidityHours = recurringCreditMaxValidityDays * 24
 )
 
 // RecurringCreditTaskInput 是循环赠额任务创建和完整编辑的输入。
@@ -42,6 +45,7 @@ type RecurringCreditTaskInput struct {
 	DayOfMonth      *int    `json:"day_of_month"`
 	DayOfWeek       *int    `json:"day_of_week"`
 	ValidityDays    *int    `json:"validity_days"`
+	ValidityHours   *int    `json:"validity_hours"` // 立即执行任务按小时配置的有效期。
 	LocalTime       string  `json:"local_time"`
 	Timezone        string  `json:"timezone"`
 	Amount          float64 `json:"amount"`
@@ -66,6 +70,7 @@ type RecurringCreditTaskView struct {
 	DayOfWeek           *int       `json:"day_of_week,omitempty"`
 	LocalTime           string     `json:"local_time"`
 	ValidityDays        *int       `json:"validity_days,omitempty"`
+	ValidityHours       *int       `json:"validity_hours,omitempty"` // 立即执行任务按小时配置的有效期。
 	Timezone            string     `json:"timezone"`
 	Amount              float64    `json:"amount"`
 	ExecutionMode       string     `json:"execution_mode"`
@@ -96,6 +101,7 @@ type RecurringCreditBatchView struct {
 	ConfigVersion         int        `json:"config_version"`
 	EligibilityPolicy     string     `json:"eligibility_policy"`
 	ValidityDays          *int       `json:"validity_days,omitempty"`
+	ValidityHours         *int       `json:"validity_hours,omitempty"` // 批次创建时固化的小时有效期。
 	Amount                float64    `json:"amount"`
 	Timezone              string     `json:"timezone"`
 	Status                string     `json:"status"`
@@ -222,8 +228,12 @@ func (s *RecurringCreditService) validateInput(input *RecurringCreditTaskInput) 
 		return infraerrors.New(http.StatusBadRequest, "INVALID_RECURRING_CREDIT_TIMEZONE", "timezone must be a valid IANA timezone")
 	}
 	if input.ScheduleType == RecurringCreditImmediate {
-		if input.ValidityDays == nil || *input.ValidityDays < 1 || *input.ValidityDays > 36500 {
-			return infraerrors.New(http.StatusBadRequest, "INVALID_RECURRING_CREDIT_VALIDITY", "immediate mode requires validity_days between 1 and 36500")
+		if _, err := recurringCreditValidityDuration(input.ValidityDays, input.ValidityHours); err != nil {
+			return err
+		}
+		if input.ValidityHours == nil && input.ValidityDays != nil {
+			hours := *input.ValidityDays * 24
+			input.ValidityHours = &hours
 		}
 		amount := decimal.NewFromFloat(input.Amount)
 		if amount.LessThan(decimal.NewFromFloat(0.01)) || amount.GreaterThan(decimal.NewFromInt(10000)) || amount.Exponent() < -8 {
@@ -239,6 +249,7 @@ func (s *RecurringCreditService) validateInput(input *RecurringCreditTaskInput) 
 		return nil
 	}
 	input.ValidityDays = nil
+	input.ValidityHours = nil
 	if _, _, err := parseLocalTime(input.LocalTime); err != nil {
 		return infraerrors.New(http.StatusBadRequest, "INVALID_RECURRING_CREDIT_TIME", "local_time must be HH:mm")
 	}
@@ -287,7 +298,8 @@ func (s *RecurringCreditService) Preview(ctx context.Context, input RecurringCre
 		if err != nil {
 			return nil, err
 		}
-		expires := now.AddDate(0, 0, *input.ValidityDays)
+		validity, _ := recurringCreditValidityDuration(input.ValidityDays, input.ValidityHours)
+		expires := now.Add(validity)
 		start, end := recurringCreditActivityWindow(now)
 		return &RecurringCreditPreview{
 			Amount: input.Amount, NextRunAt: now, NextRunLocal: now.In(mustLocation(input.Timezone)).Format(time.RFC3339),
@@ -345,6 +357,7 @@ type recurringCreditBatchRecord struct {
 	ConfigVersion         int
 	EligibilityPolicy     string
 	ValidityDays          *int
+	ValidityHours         *int
 	ScheduleType          string
 	DayOfMonth            *int
 	DayOfWeek             *int
@@ -429,12 +442,12 @@ func (s *RecurringCreditService) ReissueBatch(ctx context.Context, taskID, batch
 	var newBatchID int64
 	err = tx.QueryRowContext(ctx, `INSERT INTO recurring_credit_batches(
 			task_id,task_name,reissue_of_batch_id,scheduled_at,expires_at,qualification_start,qualification_end,qualification_cutoff_at,
-			config_version,eligibility_policy,validity_days,schedule_type,day_of_month,day_of_week,local_time,timezone,amount,execution_mode,
+			config_version,eligibility_policy,validity_days,validity_hours,schedule_type,day_of_month,day_of_week,local_time,timezone,amount,execution_mode,
 			status,claimed_at,lease_owner,lease_expires_at,attempt_count)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'running',$4,'',$19,0)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'running',$4,'',$20,0)
 		RETURNING id`,
 		root.TaskID, root.TaskName, root.ID, now, root.ExpiresAt, root.QualificationStart, root.QualificationEnd, cutoff,
-		root.ConfigVersion, root.EligibilityPolicy, root.ValidityDays, root.ScheduleType, root.DayOfMonth, root.DayOfWeek,
+		root.ConfigVersion, root.EligibilityPolicy, root.ValidityDays, root.ValidityHours, root.ScheduleType, root.DayOfMonth, root.DayOfWeek,
 		root.LocalTime, root.Timezone, root.Amount, root.ExecutionMode, now.Add(-time.Second),
 	).Scan(&newBatchID)
 	if err != nil {
@@ -523,8 +536,8 @@ func (s *RecurringCreditService) CreateTask(ctx context.Context, input Recurring
 	defer func() { _ = tx.Rollback() }()
 	var id int64
 	err = tx.QueryRowContext(ctx, `INSERT INTO recurring_credit_tasks
-		(name,admin_notes,schedule_type,day_of_month,day_of_week,validity_days,local_time,timezone,amount,execution_mode,remaining_runs,status,next_run_at,idempotency_key,created_by_admin_id,created_by_admin_email,updated_by_admin_id,updated_by_admin_email)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULLIF($14,''),$15,$16,$15,$16) RETURNING id`, input.Name, input.AdminNotes, input.ScheduleType, input.DayOfMonth, input.DayOfWeek, input.ValidityDays, input.LocalTime, input.Timezone, input.Amount, input.ExecutionMode, input.RemainingRuns, status, next, idempotencyKey, actor.AdminID, email).Scan(&id)
+		(name,admin_notes,schedule_type,day_of_month,day_of_week,validity_days,validity_hours,local_time,timezone,amount,execution_mode,remaining_runs,status,next_run_at,idempotency_key,created_by_admin_id,created_by_admin_email,updated_by_admin_id,updated_by_admin_email)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NULLIF($15,''),$16,$17,$16,$17) RETURNING id`, input.Name, input.AdminNotes, input.ScheduleType, input.DayOfMonth, input.DayOfWeek, input.ValidityDays, input.ValidityHours, input.LocalTime, input.Timezone, input.Amount, input.ExecutionMode, input.RemainingRuns, status, next, idempotencyKey, actor.AdminID, email).Scan(&id)
 	if err != nil {
 		if idempotencyKey != "" {
 			if existing, queryErr := s.getTaskByIdempotencyKey(ctx, idempotencyKey); queryErr == nil {
@@ -953,17 +966,17 @@ func queryRecurringCreditBatchRecord(ctx context.Context, queryer recurringCredi
 		suffix = " FOR UPDATE"
 	}
 	row := queryer.QueryRowContext(ctx, `SELECT id,task_id,task_name,scheduled_at,expires_at,qualification_start,qualification_end,
-		qualification_cutoff_at,config_version,eligibility_policy,validity_days,schedule_type,day_of_month,day_of_week,
+		qualification_cutoff_at,config_version,eligibility_policy,validity_days,validity_hours,schedule_type,day_of_month,day_of_week,
 		local_time,timezone,amount,execution_mode,status,reissue_of_batch_id,snapshot_completed_at,
 		eligible_user_count,api_active_count,site_active_count,both_active_count
 		FROM recurring_credit_batches WHERE task_id=$1 AND id=$2`+suffix, taskID, batchID)
 	var record recurringCreditBatchRecord
 	var cutoff, snapshotCompleted sql.NullTime
-	var validity, dayOfMonth, dayOfWeek, reissueOf sql.NullInt64
+	var validity, validityHours, dayOfMonth, dayOfWeek, reissueOf sql.NullInt64
 	err := row.Scan(
 		&record.ID, &record.TaskID, &record.TaskName, &record.ScheduledAt, &record.ExpiresAt,
 		&record.QualificationStart, &record.QualificationEnd, &cutoff, &record.ConfigVersion,
-		&record.EligibilityPolicy, &validity, &record.ScheduleType, &dayOfMonth, &dayOfWeek,
+		&record.EligibilityPolicy, &validity, &validityHours, &record.ScheduleType, &dayOfMonth, &dayOfWeek,
 		&record.LocalTime, &record.Timezone, &record.Amount, &record.ExecutionMode, &record.Status,
 		&reissueOf, &snapshotCompleted, &record.EligibleUserCount, &record.APIActiveCount,
 		&record.SiteActiveCount, &record.BothActiveCount,
@@ -979,6 +992,10 @@ func queryRecurringCreditBatchRecord(ctx context.Context, queryer recurringCredi
 	if validity.Valid {
 		value := int(validity.Int64)
 		record.ValidityDays = &value
+	}
+	if validityHours.Valid {
+		value := int(validityHours.Int64)
+		record.ValidityHours = &value
 	}
 	if dayOfMonth.Valid {
 		value := int(dayOfMonth.Int64)
@@ -1141,7 +1158,7 @@ SELECT $2,user_id,email,username,user_status,user_deleted,actual_cost,net_rechar
 FROM recurring_credit_user_items WHERE batch_id=$1
 ON CONFLICT(batch_id,user_id) DO NOTHING`
 
-const taskSelectColumns = `t.id,t.name,t.admin_notes,t.schedule_type,t.day_of_month,t.day_of_week,t.validity_days,t.local_time,t.timezone,t.amount,t.execution_mode,t.remaining_runs,t.skip_count,t.status,t.next_run_at,t.version,COALESCE((SELECT b.status FROM recurring_credit_batches b WHERE b.task_id=t.id ORDER BY b.scheduled_at DESC LIMIT 1),''),t.created_at,t.updated_at`
+const taskSelectColumns = `t.id,t.name,t.admin_notes,t.schedule_type,t.day_of_month,t.day_of_week,t.validity_days,t.validity_hours,t.local_time,t.timezone,t.amount,t.execution_mode,t.remaining_runs,t.skip_count,t.status,t.next_run_at,t.version,COALESCE((SELECT b.status FROM recurring_credit_batches b WHERE b.task_id=t.id ORDER BY b.scheduled_at DESC LIMIT 1),''),t.created_at,t.updated_at`
 
 func queryTaskDB(ctx context.Context, db *sql.DB, id int64) (*RecurringCreditTaskView, error) {
 	return scanTask(db.QueryRowContext(ctx, `SELECT `+taskSelectColumns+` FROM recurring_credit_tasks t WHERE t.id=$1`, id))
@@ -1158,9 +1175,9 @@ type sqlScanner interface{ Scan(...any) error }
 
 func scanTask(scanner sqlScanner) (*RecurringCreditTaskView, error) {
 	var v RecurringCreditTaskView
-	var dom, dow, validity, remaining sql.NullInt64
+	var dom, dow, validity, validityHours, remaining sql.NullInt64
 	var next sql.NullTime
-	err := scanner.Scan(&v.ID, &v.Name, &v.AdminNotes, &v.ScheduleType, &dom, &dow, &validity, &v.LocalTime, &v.Timezone, &v.Amount, &v.ExecutionMode, &remaining, &v.SkipCount, &v.Status, &next, &v.Version, &v.LatestBatchStatus, &v.CreatedAt, &v.UpdatedAt)
+	err := scanner.Scan(&v.ID, &v.Name, &v.AdminNotes, &v.ScheduleType, &dom, &dow, &validity, &validityHours, &v.LocalTime, &v.Timezone, &v.Amount, &v.ExecutionMode, &remaining, &v.SkipCount, &v.Status, &next, &v.Version, &v.LatestBatchStatus, &v.CreatedAt, &v.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -1175,6 +1192,10 @@ func scanTask(scanner sqlScanner) (*RecurringCreditTaskView, error) {
 	if validity.Valid {
 		x := int(validity.Int64)
 		v.ValidityDays = &x
+	}
+	if validityHours.Valid {
+		x := int(validityHours.Int64)
+		v.ValidityHours = &x
 	}
 	if remaining.Valid {
 		x := int(remaining.Int64)
@@ -1195,7 +1216,7 @@ const batchSelectColumns = `id,task_id,task_name,reissue_of_batch_id,
 		WHERE reissue.reissue_of_batch_id=COALESCE(recurring_credit_batches.reissue_of_batch_id,recurring_credit_batches.id)
 			AND reissue.status IN ('running','succeeded','empty')
 	)),
-	scheduled_at,expires_at,qualification_start,qualification_end,qualification_cutoff_at,config_version,eligibility_policy,validity_days,amount,timezone,status,attempt_count,eligible_user_count,issued_user_count,excluded_user_count,usage_eligible_count,recharge_eligible_count,api_active_count,site_active_count,both_active_count,snapshot_completed_at,issued_amount,failure_code,failure_message,finished_at,created_at`
+	scheduled_at,expires_at,qualification_start,qualification_end,qualification_cutoff_at,config_version,eligibility_policy,validity_days,validity_hours,amount,timezone,status,attempt_count,eligible_user_count,issued_user_count,excluded_user_count,usage_eligible_count,recharge_eligible_count,api_active_count,site_active_count,both_active_count,snapshot_completed_at,issued_amount,failure_code,failure_message,finished_at,created_at`
 
 func (s *RecurringCreditService) getBatch(ctx context.Context, batchID int64) (*RecurringCreditBatchView, error) {
 	item, err := scanBatch(s.db.QueryRowContext(ctx, `SELECT `+batchSelectColumns+` FROM recurring_credit_batches WHERE id=$1`, batchID))
@@ -1208,8 +1229,8 @@ func (s *RecurringCreditService) getBatch(ctx context.Context, batchID int64) (*
 func scanBatch(scanner sqlScanner) (*RecurringCreditBatchView, error) {
 	var v RecurringCreditBatchView
 	var cutoff, snapshotCompleted, finished sql.NullTime
-	var validity, reissueOf sql.NullInt64
-	err := scanner.Scan(&v.ID, &v.TaskID, &v.TaskName, &reissueOf, &v.CanReissue, &v.ScheduledAt, &v.ExpiresAt, &v.QualificationStart, &v.QualificationEnd, &cutoff, &v.ConfigVersion, &v.EligibilityPolicy, &validity, &v.Amount, &v.Timezone, &v.Status, &v.AttemptCount, &v.EligibleUserCount, &v.IssuedUserCount, &v.ExcludedUserCount, &v.UsageEligibleCount, &v.RechargeEligibleCount, &v.APIActiveCount, &v.SiteActiveCount, &v.BothActiveCount, &snapshotCompleted, &v.IssuedAmount, &v.FailureCode, &v.FailureMessage, &finished, &v.CreatedAt)
+	var validity, validityHours, reissueOf sql.NullInt64
+	err := scanner.Scan(&v.ID, &v.TaskID, &v.TaskName, &reissueOf, &v.CanReissue, &v.ScheduledAt, &v.ExpiresAt, &v.QualificationStart, &v.QualificationEnd, &cutoff, &v.ConfigVersion, &v.EligibilityPolicy, &validity, &validityHours, &v.Amount, &v.Timezone, &v.Status, &v.AttemptCount, &v.EligibleUserCount, &v.IssuedUserCount, &v.ExcludedUserCount, &v.UsageEligibleCount, &v.RechargeEligibleCount, &v.APIActiveCount, &v.SiteActiveCount, &v.BothActiveCount, &snapshotCompleted, &v.IssuedAmount, &v.FailureCode, &v.FailureMessage, &finished, &v.CreatedAt)
 	if reissueOf.Valid {
 		x := reissueOf.Int64
 		v.ReissueOfBatchID = &x
@@ -1229,6 +1250,10 @@ func scanBatch(scanner sqlScanner) (*RecurringCreditBatchView, error) {
 	if validity.Valid {
 		x := int(validity.Int64)
 		v.ValidityDays = &x
+	}
+	if validityHours.Valid {
+		x := int(validityHours.Int64)
+		v.ValidityHours = &x
 	}
 	return &v, err
 }
@@ -1257,11 +1282,14 @@ func invalidTaskState(message string) error {
 	return infraerrors.New(http.StatusConflict, "INVALID_RECURRING_CREDIT_TASK_STATE", message)
 }
 func taskViewInput(v *RecurringCreditTaskView) RecurringCreditTaskInput {
-	return RecurringCreditTaskInput{Name: v.Name, AdminNotes: v.AdminNotes, ScheduleType: v.ScheduleType, DayOfMonth: v.DayOfMonth, DayOfWeek: v.DayOfWeek, ValidityDays: v.ValidityDays, LocalTime: v.LocalTime, Timezone: v.Timezone, Amount: v.Amount, ExecutionMode: v.ExecutionMode, RemainingRuns: v.RemainingRuns}
+	return RecurringCreditTaskInput{Name: v.Name, AdminNotes: v.AdminNotes, ScheduleType: v.ScheduleType, DayOfMonth: v.DayOfMonth, DayOfWeek: v.DayOfWeek, ValidityDays: v.ValidityDays, ValidityHours: v.ValidityHours, LocalTime: v.LocalTime, Timezone: v.Timezone, Amount: v.Amount, ExecutionMode: v.ExecutionMode, RemainingRuns: v.RemainingRuns}
 }
 func scheduleDescription(v *RecurringCreditTaskView) string {
 	if v.ScheduleType == RecurringCreditImmediate && v.ValidityDays != nil {
 		return fmt.Sprintf("立即执行（有效期%d天）", *v.ValidityDays)
+	}
+	if v.ScheduleType == RecurringCreditImmediate && v.ValidityHours != nil {
+		return fmt.Sprintf("立即执行（有效期%d小时）", *v.ValidityHours)
 	}
 	if v.ScheduleType == RecurringCreditMonthly && v.DayOfMonth != nil {
 		return fmt.Sprintf("每月%d日 %s", *v.DayOfMonth, v.LocalTime)
@@ -1270,6 +1298,26 @@ func scheduleDescription(v *RecurringCreditTaskView) string {
 		return fmt.Sprintf("每周%d %s", *v.DayOfWeek, v.LocalTime)
 	}
 	return ""
+}
+
+// recurringCreditValidityDuration 校验立即执行任务的有效期并转换为精确小时数。
+func recurringCreditValidityDuration(days, hours *int) (time.Duration, error) {
+	if days == nil && hours == nil {
+		return 0, infraerrors.New(http.StatusBadRequest, "INVALID_RECURRING_CREDIT_VALIDITY", "immediate mode requires validity_days or validity_hours")
+	}
+	if days != nil && (*days < 1 || *days > recurringCreditMaxValidityDays) {
+		return 0, infraerrors.New(http.StatusBadRequest, "INVALID_RECURRING_CREDIT_VALIDITY", "validity_days must be between 1 and 36500")
+	}
+	if hours != nil && (*hours < 1 || *hours > recurringCreditMaxValidityHours) {
+		return 0, infraerrors.New(http.StatusBadRequest, "INVALID_RECURRING_CREDIT_VALIDITY", "validity_hours must be between 1 and 876000")
+	}
+	if days != nil && hours != nil && *hours != *days*24 {
+		return 0, infraerrors.New(http.StatusBadRequest, "INVALID_RECURRING_CREDIT_VALIDITY", "validity_days and validity_hours must represent the same duration")
+	}
+	if hours != nil {
+		return time.Duration(*hours) * time.Hour, nil
+	}
+	return time.Duration(*days) * 24 * time.Hour, nil
 }
 
 func parseLocalTime(value string) (int, int, error) {

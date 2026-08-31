@@ -12,6 +12,8 @@ export interface RecurringCreditTaskInput {
   day_of_month?: number
   day_of_week?: number
   validity_days?: number
+  // 立即执行任务支持按小时配置额度有效期。
+  validity_hours?: number
   local_time: string
   timezone: string
   amount: number
@@ -57,6 +59,8 @@ export interface RecurringCreditBatch {
   can_reissue: boolean
   scheduled_at: string
   validity_days?: number
+  // 批次创建时固化的小时有效期。
+  validity_hours?: number
   expires_at: string
   qualification_start: string
   qualification_end: string
