@@ -75,7 +75,7 @@ func TestNormalizeOpenAIResponsesCompactRequest_RemoteV2StaysOnResponses(t *test
 			require.False(t, legacyCompact)
 			require.True(t, nativeV2)
 			require.Equal(t, service.OpenAIEndpointCapabilityResponses,
-				openAIResponsesRequiredCapabilityForRequest(false, nativeV2 || legacyCompact, service.PlatformOpenAI))
+				openAIResponsesRequiredCapabilityForRequest(false, service.PlatformOpenAI))
 
 			reqStream, streamOK := parseOpenAICompatibleStream(normalized)
 			require.True(t, streamOK)
@@ -110,7 +110,7 @@ func TestNormalizeOpenAIResponsesCompactRequest_RemoteV2PathAliasesStayOnRespons
 			require.False(t, legacyCompact)
 			require.True(t, nativeV2)
 			require.Equal(t, service.OpenAIEndpointCapabilityResponses,
-				openAIResponsesRequiredCapabilityForRequest(false, nativeV2 || legacyCompact, service.PlatformOpenAI))
+				openAIResponsesRequiredCapabilityForRequest(false, service.PlatformOpenAI))
 		})
 	}
 }
@@ -149,7 +149,7 @@ func TestOpenAIResponsesCompactionRoutingFlags(t *testing.T) {
 			wantNativeBefore:    false,
 			wantLegacyAfter:     false,
 			wantNativeAfter:     false,
-			wantCapabilityAfter: service.OpenAIEndpointCapabilityChatCompletions,
+			wantCapabilityAfter: service.OpenAIEndpointCapabilityResponses,
 			wantPathAfter:       "/v1/responses",
 			wantBodyUnchanged:   true,
 		},
@@ -183,7 +183,7 @@ func TestOpenAIResponsesCompactionRoutingFlags(t *testing.T) {
 			wantNativeBefore:    false,
 			wantLegacyAfter:     false,
 			wantNativeAfter:     false,
-			wantCapabilityAfter: service.OpenAIEndpointCapabilityChatCompletions,
+			wantCapabilityAfter: service.OpenAIEndpointCapabilityResponses,
 			wantPathAfter:       "/v1/responses/resp_123/responses",
 			wantBodyUnchanged:   true,
 		},
@@ -226,7 +226,7 @@ func TestOpenAIResponsesCompactionRoutingFlags(t *testing.T) {
 			require.Equal(t, tt.wantLegacyAfter, legacyAfter)
 			require.Equal(t, tt.wantNativeAfter, nativeAfter)
 			require.Equal(t, tt.wantCapabilityAfter,
-				openAIResponsesRequiredCapabilityForRequest(false, nativeAfter || legacyAfter, service.PlatformOpenAI))
+				openAIResponsesRequiredCapabilityForRequest(false, service.PlatformOpenAI))
 			if tt.wantBodyUnchanged {
 				require.Equal(t, tt.body, normalized)
 			}

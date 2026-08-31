@@ -262,11 +262,12 @@ func openAIResponsesRequiredCapability(imageIntent bool, platform string) servic
 	return service.OpenAIEndpointCapabilityChatCompletions
 }
 
-// openAIResponsesRequiredCapabilityForRequest returns the endpoint capability
-// required by an image or Responses request. needsResponses includes both the
-// legacy /responses/compact endpoint and native remote compaction v2.
-func openAIResponsesRequiredCapabilityForRequest(imageIntent bool, needsResponses bool, platform string) service.OpenAIEndpointCapability {
-	if needsResponses && platform == service.PlatformOpenAI {
+// openAIResponsesRequiredCapabilityForRequest returns the capability lane for
+// the Responses ingress. All OpenAI Responses requests share the Responses
+// affinity scope; account capability probing still allows the existing
+// Chat Completions-backed forwarding path where supported.
+func openAIResponsesRequiredCapabilityForRequest(imageIntent bool, platform string) service.OpenAIEndpointCapability {
+	if platform == service.PlatformOpenAI {
 		return service.OpenAIEndpointCapabilityResponses
 	}
 	return openAIResponsesRequiredCapability(imageIntent, platform)
@@ -597,8 +598,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	// 仅对 OpenAI 平台生效：Grok 生图走独立的 forwardGrokResponses 路径，不应被过滤。
 	// 复用前置权限与并发阶段在未修改 body 上确认的显式生图意图，避免大 tools 请求重复扫描。
 	// 该判断已排除 Codex 被动 image_gen namespace，避免 CC-only 账号被误过滤（#4476）。
-	needsResponses := nativeV2 || legacyCompact
-	requiredCapability := openAIResponsesRequiredCapabilityForRequest(imageIntent, needsResponses, requestPlatform)
+	requiredCapability := openAIResponsesRequiredCapabilityForRequest(imageIntent, requestPlatform)
 
 	// 分组利润控制：请求级装配定价上下文——pricingAt 固定本请求的
 	// D 与计费高峰因子，选号、槽位终检与全部 failover 重入共用同一门与阈值。
