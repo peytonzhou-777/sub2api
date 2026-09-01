@@ -158,7 +158,7 @@ func (s *AccountTestService) testCNProviderAdaptiveResponsesConnection(c *gin.Co
 	}
 	apiURL := buildOpenAIResponsesURLForPlatform(account.Platform, baseURL)
 
-	payload := createOpenAITestPayload(testModelID, false, "")
+	payload := createOpenAITestPayload(testModelID, false, "", "")
 	// DeepSeek's native Responses endpoint is stateless and does not need the
 	// OpenAI probe's synthetic instructions.
 	delete(payload, "instructions")

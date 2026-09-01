@@ -296,6 +296,7 @@ data: {"type":"response.completed"}
 	require.Equal(t, "org-parent", req.Header.Get("chatgpt-account-id"))
 	body := readOpenAITestRequestBody(t, req)
 	require.Equal(t, openAIOAuthIntelligenceTestPrompt, gjson.GetBytes(body, "input.0.content.0.text").String())
+	require.Equal(t, openAIOAuthIntelligenceTestEffort, gjson.GetBytes(body, "reasoning.effort").String())
 	require.False(t, gjson.GetBytes(body, "tools").Exists())
 	require.Contains(t, recorder.Body.String(), `"text":"29"`)
 	require.Contains(t, recorder.Body.String(), `"success":true`)
@@ -363,9 +364,10 @@ func TestAccountTestService_OpenAIOAuthIntelligenceRejectsImageModels(t *testing
 }
 
 func TestCreateOpenAITestPayload_EmptyPromptFallsBackToHi(t *testing.T) {
-	payloadBytes, err := json.Marshal(createOpenAITestPayload("gpt-5.4", true, " \n "))
+	payloadBytes, err := json.Marshal(createOpenAITestPayload("gpt-5.4", true, " \n ", ""))
 	require.NoError(t, err)
 	require.Equal(t, "hi", gjson.GetBytes(payloadBytes, "input.0.content.0.text").String())
+	require.False(t, gjson.GetBytes(payloadBytes, "reasoning").Exists())
 }
 
 func TestAccountTestService_OpenAIStreamEOFBeforeCompletedFails(t *testing.T) {

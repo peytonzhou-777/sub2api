@@ -46,6 +46,7 @@ const (
 	testClaudeAPIURL                  = "https://api.anthropic.com/v1/messages?beta=true"
 	chatgptCodexAPIURL                = "https://chatgpt.com/backend-api/codex/responses"
 	defaultAntigravityTestModel       = "claude-sonnet-4-6"
+	openAIOAuthIntelligenceTestEffort = "high"
 	openAIOAuthIntelligenceTestPrompt = "在一个黑色的袋子里放有三种口味的糖果，每种糖果有两种不同的形状（圆形和五角星形，不同的形状靠手感可以分辨）。现已知不同口味的糖果和不同形状的数量统计如下表。参赛者需要在活动前决定摸出的糖果数目，那么，最少取出多少个糖果才能保证手中同时拥有不同形状的苹果味和桃子味的糖果？（同时手中有圆形苹果味匹配五角星桃子味糖果，或者有圆形桃子味匹配五角星苹果味糖果都满足要求）  \n" +
 		"  苹果味 桃子味 西瓜味 \n" +
 		"圆形 7 9 8 \n" +
@@ -350,12 +351,13 @@ func (s *AccountTestService) TestOpenAIOAuthIntelligence(c *gin.Context, account
 		return s.sendErrorAndEnd(c, "Intelligence test only supports text models")
 	}
 
-	return s.testOpenAIAccountConnection(
+	return s.testOpenAIAccountConnectionWithOptions(
 		c,
 		account,
 		modelID,
 		openAIOAuthIntelligenceTestPrompt,
 		AccountTestModeDefault,
+		openAIAccountTestRequestOptions{reasoningEffort: openAIOAuthIntelligenceTestEffort},
 	)
 }
 
@@ -676,6 +678,14 @@ func (s *AccountTestService) testBedrockAccountConnection(c *gin.Context, ctx co
 
 // testOpenAIAccountConnection tests an OpenAI account's connection
 func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account *Account, modelID string, prompt string, mode string) error {
+	return s.testOpenAIAccountConnectionWithOptions(c, account, modelID, prompt, mode, openAIAccountTestRequestOptions{})
+}
+
+type openAIAccountTestRequestOptions struct {
+	reasoningEffort string
+}
+
+func (s *AccountTestService) testOpenAIAccountConnectionWithOptions(c *gin.Context, account *Account, modelID string, prompt string, mode string, testOptions openAIAccountTestRequestOptions) error {
 	ctx := c.Request.Context()
 	mode = normalizeAccountTestMode(mode)
 
@@ -768,7 +778,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	if isOAuth {
 		upstreamTestModelID = normalizeOpenAIModelForUpstream(credentialAccount, testModelID)
 	}
-	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth, prompt)
+	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth, prompt, testOptions.reasoningEffort)
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Send test_start event once. A task-invalid Agent Identity response may
@@ -856,7 +866,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 				return s.sendErrorAndEnd(c, fmt.Sprintf("Agent Identity task recovery failed: %s", err.Error()))
 			}
 			c.Request = c.Request.WithContext(markAgentIdentityTaskRecoveryTried(ctx))
-			return s.testOpenAIAccountConnection(c, account, modelID, prompt, mode)
+			return s.testOpenAIAccountConnectionWithOptions(c, account, modelID, prompt, mode, testOptions)
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
 			s.reconcileOpenAI429State(ctx, account, resp.Header, body)
@@ -2650,7 +2660,7 @@ func (s *AccountTestService) processGeminiStream(c *gin.Context, body io.Reader)
 }
 
 // createOpenAITestPayload creates a test payload for OpenAI Responses API
-func createOpenAITestPayload(modelID string, isOAuth bool, prompt string) map[string]any {
+func createOpenAITestPayload(modelID string, isOAuth bool, prompt string, reasoningEffort string) map[string]any {
 	testPrompt := strings.TrimSpace(prompt)
 	if testPrompt == "" {
 		testPrompt = "hi"
@@ -2679,6 +2689,9 @@ func createOpenAITestPayload(modelID string, isOAuth bool, prompt string) map[st
 
 	// All accounts require instructions for Responses API
 	payload["instructions"] = openai.DefaultInstructions
+	if effort := strings.TrimSpace(reasoningEffort); effort != "" {
+		payload["reasoning"] = map[string]string{"effort": effort}
+	}
 
 	return payload
 }
