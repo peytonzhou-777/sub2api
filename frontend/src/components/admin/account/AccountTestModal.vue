@@ -70,6 +70,24 @@
         />
       </div>
 
+      <div v-if="showPersonaSlotSelect" class="space-y-1.5">
+        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+          {{ t('admin.accounts.intelligencePersonaSlotLabel') }}
+        </label>
+        <Select
+          v-model="selectedPersonaSlotId"
+          :options="personaSlotOptions"
+          :disabled="loadingPersonaStatus || status === 'connecting'"
+        />
+      </div>
+
+      <p
+        v-if="isIntelligenceTest && personaStatusError"
+        class="text-xs text-red-600 dark:text-red-400"
+      >
+        {{ personaStatusError }}
+      </p>
+
       <div v-if="isOpenAIAccount && !isIntelligenceTest" class="space-y-1.5">
         <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
           {{ t('admin.accounts.openai.testMode') }}
@@ -375,6 +393,7 @@ import { useClipboard } from '@/composables/useClipboard'
 import { buildApiUrl } from '@/api/client'
 import { ADMIN_UI_REQUEST_HEADER } from '@/api/adminUIRequest'
 import { adminAPI } from '@/api/admin'
+import type { OpenAIPersonaOAuthSlotStatus, OpenAIPersonaOAuthStatus } from '@/api/admin/accounts'
 import type { Account, ClaudeModel } from '@/types'
 
 const { t } = useI18n()
@@ -411,6 +430,10 @@ const availableModels = ref<ClaudeModel[]>([])
 const selectedModelId = ref('')
 const testPrompt = ref('')
 const loadingModels = ref(false)
+const loadingPersonaStatus = ref(false)
+const personaOAuthStatus = ref<OpenAIPersonaOAuthStatus | null>(null)
+const personaStatusError = ref('')
+const selectedPersonaSlotId = ref<0 | 1>(0)
 let abortController: AbortController | null = null
 const generatedImages = ref<PreviewMedia[]>([])
 const generatedAudios = ref<PreviewMedia[]>([])
@@ -432,6 +455,43 @@ const openAITestModeOptions = computed(() => [
   { value: 'default', label: t('admin.accounts.openai.testModeDefault') },
   { value: 'compact', label: t('admin.accounts.openai.testModeCompact') }
 ])
+const showPersonaSlotSelect = computed(
+  () => isIntelligenceTest.value && personaOAuthStatus.value?.mapping_mode === 'persona_v3'
+)
+const personaSlotOptions = computed(() => {
+  const slots = new Map(
+    (personaOAuthStatus.value?.slots || []).map((slot) => [slot.slot_id, slot])
+  )
+  return ([0, 1] as const).map((slotID) => {
+    const slot = slots.get(slotID)
+    const ready = isPersonaSlotReady(slot)
+    const baseLabel = t(
+      slotID === 0
+        ? 'admin.accounts.intelligencePersonaSlotStrict'
+        : 'admin.accounts.intelligencePersonaSlotOpenCode'
+    )
+    return {
+      value: slotID,
+      label: ready
+        ? baseLabel
+        : t('admin.accounts.intelligencePersonaSlotUnavailable', {
+            slot: baseLabel,
+            state: slot?.state || 'unknown'
+          }),
+      disabled: !ready
+    }
+  })
+})
+const selectedPersonaSlotReady = computed(() => {
+  if (!showPersonaSlotSelect.value) return true
+  return isPersonaSlotReady(
+    personaOAuthStatus.value?.slots.find((slot) => slot.slot_id === selectedPersonaSlotId.value)
+  )
+})
+
+function isPersonaSlotReady(slot: OpenAIPersonaOAuthSlotStatus | undefined): boolean {
+  return Boolean(slot && slot.state === 'active' && slot.enabled && slot.authorized)
+}
 const grokTestModeOptions = computed(() => [
   { value: 'text', label: t('admin.accounts.grok.testModeText') },
   { value: 'image', label: t('admin.accounts.grok.testModeImage') },
@@ -714,6 +774,10 @@ const testModeSummary = computed(() => {
 
 const canStartTest = computed(() => {
   if (status.value === 'connecting') return false
+  if (isIntelligenceTest.value) {
+    if (loadingPersonaStatus.value || personaStatusError.value) return false
+    if (!selectedPersonaSlotReady.value) return false
+  }
   if (isGrokAccount.value) {
     if (
       grokTestMode.value === 'search' ||
@@ -779,8 +843,11 @@ watch(
       testPrompt.value = ''
       testMode.value = 'default'
       grokTestMode.value = 'text'
+      personaOAuthStatus.value = null
+      personaStatusError.value = ''
+      selectedPersonaSlotId.value = 0
       resetState()
-      await loadAvailableModels()
+      await Promise.all([loadAvailableModels(), loadIntelligencePersonaStatus()])
       if (isGrokAccount.value || isIntelligenceTest.value) {
         pickDefaultModelForMode()
       }
@@ -828,6 +895,25 @@ const loadAvailableModels = async () => {
     selectedModelId.value = ''
   } finally {
     loadingModels.value = false
+  }
+}
+
+const loadIntelligencePersonaStatus = async () => {
+  if (!props.account || !isIntelligenceTest.value || !isOpenAIAccount.value || props.account.type !== 'oauth') {
+    return
+  }
+
+  loadingPersonaStatus.value = true
+  personaStatusError.value = ''
+  try {
+    const credentialAccountID = props.account.parent_account_id ?? props.account.id
+    personaOAuthStatus.value = await adminAPI.accounts.getOpenAIPersonaOAuthStatus(credentialAccountID)
+  } catch (error) {
+    console.error('Failed to load OpenAI Persona status:', error)
+    personaOAuthStatus.value = null
+    personaStatusError.value = t('admin.accounts.intelligencePersonaStatusLoadFailed')
+  } finally {
+    loadingPersonaStatus.value = false
   }
 }
 
@@ -892,12 +978,16 @@ const startTest = async () => {
   try {
     const requestBody: {
       model_id: string
+      persona_slot_id?: 0 | 1
       prompt?: string
       mode?: string
       image_data_url?: string
       audio_data_url?: string
     } = {
       model_id: showModelSelect.value ? selectedModelId.value : ''
+    }
+    if (showPersonaSlotSelect.value) {
+      requestBody.persona_slot_id = selectedPersonaSlotId.value
     }
     if (!isIntelligenceTest.value) {
       requestBody.prompt = supportsPromptInput.value ? testPrompt.value.trim() : ''

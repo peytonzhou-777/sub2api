@@ -40,6 +40,58 @@ func ResolveSessionPersonaBindingForRequest(c *gin.Context, account *Account) (S
 	return ResolveSessionPersonaBindingForNewRoot(c, account)
 }
 
+// ResolveSessionPersonaBindingForAdminProbe 严格解析管理员显式选择的 v3 slot。
+// 该入口不枚举候选、不回退 Persona，也不建立 Thread/response ID 映射。
+func ResolveSessionPersonaBindingForAdminProbe(account *Account, slotID int) (SessionPersonaSlotBinding, error) {
+	if account == nil || !account.IsOpenAIOAuth() {
+		return SessionPersonaSlotBinding{}, fmt.Errorf("Persona slot probe only supports OpenAI OAuth accounts")
+	}
+	if !account.IsOpenAIPersonaMappingEnabled() || account.GetOpenAIPersonaMappingVersion() < SessionPersonaScopeVersionV3 {
+		return SessionPersonaSlotBinding{}, fmt.Errorf("persona_slot_id is only supported by Persona v3 accounts")
+	}
+	if slotID < 0 || slotID >= DefaultSessionPersonaSlotCount {
+		return SessionPersonaSlotBinding{}, fmt.Errorf("%w: slot=%d", ErrSessionPersonaInvalidSlot, slotID)
+	}
+
+	binding, err := NewDefaultSessionPersonaRegistry().ResolveSlot(
+		SessionPersonaScopeVersionV3,
+		slotID,
+		DefaultSessionPersonaSlotCount,
+	)
+	if err != nil {
+		return SessionPersonaSlotBinding{}, err
+	}
+	binding.AccountID = account.ID
+	binding.SessionEpoch = account.CodexFingerprintEpoch
+	binding.SlotGeneration = account.GetOpenAIPersonaSlotGeneration(slotID)
+	binding.SlotSetGeneration = account.GetOpenAIPersonaSlotSetGeneration()
+	binding.State = account.GetOpenAIPersonaSlotState(slotID)
+	binding.Enabled = account.GetOpenAIPersonaSlotEnabled(slotID)
+	binding.EnabledConfigured = account.IsOpenAIPersonaSlotEnabledConfigured(slotID)
+	binding.Authorized = account.HasOpenAIPersonaCredential(binding.PersonaID, slotID)
+	binding.CredentialChainID = account.GetOpenAIPersonaCredentialChainID(binding.PersonaID, slotID)
+	binding.InstallationID = account.GetOpenAIPersonaInstallationID(binding.PersonaID, slotID, "")
+	binding = binding.NormalizeLifecycle()
+	binding.MappingKey = SessionPersonaMappingKey(binding)
+
+	if !binding.AcceptsNewRoot() {
+		return SessionPersonaSlotBinding{}, fmt.Errorf(
+			"Persona slot %d is not available for a new probe (state=%s, enabled=%t, authorized=%t)",
+			slotID,
+			binding.State,
+			binding.Enabled,
+			binding.Authorized,
+		)
+	}
+	if !sessionPersonaBindingHasSafeCredentialChain(binding) {
+		return SessionPersonaSlotBinding{}, fmt.Errorf("Persona slot %d has no safe credential chain", slotID)
+	}
+	if IsOpenCodePersona(binding) && !OpenCodePersonaTransportReady(SessionPersonaTransportHTTP) {
+		return SessionPersonaSlotBinding{}, fmt.Errorf("OpenCode Persona HTTP adapter is not enabled")
+	}
+	return binding, nil
+}
+
 // ResolveSessionPersonaBindingForNewRoot resolves a new root onto an active,
 // authorized slot only. If the preferred OpenCode slot is not ready, strict
 // Codex slot 0 is tried as a compatibility fallback, but its actual lifecycle

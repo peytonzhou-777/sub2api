@@ -1131,7 +1131,8 @@ type TestAccountRequest struct {
 
 // IntelligenceTestAccountRequest 表示 OpenAI OAuth 降智检测请求。
 type IntelligenceTestAccountRequest struct {
-	ModelID string `json:"model_id"`
+	ModelID       string `json:"model_id"`
+	PersonaSlotID *int   `json:"persona_slot_id"`
 }
 
 type SyncFromCRSRequest struct {
@@ -1191,7 +1192,7 @@ func (h *AccountHandler) IntelligenceTest(c *gin.Context) {
 	var req IntelligenceTestAccountRequest
 	_ = c.ShouldBindJSON(&req)
 
-	if err := h.accountTestService.TestOpenAIOAuthIntelligence(c, accountID, req.ModelID); err != nil {
+	if err := h.accountTestService.TestOpenAIOAuthIntelligence(c, accountID, req.ModelID, req.PersonaSlotID); err != nil {
 		// 错误已通过 SSE 返回。
 		return
 	}

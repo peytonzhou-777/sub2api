@@ -287,7 +287,7 @@ data: {"type":"response.completed"}
 	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
 	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
 
-	err := svc.TestOpenAIOAuthIntelligence(ctx, shadow.ID, "gpt-5.4")
+	err := svc.TestOpenAIOAuthIntelligence(ctx, shadow.ID, "gpt-5.4", nil)
 	require.NoError(t, err)
 	require.Len(t, upstream.requests, 1)
 
@@ -300,6 +300,204 @@ data: {"type":"response.completed"}
 	require.False(t, gjson.GetBytes(body, "tools").Exists())
 	require.Contains(t, recorder.Body.String(), `"text":"29"`)
 	require.Contains(t, recorder.Body.String(), `"success":true`)
+}
+
+func newOpenAIPersonaV3IntelligenceAccount(id int64) *Account {
+	return &Account{
+		ID:          id,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token":       "strict-token",
+			"refresh_token":      "strict-refresh-token",
+			"expires_at":         time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+			"chatgpt_account_id": "org-persona-v3",
+			openAIPersonaCredentialsKey: []any{
+				map[string]any{
+					"persona":             string(SessionPersonaOpenCode),
+					"slot_id":             1,
+					"credential_chain_id": "opencode-probe-chain",
+					"access_token":        "opencode-token",
+					"refresh_token":       "opencode-refresh-token",
+					"expires_at":          time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+					"ready":               true,
+					"state":               "ready",
+				},
+			},
+		},
+		Extra: map[string]any{
+			openAIPersonaMappingEnabledExtraKey: true,
+			openAIPersonaMappingVersionExtraKey: SessionPersonaScopeVersionV3,
+			openAIPersonaSlotStateExtraKey: map[string]any{
+				"0": string(SessionPersonaSlotStateActive),
+				"1": string(SessionPersonaSlotStateActive),
+			},
+			openAIPersonaSlotEnabledExtraKey: map[string]any{"0": true, "1": true},
+			codexFingerprintModeExtraKey:     "off",
+		},
+	}
+}
+
+func newOpenAIPersonaV3IntelligenceService(repo AccountRepository, upstream HTTPUpstream) *AccountTestService {
+	return &AccountTestService{
+		accountRepo:         repo,
+		httpUpstream:        upstream,
+		openAITokenProvider: NewOpenAITokenProvider(repo, nil, nil),
+		cfg: &config.Config{Gateway: config.GatewayConfig{
+			CodexOutboundProfileDefault: CodexOutboundProfileCLI0149,
+		}},
+	}
+}
+
+func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotZeroUsesStrictCodex(t *testing.T) {
+	ctx, _ := newTestContext()
+	account := newOpenAIPersonaV3IntelligenceAccount(205)
+	repo := &openAIAccountTestRepo{mockAccountRepoForGemini: mockAccountRepoForGemini{
+		accountsByID: map[int64]*Account{account.ID: account},
+	}}
+	resp := newJSONResponse(http.StatusOK, "")
+	resp.Body = io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\"}\n\n"))
+	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
+	svc := newOpenAIPersonaV3IntelligenceService(repo, upstream)
+	slotID := 0
+
+	require.NoError(t, svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", &slotID))
+	require.Len(t, upstream.requests, 1)
+	req := upstream.requests[0]
+	require.Equal(t, "Bearer strict-token", req.Header.Get("Authorization"))
+	require.Equal(t, "codex_cli_rs", req.Header.Get("originator"))
+	require.True(t, strings.HasPrefix(req.Header.Get("User-Agent"), "codex_cli_rs/0.149.0 "))
+	require.Equal(t, "zstd", req.Header.Get("Content-Encoding"))
+	require.Equal(t, "org-persona-v3", req.Header.Get("chatgpt-account-id"))
+	body := readOpenAITestRequestBody(t, req)
+	require.Equal(t, openAIOAuthIntelligenceTestEffort, gjson.GetBytes(body, "reasoning.effort").String())
+}
+
+func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotOneUsesOpenCodeChain(t *testing.T) {
+	ctx, _ := newTestContext()
+	account := newOpenAIPersonaV3IntelligenceAccount(206)
+	repo := &openAIAccountTestRepo{mockAccountRepoForGemini: mockAccountRepoForGemini{
+		accountsByID: map[int64]*Account{account.ID: account},
+	}}
+	resp := newJSONResponse(http.StatusOK, "")
+	resp.Body = io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\"}\n\n"))
+	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
+	svc := newOpenAIPersonaV3IntelligenceService(repo, upstream)
+	slotID := 1
+
+	require.NoError(t, svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", &slotID))
+	require.Len(t, upstream.requests, 1)
+	req := upstream.requests[0]
+	require.Equal(t, "Bearer opencode-token", req.Header.Get("Authorization"))
+	require.Equal(t, "opencode", req.Header.Get("originator"))
+	require.True(t, strings.HasPrefix(req.Header.Get("User-Agent"), "opencode/"+SessionPersonaOpenCodeVersion))
+	require.Equal(t, "org-persona-v3", req.Header.Get("chatgpt-account-id"))
+	require.Empty(t, req.Header.Get("Content-Encoding"))
+	require.Empty(t, req.Header.Get("version"))
+	require.Empty(t, req.Header.Get("OpenAI-Beta"))
+	sessionID := req.Header.Get("session-id")
+	require.True(t, strings.HasPrefix(sessionID, "oc_probe_"))
+	require.Equal(t, sessionID, req.Header.Get("X-Session-Id"))
+	require.Equal(t, sessionID, req.Header.Get("x-session-affinity"))
+	for key := range req.Header {
+		require.False(t, strings.HasPrefix(strings.ToLower(key), "x-codex-"), "Codex header leaked: %s", key)
+	}
+	body := readOpenAITestRequestBody(t, req)
+	require.Equal(t, openAIOAuthIntelligenceTestEffort, gjson.GetBytes(body, "reasoning.effort").String())
+	require.False(t, gjson.GetBytes(body, "client_metadata").Exists())
+}
+
+func TestAccountTestService_OpenAIOAuthIntelligencePersonaShadowUsesParentChainAndShadowModel(t *testing.T) {
+	ctx, _ := newTestContext()
+	parent := newOpenAIPersonaV3IntelligenceAccount(208)
+	parentID := parent.ID
+	shadow := &Account{
+		ID:              209,
+		Platform:        PlatformOpenAI,
+		Type:            AccountTypeOAuth,
+		Status:          StatusActive,
+		ParentAccountID: &parentID,
+		QuotaDimension:  QuotaDimensionSpark,
+		Concurrency:     1,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4-mini"},
+		},
+	}
+	repo := &openAIAccountTestRepo{mockAccountRepoForGemini: mockAccountRepoForGemini{
+		accountsByID: map[int64]*Account{parent.ID: parent, shadow.ID: shadow},
+	}}
+	resp := newJSONResponse(http.StatusOK, "")
+	resp.Body = io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\"}\n\n"))
+	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
+	svc := newOpenAIPersonaV3IntelligenceService(repo, upstream)
+	slotID := 1
+
+	require.NoError(t, svc.TestOpenAIOAuthIntelligence(ctx, shadow.ID, "gpt-5.4", &slotID))
+	require.Len(t, upstream.requests, 1)
+	req := upstream.requests[0]
+	require.Equal(t, "Bearer opencode-token", req.Header.Get("Authorization"))
+	require.Equal(t, "org-persona-v3", req.Header.Get("chatgpt-account-id"))
+	body := readOpenAITestRequestBody(t, req)
+	require.Equal(t, "gpt-5.4-mini", gjson.GetBytes(body, "model").String())
+}
+
+func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotFailsClosed(t *testing.T) {
+	testCases := []struct {
+		name      string
+		slotID    *int
+		mutate    func(*Account)
+		wantError string
+	}{
+		{name: "missing explicit slot", wantError: "requires persona_slot_id"},
+		{name: "invalid slot", slotID: func() *int { value := 2; return &value }(), wantError: "invalid session persona slot"},
+		{
+			name:   "draining OpenCode slot",
+			slotID: func() *int { value := 1; return &value }(),
+			mutate: func(account *Account) {
+				account.Extra[openAIPersonaSlotStateExtraKey] = map[string]any{"1": string(SessionPersonaSlotStateDraining)}
+			},
+			wantError: "not available for a new probe",
+		},
+		{
+			name:   "unauthorized OpenCode slot",
+			slotID: func() *int { value := 1; return &value }(),
+			mutate: func(account *Account) {
+				delete(account.Credentials, openAIPersonaCredentialsKey)
+			},
+			wantError: "authorized=false",
+		},
+		{
+			name:   "slot on legacy account",
+			slotID: func() *int { value := 0; return &value }(),
+			mutate: func(account *Account) {
+				account.Extra[openAIPersonaMappingEnabledExtraKey] = false
+				account.Extra[openAIPersonaMappingVersionExtraKey] = SessionPersonaScopeVersionLegacyV2
+			},
+			wantError: "only supported by Persona v3 accounts",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			ctx, recorder := newTestContext()
+			account := newOpenAIPersonaV3IntelligenceAccount(207)
+			if testCase.mutate != nil {
+				testCase.mutate(account)
+			}
+			repo := &openAIAccountTestRepo{mockAccountRepoForGemini: mockAccountRepoForGemini{
+				accountsByID: map[int64]*Account{account.ID: account},
+			}}
+			upstream := &queuedHTTPUpstream{}
+			svc := newOpenAIPersonaV3IntelligenceService(repo, upstream)
+
+			err := svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", testCase.slotID)
+			require.Error(t, err)
+			require.Empty(t, upstream.requests)
+			require.Contains(t, recorder.Body.String(), testCase.wantError)
+		})
+	}
 }
 
 func TestAccountTestService_OpenAIOAuthIntelligenceRejectsUnsupportedAccounts(t *testing.T) {
@@ -334,7 +532,7 @@ func TestAccountTestService_OpenAIOAuthIntelligenceRejectsUnsupportedAccounts(t 
 			}
 			svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
 
-			err := svc.TestOpenAIOAuthIntelligence(ctx, testCase.account.ID, "gpt-5.4")
+			err := svc.TestOpenAIOAuthIntelligence(ctx, testCase.account.ID, "gpt-5.4", nil)
 			require.Error(t, err)
 			require.Empty(t, upstream.requests)
 			require.Contains(t, recorder.Body.String(), "only supports OpenAI OAuth accounts")
@@ -357,7 +555,7 @@ func TestAccountTestService_OpenAIOAuthIntelligenceRejectsImageModels(t *testing
 	}
 	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
 
-	err := svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-image-1")
+	err := svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-image-1", nil)
 	require.Error(t, err)
 	require.Empty(t, upstream.requests)
 	require.Contains(t, recorder.Body.String(), "only supports text models")

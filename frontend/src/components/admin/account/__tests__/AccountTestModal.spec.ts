@@ -2,15 +2,17 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AccountTestModal from '../AccountTestModal.vue'
 
-const { getAvailableModels, copyToClipboard } = vi.hoisted(() => ({
+const { getAvailableModels, getOpenAIPersonaOAuthStatus, copyToClipboard } = vi.hoisted(() => ({
   getAvailableModels: vi.fn(),
+  getOpenAIPersonaOAuthStatus: vi.fn(),
   copyToClipboard: vi.fn()
 }))
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
-      getAvailableModels
+      getAvailableModels,
+      getOpenAIPersonaOAuthStatus
     }
   }
 }))
@@ -78,7 +80,10 @@ function mountModal(account: Record<string, unknown> = {
     global: {
       stubs: {
         BaseDialog: { template: '<div><slot /><slot name="footer" /></div>' },
-        Select: { template: '<div class="select-stub"></div>' },
+        Select: {
+          props: ['options'],
+          template: '<div class="select-stub">{{ (options || []).map((option) => option.label || option.display_name).join(" | ") }}</div>'
+        },
         TextArea: {
           props: ['modelValue'],
           emits: ['update:modelValue'],
@@ -97,6 +102,10 @@ describe('AccountTestModal', () => {
       { id: 'gemini-2.5-flash-image', display_name: 'Gemini 2.5 Flash Image' },
       { id: 'gemini-3.1-flash-image', display_name: 'Gemini 3.1 Flash Image' }
     ])
+    getOpenAIPersonaOAuthStatus.mockResolvedValue({
+      mapping_mode: 'legacy_v2',
+      slots: []
+    })
     copyToClipboard.mockReset()
     Object.defineProperty(globalThis, 'localStorage', {
       value: {
@@ -266,5 +275,110 @@ describe('AccountTestModal', () => {
     expect(JSON.parse(request.body)).toEqual({ model_id: 'gpt-5.4' })
     expect(wrapper.text()).toContain('29')
     expect(wrapper.text()).toContain('admin.accounts.intelligenceTestCompleted')
+  })
+
+  it('Persona v3 降智检测显示 slot 身份并提交显式选择', async () => {
+    getAvailableModels.mockResolvedValue([
+      { id: 'gpt-5.4', display_name: 'GPT-5.4' }
+    ])
+    getOpenAIPersonaOAuthStatus.mockResolvedValue({
+      mapping_mode: 'persona_v3',
+      slots: [
+        {
+          slot_id: 0,
+          persona: 'codex_cli_strict',
+          state: 'active',
+          enabled: true,
+          authorized: true,
+          slot_generation: 1,
+          slot_set_generation: 1
+        },
+        {
+          slot_id: 1,
+          persona: 'opencode',
+          state: 'active',
+          enabled: true,
+          authorized: true,
+          credential_chain_id: 'opencode-chain',
+          slot_generation: 1,
+          slot_set_generation: 1
+        }
+      ]
+    })
+    global.fetch = vi.fn().mockResolvedValue(
+      createStreamResponse([
+        'data: {"type":"test_complete","success":true}\n'
+      ])
+    ) as any
+
+    const wrapper = mountModal({
+      id: 52,
+      parent_account_id: 51,
+      name: 'OpenAI Persona Shadow',
+      platform: 'openai',
+      type: 'oauth',
+      status: 'active'
+    }, 'intelligence')
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+
+    expect(getOpenAIPersonaOAuthStatus).toHaveBeenCalledWith(51)
+    expect(wrapper.text()).toContain('admin.accounts.intelligencePersonaSlotStrict')
+    expect(wrapper.text()).toContain('admin.accounts.intelligencePersonaSlotOpenCode')
+    expect((wrapper.vm as any).selectedPersonaSlotId).toBe(0)
+
+    ;(wrapper.vm as any).selectedPersonaSlotId = 1
+    await (wrapper.vm as any).startTest()
+    await flushPromises()
+
+    const [, request] = (global.fetch as any).mock.calls[0]
+    expect(JSON.parse(request.body)).toEqual({
+      model_id: 'gpt-5.4',
+      persona_slot_id: 1
+    })
+  })
+
+  it('Persona v3 所选 slot 不可用时禁止开始检测', async () => {
+    getAvailableModels.mockResolvedValue([
+      { id: 'gpt-5.4', display_name: 'GPT-5.4' }
+    ])
+    getOpenAIPersonaOAuthStatus.mockResolvedValue({
+      mapping_mode: 'persona_v3',
+      slots: [
+        {
+          slot_id: 0,
+          persona: 'codex_cli_strict',
+          state: 'draining',
+          enabled: false,
+          authorized: true,
+          slot_generation: 1,
+          slot_set_generation: 1
+        },
+        {
+          slot_id: 1,
+          persona: 'opencode',
+          state: 'active',
+          enabled: true,
+          authorized: true,
+          slot_generation: 1,
+          slot_set_generation: 1
+        }
+      ]
+    })
+
+    const wrapper = mountModal({
+      id: 53,
+      name: 'OpenAI Persona',
+      platform: 'openai',
+      type: 'oauth',
+      status: 'active'
+    }, 'intelligence')
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+
+    expect((wrapper.vm as any).selectedPersonaSlotId).toBe(0)
+    expect((wrapper.vm as any).canStartTest).toBe(false)
+    expect(wrapper.text()).toContain('admin.accounts.intelligencePersonaSlotUnavailable')
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 })

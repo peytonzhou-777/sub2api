@@ -147,6 +147,7 @@ type AccountTestService struct {
 	accountRepo               AccountRepository
 	geminiTokenProvider       *GeminiTokenProvider
 	claudeTokenProvider       *ClaudeTokenProvider
+	openAITokenProvider       *OpenAITokenProvider
 	grokTokenProvider         *GrokTokenProvider
 	antigravityGatewayService *AntigravityGatewayService
 	httpUpstream              HTTPUpstream
@@ -167,6 +168,13 @@ type AccountTestService struct {
 func (s *AccountTestService) SetSettingService(settingService *SettingService) {
 	if s != nil {
 		s.settingService = settingService
+	}
+}
+
+// SetOpenAITokenProvider 注入按 Persona binding 读取独立 OAuth chain 的 Token provider。
+func (s *AccountTestService) SetOpenAITokenProvider(tokenProvider *OpenAITokenProvider) {
+	if s != nil {
+		s.openAITokenProvider = tokenProvider
 	}
 }
 
@@ -335,7 +343,7 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 }
 
 // TestOpenAIOAuthIntelligence 使用固定题目检测 OpenAI OAuth 账号的文本回答能力。
-func (s *AccountTestService) TestOpenAIOAuthIntelligence(c *gin.Context, accountID int64, modelID string) error {
+func (s *AccountTestService) TestOpenAIOAuthIntelligence(c *gin.Context, accountID int64, modelID string, personaSlotID *int) error {
 	account, err := s.accountRepo.GetByID(c.Request.Context(), accountID)
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Account not found")
@@ -357,7 +365,11 @@ func (s *AccountTestService) TestOpenAIOAuthIntelligence(c *gin.Context, account
 		modelID,
 		openAIOAuthIntelligenceTestPrompt,
 		AccountTestModeDefault,
-		openAIAccountTestRequestOptions{reasoningEffort: openAIOAuthIntelligenceTestEffort},
+		openAIAccountTestRequestOptions{
+			reasoningEffort:    openAIOAuthIntelligenceTestEffort,
+			personaSlotID:      personaSlotID,
+			requirePersonaSlot: true,
+		},
 	)
 }
 
@@ -682,7 +694,10 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 }
 
 type openAIAccountTestRequestOptions struct {
-	reasoningEffort string
+	reasoningEffort    string
+	personaSlotID      *int
+	requirePersonaSlot bool
+	personaBinding     *SessionPersonaSlotBinding
 }
 
 func (s *AccountTestService) testOpenAIAccountConnectionWithOptions(c *gin.Context, account *Account, modelID string, prompt string, mode string, testOptions openAIAccountTestRequestOptions) error {
@@ -725,6 +740,28 @@ func (s *AccountTestService) testOpenAIAccountConnectionWithOptions(c *gin.Conte
 		credentialAccount = resolved
 	}
 
+	var personaBinding *SessionPersonaSlotBinding
+	if testOptions.personaBinding != nil {
+		binding := testOptions.personaBinding.Clone()
+		personaBinding = &binding
+	} else if testOptions.personaSlotID != nil {
+		binding, bindingErr := ResolveSessionPersonaBindingForAdminProbe(credentialAccount, *testOptions.personaSlotID)
+		if bindingErr != nil {
+			return s.sendErrorAndEnd(c, bindingErr.Error())
+		}
+		if IsOpenCodePersona(binding) {
+			binding.UpstreamSessionID = "oc_probe_" + uuid.Must(uuid.NewV7()).String()
+		}
+		personaBinding = &binding
+		testOptions.personaBinding = &binding
+	} else if testOptions.requirePersonaSlot && credentialAccount.IsOpenAIPersonaMappingEnabled() {
+		return s.sendErrorAndEnd(c, "Persona v3 intelligence test requires persona_slot_id")
+	}
+	if personaBinding != nil {
+		ctx = ContextWithSessionPersonaBinding(ctx, *personaBinding)
+		c.Request = c.Request.WithContext(ctx)
+	}
+
 	// Determine authentication method and API URL
 	var authToken string
 	var apiURL string
@@ -732,8 +769,17 @@ func (s *AccountTestService) testOpenAIAccountConnectionWithOptions(c *gin.Conte
 
 	if credentialAccount.IsOAuth() {
 		isOAuth = true
-		// Agent Identity signs each request and does not retain the OAuth token.
-		if !credentialAccount.IsOpenAIAgentIdentity() {
+		if personaBinding != nil {
+			if s.openAITokenProvider == nil {
+				return s.sendErrorAndEnd(c, "OpenAI token provider is not configured")
+			}
+			resolvedToken, tokenErr := s.openAITokenProvider.GetAccessTokenForBinding(ctx, credentialAccount, *personaBinding)
+			if tokenErr != nil {
+				return s.sendErrorAndEnd(c, "Failed to resolve Persona access token: "+tokenErr.Error())
+			}
+			authToken = resolvedToken
+		} else if !credentialAccount.IsOpenAIAgentIdentity() {
+			// Agent Identity signs each request and does not retain the OAuth token.
 			authToken = credentialAccount.GetOpenAIAccessToken()
 		}
 		if authToken == "" && !credentialAccount.IsOpenAIAgentIdentity() {
@@ -780,6 +826,13 @@ func (s *AccountTestService) testOpenAIAccountConnectionWithOptions(c *gin.Conte
 	}
 	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth, prompt, testOptions.reasoningEffort)
 	payloadBytes, _ := json.Marshal(payload)
+	if personaBinding != nil && IsOpenCodePersona(*personaBinding) {
+		projectedBody, bodyErr := PrepareOpenCodeOutboundBody(payloadBytes, SessionPersonaTransportHTTP, false)
+		if bodyErr != nil {
+			return s.sendErrorAndEnd(c, "Failed to prepare OpenCode outbound body: "+bodyErr.Error())
+		}
+		payloadBytes = projectedBody
+	}
 
 	// Send test_start event once. A task-invalid Agent Identity response may
 	// restart this probe after registering a replacement task.
@@ -816,25 +869,33 @@ func (s *AccountTestService) testOpenAIAccountConnectionWithOptions(c *gin.Conte
 	if isOAuth {
 		req.Host = "chatgpt.com"
 		req.Header.Set("accept", "text/event-stream")
-		req.Header.Set("OpenAI-Beta", "responses=experimental")
-		canonical := resolveCodexOutboundIdentity("")
-		req.Header.Set("Originator", canonical.originator)
-		if customUA := strings.TrimSpace(credentialAccount.GetOpenAIUserAgent()); customUA != "" {
-			req.Header.Set("User-Agent", customUA)
-		} else {
-			req.Header.Set("User-Agent", canonical.userAgent)
-		}
 		setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
-		// 与真实转发一致：账号级自定义 UA 同样作为管理员显式配置传入，否则测试用的身份
-		// 与该账号真实出站的身份不是同一个（issue #3901 的配对不变式由收口保证）。
-		enforceCodexIdentityHeadersWithUA(req.Header, credentialAccount.GetOpenAIUserAgent())
+		if personaBinding != nil && IsOpenCodePersona(*personaBinding) {
+			ApplyOpenCodeOutboundHeaders(req.Header, *personaBinding, "", "", "")
+		} else {
+			req.Header.Set("OpenAI-Beta", "responses=experimental")
+			canonical := resolveCodexOutboundIdentity("")
+			req.Header.Set("Originator", canonical.originator)
+			if customUA := strings.TrimSpace(credentialAccount.GetOpenAIUserAgent()); customUA != "" {
+				req.Header.Set("User-Agent", customUA)
+			} else {
+				req.Header.Set("User-Agent", canonical.userAgent)
+			}
+			// 与真实转发一致：账号级自定义 UA 同样作为管理员显式配置传入，否则测试用的身份
+			// 与该账号真实出站的身份不是同一个（issue #3901 的配对不变式由收口保证）。
+			enforceCodexIdentityHeadersWithUA(req.Header, credentialAccount.GetOpenAIUserAgent())
+		}
 	}
 
 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
 	credentialAccount.ApplyHeaderOverrides(req.Header)
 	if isOAuth {
-		if profileErr := s.applyCodexOutboundProbeProfile(ctx, account, req, payloadBytes); profileErr != nil {
-			return s.sendErrorAndEnd(c, "Failed to prepare Codex outbound profile: "+profileErr.Error())
+		if personaBinding != nil && IsOpenCodePersona(*personaBinding) {
+			ApplyOpenCodeOutboundHeaders(req.Header, *personaBinding, "", "", "")
+		} else {
+			if profileErr := s.applyCodexOutboundProbeProfile(ctx, account, req, payloadBytes); profileErr != nil {
+				return s.sendErrorAndEnd(c, "Failed to prepare Codex outbound profile: "+profileErr.Error())
+			}
 		}
 	}
 
