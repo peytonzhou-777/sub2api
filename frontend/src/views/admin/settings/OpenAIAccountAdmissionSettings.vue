@@ -25,8 +25,12 @@
         </label>
 
         <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <NumberField v-model="config.max_concurrency" :label="t('admin.settings.openAIAccountAdmission.globalMaxConcurrency')" :hint="t('admin.settings.openAIAccountAdmission.globalMaxConcurrencyHint')" :min="0" :max="100000" />
           <NumberField v-model="config.requests_per_minute" :label="t('admin.settings.openAIAccountAdmission.rpm')" :hint="t('admin.settings.openAIAccountAdmission.rpmHint')" :min="0" :max="100000" />
           <NumberField v-model="config.tokens_per_minute" :label="t('admin.settings.openAIAccountAdmission.tpm')" :hint="t('admin.settings.openAIAccountAdmission.tpmHint')" :min="0" :max="100000000" />
+          <NumberField v-model="config.max_subagents" :label="t('admin.settings.openAIAccountAdmission.globalMaxSubagents')" :hint="t('admin.settings.openAIAccountAdmission.globalMaxSubagentsHint')" :min="0" :max="100000" />
+          <NumberField v-model="config.subagent_depth" :label="t('admin.settings.openAIAccountAdmission.globalSubagentDepth')" :hint="t('admin.settings.openAIAccountAdmission.globalSubagentDepthHint')" :min="0" :max="64" />
+          <NumberField v-model="config.max_active_websockets" :label="t('admin.settings.openAIAccountAdmission.globalMaxWebSockets')" :hint="t('admin.settings.openAIAccountAdmission.globalMaxWebSocketsHint')" :min="0" :max="10000" />
           <NumberField v-model="config.default_output_tokens" :label="t('admin.settings.openAIAccountAdmission.defaultOutputTokens')" :hint="t('admin.settings.openAIAccountAdmission.defaultOutputTokensHint')" :min="1" :max="1000000" />
           <NumberField v-model="config.max_wait_seconds" :label="t('admin.settings.openAIAccountAdmission.maxWait')" :hint="t('admin.settings.openAIAccountAdmission.maxWaitHint')" :min="1" :max="120" />
           <NumberField v-model="config.max_queue_depth_per_account" :label="t('admin.settings.openAIAccountAdmission.queueDepth')" :hint="t('admin.settings.openAIAccountAdmission.queueDepthHint')" :min="1" :max="10000" />
@@ -34,6 +38,26 @@
           <NumberField v-model="config.background_aging_seconds" :label="t('admin.settings.openAIAccountAdmission.backgroundAging')" :hint="t('admin.settings.openAIAccountAdmission.backgroundAgingHint')" :min="1" :max="120" />
           <NumberField v-model="config.jitter_min_ms" :label="t('admin.settings.openAIAccountAdmission.jitterMin')" :hint="t('admin.settings.openAIAccountAdmission.jitterMinHint')" :min="0" :max="5000" />
           <NumberField v-model="config.jitter_max_ms" :label="t('admin.settings.openAIAccountAdmission.jitterMax')" :hint="t('admin.settings.openAIAccountAdmission.jitterMaxHint')" :min="0" :max="5000" />
+        </div>
+
+        <div class="border-t border-gray-100 pt-6 dark:border-dark-700">
+          <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.openAIAccountAdmission.personaTitle') }}</h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.settings.openAIAccountAdmission.personaDescription') }}</p>
+          <div class="mt-5 grid gap-5 xl:grid-cols-2">
+            <section v-for="persona in personaCards" :key="persona.id" class="rounded-xl border border-gray-200 p-5 dark:border-dark-700">
+              <h4 class="font-semibold text-gray-900 dark:text-white">{{ persona.label }}</h4>
+              <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.settings.openAIAccountAdmission.inheritHint') }}</p>
+              <div class="mt-4 grid gap-4 md:grid-cols-2">
+                <NumberField v-model="persona.policy.max_concurrency" :label="t('admin.settings.openAIAccountAdmission.personaMaxConcurrency')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="100000" />
+                <NumberField v-model="persona.policy.requests_per_minute" :label="t('admin.settings.openAIAccountAdmission.personaRPM')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="1000000" />
+                <NumberField v-model="persona.policy.tokens_per_minute" :label="t('admin.settings.openAIAccountAdmission.personaTPM')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="1000000000" />
+                <NumberField v-model="persona.policy.max_queue_depth_per_account" :label="t('admin.settings.openAIAccountAdmission.personaQueueDepth')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="100000" />
+                <NumberField v-model="persona.policy.max_subagents" :label="t('admin.settings.openAIAccountAdmission.personaMaxSubagents')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="100000" />
+                <NumberField v-model="persona.policy.subagent_depth" :label="t('admin.settings.openAIAccountAdmission.personaSubagentDepth')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="64" />
+                <NumberField v-model="persona.policy.max_active_websockets" :label="t('admin.settings.openAIAccountAdmission.personaMaxWebSockets')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="10000" />
+              </div>
+            </section>
+          </div>
         </div>
       </div>
 
@@ -47,10 +71,10 @@
 </template>
 
 <script setup lang="ts">
-import { defineComponent, h, onMounted, ref } from 'vue'
+import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api'
-import type { OpenAIAccountAdmissionConfig } from '@/api/admin/settings'
+import type { OpenAIAccountAdmissionConfig, OpenAIPersonaAdmissionPolicy } from '@/api/admin/settings'
 import Toggle from '@/components/common/Toggle.vue'
 import { useAppStore } from '@/stores'
 import { extractApiErrorMessage, extractApiErrorStatus } from '@/utils/apiError'
@@ -60,6 +84,40 @@ const appStore = useAppStore()
 const loading = ref(true)
 const saving = ref(false)
 const config = ref<OpenAIAccountAdmissionConfig | null>(null)
+
+const emptyPersonaPolicy = (): OpenAIPersonaAdmissionPolicy => ({
+  max_concurrency: 0,
+  requests_per_minute: 0,
+  tokens_per_minute: 0,
+  max_queue_depth_per_account: 0,
+  max_subagents: 0,
+  subagent_depth: 0,
+  max_active_websockets: 0
+})
+
+function normalizeConfig(value: OpenAIAccountAdmissionConfig): OpenAIAccountAdmissionConfig {
+  const policies = value.persona_policies || {}
+  return {
+    ...value,
+    max_concurrency: value.max_concurrency || 0,
+    max_subagents: value.max_subagents || 0,
+    subagent_depth: value.subagent_depth || 0,
+    max_active_websockets: value.max_active_websockets || 0,
+    persona_policies: {
+      codex_cli_strict: { ...emptyPersonaPolicy(), ...(policies.codex_cli_strict || {}) },
+      opencode: { ...emptyPersonaPolicy(), ...(policies.opencode || {}) }
+    }
+  }
+}
+
+const personaCards = computed(() => {
+  const policies = config.value?.persona_policies
+  if (!policies) return []
+  return [
+    { id: 'codex_cli_strict', label: t('admin.settings.openAIAccountAdmission.strictCodex'), policy: policies.codex_cli_strict },
+    { id: 'opencode', label: t('admin.settings.openAIAccountAdmission.openCode'), policy: policies.opencode }
+  ]
+})
 
 const NumberField = defineComponent({
   props: {
@@ -86,7 +144,7 @@ const NumberField = defineComponent({
 async function load() {
   loading.value = true
   try {
-    config.value = (await adminAPI.settings.getOpenAIAccountAdmission()).config
+    config.value = normalizeConfig((await adminAPI.settings.getOpenAIAccountAdmission()).config)
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error, t('common.error')))
   } finally {
@@ -96,9 +154,15 @@ async function load() {
 
 async function save() {
   if (!config.value) return
+  const personaValues = Object.values(config.value.persona_policies || {}).flatMap((policy) => Object.values(policy))
+  const inheritedGlobalValues = [config.value.max_concurrency, config.value.max_subagents, config.value.subagent_depth, config.value.max_active_websockets]
+  if ([...personaValues, ...inheritedGlobalValues].some((value) => !Number.isInteger(value) || value < 0) || config.value.jitter_min_ms > config.value.jitter_max_ms) {
+    appStore.showError(t('admin.settings.openAIAccountAdmission.validationError'))
+    return
+  }
   saving.value = true
   try {
-    config.value = (await adminAPI.settings.updateOpenAIAccountAdmission(config.value)).config
+    config.value = normalizeConfig((await adminAPI.settings.updateOpenAIAccountAdmission(config.value)).config)
     appStore.showSuccess(t('common.saved'))
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error, t('common.error')))

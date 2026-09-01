@@ -247,6 +247,14 @@ func (h *ConcurrencyHelper) AcquireOpenAIWSIngressLease(ctx context.Context, api
 	return h.concurrencyService.AcquireOpenAIWSIngressLease(ctx, apiKeyID, maxConnections)
 }
 
+// AcquireOpenAIPersonaWSLease 限制一个账号 Persona 槽位的活跃客户端连接数。
+func (h *ConcurrencyHelper) AcquireOpenAIPersonaWSLease(ctx context.Context, accountID int64, persona service.SessionPersonaID, slotID, maxConnections int) (*service.OpenAIPersonaWSLease, bool, error) {
+	if h == nil || h.concurrencyService == nil {
+		return nil, false, fmt.Errorf("concurrency service is unavailable")
+	}
+	return h.concurrencyService.AcquireOpenAIPersonaWSLease(ctx, accountID, persona, slotID, maxConnections)
+}
+
 // TryAcquireAccountSlot 尝试立即获取账号并发槽位。
 // 返回值: (releaseFunc, acquired, error)
 func (h *ConcurrencyHelper) TryAcquireAccountSlot(ctx context.Context, accountID int64, maxConcurrency int) (func(), bool, error) {

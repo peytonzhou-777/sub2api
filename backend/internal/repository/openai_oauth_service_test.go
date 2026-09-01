@@ -160,6 +160,46 @@ func (s *OpenAIOAuthServiceSuite) TestRefreshToken_FormFields() {
 	require.Equal(s.T(), "rt2", resp.RefreshToken)
 }
 
+func (s *OpenAIOAuthServiceSuite) TestRefreshTokenWithProfile_OpenCodeIdentityAndShape() {
+	errCh := make(chan string, 1)
+	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			errCh <- "ParseForm failed"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if got := r.PostForm.Get("scope"); got != "" {
+			errCh <- "OpenCode refresh must omit scope"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if got := r.Header.Get("User-Agent"); got != "opencode/1.18.23" {
+			errCh <- "OpenCode user-agent mismatch"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if got := r.Header.Get("originator"); got != "opencode" {
+			errCh <- "OpenCode originator mismatch"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"access_token":"opencode-at","refresh_token":"opencode-rt","expires_in":3600}`)
+	}))
+
+	resp, err := s.svc.RefreshTokenWithProfile(s.ctx, "rt", "", openai.ClientID, service.OpenAIOAuthClientProfile{
+		UserAgent:  "opencode/1.18.23",
+		Originator: "opencode",
+	})
+	require.NoError(s.T(), err)
+	select {
+	case msg := <-errCh:
+		require.Fail(s.T(), msg)
+	default:
+	}
+	require.Equal(s.T(), "opencode-at", resp.AccessToken)
+}
+
 // TestRefreshToken_DefaultsToOpenAIClientID 验证未指定 client_id 时默认使用 OpenAI ClientID，
 // 且只发送一次请求（不再盲猜多个 client_id）。
 func (s *OpenAIOAuthServiceSuite) TestRefreshToken_DefaultsToOpenAIClientID() {

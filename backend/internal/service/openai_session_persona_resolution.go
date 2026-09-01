@@ -14,6 +14,7 @@ import (
 const (
 	openAIPersonaCredentialsKey       = "persona_credentials"
 	openAIOAuthCredentialChainsKey    = "oauth_credential_chains"
+	openAIPersonaActiveChainsKey      = "openai_persona_slot_active_chain_ids"
 	openAIPersonaSlotStateExtraKey    = "openai_persona_slot_states"
 	openAIPersonaSlotEnabledExtraKey  = "openai_persona_slot_enabled"
 	openAIPersonaSlotGenerationsKey   = "openai_persona_slot_generations"
@@ -461,6 +462,11 @@ func (a *Account) findPersonaCredential(persona SessionPersonaID, slotID int) ma
 	if a == nil || a.Credentials == nil {
 		return nil
 	}
+	if chainID := a.openAIPersonaActiveCredentialChainID(slotID); chainID != "" {
+		// An explicit pointer is authoritative. If it is stale or malformed,
+		// fail closed instead of selecting an older chain by map iteration.
+		return a.findPersonaCredentialByChainID(persona, slotID, chainID)
+	}
 	for _, key := range []string{openAIPersonaCredentialsKey, openAIOAuthCredentialChainsKey} {
 		raw, ok := a.Credentials[key]
 		if !ok {
@@ -471,6 +477,34 @@ func (a *Account) findPersonaCredential(persona SessionPersonaID, slotID int) ma
 		}
 	}
 	return nil
+}
+
+func (a *Account) openAIPersonaActiveCredentialChainID(slotID int) string {
+	if a == nil || a.Credentials == nil || slotID < 0 {
+		return ""
+	}
+	raw, ok := a.Credentials[openAIPersonaActiveChainsKey]
+	if !ok {
+		return ""
+	}
+	key := strconv.Itoa(slotID)
+	switch value := raw.(type) {
+	case map[string]any:
+		return strings.TrimSpace(openAIMapString(value, key))
+	case map[string]string:
+		return strings.TrimSpace(value[key])
+	case string:
+		var decoded map[string]any
+		if json.Unmarshal([]byte(value), &decoded) == nil {
+			return strings.TrimSpace(openAIMapString(decoded, key))
+		}
+	case json.RawMessage:
+		var decoded map[string]any
+		if json.Unmarshal(value, &decoded) == nil {
+			return strings.TrimSpace(openAIMapString(decoded, key))
+		}
+	}
+	return ""
 }
 
 func findPersonaCredentialInValue(raw any, persona SessionPersonaID, slotID int) map[string]any {

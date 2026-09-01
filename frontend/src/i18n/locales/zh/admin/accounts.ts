@@ -749,6 +749,14 @@ export default {
             not_ready: '未就绪',
             missing: '未配置'
           },
+          oauth: {
+            title: '授权 OpenAI Persona（slot {slot}）',
+            strictCodex: 'slot 0 · strict Codex 独立登录',
+            openCode: 'slot 1 · OpenCode 独立登录',
+            authorize: '授权此 Persona',
+            reauthorize: '重新授权此 Persona',
+            success: 'Persona OAuth 授权已更新'
+          },
           enable: '启用 v3 映射',
           enableDesc: '启用后仅影响新根请求；slot 1 必须具备独立 OpenCode OAuth 授权链，否则自动回落 slot 0 strict Codex。'
         },

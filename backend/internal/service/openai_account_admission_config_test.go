@@ -68,6 +68,26 @@ func TestOpenAIAccountAdmissionConfigForPersona(t *testing.T) {
 	}
 }
 
+func TestEffectiveOpenAIAccountAdmissionCapacityUsesActiveAuthorizedPersonaSlots(t *testing.T) {
+	account := newSessionPersonaOAuthAccount()
+	account.Concurrency = 4
+	account.Extra[openAIPersonaMappingEnabledExtraKey] = true
+	account.Extra[openAIPersonaMappingVersionExtraKey] = SessionPersonaScopeVersionV3
+	cfg := DefaultOpenAIAccountAdmissionConfig()
+	cfg.PersonaPolicies = map[string]OpenAIPersonaAdmissionPolicy{
+		string(SessionPersonaCodexCLIStrict): {MaxConcurrency: 3},
+		string(SessionPersonaOpenCode):       {MaxConcurrency: 2},
+	}
+
+	if got := EffectiveOpenAIAccountAdmissionCapacity(account, cfg); got != 5 {
+		t.Fatalf("active Persona capacity = %d, want 5", got)
+	}
+	account.Extra[openAIPersonaSlotStateExtraKey] = map[string]any{"1": string(SessionPersonaSlotStateDraining)}
+	if got := EffectiveOpenAIAccountAdmissionCapacity(account, cfg); got != 3 {
+		t.Fatalf("draining OpenCode capacity = %d, want 3", got)
+	}
+}
+
 func TestValidateOpenAIAccountAdmissionConfigRejectsUnknownPersona(t *testing.T) {
 	cfg := DefaultOpenAIAccountAdmissionConfig()
 	cfg.PersonaPolicies = map[string]OpenAIPersonaAdmissionPolicy{

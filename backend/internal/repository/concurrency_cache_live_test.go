@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,4 +71,33 @@ func TestLiveLeaseExpiresWithoutRefresh(t *testing.T) {
 	refreshed, err := live.RefreshLiveLease(ctx, 10, 20, 30, "expired-live")
 	require.NoError(t, err)
 	require.False(t, refreshed)
+}
+
+func TestOpenAIPersonaSlotsAreIsolatedByPersonaSlotAndTransport(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	cache := NewConcurrencyCache(client, 15, 900).(*concurrencyCache)
+	ctx := context.Background()
+
+	acquired, err := cache.AcquireOpenAIPersonaSlot(ctx, 10, "codex_cli_strict", 0, 1, "codex-http")
+	require.NoError(t, err)
+	require.True(t, acquired)
+
+	acquired, err = cache.AcquireOpenAIPersonaSlot(ctx, 10, "codex_cli_strict", 0, 1, "codex-http-2")
+	require.NoError(t, err)
+	require.False(t, acquired)
+
+	acquired, err = cache.AcquireOpenAIPersonaSlot(ctx, 10, "opencode", 1, 1, "opencode-http")
+	require.NoError(t, err)
+	require.True(t, acquired, "另一 Persona 槽位不得共享并发计数")
+
+	acquired, err = cache.AcquireOpenAIPersonaWSLease(ctx, 10, "codex_cli_strict", 0, 1, "codex-ws")
+	require.NoError(t, err)
+	require.True(t, acquired, "WS 容量不得占用 HTTP 请求槽位")
+
+	require.NoError(t, cache.SetOpenAISubagentDepth(ctx, 10, "opencode", 1, strings.Repeat("a", 64), 2, strings.Repeat("b", 64), 1))
+	depth, found, err := cache.GetOpenAISubagentDepth(ctx, 10, "opencode", 1, strings.Repeat("a", 64), 2, strings.Repeat("b", 64))
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, 1, depth)
 }

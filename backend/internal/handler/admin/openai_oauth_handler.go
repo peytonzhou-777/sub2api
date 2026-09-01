@@ -137,6 +137,12 @@ type OpenAIExchangeCodeRequest struct {
 	ProxyID     *int64 `json:"proxy_id"`
 }
 
+type openAIPersonaExchangeCodeRequest struct {
+	SessionID string `json:"session_id" binding:"required"`
+	Code      string `json:"code" binding:"required"`
+	State     string `json:"state" binding:"required"`
+}
+
 // ExchangeCode exchanges OpenAI authorization code for tokens
 // POST /api/v1/admin/openai/exchange-code
 func (h *OpenAIOAuthHandler) ExchangeCode(c *gin.Context) {
@@ -159,6 +165,149 @@ func (h *OpenAIOAuthHandler) ExchangeCode(c *gin.Context) {
 	}
 
 	response.Success(c, tokenInfo)
+}
+
+// GetPersonaOAuthStatus reports slot readiness without exposing credentials.
+func (h *OpenAIOAuthHandler) GetPersonaOAuthStatus(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	status, err := h.openaiOAuthService.GetPersonaOAuthStatus(account)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, status)
+}
+
+// GeneratePersonaAuthURL starts one target-bound slot authorization.
+func (h *OpenAIOAuthHandler) GeneratePersonaAuthURL(c *gin.Context) {
+	accountID, slotID, ok := parseOpenAIPersonaTarget(c)
+	if !ok {
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	result, err := h.openaiOAuthService.GeneratePersonaAuthURL(c.Request.Context(), account, slotID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+// ExchangePersonaCode persists slot 0 through the legacy Codex row and slot 1
+// through its independent Account × Persona credential chain.
+func (h *OpenAIOAuthHandler) ExchangePersonaCode(c *gin.Context) {
+	accountID, slotID, ok := parseOpenAIPersonaTarget(c)
+	if !ok {
+		return
+	}
+	var req openAIPersonaExchangeCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	result, err := h.openaiOAuthService.ExchangePersonaCode(c.Request.Context(), accountID, slotID, &service.OpenAIExchangeCodeInput{
+		SessionID: req.SessionID,
+		Code:      req.Code,
+		State:     req.State,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	credentials, err := h.openaiOAuthService.BuildPersonaOAuthCredentials(account, result)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	updated, err := h.adminService.UpdateAccount(c.Request.Context(), accountID, &service.UpdateAccountInput{Credentials: credentials})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	slog.Info("openai_persona_oauth_authorized",
+		"account_id", accountID,
+		"persona", result.PersonaID,
+		"slot_id", slotID,
+		"credential_chain_id", result.CredentialChainID,
+		"slot_generation", result.SlotGeneration,
+		"slot_set_generation", result.SlotSetGeneration,
+	)
+	response.Success(c, dto.AccountFromService(updated))
+}
+
+// RefreshPersonaToken refreshes the slot's active independent chain. Slot 0
+// continues to use the existing account-level refresh endpoint.
+func (h *OpenAIOAuthHandler) RefreshPersonaToken(c *gin.Context) {
+	accountID, slotID, ok := parseOpenAIPersonaTarget(c)
+	if !ok {
+		return
+	}
+	if slotID == 0 {
+		h.RefreshAccountToken(c)
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	personaID := service.SessionPersonaOpenCode
+	chainID := account.GetOpenAIPersonaCredentialChainID(personaID, slotID)
+	if chainID == "" {
+		response.BadRequest(c, "OpenCode OAuth credential chain is not configured")
+		return
+	}
+	binding := service.SessionPersonaSlotBinding{
+		AccountID:         accountID,
+		PersonaID:         personaID,
+		SlotID:            slotID,
+		CredentialChainID: chainID,
+		ScopeVersion:      service.SessionPersonaScopeVersionV3,
+		MappingVersion:    service.SessionPersonaScopeVersionV3,
+	}
+	_, credentials, err := h.openaiOAuthService.RefreshPersonaCredential(c.Request.Context(), account, binding)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	updated, err := h.adminService.UpdateAccount(c.Request.Context(), accountID, &service.UpdateAccountInput{Credentials: credentials})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.AccountFromService(updated))
+}
+
+func parseOpenAIPersonaTarget(c *gin.Context) (int64, int, bool) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return 0, 0, false
+	}
+	slotID, err := strconv.Atoi(c.Param("slot_id"))
+	if err != nil || (slotID != 0 && slotID != 1) {
+		response.BadRequest(c, "Invalid Persona slot ID")
+		return 0, 0, false
+	}
+	return accountID, slotID, true
 }
 
 // OpenAIRefreshTokenRequest represents the request for refreshing OpenAI token

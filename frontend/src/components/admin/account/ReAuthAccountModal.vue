@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :show="show"
-    :title="t('admin.accounts.reAuthorizeAccount')"
+    :title="dialogTitle"
     width="normal"
     @close="handleClose"
   >
@@ -43,6 +43,9 @@
                         ? t('admin.accounts.grokAccount')
                         : t('admin.accounts.claudeCodeAccount')
               }}
+            </span>
+            <span v-if="isOpenAIPersonaFlow" class="mt-1 block text-xs font-medium text-emerald-600 dark:text-emerald-300">
+              {{ personaSlotLabel }}
             </span>
           </div>
         </div>
@@ -130,7 +133,7 @@
         :show-help="isAnthropic"
         :show-proxy-warning="isAnthropic"
         :show-cookie-option="isAnthropic"
-        :show-refresh-token-option="isOpenAI || isAntigravity || isGrok"
+        :show-refresh-token-option="(isOpenAI && !isOpenAIPersonaFlow) || isAntigravity || isGrok"
         :show-sso-option="isGrok"
         :show-email-password-option="false"
         :allow-multiple="false"
@@ -222,6 +225,7 @@ interface OAuthFlowExposed {
 interface Props {
   show: boolean
   account: Account | null
+  personaSlot?: 0 | 1 | null
 }
 
 const props = defineProps<Props>()
@@ -254,6 +258,16 @@ const isGemini = computed(() => props.account?.platform === 'gemini')
 const isAnthropic = computed(() => props.account?.platform === 'anthropic')
 const isAntigravity = computed(() => props.account?.platform === 'antigravity')
 const isGrok = computed(() => props.account?.platform === 'grok')
+const isOpenAIPersonaFlow = computed(() => isOpenAI.value && props.personaSlot != null)
+const personaSlotLabel = computed(() => {
+  if (props.personaSlot === 1) return t('admin.accounts.openai.personaMapping.oauth.openCode')
+  return t('admin.accounts.openai.personaMapping.oauth.strictCodex')
+})
+const dialogTitle = computed(() =>
+  isOpenAIPersonaFlow.value
+    ? t('admin.accounts.openai.personaMapping.oauth.title', { slot: props.personaSlot })
+    : t('admin.accounts.reAuthorizeAccount')
+)
 
 /**
  * Grok reauth default tab (password auth is hidden):
@@ -370,7 +384,27 @@ const handleGenerateUrl = async () => {
   if (!props.account) return
 
   if (isOpenAILike.value) {
-    await openaiOAuth.generateAuthUrl(props.account.proxy_id)
+    if (isOpenAIPersonaFlow.value) {
+      openaiOAuth.loading.value = true
+      openaiOAuth.error.value = ''
+      try {
+        const result = await adminAPI.accounts.generateOpenAIPersonaAuthUrl(
+          props.account.id,
+          props.personaSlot as 0 | 1
+        )
+        openaiOAuth.authUrl.value = result.auth_url
+        openaiOAuth.sessionId.value = result.session_id
+        const parsed = new URL(result.auth_url)
+        openaiOAuth.oauthState.value = parsed.searchParams.get('state') || ''
+      } catch (error: any) {
+        openaiOAuth.error.value = error?.message || t('admin.accounts.oauth.openai.failedToGenerateUrl')
+        appStore.showError(openaiOAuth.error.value)
+      } finally {
+        openaiOAuth.loading.value = false
+      }
+    } else {
+      await openaiOAuth.generateAuthUrl(props.account.proxy_id)
+    }
   } else if (isGemini.value) {
     const creds = (props.account.credentials || {}) as Record<string, unknown>
     const tierId = typeof creds.tier_id === 'string' ? creds.tier_id : undefined
@@ -400,6 +434,31 @@ const handleExchangeCode = async () => {
     if (!stateToUse) {
       oauthClient.error.value = t('admin.accounts.oauth.authFailed')
       appStore.showError(oauthClient.error.value)
+      return
+    }
+
+    if (isOpenAIPersonaFlow.value) {
+      oauthClient.loading.value = true
+      oauthClient.error.value = ''
+      try {
+        const updatedAccount = await adminAPI.accounts.exchangeOpenAIPersonaCode(
+          props.account.id,
+          props.personaSlot as 0 | 1,
+          {
+            session_id: sessionId,
+            code: authCode.trim(),
+            state: stateToUse
+          }
+        )
+        appStore.showSuccess(t('admin.accounts.openai.personaMapping.oauth.success'))
+        emit('reauthorized', updatedAccount)
+        handleClose()
+      } catch (error: any) {
+        oauthClient.error.value = error?.message || t('admin.accounts.oauth.authFailed')
+        appStore.showError(oauthClient.error.value)
+      } finally {
+        oauthClient.loading.value = false
+      }
       return
     }
 

@@ -18,6 +18,23 @@ type OpenAIOAuthClient interface {
 	RefreshTokenWithClientID(ctx context.Context, refreshToken, proxyURL string, clientID string) (*openai.TokenResponse, error)
 }
 
+// OpenAIOAuthClientProfile describes the HTTP identity of one OAuth client.
+// Token material is intentionally excluded; callers bind it separately by
+// Account × Persona × Slot × credential chain.
+type OpenAIOAuthClientProfile struct {
+	UserAgent           string
+	Originator          string
+	IncludeRefreshScope bool
+}
+
+// OpenAIPersonaOAuthClient is the optional profile-aware port used by
+// Persona-bound OAuth chains. The legacy interface remains available for
+// historical Codex account-level credentials.
+type OpenAIPersonaOAuthClient interface {
+	ExchangeCodeWithProfile(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string, profile OpenAIOAuthClientProfile) (*openai.TokenResponse, error)
+	RefreshTokenWithProfile(ctx context.Context, refreshToken, proxyURL, clientID string, profile OpenAIOAuthClientProfile) (*openai.TokenResponse, error)
+}
+
 // GrokOAuthClient interface for xAI/Grok OAuth operations.
 type GrokOAuthClient interface {
 	ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*xai.TokenResponse, error)

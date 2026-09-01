@@ -1,17 +1,32 @@
 import { apiClient } from '../client'
 
+export interface OpenAIPersonaAdmissionPolicy {
+  max_concurrency: number
+  requests_per_minute: number
+  tokens_per_minute: number
+  max_queue_depth_per_account: number
+  max_subagents: number
+  subagent_depth: number
+  max_active_websockets: number
+}
+
 export interface OpenAIAccountAdmissionConfig {
   enabled: boolean
   queue_enabled: boolean
   max_wait_seconds: number
+  max_concurrency: number
   requests_per_minute: number
   tokens_per_minute: number
+  max_subagents: number
+  subagent_depth: number
+  max_active_websockets: number
   default_output_tokens: number
   jitter_min_ms: number
   jitter_max_ms: number
   max_queue_depth_per_account: number
   interactive_burst: number
   background_aging_seconds: number
+  persona_policies?: Record<string, OpenAIPersonaAdmissionPolicy>
   config_version: number
   updated_at: string
 }

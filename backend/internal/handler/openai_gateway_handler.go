@@ -2058,15 +2058,20 @@ func populateOpenAIPersonaAdmissionRequest(
 // inheriting the legacy global/account values through the service policy.
 func applyOpenAIPersonaAdmissionPolicy(
 	cfg service.OpenAIAccountAdmissionConfig,
+	account *service.Account,
 	binding service.SessionPersonaSlotBinding,
 	maxConcurrency int,
-) (service.OpenAIAccountAdmissionConfig, int) {
-	cfg = cfg.ForPersona(binding.PersonaID)
-	policy := cfg.EffectiveOpenAIPersonaPolicy(binding.PersonaID)
-	if policy.MaxConcurrency > 0 {
-		maxConcurrency = policy.MaxConcurrency
+) (service.OpenAIAccountAdmissionConfig, int, int) {
+	policy := cfg.EffectiveOpenAIPersonaPolicyForAccount(account, binding.PersonaID, 0)
+	accountCapacity := service.EffectiveOpenAIAccountAdmissionCapacity(account, cfg)
+	if accountCapacity <= 0 || accountCapacity < policy.MaxConcurrency {
+		// draining 槽位不计入新根总容量，但已有 Thread 仍需保留其绑定容量自然排空。
+		accountCapacity = policy.MaxConcurrency
 	}
-	return cfg, maxConcurrency
+	if accountCapacity <= 0 {
+		accountCapacity = maxConcurrency
+	}
+	return cfg.ForPersona(binding.PersonaID), accountCapacity, policy.MaxConcurrency
 }
 
 // openAIPersonaLegacyCodexFallbackAvailable keeps the confirmed v2 transition
@@ -2152,6 +2157,35 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 		return nil, openAISlotAcquireFailed
 	}
 	if !cfg.Enabled {
+		if hasPersonaBinding && personaBinding.EffectiveMappingVersion() >= service.SessionPersonaScopeVersionV3 {
+			// Persona 槽位容量是 v3 的基础语义；总开关仅停用 RPM/TPM 与排队，
+			// 不能退回旧账号并发，否则调度容量、管理页与实际执行会分裂。
+			if selection.Acquired && selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+				selection.Acquired = false
+				selection.ReleaseFunc = nil
+			}
+			if err := h.gatewayService.PrepareCodexFingerprintForAdmission(ctx, c, account, body, false); err != nil {
+				reqLog.Warn("openai.codex_fingerprint_persona_capacity_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "Codex session identity is temporarily unavailable", *streamStarted)
+				return nil, openAISlotAcquireFailed
+			}
+			_, accountCapacity, personaCapacity := applyOpenAIPersonaAdmissionPolicy(cfg, account, personaBinding, account.Concurrency)
+			release, acquired, acquireErr := h.gatewayService.TryAcquireCodexSessionAdmissionSlots(
+				ctx, c, account, accountCapacity, personaCapacity, h.concurrencyHelper.TryAcquireAccountSlot,
+			)
+			if acquireErr != nil {
+				reqLog.Warn("openai.persona_capacity_acquire_failed", zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)), zap.Int("slot_id", personaBinding.SlotID), zap.Error(acquireErr))
+				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "Persona capacity is temporarily unavailable", *streamStarted)
+				return nil, openAISlotAcquireFailed
+			}
+			if !acquired {
+				h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID)
+				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "rate_limit_error", openAIAccountBusyClientMessage, *streamStarted)
+				return nil, openAISlotAcquireFailed
+			}
+			return wrapReleaseOnDone(ctx, release), openAISlotAcquireOK
+		}
 		return h.acquireResponsesAccountSlot(c, groupID, sessionHash, selection, reqStream, streamStarted, reqLog)
 	}
 
@@ -2175,8 +2209,9 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 		return nil, openAISlotAcquireFailed
 	}
 	estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, body, "", cfg.DefaultOutputTokens)
+	personaMaxConcurrency := 0
 	if hasPersonaBinding {
-		cfg, maxConcurrency = applyOpenAIPersonaAdmissionPolicy(cfg, personaBinding, maxConcurrency)
+		cfg, maxConcurrency, personaMaxConcurrency = applyOpenAIPersonaAdmissionPolicy(cfg, account, personaBinding, maxConcurrency)
 	}
 	sessionScopeHash, sessionEpoch := service.CodexFingerprintAdmissionScope(c)
 	admissionRequest := service.OpenAIAccountAdmissionRequest{
@@ -2188,7 +2223,7 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 		MaxConcurrency:   maxConcurrency,
 		TryAcquireSlot: func(acquireCtx context.Context, _ int64, limit int) (func(), bool, error) {
 			return h.gatewayService.TryAcquireCodexSessionAdmissionSlots(
-				acquireCtx, c, account, limit, h.concurrencyHelper.TryAcquireAccountSlot,
+				acquireCtx, c, account, limit, personaMaxConcurrency, h.concurrencyHelper.TryAcquireAccountSlot,
 			)
 		},
 	}
@@ -2488,6 +2523,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 
 	var currentUserRelease func()
 	var currentAccountRelease func()
+	var currentPersonaWSLease *service.OpenAIPersonaWSLease
+	releasePersonaWSLease := func() {
+		if currentPersonaWSLease != nil {
+			currentPersonaWSLease.Release()
+			currentPersonaWSLease = nil
+		}
+	}
 	releaseAccountSlot := func() {
 		if currentAccountRelease != nil {
 			currentAccountRelease()
@@ -2503,6 +2545,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	}
 	// 必须尽早注册，确保任何 early return 都能释放已获取的并发槽位。
 	defer releaseTurnSlots()
+	defer releasePersonaWSLease()
 
 	userReleaseFunc, userAcquired, err := h.concurrencyHelper.TryAcquireUserSlotForAPIKey(ctx, subject.UserID, subject.Concurrency, apiKey.ID)
 	if err != nil {
@@ -2656,6 +2699,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID, "upstream_rpm_or_quota")
 		}
 		releaseAccountSlot()
+		releasePersonaWSLease()
 		if !failoverErr.ShouldRetryNextAccount() {
 			closeOpenAIWSFailoverExhausted(c, wsConn, failoverErr)
 			return false
@@ -2915,8 +2959,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				selection.Acquired = false
 				selection.ReleaseFunc = nil
+				personaMaxConcurrency := 0
 				if hasPersonaBinding {
-					admissionCfg, accountMaxConcurrency = applyOpenAIPersonaAdmissionPolicy(admissionCfg, personaBinding, accountMaxConcurrency)
+					admissionCfg, accountMaxConcurrency, personaMaxConcurrency = applyOpenAIPersonaAdmissionPolicy(admissionCfg, account, personaBinding, accountMaxConcurrency)
 				}
 				estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, wsAttemptMessage, reqModel, admissionCfg.DefaultOutputTokens)
 				sessionScopeHash, sessionEpoch := service.CodexFingerprintAdmissionScope(c)
@@ -2929,7 +2974,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					MaxConcurrency:   accountMaxConcurrency,
 					TryAcquireSlot: func(acquireCtx context.Context, _ int64, limit int) (func(), bool, error) {
 						return h.gatewayService.TryAcquireCodexSessionAdmissionSlots(
-							acquireCtx, c, account, limit, h.concurrencyHelper.TryAcquireAccountSlot,
+							acquireCtx, c, account, limit, personaMaxConcurrency, h.concurrencyHelper.TryAcquireAccountSlot,
 						)
 					},
 				}
@@ -2958,6 +3003,34 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					initialAccountQueueWaitMS = admissionResult.QueueWait.Milliseconds()
 					admissionCtx = service.ContextWithOpenAIAccountQueueWait(admissionCtx, admissionResult.QueueWait)
 				}
+			} else if hasPersonaBinding && personaBinding.EffectiveMappingVersion() >= service.SessionPersonaScopeVersionV3 {
+				if prepareErr := h.gatewayService.PrepareCodexFingerprintForAdmission(admissionCtx, c, account, wsAttemptMessage, true); prepareErr != nil {
+					reqLog.Warn("openai.websocket_persona_capacity_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(prepareErr))
+					closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "Codex session identity is temporarily unavailable")
+					return
+				}
+				if selection.Acquired && accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				selection.Acquired = false
+				selection.ReleaseFunc = nil
+				personaMaxConcurrency := 0
+				_, accountMaxConcurrency, personaMaxConcurrency = applyOpenAIPersonaAdmissionPolicy(admissionCfg, account, personaBinding, accountMaxConcurrency)
+				release, acquired, acquireErr := h.gatewayService.TryAcquireCodexSessionAdmissionSlots(
+					admissionCtx, c, account, accountMaxConcurrency, personaMaxConcurrency, h.concurrencyHelper.TryAcquireAccountSlot,
+				)
+				if acquireErr != nil {
+					reqLog.Warn("openai.websocket_persona_capacity_acquire_failed", zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)), zap.Int("slot_id", personaBinding.SlotID), zap.Error(acquireErr))
+					closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "Persona capacity is temporarily unavailable")
+					return
+				}
+				if !acquired {
+					h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(admissionCtx, account.ID, "websocket_persona_concurrency_unavailable")
+					closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, openAIAccountBusyClientMessage)
+					return
+				}
+				accountReleaseFunc = release
+				selection.Acquired = true
 			}
 		}
 		if selection.Acquired {
@@ -3050,6 +3123,28 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		}
 		// 准入完成：门并入连接 ctx，turn 级复核与 failover 重选共用。
 		ctx = admissionCtx
+		if hasPersonaBinding && personaBinding.EffectiveMappingVersion() >= service.SessionPersonaScopeVersionV3 {
+			releasePersonaWSLease()
+			policy := h.gatewayService.EffectiveOpenAIPersonaAdmissionPolicy(ctx, account, personaBinding)
+			personaLease, acquired, leaseErr := h.concurrencyHelper.AcquireOpenAIPersonaWSLease(
+				ctx, account.ID, personaBinding.PersonaID, personaBinding.SlotID, policy.MaxActiveWebSockets,
+			)
+			if leaseErr != nil {
+				reqLog.Warn("openai.websocket_persona_lease_acquire_failed", zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)), zap.Int("slot_id", personaBinding.SlotID), zap.Error(leaseErr))
+				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "Persona WebSocket capacity is temporarily unavailable")
+				return
+			}
+			if !acquired {
+				reqLog.Info("openai.websocket_persona_capacity_rejected", zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)), zap.Int("slot_id", personaBinding.SlotID), zap.Int("max_active_websockets", policy.MaxActiveWebSockets))
+				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "Persona WebSocket capacity is full, please retry later")
+				return
+			}
+			currentPersonaWSLease = personaLease
+			if personaLease != nil {
+				ctx = personaLease.Context()
+				c.Request = c.Request.WithContext(ctx)
+			}
+		}
 		// Account selection starts a fresh upstream attempt. Clear any model
 		// captured by the previous failover account before credential lookup.
 		setOpsSelectedAccount(c, account.ID, account.Platform)
@@ -3147,18 +3242,38 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			if err != nil {
 				return false, service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "account admission control is temporarily unavailable", err)
 			}
+			turnPersonaBinding := personaBinding
+			usePersonaBinding := hasPersonaBinding &&
+				(turnPersonaBinding.AccountID == 0 || turnPersonaBinding.AccountID == account.ID)
 			if !admissionCfg.Enabled {
-				return false, nil
+				if !usePersonaBinding || turnPersonaBinding.EffectiveMappingVersion() < service.SessionPersonaScopeVersionV3 {
+					return false, nil
+				}
+				if prepareErr := h.gatewayService.PrepareCodexFingerprintForAdmission(admissionCtx, c, account, payload, true); prepareErr != nil {
+					return false, service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "Codex session identity is temporarily unavailable", prepareErr)
+				}
+				admissionCtx = attachOpenAIPersonaBindingContext(admissionCtx, c, turnPersonaBinding)
+				_, effectiveAccountCapacity, personaMaxConcurrency := applyOpenAIPersonaAdmissionPolicy(admissionCfg, account, turnPersonaBinding, accountMaxConcurrency)
+				release, acquired, acquireErr := h.gatewayService.TryAcquireCodexSessionAdmissionSlots(
+					admissionCtx, c, account, effectiveAccountCapacity, personaMaxConcurrency, h.concurrencyHelper.TryAcquireAccountSlot,
+				)
+				if acquireErr != nil {
+					return true, service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "Persona capacity is temporarily unavailable", acquireErr)
+				}
+				if !acquired {
+					h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(admissionCtx, account.ID, "websocket_turn_persona_concurrency_unavailable")
+					return true, service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "account is busy, please retry later", nil)
+				}
+				currentAccountRelease = wrapReleaseOnDone(ctx, release)
+				return true, nil
 			}
 			if prepareErr := h.gatewayService.PrepareCodexFingerprintForAdmission(admissionCtx, c, account, payload, true); prepareErr != nil {
 				return false, service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "Codex session identity is temporarily unavailable", prepareErr)
 			}
-			turnPersonaBinding := personaBinding
-			usePersonaBinding := hasPersonaBinding &&
-				(turnPersonaBinding.AccountID == 0 || turnPersonaBinding.AccountID == account.ID)
+			personaMaxConcurrency := 0
 			if usePersonaBinding {
 				admissionCtx = attachOpenAIPersonaBindingContext(admissionCtx, c, turnPersonaBinding)
-				admissionCfg, accountMaxConcurrency = applyOpenAIPersonaAdmissionPolicy(admissionCfg, turnPersonaBinding, accountMaxConcurrency)
+				admissionCfg, accountMaxConcurrency, personaMaxConcurrency = applyOpenAIPersonaAdmissionPolicy(admissionCfg, account, turnPersonaBinding, accountMaxConcurrency)
 			}
 			estimatedTokens := h.gatewayService.EstimateOpenAIAccountAdmissionTokens(account, payload, model, admissionCfg.DefaultOutputTokens)
 			sessionScopeHash, sessionEpoch := service.CodexFingerprintAdmissionScope(c)
@@ -3171,7 +3286,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				MaxConcurrency:   accountMaxConcurrency,
 				TryAcquireSlot: func(acquireCtx context.Context, _ int64, limit int) (func(), bool, error) {
 					return h.gatewayService.TryAcquireCodexSessionAdmissionSlots(
-						acquireCtx, c, account, limit, h.concurrencyHelper.TryAcquireAccountSlot,
+						acquireCtx, c, account, limit, personaMaxConcurrency, h.concurrencyHelper.TryAcquireAccountSlot,
 					)
 				},
 			}

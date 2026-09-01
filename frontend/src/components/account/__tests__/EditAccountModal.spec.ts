@@ -2,9 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock, authIsSimpleMode } = vi.hoisted(() => ({
+const {
+  updateAccountMock,
+  checkMixedChannelRiskMock,
+  getOpenAIPersonaOAuthStatusMock,
+  authIsSimpleMode
+} = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn(),
+  getOpenAIPersonaOAuthStatusMock: vi.fn(),
   authIsSimpleMode: { value: true }
 }))
 
@@ -28,7 +34,8 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       update: updateAccountMock,
-      checkMixedChannelRisk: checkMixedChannelRiskMock
+      checkMixedChannelRisk: checkMixedChannelRiskMock,
+      getOpenAIPersonaOAuthStatus: getOpenAIPersonaOAuthStatusMock
     },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
@@ -326,6 +333,8 @@ function mountModal(account = buildAccount()) {
 describe('EditAccountModal', () => {
   beforeEach(() => {
     authIsSimpleMode.value = true
+    getOpenAIPersonaOAuthStatusMock.mockReset()
+    getOpenAIPersonaOAuthStatusMock.mockRejectedValue(new Error('status unavailable'))
   })
 
   it('reopening the same account rehydrates the OpenAI whitelist from props', async () => {
@@ -698,6 +707,37 @@ describe('EditAccountModal', () => {
       openai_persona_mapping_enabled: true,
       openai_persona_mapping_version: 3
     })
+    wrapper.unmount()
+  })
+
+  it('emits the fixed Persona slot when starting its OAuth authorization', async () => {
+    const account = buildOpenAIOAuthParentAccount()
+    getOpenAIPersonaOAuthStatusMock.mockResolvedValue({
+      account_id: account.id,
+      mapping_mode: 'legacy_v2',
+      slot_set_generation: 0,
+      slots: [
+        {
+          slot_id: 0,
+          persona: 'codex_cli_strict',
+          state: 'active',
+          authorized: true,
+          ready: true
+        },
+        {
+          slot_id: 1,
+          persona: 'opencode',
+          state: 'active',
+          authorized: false,
+          ready: false
+        }
+      ]
+    })
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="openai-persona-slot-1-oauth"]').trigger('click')
+
+    expect(wrapper.emitted('authorizePersona')).toEqual([[1]])
     wrapper.unmount()
   })
 

@@ -388,10 +388,9 @@ func (p *OpenAITokenProvider) GetAccessTokenForBinding(
 	return p.getPersonaAccessTokenForBinding(ctx, account, binding, persona)
 }
 
-// getPersonaAccessTokenForBinding 只访问绑定的 Persona 链。
-// 链级 OAuth refresh/CAS 尚未具备安全的持久化边界，因此过期或临近过期
-// 时明确报错，绝不调用旧的账号级 RefreshIfNeeded 或借用其他 Persona 的
-// refresh_token。
+// getPersonaAccessTokenForBinding 只访问绑定的 Persona 链。临近过期时使用
+// 账号级凭据写锁重新加载权威行，再刷新并持久化同一条 chain；不会调用旧的
+// 账号级 RefreshIfNeeded，也不会借用其他 Persona 的 refresh_token。
 func (p *OpenAITokenProvider) getPersonaAccessTokenForBinding(
 	ctx context.Context,
 	account *Account,
@@ -440,11 +439,9 @@ func (p *OpenAITokenProvider) getPersonaAccessTokenForBinding(
 	}
 
 	expiresAt := openAIPersonaCredentialExpiry(chain)
-	if expiresAt != nil && !time.Now().Before(*expiresAt) {
-		if strings.TrimSpace(openAIMapString(chain, "refresh_token")) == "" {
-			return "", fmt.Errorf("%w: chain=%q has no independent refresh_token", ErrOpenAIPersonaCredentialChainExpired, binding.CredentialChainID)
-		}
-		return "", fmt.Errorf("%w: chain=%q; independent chain refresh is not implemented", ErrOpenAIPersonaCredentialChainExpired, binding.CredentialChainID)
+	needsRefresh := expiresAt == nil || time.Until(*expiresAt) <= openAITokenRefreshSkew
+	if needsRefresh && strings.TrimSpace(openAIMapString(chain, "refresh_token")) == "" {
+		return "", fmt.Errorf("%w: chain=%q has no independent refresh_token", ErrOpenAIPersonaCredentialChainExpired, binding.CredentialChainID)
 	}
 
 	cacheKey := OpenAITokenCacheKeyForBinding(account, binding)
@@ -456,18 +453,14 @@ func (p *OpenAITokenProvider) getPersonaAccessTokenForBinding(
 			slog.Warn("openai_persona_token_cache_get_failed", "account_id", account.ID, "persona", binding.PersonaID, "slot_id", binding.SlotID, "error", err)
 		}
 	}
+	if needsRefresh {
+		return p.refreshPersonaAccessToken(ctx, account, binding, persona, cacheKey)
+	}
 
 	// Cache 命中仍以命名空间为边界；没有缓存时只允许读取本链 access_token。
 	accessToken := strings.TrimSpace(openAIMapString(chain, "access_token"))
 	if accessToken == "" {
 		return "", fmt.Errorf("%w: persona=%q slot=%d chain=%q", ErrOpenAIPersonaAccessTokenMissing, persona, binding.SlotID, binding.CredentialChainID)
-	}
-
-	// 仍在有效期内但已进入旧 provider 的刷新窗口时，不能伪造链级刷新。
-	// TODO: 实现按 Account×Persona×credential_chain_id 隔离的 refresh/CAS、
-	// 持久化和失效审计后，再将此处改为独立链刷新。
-	if expiresAt != nil && time.Until(*expiresAt) <= openAITokenRefreshSkew {
-		return "", fmt.Errorf("%w: chain=%q expires_at=%s", ErrOpenAIPersonaCredentialRefreshUnsupported, binding.CredentialChainID, expiresAt.UTC().Format(time.RFC3339))
 	}
 
 	if p.tokenCache != nil {
@@ -490,6 +483,87 @@ func (p *OpenAITokenProvider) getPersonaAccessTokenForBinding(
 		}
 	}
 
+	return accessToken, nil
+}
+
+func (p *OpenAITokenProvider) refreshPersonaAccessToken(
+	ctx context.Context,
+	account *Account,
+	binding SessionPersonaSlotBinding,
+	persona SessionPersonaID,
+	cacheKey string,
+) (string, error) {
+	if p.accountRepo == nil || p.openAIOAuthService == nil {
+		return "", fmt.Errorf("%w: authoritative repository or OAuth service unavailable", ErrOpenAIPersonaCredentialRefreshUnsupported)
+	}
+	lockKey := OpenAITokenCacheKey(account) + ":persona-credentials-write"
+	locked := false
+	if p.tokenCache != nil {
+		var err error
+		locked, err = p.tokenCache.AcquireRefreshLock(ctx, lockKey, 30*time.Second)
+		if err != nil {
+			return "", fmt.Errorf("acquire OpenAI Persona credential write lock: %w", err)
+		}
+		if !locked {
+			if token, waitErr := p.waitForTokenAfterLockRace(ctx, cacheKey); waitErr == nil && strings.TrimSpace(token) != "" {
+				return token, nil
+			}
+			return "", fmt.Errorf("%w: credential write is already in progress for account %d", ErrOpenAIPersonaCredentialRefreshUnsupported, account.ID)
+		}
+		defer func() { _ = p.tokenCache.ReleaseRefreshLock(context.Background(), lockKey) }()
+	}
+
+	fresh, err := p.accountRepo.GetByID(ctx, account.ID)
+	if err != nil {
+		return "", fmt.Errorf("reload authoritative OpenAI Persona account %d: %w", account.ID, err)
+	}
+	if fresh == nil || !fresh.IsOpenAIOAuth() {
+		return "", fmt.Errorf("authoritative account %d is not an OpenAI OAuth account", account.ID)
+	}
+	chain := fresh.findPersonaCredentialByChainID(persona, binding.SlotID, binding.CredentialChainID)
+	if chain == nil || !openAIPersonaCredentialReady(chain) {
+		return "", fmt.Errorf("%w: chain=%q", ErrOpenAIPersonaCredentialChainNotReady, binding.CredentialChainID)
+	}
+	expiresAt := openAIPersonaCredentialExpiry(chain)
+	accessToken := strings.TrimSpace(openAIMapString(chain, "access_token"))
+	if expiresAt != nil && time.Until(*expiresAt) > openAITokenRefreshSkew && accessToken != "" {
+		return p.cachePersonaAccessToken(ctx, cacheKey, accessToken, expiresAt)
+	}
+
+	info, credentials, err := p.openAIOAuthService.RefreshPersonaCredential(ctx, fresh, binding)
+	if err != nil {
+		return "", err
+	}
+	if err := persistAccountCredentials(ctx, p.accountRepo, fresh, credentials); err != nil {
+		return "", fmt.Errorf("persist OpenAI Persona credential chain %q: %w", binding.CredentialChainID, err)
+	}
+	accessToken = strings.TrimSpace(info.AccessToken)
+	if accessToken == "" {
+		return "", fmt.Errorf("%w: chain=%q", ErrOpenAIPersonaAccessTokenMissing, binding.CredentialChainID)
+	}
+	refreshedExpiry := time.Unix(info.ExpiresAt, 0)
+	return p.cachePersonaAccessToken(ctx, cacheKey, accessToken, &refreshedExpiry)
+}
+
+func (p *OpenAITokenProvider) cachePersonaAccessToken(ctx context.Context, cacheKey, accessToken string, expiresAt *time.Time) (string, error) {
+	if p.tokenCache == nil {
+		return accessToken, nil
+	}
+	ttl := 30 * time.Minute
+	if expiresAt != nil {
+		until := time.Until(*expiresAt)
+		switch {
+		case until > openAITokenCacheSkew:
+			ttl = until - openAITokenCacheSkew
+		case until > 0:
+			ttl = until
+		default:
+			return "", ErrOpenAIPersonaCredentialChainExpired
+		}
+	}
+	if err := p.tokenCache.SetAccessToken(ctx, cacheKey, accessToken, ttl); err != nil {
+		slog.Warn("openai_persona_token_cache_set_failed", "cache_key", cacheKey, "error", err)
+	}
 	return accessToken, nil
 }
 
