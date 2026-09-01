@@ -36,8 +36,8 @@ type recurringCandidate struct {
 
 // recurringCreditBatchInsertSQL 创建批次并在跳过/错过时写入完成时间。
 // status 与 finished_at 判断使用独立参数，避免 PostgreSQL 重复参数类型推断冲突。
-const recurringCreditBatchInsertSQL = `INSERT INTO recurring_credit_batches(task_id,task_name,scheduled_at,expires_at,qualification_start,qualification_end,qualification_cutoff_at,config_version,eligibility_policy,validity_days,schedule_type,day_of_month,day_of_week,local_time,timezone,amount,execution_mode,status,claimed_at,lease_owner,lease_expires_at,heartbeat_at,attempt_count,finished_at)
-	VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$19,$22,CASE WHEN $23 IN ('skipped','missed') THEN NOW() ELSE NULL END)
+const recurringCreditBatchInsertSQL = `INSERT INTO recurring_credit_batches(task_id,task_name,scheduled_at,expires_at,qualification_start,qualification_end,qualification_cutoff_at,config_version,eligibility_policy,validity_days,validity_hours,schedule_type,day_of_month,day_of_week,local_time,timezone,amount,execution_mode,status,claimed_at,lease_owner,lease_expires_at,heartbeat_at,attempt_count,finished_at)
+	VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$20,$23,CASE WHEN $24 IN ('skipped','missed') THEN NOW() ELSE NULL END)
 	ON CONFLICT(task_id,scheduled_at) DO NOTHING RETURNING id`
 
 // RecurringCreditRunner 使用数据库任务状态驱动循环赠额执行。
@@ -162,10 +162,11 @@ func (r *RecurringCreditRunner) claimOneDue(ctx context.Context) (*recurringClai
 	status := "running"
 	windowStart, windowEnd = recurringCreditActivityWindow(now)
 	if task.ScheduleType == RecurringCreditImmediate {
-		if task.ValidityDays == nil {
-			return nil, false, fmt.Errorf("immediate task %d is missing validity_days", task.ID)
+		validity, validityErr := recurringCreditValidityDuration(task.ValidityDays, task.ValidityHours)
+		if validityErr != nil {
+			return nil, false, fmt.Errorf("immediate task %d has invalid validity: %w", task.ID, validityErr)
 		}
-		expires = now.AddDate(0, 0, *task.ValidityDays)
+		expires = now.Add(validity)
 	} else {
 		expires, err = nextRecurringOccurrence(input, scheduled)
 		if err != nil {
@@ -187,7 +188,7 @@ func (r *RecurringCreditRunner) claimOneDue(ctx context.Context) (*recurringClai
 	if status == "running" {
 		cutoff, claimed, lease, attempts, owner = now, now, now.Add(recurringCreditLease), 1, r.owner
 	}
-	err = tx.QueryRowContext(ctx, recurringCreditBatchInsertSQL, task.ID, task.Name, scheduled, expires, windowStart, windowEnd, cutoff, task.Version, RecurringCreditEligibilityRollingActivity, task.ValidityDays, task.ScheduleType, task.DayOfMonth, task.DayOfWeek, task.LocalTime, task.Timezone, task.Amount, task.ExecutionMode, status, claimed, owner, lease, attempts, status).Scan(&batchID)
+	err = tx.QueryRowContext(ctx, recurringCreditBatchInsertSQL, task.ID, task.Name, scheduled, expires, windowStart, windowEnd, cutoff, task.Version, RecurringCreditEligibilityRollingActivity, task.ValidityDays, task.ValidityHours, task.ScheduleType, task.DayOfMonth, task.DayOfWeek, task.LocalTime, task.Timezone, task.Amount, task.ExecutionMode, status, claimed, owner, lease, attempts, status).Scan(&batchID)
 	if err == sql.ErrNoRows {
 		_, err = tx.ExecContext(ctx, `UPDATE recurring_credit_tasks SET next_run_at=$2,version=version+1,updated_at=NOW() WHERE id=$1`, id, next)
 		if err == nil {

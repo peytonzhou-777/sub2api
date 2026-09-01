@@ -99,7 +99,7 @@
         <div><label class="input-label">单用户赠额（$0.01–$10,000）</label><input v-model.number="form.amount" type="number" min="0.01" max="10000" step="0.00000001" class="input" /></div>
         <div><label class="input-label">任务类型</label><select v-model="form.schedule_type" class="input"><option value="immediate">立即执行</option><option value="monthly">每月循环</option><option value="weekly">每周循环</option></select></div>
         <div class="md:col-span-2 rounded-lg bg-gray-50 p-3 text-sm text-gray-600 dark:bg-dark-700 dark:text-gray-300"><strong>发放对象：近 30 天活跃用户</strong><p class="mt-1 text-xs">API 鉴权活跃或站内活跃任一命中即可，实际名单以执行器领取任务时的快照为准。</p></div>
-        <div v-if="form.schedule_type==='immediate'"><label class="input-label">有效期（天）</label><input v-model.number="form.validity_days" type="number" min="1" max="36500" step="1" class="input" /><p class="mt-1 text-xs text-gray-500">确认创建后立即生成活跃用户快照并发放，且只执行一次。</p></div>
+        <div v-if="form.schedule_type==='immediate'"><label class="input-label">额度有效期</label><div class="flex gap-2"><input v-model.number="form.validity_value" data-testid="recurring-credit-validity-value" type="number" min="1" :max="validityMax" step="1" class="input min-w-0 flex-1" /><select v-model="form.validity_unit" data-testid="recurring-credit-validity-unit" class="input w-24"><option value="days">天</option><option value="hours">小时</option></select></div><p class="mt-1 text-xs text-gray-500">支持按天或按小时配置；确认创建后立即生成活跃用户快照并发放，且只执行一次。</p></div>
         <template v-if="form.schedule_type!=='immediate'">
           <div v-if="form.schedule_type==='monthly'"><label class="input-label">每月日期（1–28）</label><input v-model.number="form.day_of_month" type="number" min="1" max="28" class="input" /></div>
           <div v-else><label class="input-label">星期</label><select v-model.number="form.day_of_week" class="input"><option v-for="(day,index) in weekdays" :key="day" :value="index+1">{{ day }}</option></select></div>
@@ -158,6 +158,12 @@ import { recurringCreditsAPI } from '@/api/admin'
 import type { RecurringCreditBatch, RecurringCreditPreview, RecurringCreditReissuePreview, RecurringCreditTask, RecurringCreditTaskInput, RecurringCreditUserItem } from '@/api/admin/recurringCredits'
 import { useAppStore } from '@/stores/app'
 
+type RecurringCreditValidityUnit = 'days' | 'hours'
+type RecurringCreditTaskForm = Omit<RecurringCreditTaskInput, 'validity_days' | 'validity_hours'> & {
+  validity_value: number
+  validity_unit: RecurringCreditValidityUnit
+}
+
 const appStore=useAppStore();const weekdays=['周一','周二','周三','周四','周五','周六','周日']
 const tasks=ref<RecurringCreditTask[]>([]);const taskPage=ref(1);const taskTotal=ref(0);const filters=reactive({search:'',status:'',mode:'',scheduleType:''})
 const current=ref<RecurringCreditTask|null>(null);const batches=ref<RecurringCreditBatch[]>([]);const batchPage=ref(1);const batchTotal=ref(0)
@@ -165,8 +171,9 @@ const selectedBatch=ref<RecurringCreditBatch|null>(null);const users=ref<Recurri
 const formOpen=ref(false);const confirmOpen=ref(false);const preview=ref<RecurringCreditPreview|null>(null);const confirmed=ref(false);const submitting=ref(false);const formMode=ref<'create'|'edit'|'reactivate'>('create');const editing=ref<RecurringCreditTask|null>(null);const pendingAction=ref('')
 const reissueConfirmOpen=ref(false);const reissuePreview=ref<RecurringCreditReissuePreview|null>(null);const reissueSource=ref<RecurringCreditBatch|null>(null);const reissueConfirmed=ref(false)
 const defaultTimezone=appStore.cachedPublicSettings?.server_timezone||''
-const form=reactive<RecurringCreditTaskInput>({name:'',admin_notes:'',schedule_type:'immediate',day_of_month:5,day_of_week:1,validity_days:7,local_time:'08:00',timezone:defaultTimezone,amount:10,execution_mode:'finite',remaining_runs:1,initially_active:true})
+const form=reactive<RecurringCreditTaskForm>({name:'',admin_notes:'',schedule_type:'immediate',day_of_month:5,day_of_week:1,validity_value:7,validity_unit:'days',local_time:'08:00',timezone:defaultTimezone,amount:10,execution_mode:'finite',remaining_runs:1,initially_active:true})
 const formTitle=computed(()=>formMode.value==='create'?'新建赠额任务':formMode.value==='reactivate'?'重新启用赠额任务':'编辑赠额任务')
+const validityMax=computed(()=>form.validity_unit==='hours'?876000:36500)
 const money=(value:number)=>`$${Number(value||0).toFixed(8).replace(/0+$/,'').replace(/\.$/,'')}`
 const localDate=(value:string)=>new Date(value).toLocaleString()
 const statusText=(status:string)=>({active:'运行中',stopped:'已停止',completed:'已完成',deleted:'已删除'}[status]||status)
@@ -175,8 +182,8 @@ const batchStatusText=(status:string)=>({running:'执行中',succeeded:'成功',
 const reasonText=(reason:string)=>({api_activity:'API 活跃',site_activity:'站内活跃',api_and_site_activity:'API + 站内活跃',all_users:'全部未删除用户',usage:'实际消耗',recharge:'现金充值',usage_and_recharge:'实际消耗 + 现金充值'}[reason]||reason)
 const exclusionText=(reason?:string)=>({user_inactive:'用户已停用',user_deleted:'用户已删除',user_state_changed_after_snapshot:'快照后用户状态变化'}[reason||'']||reason||'已排除')
 
-function payload():RecurringCreditTaskInput{const immediate=form.schedule_type==='immediate';return{name:form.name.trim(),admin_notes:form.admin_notes.trim(),schedule_type:form.schedule_type,day_of_month:form.schedule_type==='monthly'?Number(form.day_of_month):undefined,day_of_week:form.schedule_type==='weekly'?Number(form.day_of_week):undefined,validity_days:immediate?Number(form.validity_days):undefined,local_time:immediate?'':form.local_time,timezone:form.timezone.trim(),amount:Number(form.amount),execution_mode:immediate?'finite':form.execution_mode,remaining_runs:immediate?1:form.execution_mode==='finite'?Number(form.remaining_runs):undefined,initially_active:immediate?true:Boolean(form.initially_active)}}
-function fillForm(task?:RecurringCreditTask){Object.assign(form,task?{name:task.name,admin_notes:task.admin_notes,schedule_type:task.schedule_type,day_of_month:task.day_of_month??5,day_of_week:task.day_of_week??1,validity_days:task.validity_days??7,local_time:task.local_time,timezone:task.timezone,amount:task.amount,execution_mode:task.execution_mode,remaining_runs:task.remaining_runs??1,initially_active:task.status==='active'}:{name:'',admin_notes:'',schedule_type:'immediate',day_of_month:5,day_of_week:1,validity_days:7,local_time:'08:00',timezone:defaultTimezone,amount:10,execution_mode:'finite',remaining_runs:1,initially_active:true})}
+function payload():RecurringCreditTaskInput{const immediate=form.schedule_type==='immediate';const validityValue=Number(form.validity_value);return{name:form.name.trim(),admin_notes:form.admin_notes.trim(),schedule_type:form.schedule_type,day_of_month:form.schedule_type==='monthly'?Number(form.day_of_month):undefined,day_of_week:form.schedule_type==='weekly'?Number(form.day_of_week):undefined,validity_days:immediate&&form.validity_unit==='days'?validityValue:undefined,validity_hours:immediate&&form.validity_unit==='hours'?validityValue:undefined,local_time:immediate?'':form.local_time,timezone:form.timezone.trim(),amount:Number(form.amount),execution_mode:immediate?'finite':form.execution_mode,remaining_runs:immediate?1:form.execution_mode==='finite'?Number(form.remaining_runs):undefined,initially_active:immediate?true:Boolean(form.initially_active)}}
+function fillForm(task?:RecurringCreditTask){const useDays=Boolean(task?.validity_days);Object.assign(form,task?{name:task.name,admin_notes:task.admin_notes,schedule_type:task.schedule_type,day_of_month:task.day_of_month??5,day_of_week:task.day_of_week??1,validity_value:useDays?task.validity_days:task.validity_hours??7,validity_unit:useDays?'days':'hours',local_time:task.local_time,timezone:task.timezone,amount:task.amount,execution_mode:task.execution_mode,remaining_runs:task.remaining_runs??1,initially_active:task.status==='active'}:{name:'',admin_notes:'',schedule_type:'immediate',day_of_month:5,day_of_week:1,validity_value:7,validity_unit:'days',local_time:'08:00',timezone:defaultTimezone,amount:10,execution_mode:'finite',remaining_runs:1,initially_active:true})}
 function openCreate(){formMode.value='create';editing.value=null;fillForm();formOpen.value=true}
 function openEdit(task:RecurringCreditTask){formMode.value='edit';editing.value=task;fillForm(task);formOpen.value=true}
 function openReactivate(task:RecurringCreditTask){formMode.value='reactivate';editing.value=task;fillForm(task);form.initially_active=true;formOpen.value=true}

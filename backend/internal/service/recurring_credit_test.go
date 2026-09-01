@@ -74,20 +74,48 @@ func TestValidateImmediateCreditNormalizesOneTimeExecution(t *testing.T) {
 	require.Equal(t, 1, *input.RemainingRuns)
 	require.True(t, input.InitiallyActive)
 	require.Equal(t, "Asia/Shanghai", input.Timezone)
+	require.Equal(t, 7*24, *input.ValidityHours)
 }
 
-func TestImmediateCreditValidityDaysMustBeInRange(t *testing.T) {
+func TestImmediateCreditValidityMustBeInRange(t *testing.T) {
 	service := &RecurringCreditService{defaultTimezone: "Asia/Shanghai"}
 	for _, days := range []int{0, 36501} {
 		input := RecurringCreditTaskInput{Name: "即时赠额", ScheduleType: RecurringCreditImmediate, Amount: 1, ValidityDays: &days}
 		require.Error(t, service.validateInput(&input))
 	}
+	for _, hours := range []int{0, recurringCreditMaxValidityHours + 1} {
+		input := RecurringCreditTaskInput{Name: "即时赠额", ScheduleType: RecurringCreditImmediate, Amount: 1, ValidityHours: &hours}
+		require.Error(t, service.validateInput(&input))
+	}
+}
+
+func TestImmediateCreditValiditySupportsHours(t *testing.T) {
+	service := &RecurringCreditService{defaultTimezone: "Asia/Shanghai"}
+	hours := 6
+	input := RecurringCreditTaskInput{Name: "小时赠额", ScheduleType: RecurringCreditImmediate, Amount: 1, ValidityHours: &hours}
+
+	require.NoError(t, service.validateInput(&input))
+	require.Nil(t, input.ValidityDays)
+	require.Equal(t, 6, *input.ValidityHours)
+	validity, err := recurringCreditValidityDuration(input.ValidityDays, input.ValidityHours)
+	require.NoError(t, err)
+	require.Equal(t, 6*time.Hour, validity)
+}
+
+func TestImmediateCreditValidityRejectsConflictingUnits(t *testing.T) {
+	days, hours := 2, 25
+	_, err := recurringCreditValidityDuration(&days, &hours)
+	require.Error(t, err)
 }
 
 func TestImmediateCreditScheduleDescriptionShowsValidity(t *testing.T) {
 	validityDays := 7
 	description := scheduleDescription(&RecurringCreditTaskView{ScheduleType: RecurringCreditImmediate, ValidityDays: &validityDays})
 	require.Equal(t, "立即执行（有效期7天）", description)
+
+	validityHours := 6
+	description = scheduleDescription(&RecurringCreditTaskView{ScheduleType: RecurringCreditImmediate, ValidityHours: &validityHours})
+	require.Equal(t, "立即执行（有效期6小时）", description)
 }
 
 func TestRecurringCreditActivityWindowUsesRollingThirtyDays(t *testing.T) {
@@ -173,8 +201,9 @@ func TestRecurringCreditActivityCandidateQueryCastsCutoff(t *testing.T) {
 // TestRecurringCreditBatchInsertUsesIndependentStatusParameter 回归批次插入参数类型冲突。
 func TestRecurringCreditBatchInsertUsesIndependentStatusParameter(t *testing.T) {
 	query := strings.ToLower(recurringCreditBatchInsertSQL)
-	require.Contains(t, query, "case when $23 in ('skipped','missed')")
-	require.NotContains(t, strings.ReplaceAll(query, " ", ""), "casewhen$18in('skipped','missed')")
+	require.Contains(t, query, "validity_days,validity_hours")
+	require.Contains(t, query, "case when $24 in ('skipped','missed')")
+	require.NotContains(t, strings.ReplaceAll(query, " ", ""), "casewhen$19in('skipped','missed')")
 	require.Contains(t, query, "on conflict(task_id,scheduled_at) do nothing")
 }
 
@@ -182,8 +211,8 @@ func TestRecurringCreditBatchInsertUsesIndependentStatusParameter(t *testing.T) 
 func TestRecurringCreditBatchStatusesPreserveCompletionSemantics(t *testing.T) {
 	query := strings.ToLower(recurringCreditBatchInsertSQL)
 	for _, status := range []string{"running", "skipped", "missed"} {
-		require.Equal(t, 1, strings.Count(query, "$18"), "status 列应只绑定一个显式参数: %s", status)
-		require.Contains(t, query, "case when $23 in ('skipped','missed')")
+		require.Equal(t, 1, strings.Count(query, "$19"), "status 列应只绑定一个显式参数: %s", status)
+		require.Contains(t, query, "case when $24 in ('skipped','missed')")
 	}
 	require.Contains(t, query, "claimed_at")
 	require.Contains(t, query, "lease_owner")

@@ -189,6 +189,7 @@ func TestRecurringCreditReissuePreservesSnapshotAndExpiryInPostgres(t *testing.T
 			config_version INTEGER NOT NULL,
 			eligibility_policy TEXT NOT NULL,
 			validity_days INTEGER,
+			validity_hours INTEGER,
 			schedule_type TEXT NOT NULL,
 			day_of_month INTEGER,
 			day_of_week INTEGER,

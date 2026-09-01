@@ -46,4 +46,11 @@ describe('RecurringCreditGrantsView grant tasks', () => {
     expect(apiSource).toContain('api_last_used_at?: string')
     expect(apiSource).toContain('site_last_active_at?: string')
   })
+
+  it('supports hour-based validity for immediate tasks', () => {
+    expect(source).toContain('data-testid="recurring-credit-validity-unit"')
+    expect(source).toContain('<option value="hours">小时</option>')
+    expect(source).toContain("validity_hours:immediate&&form.validity_unit==='hours'?validityValue:undefined")
+    expect(apiSource).toContain('validity_hours?: number')
+  })
 })
