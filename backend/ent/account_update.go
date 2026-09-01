@@ -357,6 +357,20 @@ func (_u *AccountUpdate) SetNillableStatus(v *string) *AccountUpdate {
 	return _u
 }
 
+// SetIntelligenceTestStatus sets the "intelligence_test_status" field.
+func (_u *AccountUpdate) SetIntelligenceTestStatus(v string) *AccountUpdate {
+	_u.mutation.SetIntelligenceTestStatus(v)
+	return _u
+}
+
+// SetNillableIntelligenceTestStatus sets the "intelligence_test_status" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableIntelligenceTestStatus(v *string) *AccountUpdate {
+	if v != nil {
+		_u.SetIntelligenceTestStatus(*v)
+	}
+	return _u
+}
+
 // SetErrorMessage sets the "error_message" field.
 func (_u *AccountUpdate) SetErrorMessage(v string) *AccountUpdate {
 	_u.mutation.SetErrorMessage(v)
@@ -862,6 +876,11 @@ func (_u *AccountUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Account.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.IntelligenceTestStatus(); ok {
+		if err := account.IntelligenceTestStatusValidator(v); err != nil {
+			return &ValidationError{Name: "intelligence_test_status", err: fmt.Errorf(`ent: validator failed for field "Account.intelligence_test_status": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SessionWindowStatus(); ok {
 		if err := account.SessionWindowStatusValidator(v); err != nil {
 			return &ValidationError{Name: "session_window_status", err: fmt.Errorf(`ent: validator failed for field "Account.session_window_status": %w`, err)}
@@ -976,6 +995,9 @@ func (_u *AccountUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(account.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.IntelligenceTestStatus(); ok {
+		_spec.SetField(account.FieldIntelligenceTestStatus, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.ErrorMessage(); ok {
 		_spec.SetField(account.FieldErrorMessage, field.TypeString, value)
@@ -1603,6 +1625,20 @@ func (_u *AccountUpdateOne) SetNillableStatus(v *string) *AccountUpdateOne {
 	return _u
 }
 
+// SetIntelligenceTestStatus sets the "intelligence_test_status" field.
+func (_u *AccountUpdateOne) SetIntelligenceTestStatus(v string) *AccountUpdateOne {
+	_u.mutation.SetIntelligenceTestStatus(v)
+	return _u
+}
+
+// SetNillableIntelligenceTestStatus sets the "intelligence_test_status" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableIntelligenceTestStatus(v *string) *AccountUpdateOne {
+	if v != nil {
+		_u.SetIntelligenceTestStatus(*v)
+	}
+	return _u
+}
+
 // SetErrorMessage sets the "error_message" field.
 func (_u *AccountUpdateOne) SetErrorMessage(v string) *AccountUpdateOne {
 	_u.mutation.SetErrorMessage(v)
@@ -2121,6 +2157,11 @@ func (_u *AccountUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Account.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.IntelligenceTestStatus(); ok {
+		if err := account.IntelligenceTestStatusValidator(v); err != nil {
+			return &ValidationError{Name: "intelligence_test_status", err: fmt.Errorf(`ent: validator failed for field "Account.intelligence_test_status": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SessionWindowStatus(); ok {
 		if err := account.SessionWindowStatusValidator(v); err != nil {
 			return &ValidationError{Name: "session_window_status", err: fmt.Errorf(`ent: validator failed for field "Account.session_window_status": %w`, err)}
@@ -2252,6 +2293,9 @@ func (_u *AccountUpdateOne) sqlSave(ctx context.Context) (_node *Account, err er
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(account.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.IntelligenceTestStatus(); ok {
+		_spec.SetField(account.FieldIntelligenceTestStatus, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.ErrorMessage(); ok {
 		_spec.SetField(account.FieldErrorMessage, field.TypeString, value)

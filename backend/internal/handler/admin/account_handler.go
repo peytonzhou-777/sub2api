@@ -150,6 +150,7 @@ type UpdateAccountRequest struct {
 	RateMultiplier          *float64       `json:"rate_multiplier"`
 	LoadFactor              *int           `json:"load_factor"`
 	Status                  string         `json:"status" binding:"omitempty,oneof=active inactive error"`
+	IntelligenceTestStatus  *string        `json:"intelligence_test_status" binding:"omitempty,oneof=passed failed"`
 	GroupIDs                *[]int64       `json:"group_ids"`
 	ExpiresAt               *int64         `json:"expires_at"`
 	AutoPauseOnExpired      *bool          `json:"auto_pause_on_expired"`
@@ -1032,23 +1033,24 @@ func (h *AccountHandler) Update(c *gin.Context) {
 	skipCheck := req.ConfirmMixedChannelRisk != nil && *req.ConfirmMixedChannelRisk
 
 	account, err := h.adminService.UpdateAccount(c.Request.Context(), accountID, &service.UpdateAccountInput{
-		Name:                  req.Name,
-		Notes:                 req.Notes,
-		Type:                  req.Type,
-		Credentials:           req.Credentials,
-		Extra:                 req.Extra,
-		ProxyID:               req.ProxyID,
-		Concurrency:           req.Concurrency, // 指针类型，nil 表示未提供
-		Priority:              req.Priority,    // 指针类型，nil 表示未提供
-		RateMultiplier:        req.RateMultiplier,
-		LoadFactor:            req.LoadFactor,
-		Status:                req.Status,
-		GroupIDs:              req.GroupIDs,
-		ExpiresAt:             req.ExpiresAt,
-		AutoPauseOnExpired:    req.AutoPauseOnExpired,
-		ProbeEnabled:          req.ProbeEnabled,
-		RateSyncEnabled:       req.RateSyncEnabled,
-		SkipMixedChannelCheck: skipCheck,
+		Name:                   req.Name,
+		Notes:                  req.Notes,
+		Type:                   req.Type,
+		Credentials:            req.Credentials,
+		Extra:                  req.Extra,
+		ProxyID:                req.ProxyID,
+		Concurrency:            req.Concurrency, // 指针类型，nil 表示未提供
+		Priority:               req.Priority,    // 指针类型，nil 表示未提供
+		RateMultiplier:         req.RateMultiplier,
+		LoadFactor:             req.LoadFactor,
+		Status:                 req.Status,
+		IntelligenceTestStatus: req.IntelligenceTestStatus,
+		GroupIDs:               req.GroupIDs,
+		ExpiresAt:              req.ExpiresAt,
+		AutoPauseOnExpired:     req.AutoPauseOnExpired,
+		ProbeEnabled:           req.ProbeEnabled,
+		RateSyncEnabled:        req.RateSyncEnabled,
+		SkipMixedChannelCheck:  skipCheck,
 	})
 	if err != nil {
 		// 检查是否为混合渠道错误

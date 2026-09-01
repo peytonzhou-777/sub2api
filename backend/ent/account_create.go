@@ -265,6 +265,20 @@ func (_c *AccountCreate) SetNillableStatus(v *string) *AccountCreate {
 	return _c
 }
 
+// SetIntelligenceTestStatus sets the "intelligence_test_status" field.
+func (_c *AccountCreate) SetIntelligenceTestStatus(v string) *AccountCreate {
+	_c.mutation.SetIntelligenceTestStatus(v)
+	return _c
+}
+
+// SetNillableIntelligenceTestStatus sets the "intelligence_test_status" field if the given value is not nil.
+func (_c *AccountCreate) SetNillableIntelligenceTestStatus(v *string) *AccountCreate {
+	if v != nil {
+		_c.SetIntelligenceTestStatus(*v)
+	}
+	return _c
+}
+
 // SetErrorMessage sets the "error_message" field.
 func (_c *AccountCreate) SetErrorMessage(v string) *AccountCreate {
 	_c.mutation.SetErrorMessage(v)
@@ -633,6 +647,10 @@ func (_c *AccountCreate) defaults() error {
 		v := account.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.IntelligenceTestStatus(); !ok {
+		v := account.DefaultIntelligenceTestStatus
+		_c.mutation.SetIntelligenceTestStatus(v)
+	}
 	if _, ok := _c.mutation.AutoPauseOnExpired(); !ok {
 		v := account.DefaultAutoPauseOnExpired
 		_c.mutation.SetAutoPauseOnExpired(v)
@@ -717,6 +735,14 @@ func (_c *AccountCreate) check() error {
 	if v, ok := _c.mutation.Status(); ok {
 		if err := account.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Account.status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.IntelligenceTestStatus(); !ok {
+		return &ValidationError{Name: "intelligence_test_status", err: errors.New(`ent: missing required field "Account.intelligence_test_status"`)}
+	}
+	if v, ok := _c.mutation.IntelligenceTestStatus(); ok {
+		if err := account.IntelligenceTestStatusValidator(v); err != nil {
+			return &ValidationError{Name: "intelligence_test_status", err: fmt.Errorf(`ent: validator failed for field "Account.intelligence_test_status": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.AutoPauseOnExpired(); !ok {
@@ -840,6 +866,10 @@ func (_c *AccountCreate) createSpec() (*Account, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(account.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.IntelligenceTestStatus(); ok {
+		_spec.SetField(account.FieldIntelligenceTestStatus, field.TypeString, value)
+		_node.IntelligenceTestStatus = value
 	}
 	if value, ok := _c.mutation.ErrorMessage(); ok {
 		_spec.SetField(account.FieldErrorMessage, field.TypeString, value)
@@ -1338,6 +1368,18 @@ func (u *AccountUpsert) SetStatus(v string) *AccountUpsert {
 // UpdateStatus sets the "status" field to the value that was provided on create.
 func (u *AccountUpsert) UpdateStatus() *AccountUpsert {
 	u.SetExcluded(account.FieldStatus)
+	return u
+}
+
+// SetIntelligenceTestStatus sets the "intelligence_test_status" field.
+func (u *AccountUpsert) SetIntelligenceTestStatus(v string) *AccountUpsert {
+	u.Set(account.FieldIntelligenceTestStatus, v)
+	return u
+}
+
+// UpdateIntelligenceTestStatus sets the "intelligence_test_status" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateIntelligenceTestStatus() *AccountUpsert {
+	u.SetExcluded(account.FieldIntelligenceTestStatus)
 	return u
 }
 
@@ -1992,6 +2034,20 @@ func (u *AccountUpsertOne) SetStatus(v string) *AccountUpsertOne {
 func (u *AccountUpsertOne) UpdateStatus() *AccountUpsertOne {
 	return u.Update(func(s *AccountUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetIntelligenceTestStatus sets the "intelligence_test_status" field.
+func (u *AccountUpsertOne) SetIntelligenceTestStatus(v string) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetIntelligenceTestStatus(v)
+	})
+}
+
+// UpdateIntelligenceTestStatus sets the "intelligence_test_status" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateIntelligenceTestStatus() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateIntelligenceTestStatus()
 	})
 }
 
@@ -2854,6 +2910,20 @@ func (u *AccountUpsertBulk) SetStatus(v string) *AccountUpsertBulk {
 func (u *AccountUpsertBulk) UpdateStatus() *AccountUpsertBulk {
 	return u.Update(func(s *AccountUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetIntelligenceTestStatus sets the "intelligence_test_status" field.
+func (u *AccountUpsertBulk) SetIntelligenceTestStatus(v string) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetIntelligenceTestStatus(v)
+	})
+}
+
+// UpdateIntelligenceTestStatus sets the "intelligence_test_status" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateIntelligenceTestStatus() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateIntelligenceTestStatus()
 	})
 }
 

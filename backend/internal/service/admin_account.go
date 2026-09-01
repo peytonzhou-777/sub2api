@@ -781,6 +781,23 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if input.Status != "" {
 		account.Status = input.Status
 	}
+	if input.IntelligenceTestStatus != nil {
+		if account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
+			return nil, infraerrors.BadRequest(
+				"INTELLIGENCE_TEST_STATUS_UNSUPPORTED",
+				"intelligence test status is only supported for OpenAI OAuth accounts",
+			)
+		}
+		switch *input.IntelligenceTestStatus {
+		case "passed", "failed":
+			account.IntelligenceTestStatus = *input.IntelligenceTestStatus
+		default:
+			return nil, infraerrors.BadRequest(
+				"INVALID_INTELLIGENCE_TEST_STATUS",
+				"intelligence_test_status must be passed or failed",
+			)
+		}
+	}
 	if input.ExpiresAt != nil {
 		if *input.ExpiresAt <= 0 {
 			account.ExpiresAt = nil

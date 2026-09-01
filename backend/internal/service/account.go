@@ -40,15 +40,17 @@ type Account struct {
 	Priority                       int
 	// RateMultiplier 账号计费倍率（>=0，允许 0 表示该账号计费为 0）。
 	// 使用指针用于兼容旧版本调度缓存（Redis）中缺字段的情况：nil 表示按 1.0 处理。
-	RateMultiplier     *float64
-	LoadFactor         *int // 调度负载因子；nil 表示使用 Concurrency
-	Status             string
-	ErrorMessage       string
-	LastUsedAt         *time.Time
-	ExpiresAt          *time.Time
-	AutoPauseOnExpired bool
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	RateMultiplier *float64
+	LoadFactor     *int // 调度负载因子；nil 表示使用 Concurrency
+	Status         string
+	// IntelligenceTestStatus 是 OpenAI OAuth 降智检测的管理员人工结论：空值、passed 或 failed。
+	IntelligenceTestStatus string
+	ErrorMessage           string
+	LastUsedAt             *time.Time
+	ExpiresAt              *time.Time
+	AutoPauseOnExpired     bool
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 
 	Schedulable bool
 

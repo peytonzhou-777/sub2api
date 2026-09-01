@@ -291,6 +291,28 @@
               <AccountStatusIndicator :account="row" @show-temp-unsched="handleShowTempUnsched" />
             </div>
           </template>
+          <template #cell-intelligence_test_status="{ row }">
+            <span
+              v-if="row.platform === 'openai' && row.type === 'oauth'"
+              :class="[
+                'inline-flex items-center rounded px-2 py-1 text-xs font-medium',
+                row.intelligence_test_status === 'passed'
+                  ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300'
+                  : row.intelligence_test_status === 'failed'
+                    ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300'
+                    : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+              ]"
+            >
+              {{
+                row.intelligence_test_status === 'passed'
+                  ? t('admin.accounts.intelligenceTestStatusPassed')
+                  : row.intelligence_test_status === 'failed'
+                    ? t('admin.accounts.intelligenceTestStatusFailed')
+                    : t('admin.accounts.intelligenceTestStatusUnmarked')
+              }}
+            </span>
+            <span v-else class="text-sm text-gray-400 dark:text-dark-500">-</span>
+          </template>
           <template #cell-schedulable="{ row }">
             <button @click="handleToggleSchedulable(row)" :disabled="togglingSchedulable === row.id" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-800" :class="[row.schedulable ? 'bg-primary-500 hover:bg-primary-600' : 'bg-gray-200 hover:bg-gray-300 dark:bg-dark-600 dark:hover:bg-dark-500']" :title="row.schedulable ? t('admin.accounts.schedulableEnabled') : t('admin.accounts.schedulableDisabled')">
               <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out" :class="[row.schedulable ? 'translate-x-4' : 'translate-x-0']" />
@@ -458,7 +480,7 @@
     <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" @authorize-persona="handlePersonaReAuth" />
     <OpenAIUserAffinityResidentsModal :show="userAffinityAccount !== null" :account="userAffinityAccount" @close="userAffinityAccount = null" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" :persona-slot="personaReAuthSlot" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
-    <AccountTestModal :show="showTest" :account="testingAcc" :variant="testVariant" @close="closeTestModal" />
+    <AccountTestModal :show="showTest" :account="testingAcc" :variant="testVariant" @close="closeTestModal" @account-updated="handleAccountUpdated" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
     <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @intelligence-test="handleIntelligenceTest" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
@@ -1805,6 +1827,7 @@ const allColumns = computed(() => {
     { key: 'platform_type', label: t('admin.accounts.columns.platformType'), sortable: false },
     { key: 'capacity', label: t('admin.accounts.columns.capacity'), sortable: false },
     { key: 'status', label: t('admin.accounts.columns.status'), sortable: true },
+    { key: 'intelligence_test_status', label: t('admin.accounts.columns.intelligenceTest'), sortable: false },
     { key: 'schedulable', label: t('admin.accounts.columns.schedulable'), sortable: true },
     { key: 'today_stats', label: t('admin.accounts.columns.todayStats'), sortable: false }
   ]

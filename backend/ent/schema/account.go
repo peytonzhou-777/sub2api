@@ -132,6 +132,11 @@ func (Account) Fields() []ent.Field {
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),
+		// intelligence_test_status: OpenAI OAuth 降智检测的管理员人工标记。
+		// 空字符串表示尚未标记；检测请求成功不自动等同于答案质量通过。
+		field.String("intelligence_test_status").
+			MaxLen(16).
+			Default(""),
 
 		// error_message: 错误信息，记录账户异常时的详细信息
 		field.String("error_message").

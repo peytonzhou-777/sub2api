@@ -2937,6 +2937,7 @@ type AccountMutation struct {
 	rate_multiplier                    *float64
 	addrate_multiplier                 *float64
 	status                             *string
+	intelligence_test_status           *string
 	error_message                      *string
 	last_used_at                       *time.Time
 	expires_at                         *time.Time
@@ -4001,6 +4002,42 @@ func (m *AccountMutation) ResetStatus() {
 	m.status = nil
 }
 
+// SetIntelligenceTestStatus sets the "intelligence_test_status" field.
+func (m *AccountMutation) SetIntelligenceTestStatus(s string) {
+	m.intelligence_test_status = &s
+}
+
+// IntelligenceTestStatus returns the value of the "intelligence_test_status" field in the mutation.
+func (m *AccountMutation) IntelligenceTestStatus() (r string, exists bool) {
+	v := m.intelligence_test_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIntelligenceTestStatus returns the old "intelligence_test_status" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldIntelligenceTestStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIntelligenceTestStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIntelligenceTestStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIntelligenceTestStatus: %w", err)
+	}
+	return oldValue.IntelligenceTestStatus, nil
+}
+
+// ResetIntelligenceTestStatus resets all changes to the "intelligence_test_status" field.
+func (m *AccountMutation) ResetIntelligenceTestStatus() {
+	m.intelligence_test_status = nil
+}
+
 // SetErrorMessage sets the "error_message" field.
 func (m *AccountMutation) SetErrorMessage(s string) {
 	m.error_message = &s
@@ -4960,7 +4997,7 @@ func (m *AccountMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AccountMutation) Fields() []string {
-	fields := make([]string, 0, 35)
+	fields := make([]string, 0, 36)
 	if m.created_at != nil {
 		fields = append(fields, account.FieldCreatedAt)
 	}
@@ -5020,6 +5057,9 @@ func (m *AccountMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, account.FieldStatus)
+	}
+	if m.intelligence_test_status != nil {
+		fields = append(fields, account.FieldIntelligenceTestStatus)
 	}
 	if m.error_message != nil {
 		fields = append(fields, account.FieldErrorMessage)
@@ -5114,6 +5154,8 @@ func (m *AccountMutation) Field(name string) (ent.Value, bool) {
 		return m.RateMultiplier()
 	case account.FieldStatus:
 		return m.Status()
+	case account.FieldIntelligenceTestStatus:
+		return m.IntelligenceTestStatus()
 	case account.FieldErrorMessage:
 		return m.ErrorMessage()
 	case account.FieldLastUsedAt:
@@ -5193,6 +5235,8 @@ func (m *AccountMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldRateMultiplier(ctx)
 	case account.FieldStatus:
 		return m.OldStatus(ctx)
+	case account.FieldIntelligenceTestStatus:
+		return m.OldIntelligenceTestStatus(ctx)
 	case account.FieldErrorMessage:
 		return m.OldErrorMessage(ctx)
 	case account.FieldLastUsedAt:
@@ -5371,6 +5415,13 @@ func (m *AccountMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case account.FieldIntelligenceTestStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIntelligenceTestStatus(v)
 		return nil
 	case account.FieldErrorMessage:
 		v, ok := value.(string)
@@ -5777,6 +5828,9 @@ func (m *AccountMutation) ResetField(name string) error {
 		return nil
 	case account.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case account.FieldIntelligenceTestStatus:
+		m.ResetIntelligenceTestStatus()
 		return nil
 	case account.FieldErrorMessage:
 		m.ResetErrorMessage()
@@ -82667,7 +82721,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 25)
+	fields := make([]string, 0, 26)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}

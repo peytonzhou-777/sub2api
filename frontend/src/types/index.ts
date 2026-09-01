@@ -1202,6 +1202,7 @@ export interface Account {
   priority: number
   rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
   status: 'active' | 'inactive' | 'error'
+  intelligence_test_status?: '' | 'passed' | 'failed'
   error_message: string | null
   last_used_at: string | null
   expires_at: number | null
@@ -1500,6 +1501,7 @@ export interface UpdateAccountRequest {
   rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
   schedulable?: boolean
   status?: 'active' | 'inactive' | 'error'
+  intelligence_test_status?: 'passed' | 'failed'
   group_ids?: number[]
   expires_at?: number | null
   auto_pause_on_expired?: boolean

@@ -298,6 +298,66 @@
         </div>
       </div>
 
+      <div
+        v-if="isIntelligenceTest"
+        class="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-500 dark:bg-dark-700"
+      >
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-200">
+            {{ t('admin.accounts.intelligenceTestStatusLabel') }}
+          </span>
+          <span
+            :class="[
+              'rounded px-2 py-0.5 text-xs font-medium',
+              intelligenceTestStatus === 'passed'
+                ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300'
+                : intelligenceTestStatus === 'failed'
+                  ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300'
+                  : 'bg-gray-200 text-gray-600 dark:bg-dark-500 dark:text-gray-300'
+            ]"
+          >
+            {{ intelligenceTestStatusLabel }}
+          </span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            data-testid="intelligence-mark-passed"
+            :aria-pressed="intelligenceTestStatus === 'passed'"
+            :disabled="status === 'connecting' || markingIntelligenceStatus !== null"
+            :class="[
+              'flex min-h-9 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+              intelligenceTestStatus === 'passed'
+                ? 'border-green-500 bg-green-500 text-white'
+                : 'border-gray-300 bg-white text-gray-700 hover:border-green-400 hover:text-green-700 dark:border-dark-500 dark:bg-dark-600 dark:text-gray-200'
+            ]"
+            @click="saveIntelligenceTestStatus('passed')"
+          >
+            <Icon name="check" size="sm" :stroke-width="2" />
+            {{ t('admin.accounts.intelligenceTestMarkPassed') }}
+          </button>
+          <button
+            type="button"
+            data-testid="intelligence-mark-failed"
+            :aria-pressed="intelligenceTestStatus === 'failed'"
+            :disabled="status === 'connecting' || markingIntelligenceStatus !== null"
+            :class="[
+              'flex min-h-9 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+              intelligenceTestStatus === 'failed'
+                ? 'border-red-500 bg-red-500 text-white'
+                : 'border-gray-300 bg-white text-gray-700 hover:border-red-400 hover:text-red-700 dark:border-dark-500 dark:bg-dark-600 dark:text-gray-200'
+            ]"
+            @click="saveIntelligenceTestStatus('failed')"
+          >
+            <Icon name="x" size="sm" :stroke-width="2" />
+            {{ t('admin.accounts.intelligenceTestMarkFailed') }}
+          </button>
+        </div>
+        <p v-if="intelligenceStatusError" class="text-xs text-red-600 dark:text-red-400">
+          {{ intelligenceStatusError }}
+        </p>
+      </div>
+
       <!-- Image Lightbox -->
       <Teleport to="body">
         <Transition name="fade">
@@ -419,6 +479,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
+  (e: 'account-updated', account: Account): void
 }>()
 
 const terminalRef = ref<HTMLElement | null>(null)
@@ -434,6 +495,9 @@ const loadingPersonaStatus = ref(false)
 const personaOAuthStatus = ref<OpenAIPersonaOAuthStatus | null>(null)
 const personaStatusError = ref('')
 const selectedPersonaSlotId = ref<0 | 1>(0)
+const intelligenceTestStatus = ref<'' | 'passed' | 'failed'>('')
+const markingIntelligenceStatus = ref<'passed' | 'failed' | null>(null)
+const intelligenceStatusError = ref('')
 let abortController: AbortController | null = null
 const generatedImages = ref<PreviewMedia[]>([])
 const generatedAudios = ref<PreviewMedia[]>([])
@@ -487,6 +551,16 @@ const selectedPersonaSlotReady = computed(() => {
   return isPersonaSlotReady(
     personaOAuthStatus.value?.slots.find((slot) => slot.slot_id === selectedPersonaSlotId.value)
   )
+})
+const intelligenceTestStatusLabel = computed(() => {
+  switch (intelligenceTestStatus.value) {
+    case 'passed':
+      return t('admin.accounts.intelligenceTestStatusPassed')
+    case 'failed':
+      return t('admin.accounts.intelligenceTestStatusFailed')
+    default:
+      return t('admin.accounts.intelligenceTestStatusUnmarked')
+  }
 })
 
 function isPersonaSlotReady(slot: OpenAIPersonaOAuthSlotStatus | undefined): boolean {
@@ -846,6 +920,9 @@ watch(
       personaOAuthStatus.value = null
       personaStatusError.value = ''
       selectedPersonaSlotId.value = 0
+      intelligenceTestStatus.value = props.account.intelligence_test_status || ''
+      markingIntelligenceStatus.value = null
+      intelligenceStatusError.value = ''
       resetState()
       await Promise.all([loadAvailableModels(), loadIntelligencePersonaStatus()])
       if (isGrokAccount.value || isIntelligenceTest.value) {
@@ -931,6 +1008,26 @@ const resetState = () => {
 const handleClose = () => {
   abortStream()
   emit('close')
+}
+
+const saveIntelligenceTestStatus = async (nextStatus: 'passed' | 'failed') => {
+  if (!props.account || markingIntelligenceStatus.value !== null) return
+  if (intelligenceTestStatus.value === nextStatus) return
+
+  markingIntelligenceStatus.value = nextStatus
+  intelligenceStatusError.value = ''
+  try {
+    const updated = await adminAPI.accounts.update(props.account.id, {
+      intelligence_test_status: nextStatus
+    })
+    intelligenceTestStatus.value = updated.intelligence_test_status || nextStatus
+    emit('account-updated', updated)
+  } catch (error) {
+    console.error('Failed to update intelligence test status:', error)
+    intelligenceStatusError.value = t('admin.accounts.intelligenceTestStatusSaveFailed')
+  } finally {
+    markingIntelligenceStatus.value = null
+  }
 }
 
 const abortStream = () => {

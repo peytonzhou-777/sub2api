@@ -221,9 +221,10 @@ const mountViewWithRow = () =>
         DataTable: {
           props: ['data', 'columns', 'loading'],
           template: `<div>
-            <div v-for="(row, idx) in (data || [])" :key="idx">
+            <div v-for="(row, idx) in (data || [])" :key="idx" :data-row="row.name">
               <slot name="cell-name" :row="row" :value="row.name" />
               <slot name="cell-platform_type" :row="row" />
+              <slot name="cell-intelligence_test_status" :row="row" />
             </div>
           </div>`
         },
@@ -304,6 +305,30 @@ describe('admin AccountsView — 账号行展示', () => {
     expect(badge.props('privacyMode')).toBe('false')
     expect(badge.props('subscriptionExpiresAt')).toBe('2027-01-01T00:00:00Z')
 
+    wrapper.unmount()
+  })
+
+  it('降智检测列区分通过、失败、未标记和不支持账号', async () => {
+    listAccounts.mockResolvedValue({
+      items: [
+        { id: 301, name: 'passed', platform: 'openai', type: 'oauth', intelligence_test_status: 'passed' },
+        { id: 302, name: 'failed', platform: 'openai', type: 'oauth', intelligence_test_status: 'failed' },
+        { id: 303, name: 'unmarked', platform: 'openai', type: 'oauth', intelligence_test_status: '' },
+        { id: 304, name: 'unsupported', platform: 'openai', type: 'apikey' },
+      ],
+      total: 4,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+
+    const wrapper = mountViewWithRow()
+    await flushPromises()
+
+    expect(wrapper.get('[data-row="passed"]').text()).toContain('admin.accounts.intelligenceTestStatusPassed')
+    expect(wrapper.get('[data-row="failed"]').text()).toContain('admin.accounts.intelligenceTestStatusFailed')
+    expect(wrapper.get('[data-row="unmarked"]').text()).toContain('admin.accounts.intelligenceTestStatusUnmarked')
+    expect(wrapper.get('[data-row="unsupported"]').text()).toMatch(/-$/)
     wrapper.unmount()
   })
 

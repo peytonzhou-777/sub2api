@@ -100,3 +100,17 @@ func TestAccountFromServiceShallow_NilCredentialsOmitsStatus(t *testing.T) {
 	require.Nil(t, got.Credentials)
 	require.Nil(t, got.CredentialsStatus)
 }
+
+func TestAccountFromServiceShallow_IncludesIntelligenceTestStatus(t *testing.T) {
+	src := &service.Account{
+		ID:                     42,
+		Platform:               service.PlatformOpenAI,
+		Type:                   service.AccountTypeOAuth,
+		IntelligenceTestStatus: "passed",
+	}
+
+	got := AccountFromServiceShallow(src)
+
+	require.NotNil(t, got)
+	require.Equal(t, "passed", got.IntelligenceTestStatus)
+}

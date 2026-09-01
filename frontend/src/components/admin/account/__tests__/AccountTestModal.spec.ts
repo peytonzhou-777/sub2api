@@ -2,9 +2,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AccountTestModal from '../AccountTestModal.vue'
 
-const { getAvailableModels, getOpenAIPersonaOAuthStatus, copyToClipboard } = vi.hoisted(() => ({
+const { getAvailableModels, getOpenAIPersonaOAuthStatus, updateAccount, copyToClipboard } = vi.hoisted(() => ({
   getAvailableModels: vi.fn(),
   getOpenAIPersonaOAuthStatus: vi.fn(),
+  updateAccount: vi.fn(),
   copyToClipboard: vi.fn()
 }))
 
@@ -12,7 +13,8 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       getAvailableModels,
-      getOpenAIPersonaOAuthStatus
+      getOpenAIPersonaOAuthStatus,
+      update: updateAccount
     }
   }
 }))
@@ -106,6 +108,7 @@ describe('AccountTestModal', () => {
       mapping_mode: 'legacy_v2',
       slots: []
     })
+    updateAccount.mockReset()
     copyToClipboard.mockReset()
     Object.defineProperty(globalThis, 'localStorage', {
       value: {
@@ -275,6 +278,42 @@ describe('AccountTestModal', () => {
     expect(JSON.parse(request.body)).toEqual({ model_id: 'gpt-5.4' })
     expect(wrapper.text()).toContain('29')
     expect(wrapper.text()).toContain('admin.accounts.intelligenceTestCompleted')
+  })
+
+  it('OpenAI OAuth 降智检测允许管理员修改人工标记', async () => {
+    getAvailableModels.mockResolvedValue([
+      { id: 'gpt-5.4', display_name: 'GPT-5.4' }
+    ])
+    updateAccount.mockResolvedValue({
+      id: 42,
+      name: 'OpenAI OAuth',
+      platform: 'openai',
+      type: 'oauth',
+      status: 'active',
+      intelligence_test_status: 'passed'
+    })
+
+    const wrapper = mountModal({
+      id: 42,
+      name: 'OpenAI OAuth',
+      platform: 'openai',
+      type: 'oauth',
+      status: 'active',
+      intelligence_test_status: 'failed'
+    }, 'intelligence')
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="intelligence-mark-failed"]').attributes('aria-pressed')).toBe('true')
+
+    await wrapper.get('[data-testid="intelligence-mark-passed"]').trigger('click')
+    await flushPromises()
+
+    expect(updateAccount).toHaveBeenCalledWith(42, { intelligence_test_status: 'passed' })
+    expect(wrapper.get('[data-testid="intelligence-mark-passed"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.emitted('account-updated')).toEqual([[
+      expect.objectContaining({ id: 42, intelligence_test_status: 'passed' })
+    ]])
   })
 
   it('Persona v3 降智检测显示 slot 身份并提交显式选择', async () => {

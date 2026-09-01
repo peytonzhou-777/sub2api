@@ -56,6 +56,8 @@ const (
 	FieldRateMultiplier = "rate_multiplier"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldIntelligenceTestStatus holds the string denoting the intelligence_test_status field in the database.
+	FieldIntelligenceTestStatus = "intelligence_test_status"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
 	// FieldLastUsedAt holds the string denoting the last_used_at field in the database.
@@ -159,6 +161,7 @@ var Columns = []string{
 	FieldPriority,
 	FieldRateMultiplier,
 	FieldStatus,
+	FieldIntelligenceTestStatus,
 	FieldErrorMessage,
 	FieldLastUsedAt,
 	FieldExpiresAt,
@@ -234,6 +237,10 @@ var (
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultIntelligenceTestStatus holds the default value on creation for the "intelligence_test_status" field.
+	DefaultIntelligenceTestStatus string
+	// IntelligenceTestStatusValidator is a validator for the "intelligence_test_status" field. It is called by the builders before save.
+	IntelligenceTestStatusValidator func(string) error
 	// DefaultAutoPauseOnExpired holds the default value on creation for the "auto_pause_on_expired" field.
 	DefaultAutoPauseOnExpired bool
 	// DefaultSchedulable holds the default value on creation for the "schedulable" field.
@@ -364,6 +371,11 @@ func ByRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByIntelligenceTestStatus orders the results by the intelligence_test_status field.
+func ByIntelligenceTestStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIntelligenceTestStatus, opts...).ToFunc()
 }
 
 // ByErrorMessage orders the results by the error_message field.

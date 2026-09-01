@@ -145,6 +145,11 @@ func Status(v string) predicate.Account {
 	return predicate.Account(sql.FieldEQ(FieldStatus, v))
 }
 
+// IntelligenceTestStatus applies equality check predicate on the "intelligence_test_status" field. It's identical to IntelligenceTestStatusEQ.
+func IntelligenceTestStatus(v string) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldIntelligenceTestStatus, v))
+}
+
 // ErrorMessage applies equality check predicate on the "error_message" field. It's identical to ErrorMessageEQ.
 func ErrorMessage(v string) predicate.Account {
 	return predicate.Account(sql.FieldEQ(FieldErrorMessage, v))
@@ -1158,6 +1163,71 @@ func StatusEqualFold(v string) predicate.Account {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.Account {
 	return predicate.Account(sql.FieldContainsFold(FieldStatus, v))
+}
+
+// IntelligenceTestStatusEQ applies the EQ predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusEQ(v string) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldIntelligenceTestStatus, v))
+}
+
+// IntelligenceTestStatusNEQ applies the NEQ predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusNEQ(v string) predicate.Account {
+	return predicate.Account(sql.FieldNEQ(FieldIntelligenceTestStatus, v))
+}
+
+// IntelligenceTestStatusIn applies the In predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusIn(vs ...string) predicate.Account {
+	return predicate.Account(sql.FieldIn(FieldIntelligenceTestStatus, vs...))
+}
+
+// IntelligenceTestStatusNotIn applies the NotIn predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusNotIn(vs ...string) predicate.Account {
+	return predicate.Account(sql.FieldNotIn(FieldIntelligenceTestStatus, vs...))
+}
+
+// IntelligenceTestStatusGT applies the GT predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusGT(v string) predicate.Account {
+	return predicate.Account(sql.FieldGT(FieldIntelligenceTestStatus, v))
+}
+
+// IntelligenceTestStatusGTE applies the GTE predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusGTE(v string) predicate.Account {
+	return predicate.Account(sql.FieldGTE(FieldIntelligenceTestStatus, v))
+}
+
+// IntelligenceTestStatusLT applies the LT predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusLT(v string) predicate.Account {
+	return predicate.Account(sql.FieldLT(FieldIntelligenceTestStatus, v))
+}
+
+// IntelligenceTestStatusLTE applies the LTE predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusLTE(v string) predicate.Account {
+	return predicate.Account(sql.FieldLTE(FieldIntelligenceTestStatus, v))
+}
+
+// IntelligenceTestStatusContains applies the Contains predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusContains(v string) predicate.Account {
+	return predicate.Account(sql.FieldContains(FieldIntelligenceTestStatus, v))
+}
+
+// IntelligenceTestStatusHasPrefix applies the HasPrefix predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusHasPrefix(v string) predicate.Account {
+	return predicate.Account(sql.FieldHasPrefix(FieldIntelligenceTestStatus, v))
+}
+
+// IntelligenceTestStatusHasSuffix applies the HasSuffix predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusHasSuffix(v string) predicate.Account {
+	return predicate.Account(sql.FieldHasSuffix(FieldIntelligenceTestStatus, v))
+}
+
+// IntelligenceTestStatusEqualFold applies the EqualFold predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusEqualFold(v string) predicate.Account {
+	return predicate.Account(sql.FieldEqualFold(FieldIntelligenceTestStatus, v))
+}
+
+// IntelligenceTestStatusContainsFold applies the ContainsFold predicate on the "intelligence_test_status" field.
+func IntelligenceTestStatusContainsFold(v string) predicate.Account {
+	return predicate.Account(sql.FieldContainsFold(FieldIntelligenceTestStatus, v))
 }
 
 // ErrorMessageEQ applies the EQ predicate on the "error_message" field.

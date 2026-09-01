@@ -131,6 +131,7 @@ func createAccountRecord(ctx context.Context, client *dbent.Client, account *ser
 		SetConcurrency(account.Concurrency).
 		SetPriority(account.Priority).
 		SetStatus(account.Status).
+		SetIntelligenceTestStatus(account.IntelligenceTestStatus).
 		SetErrorMessage(account.ErrorMessage).
 		SetSchedulable(account.Schedulable).
 		SetAutoPauseOnExpired(account.AutoPauseOnExpired)
@@ -520,6 +521,7 @@ func (r *accountRepository) updateLockedAccount(
 		SetConcurrency(account.Concurrency).
 		SetPriority(account.Priority).
 		SetStatus(account.Status).
+		SetIntelligenceTestStatus(account.IntelligenceTestStatus).
 		SetErrorMessage(account.ErrorMessage).
 		SetSchedulable(schedulable).
 		SetAutoPauseOnExpired(account.AutoPauseOnExpired)
@@ -3426,6 +3428,7 @@ func accountEntityToService(m *dbent.Account) *service.Account {
 		RateMultiplier:                 &rateMultiplier,
 		LoadFactor:                     m.LoadFactor,
 		Status:                         m.Status,
+		IntelligenceTestStatus:         m.IntelligenceTestStatus,
 		ErrorMessage:                   derefString(m.ErrorMessage),
 		LastUsedAt:                     m.LastUsedAt,
 		ExpiresAt:                      m.ExpiresAt,
