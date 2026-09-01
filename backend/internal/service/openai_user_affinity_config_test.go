@@ -70,7 +70,7 @@ func (r *openAIUserAffinitySettingRepoStub) Delete(context.Context, string) erro
 
 func TestDefaultOpenAIUserAffinityConfig(t *testing.T) {
 	cfg := DefaultOpenAIUserAffinityConfig()
-	if cfg.Enabled || cfg.DefaultMaxContactUsers != 10 || cfg.DefaultNewResidentCooldownSeconds != 300 {
+	if cfg.Enabled || cfg.DefaultMaxResidentUsers != 10 || cfg.DefaultNewResidentCooldownSeconds != 300 {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 	if cfg.ResidentAccountSlotCount != 1 || cfg.ResidentTTLSeconds != 7*24*60*60 || cfg.ConversationActiveTTLSeconds != 60*60 {
@@ -101,7 +101,7 @@ func TestValidateAndNormalizeOpenAIUserAffinityConfig(t *testing.T) {
 		name string
 		edit func(*OpenAIUserAffinityConfig)
 	}{
-		{"max contact", func(c *OpenAIUserAffinityConfig) { c.DefaultMaxContactUsers = 0 }},
+		{"max resident", func(c *OpenAIUserAffinityConfig) { c.DefaultMaxResidentUsers = -1 }},
 		{"jitter", func(c *OpenAIUserAffinityConfig) { c.FollowerJitterMaxMS = c.FollowerJitterMinMS - 1 }},
 		{"strategy", func(c *OpenAIUserAffinityConfig) { c.BestFitStrategy = "other" }},
 		{"resident slots", func(c *OpenAIUserAffinityConfig) { c.ResidentAccountSlotCount = 6 }},
@@ -129,7 +129,7 @@ func TestOpenAIUserAffinityLegacyConfigFillsMultiSlotDefaults(t *testing.T) {
 			"cold_start_demand_quantile":0.75,
 			"best_fit_strategy":"7d_then_5h",
 			"best_fit_close_tolerance_ratio":0.01,
-			"default_max_contact_users":10,
+			"default_max_contact_users":37,
 			"default_new_resident_cooldown_seconds":300,
 			"resident_reentry_overcommit_enabled":true,
 			"capacity_failure_migration_threshold":3,
@@ -148,6 +148,9 @@ func TestOpenAIUserAffinityLegacyConfigFillsMultiSlotDefaults(t *testing.T) {
 	}
 	if cfg.ResidentAccountSlotCount != 1 || cfg.ResidentTTLSeconds != 604800 || cfg.ConversationActiveTTLSeconds != 3600 {
 		t.Fatalf("legacy defaults were not filled: %+v", cfg)
+	}
+	if cfg.DefaultMaxResidentUsers != 37 {
+		t.Fatalf("legacy resident capacity = %d, want 37", cfg.DefaultMaxResidentUsers)
 	}
 	if cfg.ConfigVersion != 9 || !cfg.Enabled {
 		t.Fatalf("legacy fields changed unexpectedly: %+v", cfg)

@@ -50,7 +50,7 @@
           <NumberField v-model="config.resident_account_slot_count" :label="t('admin.settings.openAIUserAffinity.residentSlotCount')" :hint="t('admin.settings.openAIUserAffinity.residentSlotCountHint')" :min="1" :max="5" />
           <NumberField v-model="config.resident_ttl_seconds" :label="t('admin.settings.openAIUserAffinity.residentTTL')" :hint="t('admin.settings.openAIUserAffinity.residentTTLHint')" :min="86400" :max="2592000" />
           <NumberField v-model="config.conversation_active_ttl_seconds" :label="t('admin.settings.openAIUserAffinity.conversationActiveTTL')" :hint="t('admin.settings.openAIUserAffinity.conversationActiveTTLHint')" :min="300" :max="86400" />
-          <NumberField v-model="config.default_max_contact_users" :label="t('admin.settings.openAIUserAffinity.maxContactUsers')" :hint="t('admin.settings.openAIUserAffinity.maxContactUsersHint')" :min="1" :max="10000" />
+          <NumberField v-model="config.default_max_resident_users" :label="t('admin.settings.openAIUserAffinity.maxResidentUsers')" :hint="t('admin.settings.openAIUserAffinity.maxResidentUsersHint')" :min="1" :max="10000" />
           <NumberField v-model="config.default_new_resident_cooldown_seconds" :label="t('admin.settings.openAIUserAffinity.cooldownSeconds')" :hint="t('admin.settings.openAIUserAffinity.cooldownSecondsHint')" :min="1" :max="86400" />
           <NumberField v-model="config.capacity_failure_migration_threshold" :label="t('admin.settings.openAIUserAffinity.failureThreshold')" :hint="t('admin.settings.openAIUserAffinity.failureThresholdHint')" :min="2" :max="100" />
           <NumberField v-model="config.capacity_failure_window_seconds" :label="t('admin.settings.openAIUserAffinity.failureWindow')" :hint="t('admin.settings.openAIUserAffinity.failureWindowHint')" :min="10" :max="3600" />
@@ -64,13 +64,6 @@
         </div>
 
         <div class="grid gap-4 md:grid-cols-2">
-          <label class="flex items-start justify-between gap-4 rounded border border-gray-200 px-4 py-3 dark:border-dark-700">
-            <span class="min-w-0">
-              <span class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.settings.openAIUserAffinity.reentryOvercommit') }}</span>
-              <span class="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.settings.openAIUserAffinity.reentryOvercommitHint') }}</span>
-            </span>
-            <Toggle v-model="config.resident_reentry_overcommit_enabled" class="mt-0.5 shrink-0" />
-          </label>
           <label class="flex items-start justify-between gap-4 rounded border border-gray-200 px-4 py-3 dark:border-dark-700">
             <span class="min-w-0">
               <span class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.settings.openAIUserAffinity.resetExcludeSource') }}</span>

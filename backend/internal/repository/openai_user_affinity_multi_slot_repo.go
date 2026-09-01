@@ -602,23 +602,16 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 	if err != nil {
 		return nil, false, err
 	}
-	var maxContactUsers, cooldownSeconds sql.NullInt64
+	var maxResidentUsers, cooldownSeconds sql.NullInt64
 	var cooldownUntil sql.NullTime
 	var accountStatus, accountPlatform string
-	var accountSchedulable, userAlreadyResident bool
+	var accountSchedulable bool
 	if err := scanSingleRow(ctx, exec, `
-		SELECT max_contact_users, new_resident_cooldown_seconds, new_resident_cooldown_until,
-		       status, schedulable, platform,
-		       (EXISTS (SELECT 1 FROM user_account_placements p
-		                WHERE p.user_id = $2 AND p.account_id = accounts.id
-		                  AND p.status = 'active' AND p.expires_at > $3)
-		        OR EXISTS (SELECT 1 FROM openai_user_resident_slots s
-		                   WHERE s.user_id = $2 AND s.account_id = accounts.id
-		                     AND s.status IN ('provisional', 'active', 'replacement_pending', 'draining')
-		                     AND (s.status = 'draining' OR s.expires_at > $3)))
+		SELECT max_resident_users, new_resident_cooldown_seconds, new_resident_cooldown_until,
+		       status, schedulable, platform
 		FROM accounts WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
-		[]any{reservation.AccountID, reservation.UserID, now}, &maxContactUsers, &cooldownSeconds,
-		&cooldownUntil, &accountStatus, &accountSchedulable, &accountPlatform, &userAlreadyResident); err != nil {
+		[]any{reservation.AccountID}, &maxResidentUsers, &cooldownSeconds,
+		&cooldownUntil, &accountStatus, &accountSchedulable, &accountPlatform); err != nil {
 		return nil, false, err
 	}
 	if accountStatus != service.StatusActive || !accountSchedulable || accountPlatform != service.PlatformOpenAI {
@@ -651,26 +644,24 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 		return existing, false, nil
 	}
 
-	effectiveMax := reservation.Config.DefaultMaxContactUsers
-	if maxContactUsers.Valid && maxContactUsers.Int64 > 0 {
-		effectiveMax = int(maxContactUsers.Int64)
+	effectiveMax := reservation.Config.DefaultMaxResidentUsers
+	if maxResidentUsers.Valid && maxResidentUsers.Int64 > 0 {
+		effectiveMax = int(maxResidentUsers.Int64)
 	}
-	var activeContacts int
-	var userAlreadyActive bool
-	if err := scanSingleRow(ctx, exec, `
-		SELECT COUNT(*), COALESCE(BOOL_OR(user_id = $3), FALSE) FROM account_user_contacts
-		WHERE account_id = $1 AND (touch_expires_at > $2 OR reservation_until > $2)`,
-		[]any{reservation.AccountID, now, reservation.UserID}, &activeContacts, &userAlreadyActive); err != nil {
+	residentUsers, userAlreadyResident, err := getOpenAIAccountResidentCapacity(
+		ctx, exec, reservation.AccountID, reservation.UserID, now,
+	)
+	if err != nil {
 		return nil, false, err
 	}
-	if activeContacts >= effectiveMax && !userAlreadyActive && !userAlreadyResident {
+	if residentUsers >= effectiveMax && !userAlreadyResident {
 		return nil, false, nil
 	}
-	if cooldownUntil.Valid && now.Before(cooldownUntil.Time) && !userAlreadyActive && !userAlreadyResident {
+	if cooldownUntil.Valid && now.Before(cooldownUntil.Time) && !userAlreadyResident {
 		return nil, false, nil
 	}
 	reservationKind := "new_resident"
-	if userAlreadyActive || userAlreadyResident {
+	if userAlreadyResident {
 		reservationKind = "resident_scope"
 	}
 	reservationUntil := now.Add(openAIUserAffinityProvisionalTTL(reservation.Config))
@@ -693,7 +684,7 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 		reservation.Config.FollowerJitterMaxMS, now); err != nil {
 		return nil, false, err
 	}
-	if !userAlreadyActive && !userAlreadyResident {
+	if !userAlreadyResident {
 		effectiveCooldown := reservation.Config.DefaultNewResidentCooldownSeconds
 		if cooldownSeconds.Valid && cooldownSeconds.Int64 > 0 {
 			effectiveCooldown = int(cooldownSeconds.Int64)
@@ -1050,20 +1041,16 @@ func (r *accountRepository) ReserveOpenAIUserResidentSlotReplacement(ctx context
 	if _, err := exec.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, lockKey); err != nil {
 		return nil, false, err
 	}
-	var maxContactUsers, cooldownSeconds sql.NullInt64
+	var maxResidentUsers, cooldownSeconds sql.NullInt64
 	var cooldownUntil sql.NullTime
 	var accountStatus, accountPlatform string
-	var accountSchedulable, userAlreadyResident bool
+	var accountSchedulable bool
 	if err := scanSingleRow(ctx, exec, `
-		SELECT max_contact_users, new_resident_cooldown_seconds, new_resident_cooldown_until,
-		       status, schedulable, platform,
-		       EXISTS (SELECT 1 FROM openai_user_resident_slots s
-		               WHERE s.user_id = $2 AND s.account_id = accounts.id
-		                 AND s.status IN ('provisional', 'active', 'replacement_pending', 'draining')
-		                 AND (s.status = 'draining' OR s.expires_at > $3))
+		SELECT max_resident_users, new_resident_cooldown_seconds, new_resident_cooldown_until,
+		       status, schedulable, platform
 		FROM accounts WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
-		[]any{reservation.TargetAccountID, reservation.UserID, now}, &maxContactUsers, &cooldownSeconds,
-		&cooldownUntil, &accountStatus, &accountSchedulable, &accountPlatform, &userAlreadyResident); err != nil {
+		[]any{reservation.TargetAccountID}, &maxResidentUsers, &cooldownSeconds,
+		&cooldownUntil, &accountStatus, &accountSchedulable, &accountPlatform); err != nil {
 		return nil, false, err
 	}
 	if accountStatus != service.StatusActive || !accountSchedulable || accountPlatform != service.PlatformOpenAI {
@@ -1120,24 +1107,22 @@ func (r *accountRepository) ReserveOpenAIUserResidentSlotReplacement(ctx context
 	if activeCount != len(checked) || victimAccountID <= 0 {
 		return nil, false, nil
 	}
-	effectiveMax := reservation.Config.DefaultMaxContactUsers
-	if maxContactUsers.Valid && maxContactUsers.Int64 > 0 {
-		effectiveMax = int(maxContactUsers.Int64)
+	effectiveMax := reservation.Config.DefaultMaxResidentUsers
+	if maxResidentUsers.Valid && maxResidentUsers.Int64 > 0 {
+		effectiveMax = int(maxResidentUsers.Int64)
 	}
-	var activeContacts int
-	var userAlreadyActive bool
-	if err := scanSingleRow(ctx, exec, `
-		SELECT COUNT(*), COALESCE(BOOL_OR(user_id = $3), FALSE) FROM account_user_contacts
-		WHERE account_id = $1 AND (touch_expires_at > $2 OR reservation_until > $2)`,
-		[]any{reservation.TargetAccountID, now, reservation.UserID}, &activeContacts, &userAlreadyActive); err != nil {
+	residentUsers, userAlreadyResident, err := getOpenAIAccountResidentCapacity(
+		ctx, exec, reservation.TargetAccountID, reservation.UserID, now,
+	)
+	if err != nil {
 		return nil, false, err
 	}
-	if activeContacts >= effectiveMax && !userAlreadyActive && !userAlreadyResident ||
-		cooldownUntil.Valid && now.Before(cooldownUntil.Time) && !userAlreadyActive && !userAlreadyResident {
+	if residentUsers >= effectiveMax && !userAlreadyResident ||
+		cooldownUntil.Valid && now.Before(cooldownUntil.Time) && !userAlreadyResident {
 		return nil, false, nil
 	}
 	reservationKind := "new_resident"
-	if userAlreadyActive || userAlreadyResident {
+	if userAlreadyResident {
 		reservationKind = "resident_scope"
 	}
 	reservationUntil := now.Add(openAIUserAffinityProvisionalTTL(reservation.Config))
@@ -1157,7 +1142,7 @@ func (r *accountRepository) ReserveOpenAIUserResidentSlotReplacement(ctx context
 		reservation.Config.FollowerJitterMinMS, reservation.Config.FollowerJitterMaxMS, now); err != nil {
 		return nil, false, err
 	}
-	if !userAlreadyActive && !userAlreadyResident {
+	if !userAlreadyResident {
 		effectiveCooldown := reservation.Config.DefaultNewResidentCooldownSeconds
 		if cooldownSeconds.Valid && cooldownSeconds.Int64 > 0 {
 			effectiveCooldown = int(cooldownSeconds.Int64)

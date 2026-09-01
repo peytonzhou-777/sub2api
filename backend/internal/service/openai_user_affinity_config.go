@@ -53,21 +53,22 @@ type OpenAIUserAffinityConfig struct {
 	ColdStartDemandQuantile           float64 `json:"cold_start_demand_quantile"`
 	BestFitStrategy                   string  `json:"best_fit_strategy"`
 	BestFitCloseToleranceRatio        float64 `json:"best_fit_close_tolerance_ratio"`
-	DefaultMaxContactUsers            int     `json:"default_max_contact_users"`
+	DefaultMaxResidentUsers           int     `json:"default_max_resident_users"`
 	DefaultNewResidentCooldownSeconds int     `json:"default_new_resident_cooldown_seconds"`
-	ResidentReentryOvercommitEnabled  bool    `json:"resident_reentry_overcommit_enabled"`
-	CapacityFailureMigrationThreshold int     `json:"capacity_failure_migration_threshold"`
-	CapacityFailureWindowSeconds      int     `json:"capacity_failure_window_seconds"`
-	MigrationStabilitySeconds         int     `json:"migration_stability_seconds"`
-	FollowerJitterMinMS               int     `json:"follower_jitter_min_ms"`
-	FollowerJitterMaxMS               int     `json:"follower_jitter_max_ms"`
-	TouchSuccessMode                  string  `json:"touch_success_mode"`
-	ManualResetExcludeSourceAccount   bool    `json:"manual_reset_exclude_source_account"`
-	ResidentAccountSlotCount          int     `json:"resident_account_slot_count"`
-	ResidentTTLSeconds                int     `json:"resident_ttl_seconds"`
-	ConversationActiveTTLSeconds      int     `json:"conversation_active_ttl_seconds"`
-	ConfigVersion                     int64   `json:"config_version"`
-	UpdatedAt                         string  `json:"updated_at,omitempty"`
+	// ResidentReentryOvercommitEnabled 仅保留旧配置兼容；居民准入改按唯一居民数后不再参与决策。
+	ResidentReentryOvercommitEnabled  bool   `json:"resident_reentry_overcommit_enabled"`
+	CapacityFailureMigrationThreshold int    `json:"capacity_failure_migration_threshold"`
+	CapacityFailureWindowSeconds      int    `json:"capacity_failure_window_seconds"`
+	MigrationStabilitySeconds         int    `json:"migration_stability_seconds"`
+	FollowerJitterMinMS               int    `json:"follower_jitter_min_ms"`
+	FollowerJitterMaxMS               int    `json:"follower_jitter_max_ms"`
+	TouchSuccessMode                  string `json:"touch_success_mode"`
+	ManualResetExcludeSourceAccount   bool   `json:"manual_reset_exclude_source_account"`
+	ResidentAccountSlotCount          int    `json:"resident_account_slot_count"`
+	ResidentTTLSeconds                int    `json:"resident_ttl_seconds"`
+	ConversationActiveTTLSeconds      int    `json:"conversation_active_ttl_seconds"`
+	ConfigVersion                     int64  `json:"config_version"`
+	UpdatedAt                         string `json:"updated_at,omitempty"`
 }
 
 // DefaultOpenAIUserAffinityConfig 返回安全默认值：策略默认关闭，启用后仍限制新居民装箱。
@@ -80,7 +81,7 @@ func DefaultOpenAIUserAffinityConfig() OpenAIUserAffinityConfig {
 		ColdStartDemandQuantile:           0.75,
 		BestFitStrategy:                   OpenAIUserAffinityBestFit7DThen5H,
 		BestFitCloseToleranceRatio:        0.01,
-		DefaultMaxContactUsers:            10,
+		DefaultMaxResidentUsers:           10,
 		DefaultNewResidentCooldownSeconds: 300,
 		ResidentReentryOvercommitEnabled:  true,
 		CapacityFailureMigrationThreshold: 3,
@@ -121,6 +122,9 @@ func ValidateAndNormalizeOpenAIUserAffinityConfig(cfg OpenAIUserAffinityConfig) 
 	if cfg.ConversationActiveTTLSeconds == 0 {
 		cfg.ConversationActiveTTLSeconds = defaults.ConversationActiveTTLSeconds
 	}
+	if cfg.DefaultMaxResidentUsers == 0 {
+		cfg.DefaultMaxResidentUsers = defaults.DefaultMaxResidentUsers
+	}
 	if cfg.Mode != OpenAIUserAffinityModeShadow && cfg.Mode != OpenAIUserAffinityModeEnforce {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "mode must be shadow or enforce")
 	}
@@ -139,8 +143,8 @@ func ValidateAndNormalizeOpenAIUserAffinityConfig(cfg OpenAIUserAffinityConfig) 
 	if cfg.BestFitCloseToleranceRatio < 0 || cfg.BestFitCloseToleranceRatio > 0.20 {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "best_fit_close_tolerance_ratio must be between 0 and 0.20")
 	}
-	if cfg.DefaultMaxContactUsers < 1 || cfg.DefaultMaxContactUsers > 10000 {
-		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "default_max_contact_users must be between 1 and 10000")
+	if cfg.DefaultMaxResidentUsers < 1 || cfg.DefaultMaxResidentUsers > 10000 {
+		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "default_max_resident_users must be between 1 and 10000")
 	}
 	if cfg.DefaultNewResidentCooldownSeconds < 1 || cfg.DefaultNewResidentCooldownSeconds > 86400 {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "default_new_resident_cooldown_seconds must be between 1 and 86400")
@@ -191,6 +195,24 @@ func (cfg OpenAIUserAffinityConfig) ConversationActiveTTL() time.Duration {
 	return time.Duration(cfg.ConversationActiveTTLSeconds) * time.Second
 }
 
+// decodeOpenAIUserAffinityConfig 兼容迁移前的触达容量键，便于滚动升级期间保留自定义上限。
+func decodeOpenAIUserAffinityConfig(raw string, cfg *OpenAIUserAffinityConfig) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return err
+	}
+	if err := json.Unmarshal([]byte(raw), cfg); err != nil {
+		return err
+	}
+	if _, hasResidentLimit := fields["default_max_resident_users"]; hasResidentLimit {
+		return nil
+	}
+	if legacy, ok := fields["default_max_contact_users"]; ok {
+		return json.Unmarshal(legacy, &cfg.DefaultMaxResidentUsers)
+	}
+	return nil
+}
+
 // GetOpenAIUserAffinityConfig 读取完整配置；未初始化时返回默认值和版本 0。
 func (s *SettingService) GetOpenAIUserAffinityConfig(ctx context.Context) (OpenAIUserAffinityConfig, error) {
 	cfg := DefaultOpenAIUserAffinityConfig()
@@ -208,7 +230,7 @@ func (s *SettingService) GetOpenAIUserAffinityConfig(ctx context.Context) (OpenA
 	if err != nil {
 		return cfg, fmt.Errorf("get openai user affinity config: %w", err)
 	}
-	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+	if err := decodeOpenAIUserAffinityConfig(raw, &cfg); err != nil {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "stored openai user affinity config is invalid").WithCause(err)
 	}
 	cfg, err = ValidateAndNormalizeOpenAIUserAffinityConfig(cfg)
@@ -235,7 +257,7 @@ func (s *SettingService) UpdateOpenAIUserAffinityConfig(ctx context.Context, nex
 	raw, readErr := s.settingRepo.GetValue(ctx, SettingKeyOpenAIUserAffinityScheduling)
 	if readErr == nil {
 		expectedRaw = &raw
-		if err := json.Unmarshal([]byte(raw), &current); err != nil {
+		if err := decodeOpenAIUserAffinityConfig(raw, &current); err != nil {
 			return next, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "stored openai user affinity config is invalid").WithCause(err)
 		}
 		var err error

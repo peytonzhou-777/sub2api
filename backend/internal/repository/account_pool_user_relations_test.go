@@ -28,10 +28,10 @@ func TestListAccountPoolUserRelationsUsesSuccessfulTouchFacts(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestListAccountPoolResidentStatsCountsDistinctActiveResidents(t *testing.T) {
+func TestListAccountPoolResidentStatsUsesUniqueCurrentResidentUsers(t *testing.T) {
 	repo, mock := newOpenAIUserAffinityRepositoryTest(t)
 	activeSince := time.Date(2026, 8, 18, 11, 0, 0, 0, time.UTC)
-	mock.ExpectQuery(`(?s)WITH requested AS.*resident_stats AS.*FROM openai_user_resident_slots.*conversation_stats AS.*openai_user_conversation_bindings.*contact_stats AS.*account_user_contacts.*SELECT requested.account_id`).
+	mock.ExpectQuery(`(?s)WITH requested AS.*resident_users AS.*openai_user_resident_slots.*UNION.*user_account_placements.*resident_stats AS.*active_resident_stats AS.*draining_stats AS.*conversation_stats AS.*contact_stats AS.*last_touched_at >= NOW\(\) - INTERVAL '7 days'.*SELECT requested.account_id`).
 		WithArgs("{11,12}", activeSince).
 		WillReturnRows(sqlmock.NewRows([]string{"account_id", "active", "total", "draining_slots", "active_conversations", "contacted_users"}).
 			AddRow(11, int64(3), int64(8), int64(1), int64(4), int64(9)).

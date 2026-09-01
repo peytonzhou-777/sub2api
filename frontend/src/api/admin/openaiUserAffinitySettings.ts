@@ -8,7 +8,7 @@ export interface OpenAIUserAffinityConfig {
   cold_start_demand_quantile: number
   best_fit_strategy: '7d_then_5h' | '5h_then_7d'
   best_fit_close_tolerance_ratio: number
-  default_max_contact_users: number
+  default_max_resident_users: number
   default_new_resident_cooldown_seconds: number
   resident_reentry_overcommit_enabled: boolean
   capacity_failure_migration_threshold: number

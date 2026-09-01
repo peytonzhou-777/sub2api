@@ -22,20 +22,32 @@ func (r *accountRepository) ListAccountPoolResidentStats(ctx context.Context, ac
 	rows, err := r.sql.QueryContext(ctx, `
 		WITH requested AS (
 			SELECT UNNEST($1::bigint[]) AS account_id
-		), resident_stats AS (
-			SELECT account_id,
-			       COUNT(DISTINCT user_id) FILTER (
-			           WHERE status = 'active' AND expires_at > NOW() AND last_success_at >= $2
-			       ) AS active,
-			       COUNT(DISTINCT user_id) FILTER (
-			           WHERE status = 'active' AND expires_at > NOW()
-			       ) AS total,
-			       COUNT(DISTINCT id) FILTER (
-			           WHERE status IN ('replacement_pending', 'draining', 'reset') AND expires_at > NOW()
-			       ) AS draining_slots
+		), resident_users AS (
+			SELECT account_id, user_id
 			FROM openai_user_resident_slots
 			WHERE account_id = ANY($1)
 			  AND (scope_key = 'openai' OR scope_key LIKE 'openai:v1:%')
+			  AND (status = 'draining' OR (
+			      status IN ('provisional', 'active', 'replacement_pending') AND expires_at > NOW()
+			  ))
+			UNION
+			SELECT account_id, user_id
+			FROM user_account_placements
+			WHERE account_id = ANY($1) AND status = 'active' AND expires_at > NOW()
+		), resident_stats AS (
+			SELECT account_id, COUNT(*) AS total
+			FROM resident_users GROUP BY account_id
+		), active_resident_stats AS (
+			SELECT account_id, COUNT(DISTINCT user_id) AS active
+			FROM openai_user_resident_slots
+			WHERE account_id = ANY($1) AND status = 'active' AND expires_at > NOW()
+			  AND last_success_at >= $2
+			GROUP BY account_id
+		), draining_stats AS (
+			SELECT account_id, COUNT(DISTINCT id) AS draining_slots
+			FROM openai_user_resident_slots
+			WHERE account_id = ANY($1) AND status IN ('replacement_pending', 'draining', 'reset')
+			  AND (status = 'draining' OR expires_at > NOW())
 			GROUP BY account_id
 		), conversation_stats AS (
 			SELECT account_id, COUNT(DISTINCT id) AS active_conversations
@@ -46,14 +58,16 @@ func (r *accountRepository) ListAccountPoolResidentStats(ctx context.Context, ac
 		), contact_stats AS (
 			SELECT account_id, COUNT(DISTINCT user_id) AS contacted_users
 			FROM account_user_contacts
-			WHERE account_id = ANY($1) AND (touch_expires_at > NOW() OR reservation_until > NOW())
+			WHERE account_id = ANY($1) AND last_touched_at >= NOW() - INTERVAL '7 days'
 			GROUP BY account_id
 		)
-		SELECT requested.account_id, COALESCE(resident_stats.active, 0), COALESCE(resident_stats.total, 0),
-		       COALESCE(resident_stats.draining_slots, 0), COALESCE(conversation_stats.active_conversations, 0),
+		SELECT requested.account_id, COALESCE(active_resident_stats.active, 0), COALESCE(resident_stats.total, 0),
+		       COALESCE(draining_stats.draining_slots, 0), COALESCE(conversation_stats.active_conversations, 0),
 		       COALESCE(contact_stats.contacted_users, 0)
 		FROM requested
 		LEFT JOIN resident_stats USING (account_id)
+		LEFT JOIN active_resident_stats USING (account_id)
+		LEFT JOIN draining_stats USING (account_id)
 		LEFT JOIN conversation_stats USING (account_id)
 		LEFT JOIN contact_stats USING (account_id)
 		ORDER BY requested.account_id`, pq.Array(accountIDs), activeSince.UTC())
@@ -107,7 +121,7 @@ func (r *accountRepository) ListAccountPoolUserRelations(ctx context.Context, us
 			FROM ranked_slots
 			UNION ALL
 			SELECT account_id, FALSE AS is_current_residence, FALSE AS is_primary_residence,
-			       COALESCE(touch_expires_at > NOW(), FALSE) AS is_seven_day_contact,
+			       last_touched_at >= NOW() - INTERVAL '7 days' AS is_seven_day_contact,
 			       TRUE AS is_historical_contact
 			FROM account_user_contacts
 			WHERE user_id = $1 AND last_touched_at IS NOT NULL

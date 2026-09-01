@@ -5,13 +5,6 @@ import (
 	"errors"
 	"strings"
 	"time"
-
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-)
-
-var ErrOpenAIUserAffinityContactLimitConflict = infraerrors.Conflict(
-	"OPENAI_USER_AFFINITY_CONTACT_LIMIT_CONFLICT",
-	"max_contact_users is lower than the current active contact count",
 )
 
 // OpenAIUserAffinityResident 是管理员按账号查看的当前居民投影。
@@ -57,7 +50,7 @@ type OpenAIUserAffinityUserDetail struct {
 // OpenAIUserAffinityAccountPolicy 是账号级覆盖；nil 表示继承网关全局配置。
 type OpenAIUserAffinityAccountPolicy struct {
 	AccountID                         int64      `json:"account_id"`
-	MaxContactUsers                   *int       `json:"max_contact_users"`
+	MaxResidentUsers                  *int       `json:"max_resident_users"`
 	NewResidentCooldownSeconds        *int       `json:"new_resident_cooldown_seconds"`
 	CapacityFailureMigrationThreshold *int       `json:"capacity_failure_migration_threshold"`
 	CapacityFailureWindowSeconds      *int       `json:"capacity_failure_window_seconds"`
@@ -138,8 +131,8 @@ func (s *adminServiceImpl) UpdateOpenAIUserAffinityAccountPolicy(ctx context.Con
 	if !ok {
 		return errors.New("openai user affinity admin storage unavailable")
 	}
-	if policy.MaxContactUsers != nil && (*policy.MaxContactUsers < 1 || *policy.MaxContactUsers > 10000) {
-		return errors.New("max_contact_users must be between 1 and 10000")
+	if policy.MaxResidentUsers != nil && (*policy.MaxResidentUsers < 1 || *policy.MaxResidentUsers > 10000) {
+		return errors.New("max_resident_users must be between 1 and 10000")
 	}
 	if policy.NewResidentCooldownSeconds != nil && (*policy.NewResidentCooldownSeconds < 1 || *policy.NewResidentCooldownSeconds > 86400) {
 		return errors.New("new_resident_cooldown_seconds must be between 1 and 86400")

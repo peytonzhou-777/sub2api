@@ -72,7 +72,7 @@ export interface OpenAIUserAffinityUserDetail {
 
 export interface OpenAIUserAffinityAccountPolicy {
   account_id: number
-  max_contact_users: number | null
+  max_resident_users: number | null
   new_resident_cooldown_seconds: number | null
   capacity_failure_migration_threshold: number | null
   capacity_failure_window_seconds: number | null

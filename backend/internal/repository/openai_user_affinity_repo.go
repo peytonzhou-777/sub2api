@@ -20,7 +20,7 @@ func normalizeOpenAIUserAffinityScopeKey(scopeKey string) string {
 	return scopeKey
 }
 
-// GetOpenAIUserAffinityCandidateStats 返回账号当前有效触达数、账号级上限和新居民冷却状态。
+// GetOpenAIUserAffinityCandidateStats 返回账号当前唯一居民数、账号级上限和新居民冷却状态。
 func (r *accountRepository) GetOpenAIUserAffinityCandidateStats(ctx context.Context, userID int64, accountIDs []int64) (map[int64]service.OpenAIUserAffinityCandidate, error) {
 	stats := make(map[int64]service.OpenAIUserAffinityCandidate, len(accountIDs))
 	if len(accountIDs) == 0 {
@@ -39,30 +39,28 @@ func (r *accountRepository) GetOpenAIUserAffinityCandidateStats(ctx context.Cont
 	userPlaceholder := fmt.Sprintf("$%d", len(args)+1)
 	args = append(args, userID)
 	rows, err := r.sql.QueryContext(ctx, fmt.Sprintf(`
-		SELECT a.id, a.max_contact_users, a.new_resident_cooldown_seconds,
+		WITH resident_users AS (
+			SELECT account_id, user_id FROM openai_user_resident_slots
+			WHERE account_id IN (%s)
+			  AND (status = 'draining' OR (
+			      status IN ('provisional', 'active', 'replacement_pending') AND expires_at > NOW()
+			  ))
+			UNION
+			SELECT account_id, user_id FROM user_account_placements
+			WHERE account_id IN (%s) AND status = 'active' AND expires_at > NOW()
+		), resident_stats AS (
+			SELECT account_id, COUNT(*) AS active_resident_users,
+			       BOOL_OR(user_id = %s) AS user_already_resident
+			FROM resident_users GROUP BY account_id
+		)
+		SELECT a.id, a.max_resident_users, a.new_resident_cooldown_seconds,
 		       a.new_resident_cooldown_until,
-		       COUNT(c.user_id) FILTER (
-		           WHERE c.touch_expires_at > NOW()
-		              OR (c.reservation_until IS NOT NULL AND c.reservation_until > NOW())
-		       ) AS active_contact_users,
-		       COALESCE(BOOL_OR(c.user_id = %s AND (
-		           c.touch_expires_at > NOW() OR c.reservation_until > NOW()
-		       )), FALSE) AS user_already_active,
-		       (EXISTS (
-		           SELECT 1 FROM user_account_placements p
-		           WHERE p.user_id = %s AND p.account_id = a.id
-		             AND p.status = 'active' AND p.expires_at > NOW()
-		       ) OR EXISTS (
-		           SELECT 1 FROM openai_user_resident_slots s
-		           WHERE s.user_id = %s AND s.account_id = a.id
-		             AND s.status IN ('provisional', 'active', 'replacement_pending', 'draining')
-		             AND (s.status = 'draining' OR s.expires_at > NOW())
-		       )) AS user_already_resident
+		       COALESCE(rs.active_resident_users, 0),
+		       COALESCE(rs.user_already_resident, FALSE)
 		FROM accounts a
-		LEFT JOIN account_user_contacts c ON c.account_id = a.id
-		WHERE a.id IN (%s)
-		GROUP BY a.id, a.max_contact_users, a.new_resident_cooldown_seconds,
-		         a.new_resident_cooldown_until`, userPlaceholder, userPlaceholder, userPlaceholder, strings.Join(placeholders, ", ")), args...)
+		LEFT JOIN resident_stats rs ON rs.account_id = a.id
+		WHERE a.id IN (%s)`, strings.Join(placeholders, ", "), strings.Join(placeholders, ", "),
+		userPlaceholder, strings.Join(placeholders, ", ")), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -70,13 +68,14 @@ func (r *accountRepository) GetOpenAIUserAffinityCandidateStats(ctx context.Cont
 
 	for rows.Next() {
 		var candidate service.OpenAIUserAffinityCandidate
-		var maxContactUsers, cooldownSeconds sql.NullInt64
+		var maxResidentUsers, cooldownSeconds sql.NullInt64
 		var cooldownUntil sql.NullTime
-		if err := rows.Scan(&candidate.AccountID, &maxContactUsers, &cooldownSeconds, &cooldownUntil, &candidate.ActiveContactUsers, &candidate.UserAlreadyActive, &candidate.UserAlreadyResident); err != nil {
+		if err := rows.Scan(&candidate.AccountID, &maxResidentUsers, &cooldownSeconds, &cooldownUntil,
+			&candidate.ActiveResidentUsers, &candidate.UserAlreadyResident); err != nil {
 			return nil, err
 		}
-		if maxContactUsers.Valid {
-			candidate.MaxContactUsers = int(maxContactUsers.Int64)
+		if maxResidentUsers.Valid {
+			candidate.MaxResidentUsers = int(maxResidentUsers.Int64)
 		}
 		if cooldownSeconds.Valid {
 			candidate.NewResidentCooldownSeconds = int(cooldownSeconds.Int64)
@@ -93,7 +92,7 @@ func (r *accountRepository) GetOpenAIUserAffinityCandidateStats(ctx context.Cont
 	return stats, nil
 }
 
-// AssignOpenAIUserAffinityPlacement 在账号行锁内完成容量校验、归属、触达预留和长冷却。
+// AssignOpenAIUserAffinityPlacement 在账号行锁内完成居民容量校验、归属、暂态预留和长冷却。
 func (r *accountRepository) AssignOpenAIUserAffinityPlacement(ctx context.Context, placement service.OpenAIUserPlacement, config service.OpenAIUserAffinityConfig) (bool, error) {
 	if r == nil || r.client == nil || placement.AccountID == nil {
 		return false, errors.New("openai user affinity storage unavailable")
@@ -111,40 +110,35 @@ func (r *accountRepository) AssignOpenAIUserAffinityPlacement(ctx context.Contex
 		exec = tx.Client()
 	}
 	now := time.Now().UTC()
-	var maxContactUsers, cooldownSeconds sql.NullInt64
+	var maxResidentUsers, cooldownSeconds sql.NullInt64
 	var cooldownUntil sql.NullTime
 	var accountStatus, accountPlatform string
-	var accountSchedulable, userAlreadyResident bool
+	var accountSchedulable bool
 	if err := scanSingleRow(ctx, exec, `
-		SELECT max_contact_users, new_resident_cooldown_seconds, new_resident_cooldown_until,
-		       status, schedulable, platform,
-		       EXISTS (SELECT 1 FROM user_account_placements p
-		               WHERE p.user_id = $2 AND p.account_id = accounts.id
-		                 AND p.status = 'active' AND p.expires_at > $3)
+		SELECT max_resident_users, new_resident_cooldown_seconds, new_resident_cooldown_until,
+		       status, schedulable, platform
 		FROM accounts WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
-		[]any{*placement.AccountID, placement.UserID, now}, &maxContactUsers, &cooldownSeconds,
-		&cooldownUntil, &accountStatus, &accountSchedulable, &accountPlatform, &userAlreadyResident); err != nil {
+		[]any{*placement.AccountID}, &maxResidentUsers, &cooldownSeconds,
+		&cooldownUntil, &accountStatus, &accountSchedulable, &accountPlatform); err != nil {
 		return false, err
 	}
 	if accountStatus != service.StatusActive || !accountSchedulable || accountPlatform != service.PlatformOpenAI {
 		return false, nil
 	}
-	effectiveMax := config.DefaultMaxContactUsers
-	if maxContactUsers.Valid && maxContactUsers.Int64 > 0 {
-		effectiveMax = int(maxContactUsers.Int64)
+	effectiveMax := config.DefaultMaxResidentUsers
+	if maxResidentUsers.Valid && maxResidentUsers.Int64 > 0 {
+		effectiveMax = int(maxResidentUsers.Int64)
 	}
-	var activeContacts int
-	var userAlreadyActive bool
-	if err := scanSingleRow(ctx, exec, `
-		SELECT COUNT(*), COALESCE(BOOL_OR(user_id = $3), FALSE) FROM account_user_contacts
-		WHERE account_id = $1
-		  AND (touch_expires_at > $2 OR reservation_until > $2)`, []any{*placement.AccountID, now, placement.UserID}, &activeContacts, &userAlreadyActive); err != nil {
+	residentUsers, userAlreadyResident, err := getOpenAIAccountResidentCapacity(
+		ctx, exec, *placement.AccountID, placement.UserID, now,
+	)
+	if err != nil {
 		return false, err
 	}
-	if activeContacts >= effectiveMax && !userAlreadyActive && !userAlreadyResident {
+	if residentUsers >= effectiveMax && !userAlreadyResident {
 		return false, nil
 	}
-	if cooldownUntil.Valid && now.Before(cooldownUntil.Time) && !userAlreadyActive && !userAlreadyResident {
+	if cooldownUntil.Valid && now.Before(cooldownUntil.Time) && !userAlreadyResident {
 		return false, nil
 	}
 
@@ -206,7 +200,7 @@ func (r *accountRepository) AssignOpenAIUserAffinityPlacement(ctx context.Contex
 	}
 	reservationUntil := now.Add(2 * time.Minute)
 	reservationKind := "new_resident"
-	if userAlreadyActive || userAlreadyResident {
+	if userAlreadyResident {
 		reservationKind = "resident_scope"
 	}
 	if _, err := exec.ExecContext(ctx, `
@@ -231,7 +225,7 @@ func (r *accountRepository) AssignOpenAIUserAffinityPlacement(ctx context.Contex
 	if cooldownSeconds.Valid && cooldownSeconds.Int64 > 0 {
 		effectiveCooldown = int(cooldownSeconds.Int64)
 	}
-	if !userAlreadyActive && !userAlreadyResident {
+	if !userAlreadyResident {
 		if _, err := exec.ExecContext(ctx, `
 			UPDATE accounts SET new_resident_cooldown_until = $2,
 				affinity_config_version = $3, updated_at = $1 WHERE id = $4`,
@@ -256,7 +250,7 @@ func (r *accountRepository) AssignOpenAIUserAffinityPlacement(ctx context.Contex
 	return true, nil
 }
 
-// TouchOpenAIUserAffinity 在上游接受请求后刷新 7 天触达 TTL 和 14 天居住 TTL。
+// TouchOpenAIUserAffinity 在上游接受请求后记录触达事实，并按配置滑动续期居住关系。
 func (r *accountRepository) TouchOpenAIUserAffinity(ctx context.Context, userID, accountID, generation int64, scopeKey string, config service.OpenAIUserAffinityConfig) error {
 	if r == nil || r.client == nil || userID <= 0 || accountID <= 0 {
 		return errors.New("openai user affinity storage unavailable")
@@ -272,7 +266,7 @@ func (r *accountRepository) TouchOpenAIUserAffinity(ctx context.Context, userID,
 		exec = tx.Client()
 	}
 	now := time.Now().UTC()
-	touchExpiresAt := now.Add(7 * 24 * time.Hour)
+	touchExpiresAt := now.Add(config.ResidentTTL())
 	residenceExpiresAt := now.Add(config.ResidentTTL())
 	placementMatches := false
 	if generation > 0 {
@@ -762,40 +756,33 @@ func (r *accountRepository) MigrateOpenAIUserAffinityPlacement(ctx context.Conte
 		(sourceProvisionalToken.Valid && strings.TrimSpace(sourceProvisionalToken.String) != "") {
 		return false, nil
 	}
-	var maxContactUsers, cooldownSeconds sql.NullInt64
+	var maxResidentUsers, cooldownSeconds sql.NullInt64
 	var cooldownUntil sql.NullTime
 	var targetStatus, targetPlatform string
-	var targetSchedulable, userAlreadyResident bool
+	var targetSchedulable bool
 	if err := scanSingleRow(ctx, exec, `
-		SELECT max_contact_users, new_resident_cooldown_seconds, new_resident_cooldown_until,
-		       status, schedulable, platform,
-		       EXISTS (SELECT 1 FROM user_account_placements p
-		               WHERE p.user_id = $2 AND p.account_id = accounts.id
-		                 AND p.status = 'active' AND p.expires_at > $3)
+		SELECT max_resident_users, new_resident_cooldown_seconds, new_resident_cooldown_until,
+		       status, schedulable, platform
 		FROM accounts WHERE id = $1 AND deleted_at IS NULL`,
-		[]any{targetAccountID, userID, now}, &maxContactUsers, &cooldownSeconds, &cooldownUntil,
-		&targetStatus, &targetSchedulable, &targetPlatform, &userAlreadyResident); err != nil {
+		[]any{targetAccountID}, &maxResidentUsers, &cooldownSeconds, &cooldownUntil,
+		&targetStatus, &targetSchedulable, &targetPlatform); err != nil {
 		return false, err
 	}
 	if targetStatus != service.StatusActive || !targetSchedulable || targetPlatform != service.PlatformOpenAI {
 		return false, nil
 	}
-	effectiveMax := config.DefaultMaxContactUsers
-	if maxContactUsers.Valid && maxContactUsers.Int64 > 0 {
-		effectiveMax = int(maxContactUsers.Int64)
+	effectiveMax := config.DefaultMaxResidentUsers
+	if maxResidentUsers.Valid && maxResidentUsers.Int64 > 0 {
+		effectiveMax = int(maxResidentUsers.Int64)
 	}
-	var activeContacts int
-	var userAlreadyActive bool
-	if err := scanSingleRow(ctx, exec, `
-		SELECT COUNT(*), COALESCE(BOOL_OR(user_id = $3), FALSE) FROM account_user_contacts
-		WHERE account_id = $1 AND (touch_expires_at > $2 OR reservation_until > $2)`,
-		[]any{targetAccountID, now, userID}, &activeContacts, &userAlreadyActive); err != nil {
+	residentUsers, userAlreadyResident, err := getOpenAIAccountResidentCapacity(ctx, exec, targetAccountID, userID, now)
+	if err != nil {
 		return false, err
 	}
-	if activeContacts >= effectiveMax && !userAlreadyActive && !userAlreadyResident {
+	if residentUsers >= effectiveMax && !userAlreadyResident {
 		return false, nil
 	}
-	if cooldownUntil.Valid && now.Before(cooldownUntil.Time) && !userAlreadyActive && !userAlreadyResident {
+	if cooldownUntil.Valid && now.Before(cooldownUntil.Time) && !userAlreadyResident {
 		return false, nil
 	}
 	newGeneration := generation + 1
@@ -811,7 +798,7 @@ func (r *accountRepository) MigrateOpenAIUserAffinityPlacement(ctx context.Conte
 		return false, err
 	}
 	reservationKind := "migration"
-	if userAlreadyActive || userAlreadyResident {
+	if userAlreadyResident {
 		reservationKind = "resident_scope_migration"
 	}
 	if _, err := exec.ExecContext(ctx, `
@@ -835,7 +822,7 @@ func (r *accountRepository) MigrateOpenAIUserAffinityPlacement(ctx context.Conte
 	if cooldownSeconds.Valid && cooldownSeconds.Int64 > 0 {
 		effectiveCooldown = int(cooldownSeconds.Int64)
 	}
-	if !userAlreadyActive && !userAlreadyResident {
+	if !userAlreadyResident {
 		if _, err := exec.ExecContext(ctx, `UPDATE accounts SET new_resident_cooldown_until = $2,
 			affinity_config_version = $3, updated_at = $1 WHERE id = $4`, now,
 			now.Add(time.Duration(effectiveCooldown)*time.Second), config.ConfigVersion, targetAccountID); err != nil {

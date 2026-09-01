@@ -15,7 +15,7 @@ describe('OpenAI 用户粘性调度翻译', () => {
         upstreamAccepted: '上游已接受请求',
         responseCompleted: '响应已完成'
       },
-      maxContactUsersHint: expect.any(String),
+      maxResidentUsersHint: expect.stringContaining('跨分组和 Scope 按用户去重'),
       failureThresholdHint: expect.any(String),
       reserve7dHint: expect.any(String),
       resetExcludeSourceHint: expect.stringContaining('直接参与新居民 Best Fit')
@@ -34,7 +34,7 @@ describe('OpenAI 用户粘性调度翻译', () => {
         upstreamAccepted: 'Upstream accepted the request',
         responseCompleted: 'Response completed'
       },
-      maxContactUsersHint: expect.any(String),
+      maxResidentUsersHint: expect.stringContaining('deduplicated across groups and scopes'),
       failureThresholdHint: expect.any(String),
       reserve7dHint: expect.any(String),
       resetExcludeSourceHint: expect.stringContaining('enter new-resident Best Fit directly')

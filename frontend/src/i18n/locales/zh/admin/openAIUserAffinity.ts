@@ -1,7 +1,7 @@
 export const openAIUserAffinityAccounts = {
   title: '用户粘性归属', short: '居民', user: '用户', lastActive: '最后活跃',
   residenceExpiry: '居住到期', migrationHistory: '槽位与搬迁记录',
-  reset: '重置归属', inherit: '继承全局', maxContactUsers: '最大触达用户数',
+  reset: '重置归属', inherit: '继承全局', maxResidentUsers: '最大常驻居民数',
   cooldownSeconds: '新居民冷却（秒）', failureThreshold: '搬迁失败阈值', failureWindow: '失败窗口（秒）',
   slot: '槽位', status: '状态', heat: '热度', slotValue: '槽位 {index} / generation {generation}',
   heatValue: '热度 {value}', activeRoute: '活动账号', softOwner: '软驻留主用户',
@@ -10,26 +10,26 @@ export const openAIUserAffinityAccounts = {
 
 export const openAIUserAffinitySettings = {
   title: 'OpenAI 用户粘性调度',
-  description: '将同一用户优先固定到同一 OpenAI 上游账号，并控制新居民装箱、触达容量与搬迁条件。',
+  description: '将同一用户优先固定到同一 OpenAI 上游账号，并控制新居民装箱、居民容量与搬迁条件。',
   state: '生效状态',
   states: { disabled: '已关闭', shadow: '影子模式', enforce: '强制执行' },
   mode: '运行模式',
   modeHint: '强制执行会实际改变账号选择；影子模式仅计算并记录决策，不改变现有调度结果。',
   modes: { enforce: '强制执行', shadow: '影子模式' },
   bestFitStrategy: '额度优先窗口',
-  bestFitStrategyHint: '新居民优先选择该窗口预计分配后剩余额度更多的账号；主窗口接近时优先选择当前触达用户较少的账号，再比较另一窗口。',
+  bestFitStrategyHint: '新居民优先选择该窗口预计分配后剩余额度更多的账号；主窗口接近时优先选择当前常驻居民较少的账号，再比较另一窗口。',
   bestFitStrategies: {
     sevenDayThenFiveHour: '7 天额度优先，5 小时额度辅助',
     fiveHourThenSevenDay: '5 小时额度优先，7 天额度辅助'
   },
   touchSuccessMode: '触达成功口径',
-  touchSuccessModeHint: '决定何时把本次上游调用记为成功，并刷新该用户的 7 天触达 TTL。',
+  touchSuccessModeHint: '决定何时记录本次成功触达，并按常驻与会话续期配置刷新居住关系。',
   touchSuccessModes: {
     upstreamAccepted: '上游已接受请求',
     responseCompleted: '响应已完成'
   },
-  maxContactUsers: '默认最大触达用户数',
-  maxContactUsersHint: '账号当前可计入 7 天触达 TTL 的唯一用户上限；新账号默认 10。',
+  maxResidentUsers: '默认最大常驻居民数',
+  maxResidentUsersHint: '账号可同时承载的唯一居民用户上限；跨分组和 Scope 按用户去重，默认 10。',
   residentSlotCount: '常驻账号槽位数',
   residentSlotCountHint: '每个用户在同一调度范围内可保留的常驻 OpenAI 账号数量；默认 1，建议按 1、2、3 的顺序逐步放量。',
   residentTTL: '常驻与会话续期（秒）',
@@ -55,9 +55,7 @@ export const openAIUserAffinitySettings = {
   reserve7d: '7d 额度保留比例',
   reserve7dHint: '7d 剩余额度进入该保留区后，账号停止接收新居民，但继续服务已有居民。',
   closeTolerance: '主窗口接近容差',
-  closeToleranceHint: '候选账号的主窗口预计剩余额度差距在此比例内时，优先选择当前触达用户数较少的账号。',
-  reentryOvercommit: '居民回流允许短暂超配',
-  reentryOvercommitHint: '已有居民重新触达时可短暂超过账号触达上限；超配期间禁止新居民进入。',
+  closeToleranceHint: '候选账号的主窗口预计剩余额度差距在此比例内时，优先选择当前常驻居民数较少的账号。',
   resetExcludeSource: '手动重置后排除原账号',
-  resetExcludeSourceHint: '管理员重置用户归属后，排除原账号，并取消七日触达及其他居住账号的优先访问；其余候选直接参与新居民 Best Fit。'
+  resetExcludeSourceHint: '管理员重置用户归属后，排除原账号，并取消其他居住账号的优先访问；其余候选直接参与新居民 Best Fit。'
 }

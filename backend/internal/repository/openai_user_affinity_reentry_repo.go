@@ -28,8 +28,8 @@ func (r *accountRepository) BeginOpenAIUserAffinityReentry(ctx context.Context, 
 	now := time.Now().UTC()
 	input.ScopeKey = normalizeOpenAIUserAffinityScopeKey(input.ScopeKey)
 	// 全部回流事务统一按 account -> placement -> contact 加锁，避免成功触达反向死锁。
-	var maxUsers sql.NullInt64
-	if err := scanSingleRow(ctx, exec, `SELECT max_contact_users FROM accounts WHERE id = $1 FOR UPDATE`, []any{input.AccountID}, &maxUsers); err != nil {
+	var lockedAccountID int64
+	if err := scanSingleRow(ctx, exec, `SELECT id FROM accounts WHERE id = $1 FOR UPDATE`, []any{input.AccountID}, &lockedAccountID); err != nil {
 		return nil, err
 	}
 	var accountID sql.NullInt64
@@ -78,22 +78,6 @@ func (r *accountRepository) BeginOpenAIUserAffinityReentry(ctx context.Context, 
 			LeaderLeaseUntil: leaderLease.Time, ReentryState: reentryState.String,
 			JitterMinMS: int(jitterMin.Int64), JitterMaxMS: int(jitterMax.Int64),
 		}, nil
-	}
-
-	if !input.Config.ResidentReentryOvercommitEnabled {
-		effectiveMax := input.Config.DefaultMaxContactUsers
-		if maxUsers.Valid && maxUsers.Int64 > 0 {
-			effectiveMax = int(maxUsers.Int64)
-		}
-		var active int
-		if err := scanSingleRow(ctx, exec, `SELECT COUNT(*) FROM account_user_contacts
-			WHERE account_id = $1 AND user_id <> $2 AND (touch_expires_at > $3 OR reservation_until > $3)`,
-			[]any{input.AccountID, input.UserID, now}, &active); err != nil {
-			return nil, err
-		}
-		if active >= effectiveMax {
-			return nil, service.ErrNoAvailableAccounts
-		}
 	}
 
 	leaseUntil := input.LeaderLeaseUntil.UTC()

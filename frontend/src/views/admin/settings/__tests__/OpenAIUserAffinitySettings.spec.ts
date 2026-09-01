@@ -38,7 +38,7 @@ const config = {
   cold_start_demand_quantile: 0.75,
   best_fit_strategy: '7d_then_5h',
   best_fit_close_tolerance_ratio: 0.01,
-  default_max_contact_users: 10,
+  default_max_resident_users: 10,
   default_new_resident_cooldown_seconds: 300,
   resident_reentry_overcommit_enabled: true,
   capacity_failure_migration_threshold: 3,

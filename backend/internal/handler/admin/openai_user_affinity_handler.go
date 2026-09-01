@@ -100,7 +100,7 @@ func (h *AccountHandler) ResetOpenAIUserAffinityPlacement(c *gin.Context) {
 	response.Success(c, gin.H{"user_id": userID, "reset": true})
 }
 
-// GetOpenAIUserAffinityAccountPolicy 读取账号级触达上限、冷却和搬迁阈值覆盖。
+// GetOpenAIUserAffinityAccountPolicy 读取账号级居民上限、冷却和搬迁阈值覆盖。
 func (h *AccountHandler) GetOpenAIUserAffinityAccountPolicy(c *gin.Context) {
 	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || accountID <= 0 {

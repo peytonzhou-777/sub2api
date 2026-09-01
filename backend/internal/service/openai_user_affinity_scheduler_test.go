@@ -950,7 +950,7 @@ func TestOpenAIGatewayService_ResetScopeExcludesAllOldSlotsAndSkipsAffinityPrior
 	}
 	stats := map[int64]OpenAIUserAffinityCandidate{
 		36271: {AccountID: 36271},
-		36272: {AccountID: 36272, UserAlreadyActive: true, UserAlreadyResident: true},
+		36272: {AccountID: 36272, UserAlreadyResident: true},
 	}
 	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t, nil, accounts, stats, 2)
 	repo.resetExclusions = []int64{36269, 36270}
@@ -961,7 +961,7 @@ func TestOpenAIGatewayService_ResetScopeExcludesAllOldSlotsAndSkipsAffinityPrior
 	require.NoError(t, err)
 	require.True(t, found)
 	require.NotNil(t, selection)
-	require.Equal(t, int64(36271), selection.Account.ID, "重置后应直接按 BestFit，而不是优先已触达账号")
+	require.Equal(t, int64(36271), selection.Account.ID, "重置后应直接按 BestFit，而不是优先跨 Scope 已居住账号")
 	require.Len(t, repo.reservations, 1)
 }
 

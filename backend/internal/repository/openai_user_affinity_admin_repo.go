@@ -520,7 +520,7 @@ func (r *accountRepository) GetOpenAIUserAffinityAccountPolicy(ctx context.Conte
 	var maxUsers, cooldownSeconds, threshold, windowSeconds sql.NullInt64
 	var cooldownUntil sql.NullTime
 	if err := scanSingleRow(ctx, r.sql, `
-		SELECT max_contact_users, new_resident_cooldown_seconds,
+		SELECT max_resident_users, new_resident_cooldown_seconds,
 		       capacity_failure_migration_threshold, capacity_failure_window_seconds,
 		       new_resident_cooldown_until, affinity_config_version
 		FROM accounts WHERE id = $1`, []any{accountID}, &maxUsers, &cooldownSeconds,
@@ -529,7 +529,7 @@ func (r *accountRepository) GetOpenAIUserAffinityAccountPolicy(ctx context.Conte
 	}
 	if maxUsers.Valid {
 		value := int(maxUsers.Int64)
-		policy.MaxContactUsers = &value
+		policy.MaxResidentUsers = &value
 	}
 	if cooldownSeconds.Valid {
 		value := int(cooldownSeconds.Int64)
@@ -571,25 +571,14 @@ func (r *accountRepository) UpdateOpenAIUserAffinityAccountPolicy(ctx context.Co
 		}
 		return err
 	}
-	if policy.MaxContactUsers != nil {
-		var activeContacts int
-		if err := scanSingleRow(ctx, exec, `SELECT COUNT(*) FROM account_user_contacts
-			WHERE account_id = $1 AND (touch_expires_at > NOW() OR reservation_until > NOW())`,
-			[]any{policy.AccountID}, &activeContacts); err != nil {
-			return err
-		}
-		if activeContacts > *policy.MaxContactUsers {
-			return service.ErrOpenAIUserAffinityContactLimitConflict
-		}
-	}
 	result, err := exec.ExecContext(ctx, `
-		UPDATE accounts SET max_contact_users = $2,
+		UPDATE accounts SET max_resident_users = $2,
 			new_resident_cooldown_seconds = $3,
 			capacity_failure_migration_threshold = $4,
 			capacity_failure_window_seconds = $5,
 			affinity_config_version = affinity_config_version + 1,
 			updated_at = NOW()
-		WHERE id = $1`, policy.AccountID, policy.MaxContactUsers,
+		WHERE id = $1`, policy.AccountID, policy.MaxResidentUsers,
 		policy.NewResidentCooldownSeconds, policy.CapacityFailureMigrationThreshold,
 		policy.CapacityFailureWindowSeconds)
 	if err != nil {

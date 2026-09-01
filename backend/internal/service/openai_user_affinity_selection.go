@@ -17,10 +17,9 @@ type OpenAIUserAffinityCandidate struct {
 	Quota7DWindowMinutes       int
 	Quota5HResetAt             *time.Time
 	Quota7DResetAt             *time.Time
-	ActiveContactUsers         int
-	UserAlreadyActive          bool
+	ActiveResidentUsers        int
 	UserAlreadyResident        bool
-	MaxContactUsers            int
+	MaxResidentUsers           int
 	NewResidentCooldownSeconds int
 	CooldownUntil              *time.Time
 }
@@ -46,7 +45,7 @@ func openAIUserAffinityScopeKey(groupID *int64, requireCompact bool, endpointCap
 }
 
 // SelectOpenAIUserAffinityCandidate 按额度主窗口选择剩余容量更充足的新居民账号。
-// 主窗口接近时优先选择触达用户较少者，再用辅助窗口和账号 ID 保证结果确定。
+// 主窗口接近时优先选择当前居民较少者，再用辅助窗口和账号 ID 保证结果确定。
 func SelectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates []OpenAIUserAffinityCandidate, demand5H, demand7D float64, now time.Time) (*OpenAIUserAffinityCandidate, bool) {
 	return selectOpenAIUserAffinityCandidate(cfg, candidates, demand5H, demand7D, now, true)
 }
@@ -62,8 +61,8 @@ func selectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates 
 		if !candidate.Quota5HKnown || !candidate.Quota7DKnown {
 			continue
 		}
-		resident := candidate.UserAlreadyActive || candidate.UserAlreadyResident
-		if candidate.AccountID <= 0 || candidate.ActiveContactUsers >= effectiveMaxContactUsers(cfg, candidate.MaxContactUsers) && !resident {
+		resident := candidate.UserAlreadyResident
+		if candidate.AccountID <= 0 || candidate.ActiveResidentUsers >= effectiveMaxResidentUsers(cfg, candidate.MaxResidentUsers) && !resident {
 			continue
 		}
 		if candidate.CooldownUntil != nil && now.Before(*candidate.CooldownUntil) && !resident {
@@ -91,7 +90,7 @@ func selectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates 
 		// 跨 scope 已居住账号仍优先，避免同一用户扩散到更多账号。
 		residentPool := make([]OpenAIUserAffinityCandidate, 0, len(valid))
 		for _, candidate := range valid {
-			if candidate.UserAlreadyActive || candidate.UserAlreadyResident {
+			if candidate.UserAlreadyResident {
 				residentPool = append(residentPool, candidate)
 			}
 		}
@@ -114,22 +113,22 @@ func selectOpenAIUserAffinityCandidate(cfg OpenAIUserAffinityConfig, candidates 
 		}
 	}
 
-	minContactUsers := primaryPool[0].ActiveContactUsers
+	minResidentUsers := primaryPool[0].ActiveResidentUsers
 	for _, candidate := range primaryPool[1:] {
-		if candidate.ActiveContactUsers < minContactUsers {
-			minContactUsers = candidate.ActiveContactUsers
+		if candidate.ActiveResidentUsers < minResidentUsers {
+			minResidentUsers = candidate.ActiveResidentUsers
 		}
 	}
-	contactPool := make([]OpenAIUserAffinityCandidate, 0, len(primaryPool))
+	residentPool := make([]OpenAIUserAffinityCandidate, 0, len(primaryPool))
 	for _, candidate := range primaryPool {
-		if candidate.ActiveContactUsers == minContactUsers {
-			contactPool = append(contactPool, candidate)
+		if candidate.ActiveResidentUsers == minResidentUsers {
+			residentPool = append(residentPool, candidate)
 		}
 	}
 
-	selected := contactPool[0]
+	selected := residentPool[0]
 	selectedSecondary := secondary(selected)
-	for _, candidate := range contactPool[1:] {
+	for _, candidate := range residentPool[1:] {
 		candidateSecondary := secondary(candidate)
 		if candidateSecondary > selectedSecondary || candidateSecondary == selectedSecondary && candidate.AccountID < selected.AccountID {
 			selected = candidate
@@ -158,11 +157,11 @@ func openAIUserAffinityEffectiveCapacity(availableRatio, predictedDemand float64
 	return score + 1 - remainingRatio
 }
 
-func effectiveMaxContactUsers(cfg OpenAIUserAffinityConfig, override int) int {
+func effectiveMaxResidentUsers(cfg OpenAIUserAffinityConfig, override int) int {
 	if override > 0 {
 		return override
 	}
-	return cfg.DefaultMaxContactUsers
+	return cfg.DefaultMaxResidentUsers
 }
 
 func nearlyEqualAffinityRatio(a, b, tolerance float64) bool {

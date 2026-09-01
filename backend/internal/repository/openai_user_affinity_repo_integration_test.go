@@ -15,6 +15,70 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestOpenAIAccountResidentCapacityAndPoolStatsShareUniqueUserSemantics(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	client := tx.Client()
+	repo := newAccountRepositoryWithSQL(client, tx, nil)
+	account := mustCreateAccount(t, client, &service.Account{
+		Name: "openai-resident-capacity-" + uuid.NewString(), Platform: service.PlatformOpenAI,
+	})
+	users := make([]*service.User, 6)
+	for i := range users {
+		users[i] = mustCreateUser(t, client, &service.User{
+			Email: "resident-capacity-" + uuid.NewString() + "@example.com", PasswordHash: "hash",
+		})
+	}
+	now := time.Now().UTC()
+	type slotSeed struct {
+		user        *service.User
+		scope       string
+		status      string
+		expiresAt   time.Time
+		lastSuccess any
+	}
+	seeds := []slotSeed{
+		{users[0], "openai:v1:group:1:lane:general", "active", now.Add(time.Hour), now},
+		{users[0], "openai:v1:group:2:lane:general", "active", now.Add(time.Hour), nil},
+		{users[1], "openai:v1:group:1:lane:general", "provisional", now.Add(time.Hour), nil},
+		{users[2], "openai:v1:group:1:lane:general", "replacement_pending", now.Add(time.Hour), nil},
+		{users[3], "openai:v1:group:1:lane:general", "draining", now.Add(-time.Hour), nil},
+		{users[5], "openai:v1:group:1:lane:general", "expired", now.Add(-time.Hour), nil},
+	}
+	for i, seed := range seeds {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO openai_user_resident_slots
+				(user_id, scope_key, slot_index, account_id, generation, status, expires_at, last_success_at)
+			VALUES ($1, $2, 1, $3, $4, $5, $6, $7)`,
+			seed.user.ID, seed.scope, account.ID, int64(i+1), seed.status, seed.expiresAt, seed.lastSuccess)
+		require.NoError(t, err)
+	}
+	for _, user := range []*service.User{users[0], users[4]} {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO user_account_placements
+				(user_id, scope_key, account_id, generation, status, expires_at)
+			VALUES ($1, $2, $3, 1, 'active', $4)`,
+			user.ID, "openai:v1:group:9:lane:general", account.ID, now.Add(time.Hour))
+		require.NoError(t, err)
+	}
+
+	residentUsers, alreadyResident, err := getOpenAIAccountResidentCapacity(ctx, tx, account.ID, users[0].ID, now)
+	require.NoError(t, err)
+	require.Equal(t, 5, residentUsers)
+	require.True(t, alreadyResident)
+
+	residentUsers, alreadyResident, err = getOpenAIAccountResidentCapacity(ctx, tx, account.ID, users[5].ID, now)
+	require.NoError(t, err)
+	require.Equal(t, 5, residentUsers)
+	require.False(t, alreadyResident)
+
+	stats, err := repo.ListAccountPoolResidentStats(ctx, []int64{account.ID}, now.Add(-time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, int64(5), stats[account.ID].Total)
+	require.Equal(t, int64(1), stats[account.ID].Active)
+	require.Equal(t, int64(1), stats[account.ID].DrainingSlots)
+}
+
 // 该回归测试必须使用真实 PostgreSQL，sqlmock 无法触发无类型 NULL 的参数推断错误。
 func TestRecordOpenAIUserAffinityCapacityFailureBeforeMigrationThreshold(t *testing.T) {
 	ctx := context.Background()

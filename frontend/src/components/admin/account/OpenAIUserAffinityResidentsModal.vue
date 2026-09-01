@@ -17,7 +17,7 @@
           <div v-if="loading" class="flex justify-center py-12"><span class="h-6 w-6 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" /></div>
           <template v-else>
             <div v-if="account && policy" class="mb-5 grid gap-3 border-b border-gray-100 pb-5 sm:grid-cols-2 lg:grid-cols-4 dark:border-dark-700">
-              <PolicyField v-model="policy.max_contact_users" :label="t('admin.accounts.userAffinity.maxContactUsers')" />
+              <PolicyField v-model="policy.max_resident_users" :label="t('admin.accounts.userAffinity.maxResidentUsers')" />
               <PolicyField v-model="policy.new_resident_cooldown_seconds" :label="t('admin.accounts.userAffinity.cooldownSeconds')" />
               <PolicyField v-model="policy.capacity_failure_migration_threshold" :label="t('admin.accounts.userAffinity.failureThreshold')" />
               <PolicyField v-model="policy.capacity_failure_window_seconds" :label="t('admin.accounts.userAffinity.failureWindow')" />

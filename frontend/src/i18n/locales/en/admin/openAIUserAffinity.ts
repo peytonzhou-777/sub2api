@@ -1,7 +1,7 @@
 export const openAIUserAffinityAccounts = {
   title: 'User Affinity Residents', short: 'Residents', user: 'User', lastActive: 'Last active',
   residenceExpiry: 'Residence expiry', migrationHistory: 'Slots and migration history',
-  reset: 'Reset placement', inherit: 'Inherit global', maxContactUsers: 'Maximum contacted users',
+  reset: 'Reset placement', inherit: 'Inherit global', maxResidentUsers: 'Maximum resident users',
   cooldownSeconds: 'New resident cooldown (seconds)', failureThreshold: 'Migration failure threshold', failureWindow: 'Failure window (seconds)',
   slot: 'Slot', status: 'Status', heat: 'Heat', slotValue: 'Slot {index} / generation {generation}',
   heatValue: 'Heat {value}', activeRoute: 'Active account', softOwner: 'Soft resident owner',
@@ -10,26 +10,26 @@ export const openAIUserAffinityAccounts = {
 
 export const openAIUserAffinitySettings = {
   title: 'OpenAI User Affinity Scheduling',
-  description: 'Keep each user on the same OpenAI upstream account when possible, while controlling new-resident placement, contact capacity, and migration.',
+  description: 'Keep each user on the same OpenAI upstream account when possible, while controlling new-resident placement, resident capacity, and migration.',
   state: 'Effective state',
   states: { disabled: 'Disabled', shadow: 'Shadow', enforce: 'Enforced' },
   mode: 'Mode',
   modeHint: 'Enforce changes account selection. Shadow only evaluates and records decisions without changing the existing scheduler result.',
   modes: { enforce: 'Enforce', shadow: 'Shadow' },
   bestFitStrategy: 'Quota priority window',
-  bestFitStrategyHint: 'New residents prefer the account with more projected remaining quota in this window. Near-ties prefer fewer contacted users, then compare the other window.',
+  bestFitStrategyHint: 'New residents prefer the account with more projected remaining quota in this window. Near-ties prefer fewer current resident users, then compare the other window.',
   bestFitStrategies: {
     sevenDayThenFiveHour: '7-day quota first, 5-hour quota second',
     fiveHourThenSevenDay: '5-hour quota first, 7-day quota second'
   },
   touchSuccessMode: 'Touch success point',
-  touchSuccessModeHint: 'Choose when an upstream call counts as successful and refreshes the user\'s 7-day contact TTL.',
+  touchSuccessModeHint: 'Choose when to record a successful touch and refresh residence using the configured residence and binding TTL.',
   touchSuccessModes: {
     upstreamAccepted: 'Upstream accepted the request',
     responseCompleted: 'Response completed'
   },
-  maxContactUsers: 'Default maximum contacted users',
-  maxContactUsersHint: 'Maximum unique users with an active 7-day contact TTL on an account; new accounts default to 10.',
+  maxResidentUsers: 'Default maximum resident users',
+  maxResidentUsersHint: 'Maximum unique resident users an account can hold; users are deduplicated across groups and scopes. Defaults to 10.',
   residentSlotCount: 'Resident account slots',
   residentSlotCountHint: 'Maximum resident OpenAI accounts per user and scheduling scope. Keep 1 by default, then roll out 2 and 3 progressively.',
   residentTTL: 'Residence and binding TTL (seconds)',
@@ -55,9 +55,7 @@ export const openAIUserAffinitySettings = {
   reserve7d: '7d quota reserve ratio',
   reserve7dHint: 'Stop accepting new residents when remaining 7-day quota enters this reserve, while continuing to serve existing residents.',
   closeTolerance: 'Primary-window close tolerance',
-  closeToleranceHint: 'When projected remaining quota in the primary window differs by no more than this ratio, prefer the account with fewer currently contacted users.',
-  reentryOvercommit: 'Allow resident reentry overcommit',
-  reentryOvercommitHint: 'Allow returning residents to temporarily exceed the contact limit; block new residents while overcommitted.',
+  closeToleranceHint: 'When projected remaining quota in the primary window differs by no more than this ratio, prefer the account with fewer current resident users.',
   resetExcludeSource: 'Exclude source account after reset',
-  resetExcludeSourceHint: 'After an admin resets a residence, exclude the previous account and remove 7-day contact or other-residence priority; all remaining candidates enter new-resident Best Fit directly.'
+  resetExcludeSourceHint: 'After an admin resets a residence, exclude the previous account and remove other-residence priority; all remaining candidates enter new-resident Best Fit directly.'
 }
