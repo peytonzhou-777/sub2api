@@ -43,9 +43,14 @@ import (
 var sseDataPrefix = regexp.MustCompile(`^data:\s*`)
 
 const (
-	testClaudeAPIURL            = "https://api.anthropic.com/v1/messages?beta=true"
-	chatgptCodexAPIURL          = "https://chatgpt.com/backend-api/codex/responses"
-	defaultAntigravityTestModel = "claude-sonnet-4-6"
+	testClaudeAPIURL                  = "https://api.anthropic.com/v1/messages?beta=true"
+	chatgptCodexAPIURL                = "https://chatgpt.com/backend-api/codex/responses"
+	defaultAntigravityTestModel       = "claude-sonnet-4-6"
+	openAIOAuthIntelligenceTestPrompt = "在一个黑色的袋子里放有三种口味的糖果，每种糖果有两种不同的形状（圆形和五角星形，不同的形状靠手感可以分辨）。现已知不同口味的糖果和不同形状的数量统计如下表。参赛者需要在活动前决定摸出的糖果数目，那么，最少取出多少个糖果才能保证手中同时拥有不同形状的苹果味和桃子味的糖果？（同时手中有圆形苹果味匹配五角星桃子味糖果，或者有圆形桃子味匹配五角星苹果味糖果都满足要求）  \n" +
+		"  苹果味 桃子味 西瓜味 \n" +
+		"圆形 7 9 8 \n" +
+		"五角星形 7 6 4 \n" +
+		"帮我做一下，不调用任何工具也不调用联网，直接告诉我数量答案。"
 )
 
 // TestEvent represents a SSE event for account testing
@@ -326,6 +331,32 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 
 	return s.testClaudeAccountConnection(c, account, modelID)
+}
+
+// TestOpenAIOAuthIntelligence 使用固定题目检测 OpenAI OAuth 账号的文本回答能力。
+func (s *AccountTestService) TestOpenAIOAuthIntelligence(c *gin.Context, accountID int64, modelID string) error {
+	account, err := s.accountRepo.GetByID(c.Request.Context(), accountID)
+	if err != nil {
+		return s.sendErrorAndEnd(c, "Account not found")
+	}
+	if !account.IsOpenAIOAuth() {
+		return s.sendErrorAndEnd(c, "Intelligence test only supports OpenAI OAuth accounts")
+	}
+	testModelID := strings.TrimSpace(modelID)
+	if testModelID == "" {
+		testModelID = openai.DefaultTestModel
+	}
+	if isOpenAIImageModel(account.GetMappedModel(testModelID)) {
+		return s.sendErrorAndEnd(c, "Intelligence test only supports text models")
+	}
+
+	return s.testOpenAIAccountConnection(
+		c,
+		account,
+		modelID,
+		openAIOAuthIntelligenceTestPrompt,
+		AccountTestModeDefault,
+	)
 }
 
 func (s *AccountTestService) testCNProviderChatCompletionsConnection(c *gin.Context, account *Account, modelID string, prompt string) error {
@@ -737,7 +768,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	if isOAuth {
 		upstreamTestModelID = normalizeOpenAIModelForUpstream(credentialAccount, testModelID)
 	}
-	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth)
+	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth, prompt)
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Send test_start event once. A task-invalid Agent Identity response may
@@ -2619,7 +2650,12 @@ func (s *AccountTestService) processGeminiStream(c *gin.Context, body io.Reader)
 }
 
 // createOpenAITestPayload creates a test payload for OpenAI Responses API
-func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
+func createOpenAITestPayload(modelID string, isOAuth bool, prompt string) map[string]any {
+	testPrompt := strings.TrimSpace(prompt)
+	if testPrompt == "" {
+		testPrompt = "hi"
+	}
+
 	payload := map[string]any{
 		"model": modelID,
 		"input": []map[string]any{
@@ -2628,7 +2664,7 @@ func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
 				"content": []map[string]any{
 					{
 						"type": "input_text",
-						"text": "hi",
+						"text": testPrompt,
 					},
 				},
 			},

@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :show="show"
-    :title="t('admin.accounts.testAccountConnection')"
+    :title="dialogTitle"
     width="normal"
     @close="handleClose"
   >
@@ -15,7 +15,7 @@
           <div
             class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-600"
           >
-            <Icon name="play" size="md" class="text-white" :stroke-width="2" />
+            <Icon :name="isIntelligenceTest ? 'sparkles' : 'play'" size="md" class="text-white" :stroke-width="2" />
           </div>
           <div>
             <div class="font-semibold text-gray-900 dark:text-gray-100">{{ account.name }}</div>
@@ -42,7 +42,7 @@
       </div>
 
       <!-- Grok: mode first, then optional model / mode params -->
-      <div v-if="isGrokAccount" class="space-y-1.5">
+      <div v-if="isGrokAccount && !isIntelligenceTest" class="space-y-1.5">
         <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
           {{ t('admin.accounts.grok.testMode') }}
         </label>
@@ -70,7 +70,7 @@
         />
       </div>
 
-      <div v-if="isOpenAIAccount" class="space-y-1.5">
+      <div v-if="isOpenAIAccount && !isIntelligenceTest" class="space-y-1.5">
         <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
           {{ t('admin.accounts.openai.testMode') }}
         </label>
@@ -179,11 +179,11 @@
           <!-- Status Line -->
           <div v-if="status === 'idle'" class="flex items-center gap-2 text-gray-500">
             <Icon name="play" size="sm" :stroke-width="2" />
-            <span>{{ t('admin.accounts.readyToTest') }}</span>
+            <span>{{ readyLabel }}</span>
           </div>
           <div v-else-if="status === 'connecting'" class="flex items-center gap-2 text-yellow-400">
             <Icon name="refresh" size="sm" class="animate-spin" :stroke-width="2" />
-            <span>{{ t('admin.accounts.connectingToApi') }}</span>
+            <span>{{ connectingLabel }}</span>
           </div>
 
           <!-- Output Lines -->
@@ -202,7 +202,7 @@
             class="mt-3 flex items-center gap-2 border-t border-gray-700 pt-3 text-green-400"
           >
             <Icon name="check" size="sm" :stroke-width="2" />
-            <span>{{ t('admin.accounts.testCompleted') }}</span>
+            <span>{{ completedLabel }}</span>
           </div>
           <div
             v-else-if="status === 'error'"
@@ -352,9 +352,9 @@
           <span>
             {{
               status === 'connecting'
-                ? t('admin.accounts.testing')
-                : status === 'idle'
-                  ? t('admin.accounts.startTest')
+                  ? runningLabel
+                  : status === 'idle'
+                  ? startLabel
                   : t('admin.accounts.retry')
             }}
           </span>
@@ -390,10 +390,13 @@ interface PreviewMedia {
   mimeType?: string
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   show: boolean
   account: Account | null
-}>()
+  variant?: 'connection' | 'intelligence'
+}>(), {
+  variant: 'connection'
+})
 
 const emit = defineEmits<{
   (e: 'close'): void
@@ -422,6 +425,7 @@ const uploadAudioDataURL = ref('')
 const uploadAudioName = ref('')
 const imageFileInput = ref<HTMLInputElement | null>(null)
 const audioFileInput = ref<HTMLInputElement | null>(null)
+const isIntelligenceTest = computed(() => props.variant === 'intelligence')
 const isOpenAIAccount = computed(() => props.account?.platform === 'openai')
 const isGrokAccount = computed(() => props.account?.platform === 'grok')
 const openAITestModeOptions = computed(() => [
@@ -437,6 +441,36 @@ const grokTestModeOptions = computed(() => [
   { value: 'stt', label: t('admin.accounts.grok.testModeSTT') },
   { value: 'realtime', label: t('admin.accounts.grok.testModeRealtime') }
 ])
+const dialogTitle = computed(() =>
+  isIntelligenceTest.value
+    ? t('admin.accounts.intelligenceTestTitle')
+    : t('admin.accounts.testAccountConnection')
+)
+const readyLabel = computed(() =>
+  isIntelligenceTest.value
+    ? t('admin.accounts.readyToIntelligenceTest')
+    : t('admin.accounts.readyToTest')
+)
+const connectingLabel = computed(() =>
+  isIntelligenceTest.value
+    ? t('admin.accounts.intelligenceTesting')
+    : t('admin.accounts.connectingToApi')
+)
+const completedLabel = computed(() =>
+  isIntelligenceTest.value
+    ? t('admin.accounts.intelligenceTestCompleted')
+    : t('admin.accounts.testCompleted')
+)
+const startLabel = computed(() =>
+  isIntelligenceTest.value
+    ? t('admin.accounts.startIntelligenceTest')
+    : t('admin.accounts.startTest')
+)
+const runningLabel = computed(() =>
+  isIntelligenceTest.value
+    ? t('admin.accounts.intelligenceTesting')
+    : t('admin.accounts.testing')
+)
 const prioritizedGeminiModels = ['gemini-3.1-flash-image', 'gemini-2.5-flash-image', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3-pro-preview', 'gemini-2.0-flash']
 const supportsGeminiImageTest = computed(() => {
   const modelID = selectedModelId.value.toLowerCase()
@@ -483,6 +517,9 @@ const showModelSelect = computed(() => {
 })
 
 const modelOptionsForMode = computed(() => {
+  if (isIntelligenceTest.value) {
+    return availableModels.value.filter((model) => !model.id.toLowerCase().startsWith('gpt-image-'))
+  }
   if (!isGrokAccount.value) return availableModels.value
   if (grokTestMode.value === 'image') {
     return availableModels.value.filter((m) => isGrokImageModel(m.id))
@@ -497,6 +534,7 @@ const modelOptionsForMode = computed(() => {
 })
 
 const supportsPromptInput = computed(() => {
+  if (isIntelligenceTest.value) return false
   if (!isGrokAccount.value) {
     return supportsImageTest.value
   }
@@ -651,6 +689,7 @@ const promptInputHint = computed(() => {
 })
 
 const testModeSummary = computed(() => {
+  if (isIntelligenceTest.value) return t('admin.accounts.intelligenceTestMode')
   if (isGrokAccount.value) {
     switch (grokTestMode.value) {
       case 'video':
@@ -742,8 +781,10 @@ watch(
       grokTestMode.value = 'text'
       resetState()
       await loadAvailableModels()
-      if (isGrokAccount.value) {
+      if (isGrokAccount.value || isIntelligenceTest.value) {
         pickDefaultModelForMode()
+      }
+      if (isGrokAccount.value) {
         applyDefaultPromptForMode()
       }
     } else {
@@ -830,7 +871,12 @@ const startTest = async () => {
 
   resetState()
   status.value = 'connecting'
-  addLine(t('admin.accounts.startingTestForAccount', { name: props.account.name }), 'text-blue-400')
+  addLine(
+    isIntelligenceTest.value
+      ? t('admin.accounts.startingIntelligenceTestForAccount', { name: props.account.name })
+      : t('admin.accounts.startingTestForAccount', { name: props.account.name }),
+    'text-blue-400'
+  )
   addLine(t('admin.accounts.testAccountTypeLabel', { type: props.account.type }), 'text-gray-400')
   if (isGrokAccount.value) {
     const modeLabel =
@@ -846,15 +892,17 @@ const startTest = async () => {
   try {
     const requestBody: {
       model_id: string
-      prompt: string
+      prompt?: string
       mode?: string
       image_data_url?: string
       audio_data_url?: string
     } = {
-      model_id: showModelSelect.value ? selectedModelId.value : '',
-      prompt: supportsPromptInput.value ? testPrompt.value.trim() : ''
+      model_id: showModelSelect.value ? selectedModelId.value : ''
     }
-    if (isOpenAIAccount.value) {
+    if (!isIntelligenceTest.value) {
+      requestBody.prompt = supportsPromptInput.value ? testPrompt.value.trim() : ''
+    }
+    if (isOpenAIAccount.value && !isIntelligenceTest.value) {
       requestBody.mode = testMode.value
     }
     if (isGrokAccount.value) {
@@ -878,7 +926,8 @@ const startTest = async () => {
     }
 
     // Use the configured API base; EventSource does not support POST.
-    const url = buildApiUrl(`/admin/accounts/${props.account.id}/test`)
+    const endpoint = isIntelligenceTest.value ? 'intelligence-test' : 'test'
+    const url = buildApiUrl(`/admin/accounts/${props.account.id}/${endpoint}`)
 
     // Use fetch with streaming for SSE since EventSource doesn't support POST
     const response = await fetch(url, {
@@ -970,6 +1019,8 @@ const handleEvent = (event: {
                     : grokTestMode.value === 'realtime'
                       ? t('admin.accounts.grok.sendingRealtimeRequest')
                       : t('admin.accounts.sendingTestMessage')
+          : isIntelligenceTest.value
+            ? t('admin.accounts.sendingIntelligenceTest')
           : supportsImageTest.value
             ? t('admin.accounts.sendingImageRequest')
             : t('admin.accounts.sendingTestMessage'),

@@ -68,11 +68,12 @@ function mountModal(account: Record<string, unknown> = {
   platform: 'gemini',
   type: 'apikey',
   status: 'active'
-}) {
+}, variant: 'connection' | 'intelligence' = 'connection') {
   return mount(AccountTestModal, {
     props: {
       show: false,
-      account
+      account,
+      variant
     } as any,
     global: {
       stubs: {
@@ -219,5 +220,51 @@ describe('AccountTestModal', () => {
       prompt: '',
       mode: 'compact'
     })
+  })
+
+  it('OpenAI OAuth 降智检测仅提交模型并渲染流式答案', async () => {
+    getAvailableModels.mockResolvedValue([
+      { id: 'gpt-image-1', display_name: 'GPT Image 1' },
+      { id: 'gpt-5.4', display_name: 'GPT-5.4' }
+    ])
+    global.fetch = vi.fn().mockResolvedValue(
+      createStreamResponse([
+        'data: {"type":"test_start","model":"gpt-5.4"}\n',
+        'data: {"type":"content","text":"29"}\n',
+        'data: {"type":"test_complete","success":true}\n'
+      ])
+    ) as any
+
+    const wrapper = mountModal({
+      id: 42,
+      name: 'OpenAI OAuth',
+      platform: 'openai',
+      type: 'oauth',
+      status: 'active'
+    }, 'intelligence')
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+
+    expect((wrapper.vm as any).selectedModelId).toBe('gpt-5.4')
+    expect((wrapper.vm as any).modelOptionsForMode.map((model: { id: string }) => model.id)).toEqual([
+      'gpt-5.4'
+    ])
+    expect(wrapper.find('textarea.textarea-stub').exists()).toBe(false)
+
+    const startButton = wrapper.findAll('button').find((button) =>
+      button.text().includes('admin.accounts.startIntelligenceTest')
+    )
+    expect(startButton).toBeTruthy()
+
+    await startButton!.trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    const [url, request] = (global.fetch as any).mock.calls[0]
+    expect(String(url)).toContain('/admin/accounts/42/intelligence-test')
+    expect(JSON.parse(request.body)).toEqual({ model_id: 'gpt-5.4' })
+    expect(wrapper.text()).toContain('29')
+    expect(wrapper.text()).toContain('admin.accounts.intelligenceTestCompleted')
   })
 })

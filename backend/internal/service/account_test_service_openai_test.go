@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/gin-gonic/gin"
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -49,6 +51,22 @@ func newJSONResponse(status int, body string) *http.Response {
 		Header:     make(http.Header),
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
+}
+
+func readOpenAITestRequestBody(t *testing.T, req *http.Request) []byte {
+	t.Helper()
+	body, err := io.ReadAll(req.Body)
+	require.NoError(t, err)
+	if req.Header.Get("Content-Encoding") != "zstd" {
+		return body
+	}
+
+	decoder, err := zstd.NewReader(nil)
+	require.NoError(t, err)
+	t.Cleanup(decoder.Close)
+	decoded, err := decoder.DecodeAll(body, nil)
+	require.NoError(t, err)
+	return decoded
 }
 
 // --- test functions ---
@@ -221,6 +239,133 @@ func TestAccountTestService_OpenAIShadowUsesParentCredentialsAndShadowModel(t *t
 	require.NoError(t, err)
 	require.Equal(t, "gpt-5.3-codex-spark", gjson.GetBytes(body, "model").String())
 	require.Contains(t, recorder.Body.String(), `"success":true`)
+}
+
+func TestAccountTestService_OpenAIOAuthIntelligenceUsesFixedPromptThroughShadow(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, recorder := newTestContext()
+
+	resp := newJSONResponse(http.StatusOK, "")
+	resp.Body = io.NopCloser(strings.NewReader(`data: {"type":"response.output_text.delta","delta":"29"}
+
+data: {"type":"response.completed"}
+
+`))
+
+	parentID := int64(101)
+	parent := &Account{
+		ID:       parentID,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Status:   StatusActive,
+		Credentials: map[string]any{
+			"access_token":       "parent-token",
+			"chatgpt_account_id": "org-parent",
+		},
+	}
+	shadow := &Account{
+		ID:              201,
+		Platform:        PlatformOpenAI,
+		Type:            AccountTypeOAuth,
+		Status:          StatusActive,
+		ParentAccountID: &parentID,
+		QuotaDimension:  QuotaDimensionSpark,
+		Concurrency:     2,
+		Extra: map[string]any{
+			codexFingerprintModeExtraKey: "off",
+		},
+	}
+
+	repo := &openAIAccountTestRepo{
+		mockAccountRepoForGemini: mockAccountRepoForGemini{
+			accountsByID: map[int64]*Account{
+				parentID:  parent,
+				shadow.ID: shadow,
+			},
+		},
+	}
+	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
+	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
+
+	err := svc.TestOpenAIOAuthIntelligence(ctx, shadow.ID, "gpt-5.4")
+	require.NoError(t, err)
+	require.Len(t, upstream.requests, 1)
+
+	req := upstream.requests[0]
+	require.Equal(t, "Bearer parent-token", req.Header.Get("Authorization"))
+	require.Equal(t, "org-parent", req.Header.Get("chatgpt-account-id"))
+	body := readOpenAITestRequestBody(t, req)
+	require.Equal(t, openAIOAuthIntelligenceTestPrompt, gjson.GetBytes(body, "input.0.content.0.text").String())
+	require.False(t, gjson.GetBytes(body, "tools").Exists())
+	require.Contains(t, recorder.Body.String(), `"text":"29"`)
+	require.Contains(t, recorder.Body.String(), `"success":true`)
+}
+
+func TestAccountTestService_OpenAIOAuthIntelligenceRejectsUnsupportedAccounts(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		account *Account
+	}{
+		{
+			name: "OpenAI API key",
+			account: &Account{
+				ID:       202,
+				Platform: PlatformOpenAI,
+				Type:     AccountTypeAPIKey,
+			},
+		},
+		{
+			name: "non-OpenAI OAuth",
+			account: &Account{
+				ID:       203,
+				Platform: PlatformAnthropic,
+				Type:     AccountTypeOAuth,
+			},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			ctx, recorder := newTestContext()
+			upstream := &queuedHTTPUpstream{}
+			repo := &openAIAccountTestRepo{
+				mockAccountRepoForGemini: mockAccountRepoForGemini{
+					accountsByID: map[int64]*Account{testCase.account.ID: testCase.account},
+				},
+			}
+			svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
+
+			err := svc.TestOpenAIOAuthIntelligence(ctx, testCase.account.ID, "gpt-5.4")
+			require.Error(t, err)
+			require.Empty(t, upstream.requests)
+			require.Contains(t, recorder.Body.String(), "only supports OpenAI OAuth accounts")
+		})
+	}
+}
+
+func TestAccountTestService_OpenAIOAuthIntelligenceRejectsImageModels(t *testing.T) {
+	ctx, recorder := newTestContext()
+	account := &Account{
+		ID:       204,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+	}
+	upstream := &queuedHTTPUpstream{}
+	repo := &openAIAccountTestRepo{
+		mockAccountRepoForGemini: mockAccountRepoForGemini{
+			accountsByID: map[int64]*Account{account.ID: account},
+		},
+	}
+	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
+
+	err := svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-image-1")
+	require.Error(t, err)
+	require.Empty(t, upstream.requests)
+	require.Contains(t, recorder.Body.String(), "only supports text models")
+}
+
+func TestCreateOpenAITestPayload_EmptyPromptFallsBackToHi(t *testing.T) {
+	payloadBytes, err := json.Marshal(createOpenAITestPayload("gpt-5.4", true, " \n "))
+	require.NoError(t, err)
+	require.Equal(t, "hi", gjson.GetBytes(payloadBytes, "input.0.content.0.text").String())
 }
 
 func TestAccountTestService_OpenAIStreamEOFBeforeCompletedFails(t *testing.T) {

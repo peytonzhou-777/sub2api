@@ -1129,6 +1129,11 @@ type TestAccountRequest struct {
 	AudioDataURL string `json:"audio_data_url"`
 }
 
+// IntelligenceTestAccountRequest 表示 OpenAI OAuth 降智检测请求。
+type IntelligenceTestAccountRequest struct {
+	ModelID string `json:"model_id"`
+}
+
 type SyncFromCRSRequest struct {
 	BaseURL            string   `json:"base_url" binding:"required"`
 	Username           string   `json:"username" binding:"required"`
@@ -1171,6 +1176,24 @@ func (h *AccountHandler) Test(c *gin.Context) {
 		if _, err := h.rateLimitService.RecoverAccountAfterSuccessfulTest(c.Request.Context(), accountID); err != nil {
 			_ = c.Error(err)
 		}
+	}
+}
+
+// IntelligenceTest 使用固定题目检测 OpenAI OAuth 账号的文本回答能力。
+// POST /api/v1/admin/accounts/:id/intelligence-test
+func (h *AccountHandler) IntelligenceTest(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+
+	var req IntelligenceTestAccountRequest
+	_ = c.ShouldBindJSON(&req)
+
+	if err := h.accountTestService.TestOpenAIOAuthIntelligence(c, accountID, req.ModelID); err != nil {
+		// 错误已通过 SSE 返回。
+		return
 	}
 }
 
