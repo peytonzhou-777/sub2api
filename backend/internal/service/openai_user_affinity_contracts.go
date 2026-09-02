@@ -56,6 +56,7 @@ type OpenAIUserAffinityResetExclusionStore interface {
 // OpenAIUserAffinityConversationStore 负责会话绑定的 provisional、首输出提交和失败回滚。
 type OpenAIUserAffinityConversationStore interface {
 	OpenAIUserAffinityMultiSlotStore
+	ValidateOpenAIUserConversationBinding(ctx context.Context, binding OpenAIUserConversationBinding) (bool, error)
 	ReserveOpenAIUserConversationBinding(ctx context.Context, reservation OpenAIUserConversationReservation) (*OpenAIUserConversationBinding, bool, error)
 	CommitOpenAIUserConversationBinding(ctx context.Context, transition OpenAIUserConversationTransition) (bool, error)
 	RollbackOpenAIUserConversationBinding(ctx context.Context, transition OpenAIUserConversationTransition) (bool, error)
@@ -325,6 +326,7 @@ type OpenAIUserConversationTransition struct {
 	ResponseAliasHash  string
 	ManageActiveRoute  bool
 	ActiveRoutePending bool
+	Aliases            []OpenAIUserConversationAlias
 	Config             OpenAIUserAffinityConfig
 }
 
@@ -332,6 +334,7 @@ type OpenAIUserConversationTransition struct {
 type OpenAIUserConversationFailoverReservation struct {
 	BindingID            int64
 	UserID               int64
+	APIKeyID             int64
 	ScopeKey             string
 	ConversationHash     string
 	SourceAccountID      int64
@@ -341,6 +344,7 @@ type OpenAIUserConversationFailoverReservation struct {
 	TargetResidentSlotID int64
 	TargetSlotGeneration int64
 	ProvisionalToken     string
+	Aliases              []OpenAIUserConversationAlias
 	DetachSource         bool
 	Config               OpenAIUserAffinityConfig
 }
@@ -356,6 +360,7 @@ type OpenAIUserResidentSlotVersion struct {
 type OpenAIUserResidentSlotReplacementReservation struct {
 	BindingID            int64
 	UserID               int64
+	APIKeyID             int64
 	ScopeKey             string
 	ConversationHash     string
 	SourceAccountID      int64
@@ -365,6 +370,7 @@ type OpenAIUserResidentSlotReplacementReservation struct {
 	TargetAccountID      int64
 	CheckedSlots         []OpenAIUserResidentSlotVersion
 	ProvisionalToken     string
+	Aliases              []OpenAIUserConversationAlias
 	Config               OpenAIUserAffinityConfig
 }
 

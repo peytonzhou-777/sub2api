@@ -243,8 +243,9 @@ func TestOpenAIUserConversationBindingProvisionalLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, created)
 	rolledBack, err := repo.RollbackOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
-		BindingID: rollbackBinding.ID, UserID: user.ID, ResidentSlotID: rollbackBinding.ResidentSlotID,
-		AccountID: account.ID, ProvisionalToken: rollbackToken,
+		BindingID: rollbackBinding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey,
+		ConversationHash: rollbackBinding.ConversationHash, ResidentSlotID: rollbackBinding.ResidentSlotID,
+		AccountID: account.ID, SlotGeneration: rollbackBinding.SlotGeneration, ProvisionalToken: rollbackToken,
 	})
 	require.NoError(t, err)
 	require.True(t, rolledBack)
@@ -285,7 +286,7 @@ func TestOpenAIUserConversationProvisionalCapacityFailureIsRecorded(t *testing.T
 	firstToken := uuid.NewString()
 	first := reserve(strings.Repeat("1", 64), firstToken)
 	committed, err := repo.CommitOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
-		BindingID: first.ID, UserID: user.ID, ScopeKey: scopeKey, ConversationHash: first.ConversationHash,
+		BindingID: first.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey, ConversationHash: first.ConversationHash,
 		ResidentSlotID: first.ResidentSlotID, AccountID: account.ID, SlotGeneration: first.SlotGeneration,
 		ProvisionalToken: firstToken, Config: config,
 	})
@@ -311,7 +312,7 @@ func TestOpenAIUserConversationProvisionalCapacityFailureIsRecorded(t *testing.T
 	require.Equal(t, 1, failureCount)
 
 	rolledBack, err := repo.RollbackOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
-		BindingID: second.ID, UserID: user.ID, ScopeKey: scopeKey, ConversationHash: second.ConversationHash,
+		BindingID: second.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey, ConversationHash: second.ConversationHash,
 		ResidentSlotID: second.ResidentSlotID, AccountID: account.ID, SlotGeneration: second.SlotGeneration,
 		ProvisionalToken: secondToken, Config: config,
 	})
@@ -411,8 +412,9 @@ func TestOpenAIUserActiveRouteSoftOwnerAndPendingLifecycle(t *testing.T) {
 	require.Equal(t, secondUser.ID, occupancies[secondAccount.ID].OwnerUserID)
 
 	rolledBack, err := repo.RollbackOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
-		BindingID: pendingBinding.ID, UserID: secondUser.ID, ScopeKey: scopeKey,
-		ResidentSlotID: pendingBinding.ResidentSlotID, AccountID: secondAccount.ID,
+		BindingID: pendingBinding.ID, UserID: secondUser.ID, APIKeyID: secondKey.ID, ScopeKey: scopeKey,
+		ConversationHash: pendingBinding.ConversationHash,
+		ResidentSlotID:   pendingBinding.ResidentSlotID, AccountID: secondAccount.ID,
 		SlotGeneration: pendingBinding.SlotGeneration, ProvisionalToken: token,
 		ManageActiveRoute: true, ActiveRoutePending: true, Config: config,
 	})
@@ -457,7 +459,7 @@ func TestOpenAIUserAffinityConvergenceShortensExistingTTL(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, created)
 	committed, err := repo.CommitOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
-		BindingID: binding.ID, UserID: user.ID, ScopeKey: scopeKey, ConversationHash: binding.ConversationHash,
+		BindingID: binding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey, ConversationHash: binding.ConversationHash,
 		ResidentSlotID: binding.ResidentSlotID, AccountID: account.ID, SlotGeneration: binding.SlotGeneration,
 		ProvisionalToken: token, ResponseAliasHash: responseAliasHash,
 		ManageActiveRoute: binding.ManageActiveRoute, ActiveRoutePending: binding.ActiveRoutePending, Config: config,
@@ -560,8 +562,9 @@ func TestOpenAIUserConversationBindingEnforcesResidentSlotLimit(t *testing.T) {
 	require.Zero(t, blockedContacts, "槽位上限拒绝时不得泄漏触达预留")
 
 	rolledBack, err := repo.RollbackOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
-		BindingID: second.ID, UserID: user.ID, ResidentSlotID: second.ResidentSlotID,
-		AccountID: accounts[1].ID, ProvisionalToken: secondToken,
+		BindingID: second.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey,
+		ConversationHash: second.ConversationHash, ResidentSlotID: second.ResidentSlotID,
+		AccountID: accounts[1].ID, SlotGeneration: second.SlotGeneration, ProvisionalToken: secondToken,
 	})
 	require.NoError(t, err)
 	require.True(t, rolledBack)
@@ -754,6 +757,261 @@ func TestReserveOpenAIUserConversationBindingConcurrentSameConversationIsIdempot
 	require.Equal(t, 1, bindingCount)
 }
 
+func TestReserveOpenAIUserConversationBindingRebuildsStaleSlotGeneration(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	client := tx.Client()
+	repo := newAccountRepositoryWithSQL(client, tx, nil)
+	user := mustCreateUser(t, client, &service.User{
+		Email: "affinity-stale-generation-rebuild-" + uuid.NewString() + "@example.com", PasswordHash: "hash",
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID, Key: "sk-affinity-stale-generation-rebuild-" + uuid.NewString(), Name: "affinity",
+	})
+	account := mustCreateAccount(t, client, &service.Account{
+		Name: "openai-affinity-stale-generation-rebuild-" + uuid.NewString(), Platform: service.PlatformOpenAI,
+	})
+	config := service.DefaultOpenAIUserAffinityConfig()
+	config.ResidentAccountSlotCount = 2
+	scopeKey := "openai:v1:group:simple:lane:stale-generation-rebuild"
+	conversationHash := strings.Repeat("7", 64)
+	originalToken := uuid.NewString()
+	binding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+		UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey, ConversationHash: conversationHash,
+		AccountID: account.ID, PlacementGeneration: 1, MaxResidentSlots: 2,
+		ContextRebuildable: true, ProvisionalToken: originalToken, Config: config,
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+	committed, err := repo.CommitOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
+		BindingID: binding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey,
+		ConversationHash: conversationHash, ResidentSlotID: binding.ResidentSlotID,
+		AccountID: account.ID, SlotGeneration: binding.SlotGeneration,
+		ProvisionalToken: originalToken, Config: config,
+	})
+	require.NoError(t, err)
+	require.True(t, committed)
+
+	_, err = tx.ExecContext(ctx, `UPDATE openai_user_resident_slots SET generation = 2 WHERE id = $1`, binding.ResidentSlotID)
+	require.NoError(t, err)
+	valid, err := repo.ValidateOpenAIUserConversationBinding(ctx, *binding)
+	require.NoError(t, err)
+	require.False(t, valid)
+
+	rebuildToken := uuid.NewString()
+	rebuilt, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+		UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey, ConversationHash: conversationHash,
+		AccountID: account.ID, PlacementGeneration: 2, MaxResidentSlots: 2,
+		PreferredResidentSlotID: binding.ResidentSlotID, PreferredSlotGeneration: 2,
+		ContextRebuildable: true, ProvisionalToken: rebuildToken, Config: config,
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+	require.Equal(t, binding.ID, rebuilt.ID)
+	require.Equal(t, int64(2), rebuilt.SlotGeneration)
+	require.Equal(t, "provisional", rebuilt.Status)
+	require.False(t, rebuilt.FirstOutputCommitted)
+	require.Equal(t, rebuildToken, rebuilt.ProvisionalToken)
+}
+
+func TestCrossScopeLineageConcurrentRebuildLifecycle(t *testing.T) {
+	ctx := context.Background()
+	client := integrationEntClient
+	repo := newAccountRepositoryWithSQL(client, integrationDB, nil)
+	user := mustCreateUser(t, client, &service.User{
+		Email: "affinity-cross-scope-rebuild-" + uuid.NewString() + "@example.com", PasswordHash: "hash",
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID, Key: "sk-affinity-cross-scope-rebuild-" + uuid.NewString(), Name: "affinity",
+	})
+	sourceAccount := mustCreateAccount(t, client, &service.Account{
+		Name: "openai-affinity-cross-scope-source-" + uuid.NewString(), Platform: service.PlatformOpenAI,
+	})
+	targetAccount := mustCreateAccount(t, client, &service.Account{
+		Name: "openai-affinity-cross-scope-target-" + uuid.NewString(), Platform: service.PlatformOpenAI,
+	})
+	t.Cleanup(func() {
+		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM users WHERE id = $1`, user.ID)
+		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM accounts WHERE id IN ($1, $2)`, sourceAccount.ID, targetAccount.ID)
+	})
+	config := service.DefaultOpenAIUserAffinityConfig()
+	config.ResidentAccountSlotCount = 2
+	chatScope := "openai:v1:group:simple:lane:endpoint:chat_completions"
+	responsesScope := "openai:v1:group:simple:lane:endpoint:responses"
+	lineageScope := "openai:v1:group:simple:lineage:codex-thread"
+	lineageHash := strings.Repeat("b", 64)
+	alias := service.OpenAIUserConversationAlias{ScopeKey: lineageScope, Type: "codex_thread", Hash: lineageHash}
+	sourceToken := uuid.NewString()
+	sourceBinding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+		UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: chatScope, ConversationHash: strings.Repeat("c", 64),
+		AccountID: sourceAccount.ID, PlacementGeneration: 1, MaxResidentSlots: 2,
+		ContextRebuildable: true, ProvisionalToken: sourceToken, Aliases: []service.OpenAIUserConversationAlias{alias}, Config: config,
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+	_, err = repo.CommitOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
+		BindingID: sourceBinding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: chatScope,
+		ConversationHash: sourceBinding.ConversationHash, ResidentSlotID: sourceBinding.ResidentSlotID,
+		AccountID: sourceAccount.ID, SlotGeneration: sourceBinding.SlotGeneration,
+		ProvisionalToken: sourceToken, Aliases: []service.OpenAIUserConversationAlias{alias}, Config: config,
+	})
+	require.NoError(t, err)
+	valid, err := repo.ValidateOpenAIUserConversationBinding(ctx, *sourceBinding)
+	require.NoError(t, err)
+	require.True(t, valid)
+
+	type rebuildResult struct {
+		binding *service.OpenAIUserConversationBinding
+		created bool
+		token   string
+		err     error
+	}
+	results := make(chan rebuildResult, 2)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			token := uuid.NewString()
+			binding, wasCreated, reserveErr := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+				UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: responsesScope, ConversationHash: lineageHash,
+				AccountID: targetAccount.ID, PlacementGeneration: 2, MaxResidentSlots: 2,
+				ContextRebuildable: true, ProvisionalToken: token, Aliases: []service.OpenAIUserConversationAlias{alias}, Config: config,
+			})
+			results <- rebuildResult{binding: binding, created: wasCreated, token: token, err: reserveErr}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	createdCount := 0
+	var leader rebuildResult
+	for result := range results {
+		require.NoError(t, result.err)
+		require.NotNil(t, result.binding)
+		require.Equal(t, responsesScope, result.binding.ScopeKey)
+		require.Equal(t, targetAccount.ID, result.binding.AccountID)
+		if result.created {
+			createdCount++
+			leader = result
+		}
+	}
+	require.Equal(t, 1, createdCount)
+	byLineage, err := repo.GetOpenAIUserConversationBindingByAlias(ctx, user.ID, apiKey.ID, lineageScope, "codex_thread", lineageHash)
+	require.NoError(t, err)
+	require.NotNil(t, byLineage)
+	require.Equal(t, leader.binding.ID, byLineage.ID)
+
+	rolledBack, err := repo.RollbackOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
+		BindingID: leader.binding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: responsesScope,
+		ConversationHash: lineageHash, ResidentSlotID: leader.binding.ResidentSlotID,
+		AccountID: targetAccount.ID, SlotGeneration: leader.binding.SlotGeneration,
+		ProvisionalToken: leader.token, Aliases: []service.OpenAIUserConversationAlias{alias}, Config: config,
+	})
+	require.NoError(t, err)
+	require.True(t, rolledBack)
+	byLineage, err = repo.GetOpenAIUserConversationBindingByAlias(ctx, user.ID, apiKey.ID, lineageScope, "codex_thread", lineageHash)
+	require.NoError(t, err)
+	require.Nil(t, byLineage, "首输出前失败不得留下指向 provisional binding 的 lineage alias")
+
+	commitToken := uuid.NewString()
+	committedBinding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+		UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: responsesScope, ConversationHash: lineageHash,
+		AccountID: targetAccount.ID, PlacementGeneration: 3, MaxResidentSlots: 2,
+		ContextRebuildable: true, ProvisionalToken: commitToken, Aliases: []service.OpenAIUserConversationAlias{alias}, Config: config,
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+	committed, err := repo.CommitOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
+		BindingID: committedBinding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: responsesScope,
+		ConversationHash: lineageHash, ResidentSlotID: committedBinding.ResidentSlotID,
+		AccountID: targetAccount.ID, SlotGeneration: committedBinding.SlotGeneration,
+		ProvisionalToken: commitToken, Aliases: []service.OpenAIUserConversationAlias{alias}, Config: config,
+	})
+	require.NoError(t, err)
+	require.True(t, committed)
+	byLineage, err = repo.GetOpenAIUserConversationBindingByAlias(ctx, user.ID, apiKey.ID, lineageScope, "codex_thread", lineageHash)
+	require.NoError(t, err)
+	require.NotNil(t, byLineage)
+	require.Equal(t, responsesScope, byLineage.ScopeKey)
+	require.Equal(t, targetAccount.ID, byLineage.AccountID)
+	_, err = integrationDB.ExecContext(ctx, `UPDATE openai_user_resident_slots SET status = 'expired' WHERE id = $1`, sourceBinding.ResidentSlotID)
+	require.NoError(t, err)
+	valid, err = repo.ValidateOpenAIUserConversationBinding(ctx, *sourceBinding)
+	require.NoError(t, err)
+	require.False(t, valid)
+}
+
+func TestCrossScopeLineageLateCommitCannotOverwriteNewOwner(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	client := tx.Client()
+	repo := newAccountRepositoryWithSQL(client, tx, nil)
+	user := mustCreateUser(t, client, &service.User{
+		Email: "affinity-lineage-late-commit-" + uuid.NewString() + "@example.com", PasswordHash: "hash",
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID, Key: "sk-affinity-lineage-late-commit-" + uuid.NewString(), Name: "affinity",
+	})
+	sourceAccount := mustCreateAccount(t, client, &service.Account{
+		Name: "openai-affinity-lineage-late-source-" + uuid.NewString(), Platform: service.PlatformOpenAI,
+	})
+	targetAccount := mustCreateAccount(t, client, &service.Account{
+		Name: "openai-affinity-lineage-late-target-" + uuid.NewString(), Platform: service.PlatformOpenAI,
+	})
+	config := service.DefaultOpenAIUserAffinityConfig()
+	config.ResidentAccountSlotCount = 2
+	chatScope := "openai:v1:group:simple:lane:endpoint:chat_completions"
+	responsesScope := "openai:v1:group:simple:lane:endpoint:responses"
+	lineageScope := "openai:v1:group:simple:lineage:codex-thread"
+	lineageHash := strings.Repeat("8", 64)
+	alias := service.OpenAIUserConversationAlias{ScopeKey: lineageScope, Type: "codex_thread", Hash: lineageHash}
+
+	reserve := func(scopeKey, conversationHash string, accountID, generation int64) (*service.OpenAIUserConversationBinding, string) {
+		t.Helper()
+		token := uuid.NewString()
+		binding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+			UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey, ConversationHash: conversationHash,
+			AccountID: accountID, PlacementGeneration: generation, MaxResidentSlots: 2,
+			ContextRebuildable: true, ProvisionalToken: token,
+			Aliases: []service.OpenAIUserConversationAlias{alias}, Config: config,
+		})
+		require.NoError(t, err)
+		require.True(t, created)
+		return binding, token
+	}
+	transition := func(binding *service.OpenAIUserConversationBinding, token string) service.OpenAIUserConversationTransition {
+		return service.OpenAIUserConversationTransition{
+			BindingID: binding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: binding.ScopeKey,
+			ConversationHash: binding.ConversationHash, ResidentSlotID: binding.ResidentSlotID,
+			AccountID: binding.AccountID, SlotGeneration: binding.SlotGeneration,
+			ProvisionalToken: token, Aliases: []service.OpenAIUserConversationAlias{alias}, Config: config,
+		}
+	}
+
+	oldBinding, oldToken := reserve(chatScope, strings.Repeat("9", 64), sourceAccount.ID, 1)
+	newBinding, newToken := reserve(responsesScope, lineageHash, targetAccount.ID, 2)
+	committed, err := repo.CommitOpenAIUserConversationBinding(ctx, transition(newBinding, newToken))
+	require.NoError(t, err)
+	require.True(t, committed)
+
+	committed, err = repo.CommitOpenAIUserConversationBinding(ctx, transition(oldBinding, oldToken))
+	require.NoError(t, err)
+	require.False(t, committed, "旧 scope 的晚到首输出不得覆盖已提交的新 lineage owner")
+	byLineage, err := repo.GetOpenAIUserConversationBindingByAlias(ctx, user.ID, apiKey.ID, lineageScope, "codex_thread", lineageHash)
+	require.NoError(t, err)
+	require.NotNil(t, byLineage)
+	require.Equal(t, newBinding.ID, byLineage.ID)
+	oldLoaded, err := repo.GetOpenAIUserConversationBinding(ctx, user.ID, apiKey.ID, chatScope, oldBinding.ConversationHash)
+	require.NoError(t, err)
+	require.NotNil(t, oldLoaded)
+	require.Equal(t, "provisional", oldLoaded.Status)
+	require.False(t, oldLoaded.FirstOutputCommitted)
+}
+
 // 会话级切号提交前必须保留源绑定，失败回滚和成功提交都不能搬迁其他会话。
 func TestOpenAIUserConversationFailoverLifecycle(t *testing.T) {
 	ctx := context.Background()
@@ -786,7 +1044,7 @@ func TestOpenAIUserConversationFailoverLifecycle(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, created)
 		committed, err := repo.CommitOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
-			BindingID: binding.ID, UserID: user.ID, ScopeKey: scopeKey,
+			BindingID: binding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey,
 			ConversationHash: conversationHash, ResidentSlotID: binding.ResidentSlotID,
 			AccountID: account.ID, SlotGeneration: binding.SlotGeneration,
 			ProvisionalToken: token, Config: config,
@@ -802,7 +1060,7 @@ func TestOpenAIUserConversationFailoverLifecycle(t *testing.T) {
 
 	reserveFailover := func(token string) *service.OpenAIUserConversationTransition {
 		transition, reserved, err := repo.ReserveOpenAIUserConversationFailover(ctx, service.OpenAIUserConversationFailoverReservation{
-			BindingID: sourceBinding.ID, UserID: user.ID, ScopeKey: scopeKey, ConversationHash: sourceHash,
+			BindingID: sourceBinding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey, ConversationHash: sourceHash,
 			SourceAccountID: sourceAccount.ID, SourceResidentSlotID: sourceBinding.ResidentSlotID,
 			SourceSlotGeneration: sourceBinding.SlotGeneration,
 			TargetAccountID:      targetAccount.ID, TargetResidentSlotID: targetBinding.ResidentSlotID,
@@ -881,7 +1139,7 @@ func TestOpenAIUserResidentSlotReplacementLifecycle(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, created)
 		_, err = repo.CommitOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
-			BindingID: binding.ID, UserID: user.ID, ScopeKey: scopeKey, ConversationHash: hash,
+			BindingID: binding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey, ConversationHash: hash,
 			ResidentSlotID: binding.ResidentSlotID, AccountID: account.ID,
 			SlotGeneration: binding.SlotGeneration, ProvisionalToken: token, Config: config,
 		})
@@ -901,7 +1159,7 @@ func TestOpenAIUserResidentSlotReplacementLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, created)
 	_, err = repo.CommitOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
-		BindingID: crossScopeBinding.ID, UserID: user.ID, ScopeKey: crossScopeBinding.ScopeKey,
+		BindingID: crossScopeBinding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: crossScopeBinding.ScopeKey,
 		ConversationHash: crossScopeBinding.ConversationHash, ResidentSlotID: crossScopeBinding.ResidentSlotID,
 		AccountID: accounts[2].ID, SlotGeneration: crossScopeBinding.SlotGeneration,
 		ProvisionalToken: crossScopeToken, Config: config,
@@ -913,7 +1171,7 @@ func TestOpenAIUserResidentSlotReplacementLifecycle(t *testing.T) {
 	}
 	reserveReplacement := func(token string) *service.OpenAIUserConversationTransition {
 		transition, reserved, err := repo.ReserveOpenAIUserResidentSlotReplacement(ctx, service.OpenAIUserResidentSlotReplacementReservation{
-			BindingID: sourceBinding.ID, UserID: user.ID, ScopeKey: scopeKey, ConversationHash: sourceHash,
+			BindingID: sourceBinding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey, ConversationHash: sourceHash,
 			SourceAccountID: accounts[0].ID, SourceResidentSlotID: sourceBinding.ResidentSlotID,
 			SourceSlotGeneration: sourceBinding.SlotGeneration, VictimSlotID: victimBinding.ResidentSlotID,
 			TargetAccountID: accounts[2].ID, CheckedSlots: checked, ProvisionalToken: token, Config: config,
@@ -1000,7 +1258,7 @@ func TestOpenAIUserCapacityIncidentsAreIsolatedByConversation(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, created)
 		_, err = repo.CommitOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationTransition{
-			BindingID: binding.ID, UserID: user.ID, ScopeKey: scopeKey, ConversationHash: hash,
+			BindingID: binding.ID, UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey, ConversationHash: hash,
 			ResidentSlotID: binding.ResidentSlotID, AccountID: account.ID,
 			SlotGeneration: binding.SlotGeneration, ProvisionalToken: token, Config: config,
 		})

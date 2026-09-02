@@ -198,9 +198,13 @@ func resolveOpenAICodexThreadBindings(
 		return nil, nil, err
 	}
 	var parentBinding *OpenAIUserConversationBinding
+	var parentHint *OpenAIUserConversationBinding
 	for _, hash := range sortedOpenAICodexThreadHashes(state.parentAliasHashes) {
 		if hash == state.selfAliasHash {
-			if selfBinding != nil && selfBinding.FirstOutputCommitted && selfBinding.Status != "provisional" {
+			if selfBinding != nil && selfBinding.ScopeKey != identity.scopeKey {
+				continue
+			}
+			if selfBinding != nil {
 				return selfBinding, nil, nil
 			}
 			return nil, nil, ErrOpenAICodexThreadLineageConflict
@@ -212,19 +216,22 @@ func resolveOpenAICodexThreadBindings(
 		if candidate == nil {
 			continue
 		}
-		if candidate.Status == "provisional" || !candidate.FirstOutputCommitted {
-			if selfBinding != nil && selfBinding.FirstOutputCommitted && selfBinding.Status != "provisional" {
-				return selfBinding, nil, nil
+		if candidate.ScopeKey != identity.scopeKey {
+			if parentHint == nil {
+				parentHint = candidate
 			}
-			return nil, nil, ErrOpenAICodexParentThreadPending
+			continue
 		}
 		if parentBinding != nil && (parentBinding.ID != candidate.ID || parentBinding.AccountID != candidate.AccountID) {
-			if selfBinding != nil && selfBinding.FirstOutputCommitted && selfBinding.Status != "provisional" {
+			if selfBinding != nil && selfBinding.ScopeKey == identity.scopeKey {
 				return selfBinding, nil, nil
 			}
 			return nil, nil, ErrOpenAICodexThreadLineageConflict
 		}
 		parentBinding = candidate
+	}
+	if parentBinding == nil {
+		parentBinding = parentHint
 	}
 	return selfBinding, parentBinding, nil
 }

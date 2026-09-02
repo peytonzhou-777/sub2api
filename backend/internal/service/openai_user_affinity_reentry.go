@@ -66,6 +66,15 @@ type openAIUserAffinityMetrics struct {
 	residentSlotFillAttempts        atomic.Uint64
 	conversationFailoverAttempts    atomic.Uint64
 	residentSlotReplacementAttempts atomic.Uint64
+	staleBindingAccountUnavailable  atomic.Uint64
+	staleLineageScopeMismatch       atomic.Uint64
+	staleLineageAccountUnavailable  atomic.Uint64
+	residentSlotUnderfilledReplace  atomic.Uint64
+	residentSlotFullReplace         atomic.Uint64
+	noHealthyCandidate              atomic.Uint64
+	provisionalCommitSuccess        atomic.Uint64
+	provisionalRollback             atomic.Uint64
+	concurrentRebuildConflict       atomic.Uint64
 }
 
 // openAIUserAffinityState 集中保存进程级亲和性协调状态，减少网关主结构的接线字段。
@@ -90,6 +99,15 @@ type OpenAIUserAffinityMetricsSnapshot struct {
 	ResidentSlotFillAttempts        uint64
 	ConversationFailoverAttempts    uint64
 	ResidentSlotReplacementAttempts uint64
+	StaleBindingAccountUnavailable  uint64
+	StaleLineageScopeMismatch       uint64
+	StaleLineageAccountUnavailable  uint64
+	ResidentSlotUnderfilledReplace  uint64
+	ResidentSlotFullReplace         uint64
+	NoHealthyCandidate              uint64
+	ProvisionalCommitSuccess        uint64
+	ProvisionalRollback             uint64
+	ConcurrentRebuildConflict       uint64
 }
 
 // SnapshotOpenAIUserAffinityMetrics 返回进程级协调指标，供运维采集器和诊断使用。
@@ -109,7 +127,45 @@ func (s *OpenAIGatewayService) SnapshotOpenAIUserAffinityMetrics() OpenAIUserAff
 		ResidentSlotFillAttempts:        s.openaiAffinity.metrics.residentSlotFillAttempts.Load(),
 		ConversationFailoverAttempts:    s.openaiAffinity.metrics.conversationFailoverAttempts.Load(),
 		ResidentSlotReplacementAttempts: s.openaiAffinity.metrics.residentSlotReplacementAttempts.Load(),
+		StaleBindingAccountUnavailable:  s.openaiAffinity.metrics.staleBindingAccountUnavailable.Load(),
+		StaleLineageScopeMismatch:       s.openaiAffinity.metrics.staleLineageScopeMismatch.Load(),
+		StaleLineageAccountUnavailable:  s.openaiAffinity.metrics.staleLineageAccountUnavailable.Load(),
+		ResidentSlotUnderfilledReplace:  s.openaiAffinity.metrics.residentSlotUnderfilledReplace.Load(),
+		ResidentSlotFullReplace:         s.openaiAffinity.metrics.residentSlotFullReplace.Load(),
+		NoHealthyCandidate:              s.openaiAffinity.metrics.noHealthyCandidate.Load(),
+		ProvisionalCommitSuccess:        s.openaiAffinity.metrics.provisionalCommitSuccess.Load(),
+		ProvisionalRollback:             s.openaiAffinity.metrics.provisionalRollback.Load(),
+		ConcurrentRebuildConflict:       s.openaiAffinity.metrics.concurrentRebuildConflict.Load(),
 	}
+}
+
+// observeOpenAIUserAffinityRecovery 统一输出老会话重建的结构化原因及进程指标。
+func (s *OpenAIGatewayService) observeOpenAIUserAffinityRecovery(reason string, args ...any) {
+	if s == nil {
+		return
+	}
+	switch reason {
+	case "stale_binding_account_unavailable":
+		s.openaiAffinity.metrics.staleBindingAccountUnavailable.Add(1)
+	case "stale_lineage_scope_mismatch":
+		s.openaiAffinity.metrics.staleLineageScopeMismatch.Add(1)
+	case "stale_lineage_account_unavailable":
+		s.openaiAffinity.metrics.staleLineageAccountUnavailable.Add(1)
+	case "resident_slot_underfilled_replacement":
+		s.openaiAffinity.metrics.residentSlotUnderfilledReplace.Add(1)
+	case "resident_slot_full_replacement":
+		s.openaiAffinity.metrics.residentSlotFullReplace.Add(1)
+	case "no_healthy_candidate":
+		s.openaiAffinity.metrics.noHealthyCandidate.Add(1)
+	case "provisional_commit_success":
+		s.openaiAffinity.metrics.provisionalCommitSuccess.Add(1)
+	case "provisional_rollback":
+		s.openaiAffinity.metrics.provisionalRollback.Add(1)
+	case "concurrent_rebuild_conflict":
+		s.openaiAffinity.metrics.concurrentRebuildConflict.Add(1)
+	}
+	attributes := append([]any{"reason", reason}, args...)
+	slog.Info("openai_user_affinity.conversation_recovery", attributes...)
 }
 
 // coordinateOpenAIUserAffinityReentry 在账号抢槽前合并同用户回流，并仅按 FIFO 放行独立请求。

@@ -47,6 +47,10 @@ func (r *openAIUserAffinitySuccessTouchRepo) GetOpenAIUserConversationBindingByA
 	return nil, nil
 }
 
+func (r *openAIUserAffinitySuccessTouchRepo) ValidateOpenAIUserConversationBinding(context.Context, OpenAIUserConversationBinding) (bool, error) {
+	return true, nil
+}
+
 func (r *openAIUserAffinitySuccessTouchRepo) ReserveOpenAIUserConversationBinding(context.Context, OpenAIUserConversationReservation) (*OpenAIUserConversationBinding, bool, error) {
 	return nil, false, nil
 }

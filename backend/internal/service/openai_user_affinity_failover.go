@@ -26,6 +26,10 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversationFailover(
 		return nil, true, ErrNoAvailableAccounts
 	}
 	now := time.Now().UTC()
+	lineageAliases := make([]OpenAIUserConversationAlias, 0, 1)
+	if identity.codexThreadHash != "" {
+		lineageAliases = append(lineageAliases, openAICodexThreadReservationAlias(req.GroupID, identity.codexThreadHash))
+	}
 	incident := OpenAIUserAffinityIncidentIdentity{
 		UserID: identity.userID, AccountID: binding.AccountID, ScopeKey: binding.ScopeKey,
 		PlacementGeneration: binding.SlotGeneration, ConversationHash: binding.ConversationHash,
@@ -115,11 +119,12 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversationFailover(
 			release = acquired.ReleaseFunc
 		}
 		transition, reserved, reserveErr := failoverStore.ReserveOpenAIUserConversationFailover(ctx, OpenAIUserConversationFailoverReservation{
-			BindingID: binding.ID, UserID: identity.userID, ScopeKey: identity.scopeKey,
+			BindingID: binding.ID, UserID: identity.userID, APIKeyID: identity.apiKeyID, ScopeKey: identity.scopeKey,
 			ConversationHash: binding.ConversationHash, SourceAccountID: binding.AccountID,
 			SourceResidentSlotID: binding.ResidentSlotID, SourceSlotGeneration: binding.SlotGeneration,
 			TargetAccountID: slot.AccountID, TargetResidentSlotID: slot.ID, TargetSlotGeneration: slot.Generation,
-			ProvisionalToken: uuid.NewString(), DetachSource: isOpenAIUserAffinityResidentHardUnavailable(sourceAdmission), Config: config,
+			ProvisionalToken: uuid.NewString(), Aliases: lineageAliases,
+			DetachSource: isOpenAIUserAffinityResidentHardUnavailable(sourceAdmission), Config: config,
 		})
 		if reserveErr != nil || !reserved || transition == nil {
 			if release != nil {
@@ -128,7 +133,10 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversationFailover(
 			if reserveErr != nil {
 				return nil, true, reserveErr
 			}
-			continue
+			s.observeOpenAIUserAffinityRecovery("concurrent_rebuild_conflict",
+				"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
+				"binding_id", binding.ID, "source_account_id", binding.AccountID, "target_account_id", slot.AccountID)
+			return nil, true, ErrNoAvailableAccounts
 		}
 		s.rememberOpenAIUserAffinityConversationTransition(ctx, transition)
 		s.openaiAffinity.metrics.conversationFailoverAttempts.Add(1)
@@ -142,9 +150,20 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversationFailover(
 		})
 		return selection, true, selectionErr
 	}
-	if allSlotsFailed && len(activeSlots) >= config.RuntimeResidentAccountSlotCount() && len(activeSlots) > 0 {
+	if allSlotsFailed && len(activeSlots) > 0 && isOpenAIUserAffinityResidentHardUnavailable(sourceAdmission) {
+		reason := "resident_slot_underfilled_replacement"
+		if len(activeSlots) >= config.RuntimeResidentAccountSlotCount() {
+			reason = "resident_slot_full_replacement"
+		}
+		s.observeOpenAIUserAffinityRecovery(reason,
+			"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
+			"binding_id", binding.ID, "source_account_id", binding.AccountID, "slot_count", len(activeSlots),
+			"slot_limit", config.RuntimeResidentAccountSlotCount())
 		return s.selectOpenAIUserAffinitySlotReplacement(ctx, req, config, identity, binding, sourceAdmission, slots, activeSlots, checkedSlots)
 	}
+	s.observeOpenAIUserAffinityRecovery("no_healthy_candidate",
+		"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
+		"binding_id", binding.ID, "source_account_id", binding.AccountID)
 	return nil, true, ErrNoAvailableAccounts
 }
 
@@ -209,11 +228,16 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinitySlotReplacement(
 			release = acquired.ReleaseFunc
 		}
 		transition, reserved, reserveErr := store.ReserveOpenAIUserResidentSlotReplacement(ctx, OpenAIUserResidentSlotReplacementReservation{
-			BindingID: binding.ID, UserID: identity.userID, ScopeKey: identity.scopeKey,
+			BindingID: binding.ID, UserID: identity.userID, APIKeyID: identity.apiKeyID, ScopeKey: identity.scopeKey,
 			ConversationHash: binding.ConversationHash, SourceAccountID: binding.AccountID,
 			SourceResidentSlotID: binding.ResidentSlotID, SourceSlotGeneration: binding.SlotGeneration,
 			VictimSlotID: victim.ID, TargetAccountID: account.ID, CheckedSlots: checkedSlots,
-			ProvisionalToken: uuid.NewString(), Config: config,
+			ProvisionalToken: uuid.NewString(), Aliases: func() []OpenAIUserConversationAlias {
+				if identity.codexThreadHash == "" {
+					return nil
+				}
+				return []OpenAIUserConversationAlias{openAICodexThreadReservationAlias(req.GroupID, identity.codexThreadHash)}
+			}(), Config: config,
 		})
 		if reserveErr != nil || !reserved || transition == nil {
 			if release != nil {
@@ -222,8 +246,10 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinitySlotReplacement(
 			if reserveErr != nil {
 				return nil, true, reserveErr
 			}
-			candidates = removeOpenAIUserAffinityCandidate(candidates, candidate.AccountID)
-			continue
+			s.observeOpenAIUserAffinityRecovery("concurrent_rebuild_conflict",
+				"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
+				"binding_id", binding.ID, "source_account_id", binding.AccountID, "target_account_id", account.ID)
+			return nil, true, ErrNoAvailableAccounts
 		}
 		s.rememberOpenAIUserAffinityConversationTransition(ctx, transition)
 		s.openaiAffinity.metrics.residentSlotReplacementAttempts.Add(1)
@@ -237,6 +263,9 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinitySlotReplacement(
 		})
 		return selection, true, selectionErr
 	}
+	s.observeOpenAIUserAffinityRecovery("no_healthy_candidate",
+		"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
+		"binding_id", binding.ID, "source_account_id", binding.AccountID)
 	return nil, true, ErrNoAvailableAccounts
 }
 

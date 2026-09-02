@@ -113,6 +113,8 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 	if topologyErr != nil {
 		return nil, true, topologyErr
 	}
+	selfBinding = s.acceptOpenAICodexLineageBinding(ctx, req, identity, selfBinding)
+	parentBinding = s.acceptOpenAICodexLineageBinding(ctx, req, identity, parentBinding)
 	var binding *OpenAIUserConversationBinding
 	bindingSource := ""
 	if selfBinding != nil {
@@ -158,6 +160,25 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		}
 		return nil, false, nil
 	}
+	validBinding, validateErr := store.ValidateOpenAIUserConversationBinding(ctx, *binding)
+	if validateErr != nil {
+		return nil, true, validateErr
+	}
+	if !validBinding {
+		slog.Warn("openai_user_affinity.stale_binding_slot_invalid",
+			"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
+			"binding_id", binding.ID, "account_id", binding.AccountID, "slot_id", binding.ResidentSlotID,
+			"slot_generation", binding.SlotGeneration)
+		if !binding.ContextRebuildable || !identity.contextRebuildable {
+			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
+		}
+		// reservation 会在 scope 锁内再次校验并把 stale binding 转回 provisional，
+		// 这里先交还当前 scope 的居民槽位选择流程。
+		return nil, false, nil
+	}
+	if bindingSource == "codex_parent" && (binding.Status == "provisional" || !binding.FirstOutputCommitted) {
+		return nil, true, ErrOpenAICodexParentThreadPending
+	}
 	excluded := false
 	if req.ExcludedIDs != nil {
 		_, excluded = req.ExcludedIDs[binding.AccountID]
@@ -168,6 +189,17 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 	}
 	admission := s.classifyOpenAIUserAffinityResidentAdmission(ctx, account, req.GroupID, req.RequestedModel,
 		req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
+	if isOpenAIUserAffinityResidentHardUnavailable(admission) {
+		s.observeOpenAIUserAffinityRecovery("stale_binding_account_unavailable",
+			"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
+			"binding_id", binding.ID, "account_id", binding.AccountID, "binding_source", bindingSource,
+			"admission", admission)
+		if bindingSource == "codex_self" || bindingSource == "codex_parent" {
+			s.observeOpenAIUserAffinityRecovery("stale_lineage_account_unavailable",
+				"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
+				"binding_id", binding.ID, "account_id", binding.AccountID, "binding_source", bindingSource)
+		}
+	}
 	if binding.Status == "provisional" || !binding.FirstOutputCommitted {
 		// 首输出前若账号已确认不可恢复，先回滚旧预留，避免 provisional 绑定永久占住会话。
 		if bindingSource == "codex_parent" {
@@ -188,6 +220,9 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 				return nil, true, rollbackErr
 			}
 			if rolledBack {
+				s.observeOpenAIUserAffinityRecovery("provisional_rollback",
+					"user_id", binding.UserID, "api_key_id", binding.APIKeyID, "scope_key", binding.ScopeKey,
+					"binding_id", binding.ID, "account_id", binding.AccountID)
 				if maintenance, maintenanceOK := s.accountRepo.(OpenAIUserAffinityResidentSlotMaintenanceStore); maintenanceOK {
 					if _, evictErr := maintenance.EvictOpenAIUserResidentSlot(ctx, binding.UserID, binding.ScopeKey,
 						binding.ResidentSlotID, binding.AccountID, binding.SlotGeneration, "account_unavailable", time.Now().UTC()); evictErr != nil {
@@ -201,6 +236,9 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 			}
 		}
 		// leader 首输出前不允许同会话 follower 向上游发送。
+		s.observeOpenAIUserAffinityRecovery("concurrent_rebuild_conflict",
+			"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
+			"binding_id", binding.ID, "account_id", binding.AccountID, "binding_source", bindingSource)
 		return nil, true, ErrNoAvailableAccounts
 	}
 	if excluded || admission != openAIUserAffinityResidentAllowed {
@@ -339,12 +377,18 @@ func (s *OpenAIGatewayService) reserveOpenAIUserAffinityConversationWithAliases(
 		return ErrOpenAIUserAffinityReservationConflict
 	}
 	if !created && (binding.Status == "provisional" || !binding.FirstOutputCommitted) {
+		s.observeOpenAIUserAffinityRecovery("concurrent_rebuild_conflict",
+			"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
+			"binding_id", binding.ID, "account_id", binding.AccountID)
 		return ErrNoAvailableAccounts
 	}
 	if !created {
 		token = ""
 	}
 	s.rememberOpenAIUserAffinityConversationAttempt(ctx, binding, config, token)
+	if attempt, found := s.openAIUserAffinityAttempt(ctx, binding.AccountID); found && attempt.conversation != nil {
+		attempt.conversation.Aliases = append([]OpenAIUserConversationAlias(nil), aliases...)
+	}
 	return nil
 }
 
@@ -391,8 +435,19 @@ func (s *OpenAIGatewayService) commitOpenAIUserAffinityConversation(ctx context.
 		transition.ResponseAliasHash, _ = value.(string)
 	}
 	firstCommit, err := store.CommitOpenAIUserConversationBinding(ctx, transition)
-	if err != nil || strings.TrimSpace(attempt.conversation.ProvisionalToken) != "" && !firstCommit {
+	if err != nil {
 		return false
+	}
+	if strings.TrimSpace(attempt.conversation.ProvisionalToken) != "" && !firstCommit {
+		s.observeOpenAIUserAffinityRecovery("concurrent_rebuild_conflict",
+			"user_id", transition.UserID, "api_key_id", transition.APIKeyID, "scope_key", transition.ScopeKey,
+			"binding_id", transition.BindingID, "account_id", transition.AccountID, "phase", "first_output_commit")
+		return false
+	}
+	if strings.TrimSpace(attempt.conversation.ProvisionalToken) != "" && firstCommit {
+		s.observeOpenAIUserAffinityRecovery("provisional_commit_success",
+			"user_id", transition.UserID, "api_key_id", transition.APIKeyID, "scope_key", transition.ScopeKey,
+			"binding_id", transition.BindingID, "account_id", transition.AccountID)
 	}
 	attempt.conversationCommitted.Store(true)
 	attempt.conversation.ProvisionalToken = ""
@@ -427,5 +482,38 @@ func (s *OpenAIGatewayService) rollbackOpenAIUserAffinityConversation(ctx contex
 	if !ok {
 		return
 	}
-	_, _ = store.RollbackOpenAIUserConversationBinding(ctx, *attempt.conversation)
+	rolledBack, err := store.RollbackOpenAIUserConversationBinding(ctx, *attempt.conversation)
+	if err == nil && rolledBack {
+		s.observeOpenAIUserAffinityRecovery("provisional_rollback",
+			"user_id", attempt.conversation.UserID, "api_key_id", attempt.conversation.APIKeyID,
+			"scope_key", attempt.conversation.ScopeKey, "binding_id", attempt.conversation.BindingID,
+			"account_id", attempt.conversation.AccountID)
+	}
+}
+
+// acceptOpenAICodexLineageBinding 只允许 lineage 恢复当前 endpoint scope 的权威 binding。
+func (s *OpenAIGatewayService) acceptOpenAICodexLineageBinding(
+	ctx context.Context,
+	req OpenAIAccountScheduleRequest,
+	identity openAIUserConversationIdentity,
+	binding *OpenAIUserConversationBinding,
+) *OpenAIUserConversationBinding {
+	if binding == nil || binding.ScopeKey == identity.scopeKey {
+		return binding
+	}
+	s.observeOpenAIUserAffinityRecovery("stale_lineage_scope_mismatch",
+		"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
+		"binding_id", binding.ID, "binding_scope_key", binding.ScopeKey, "account_id", binding.AccountID)
+	account, err := s.getOpenAIUserAffinityResidentAccount(ctx, binding.AccountID)
+	if err == nil {
+		admission := s.classifyOpenAIUserAffinityResidentAdmission(ctx, account, req.GroupID, req.RequestedModel,
+			req.RequireCompact, req.RequiredCapability, req.RequiredImageCapability, req.RequiredTransport)
+		if isOpenAIUserAffinityResidentHardUnavailable(admission) {
+			s.observeOpenAIUserAffinityRecovery("stale_lineage_account_unavailable",
+				"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
+				"binding_id", binding.ID, "binding_scope_key", binding.ScopeKey, "account_id", binding.AccountID,
+				"admission", admission)
+		}
+	}
+	return nil
 }
