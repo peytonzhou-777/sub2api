@@ -605,6 +605,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	switchCount := 0
 	firstOutputTimeoutSwitchCount := 0
 	profitVetoCount := 0
+	personaSessionCapacityRejected := false
 	failedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
@@ -678,6 +679,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			}
 			if lastFailoverErr != nil {
 				h.handleFailoverExhausted(c, lastFailoverErr, streamStarted)
+			} else if personaSessionCapacityRejected {
+				markOpsRoutingCapacityLimited(c)
+				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "rate_limit_error", openAIAccountBusyClientMessage, streamStarted)
 			} else {
 				h.handleFailoverExhaustedSimple(c, 502, streamStarted)
 			}
@@ -751,6 +755,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
 		accountReleaseFunc, slotResult := h.acquireResponsesAccountSlotWithAdmission(c, apiKey.GroupID, sessionHash, selection, reqStream, &streamStarted, reqLog, body)
+		if slotResult == openAISlotAcquirePersonaSessionUnavailable {
+			personaSessionCapacityRejected = true
+			failedAccountIDs[account.ID] = struct{}{}
+			h.gatewayService.RecordOpenAIUserAffinityFailure(c.Request.Context(), account.ID)
+			continue
+		}
 		if slotResult == openAISlotAcquireProfitVetoed {
 			// 利润终检否决：排除该账号重新选号，全池耗尽由下一轮选号报错；
 			// 否决次数达上限则直接终止，避免排队抢槽后才终检的延迟放大。
@@ -1298,6 +1308,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	maxAccountSwitches := h.maxAccountSwitches
 	switchCount := 0
 	profitVetoCount := 0
+	personaSessionCapacityRejected := false
 	failedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
@@ -1349,6 +1360,10 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					h.anthropicStreamingAwareError(c, cls.Status, cls.ErrType, cls.Message, streamStarted)
 					return
 				}
+			} else if personaSessionCapacityRejected {
+				markOpsRoutingCapacityLimited(c)
+				h.anthropicStreamingAwareError(c, http.StatusServiceUnavailable, "rate_limit_error", openAIAccountBusyClientMessage, streamStarted)
+				return
 			} else {
 				if lastFailoverErr != nil {
 					h.handleAnthropicFailoverExhausted(c, lastFailoverErr, streamStarted)
@@ -1373,6 +1388,12 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
 		accountReleaseFunc, slotResult := h.acquireResponsesAccountSlotWithAdmission(c, apiKey.GroupID, sessionHash, selection, reqStream, &streamStarted, reqLog, body)
+		if slotResult == openAISlotAcquirePersonaSessionUnavailable {
+			personaSessionCapacityRejected = true
+			failedAccountIDs[account.ID] = struct{}{}
+			h.gatewayService.RecordOpenAIUserAffinityFailure(c.Request.Context(), account.ID)
+			continue
+		}
 		if slotResult == openAISlotAcquireProfitVetoed {
 			// 利润终检否决：排除该账号重新选号，全池耗尽由下一轮选号报错；
 			// 否决次数达上限则直接终止，避免排队抢槽后才终检的延迟放大。
@@ -2054,6 +2075,9 @@ const (
 	openAISlotAcquireProfitVetoed
 	// openAISlotAcquireAdmissionRejected：账号侧准入已写错误响应，调用方只补零成本记录。
 	openAISlotAcquireAdmissionRejected
+	// openAISlotAcquirePersonaSessionUnavailable：当前 Persona 的活跃客户端
+	// Session 已满，调用方应排除该账号并继续选号，不向上游发起请求。
+	openAISlotAcquirePersonaSessionUnavailable
 )
 
 // openAIWSTurnPricing 持有 WebSocket 连接内「当前 turn」的计费定价时刻。
@@ -2436,6 +2460,24 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 	// the Codex adapter.
 	var personaBinding service.SessionPersonaSlotBinding
 	var hasPersonaBinding bool
+	var personaSessionRelease func()
+	personaSessionHandedOff := false
+	defer func() {
+		if !personaSessionHandedOff && personaSessionRelease != nil {
+			personaSessionRelease()
+		}
+	}()
+	wrapPersonaSessionRelease := func(release func()) func() {
+		if personaSessionRelease == nil {
+			return release
+		}
+		return func() {
+			if release != nil {
+				release()
+			}
+			personaSessionRelease()
+		}
+	}
 	ctx := service.ContextWithSelectionProfitGate(c.Request.Context(), selection)
 	if account.Platform == service.PlatformOpenAI && account.IsOpenAIOAuth() {
 		_, existingBinding := service.SessionPersonaBindingFromGin(c)
@@ -2472,8 +2514,48 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 		h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No active OpenAI Persona slot is available", *streamStarted)
 		return nil, openAISlotAcquireFailed
 	}
+	if hasPersonaBinding && personaBinding.EffectiveMappingVersion() >= service.SessionPersonaScopeVersionV3 {
+		// 活跃客户端 Session 是 Persona 的基础选号门，不受 RPM/TPM 排队总开关影响。
+		// 使用入站客户端 Session 摘要；不能拿账号侧 fingerprint Session 槽位代替。
+		clientSessionHash, err := service.OpenAIPersonaClientSessionHash(ctx, sessionHash)
+		if err != nil {
+			reqLog.Warn("openai.persona_active_session_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+			h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "Persona Session identity is temporarily unavailable", *streamStarted)
+			return nil, openAISlotAcquireFailed
+		}
+		var allowed bool
+		var reserveErr error
+		ctx, personaSessionRelease, allowed, reserveErr = h.gatewayService.ReserveOpenAIPersonaActiveSession(ctx, account, personaBinding, clientSessionHash)
+		if reserveErr != nil {
+			reqLog.Warn("openai.persona_active_session_reserve_failed", zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)), zap.Error(reserveErr))
+			h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "Persona Session capacity is temporarily unavailable", *streamStarted)
+			return nil, openAISlotAcquireFailed
+		}
+		if !allowed {
+			if selection.Acquired && selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+				selection.Acquired = false
+				selection.ReleaseFunc = nil
+			}
+			service.ClearSessionPersonaBindingFromGin(c)
+			reqLog.Info("openai.persona_active_session_capacity_rejected",
+				zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)),
+				zap.Int("max_active_client_sessions", h.gatewayService.EffectiveOpenAIPersonaAdmissionPolicy(ctx, account, personaBinding).MaxActiveClientSessions),
+			)
+			return nil, openAISlotAcquirePersonaSessionUnavailable
+		}
+		ctx = attachOpenAIPersonaBindingContext(ctx, c, personaBinding)
+		// Forward/ForwardAsAnthropic 从 request context 读取首个有效上游响应，
+		// 必须把 Session reservation 一并交给成功/失败生命周期提交或回滚。
+		c.Request = c.Request.WithContext(ctx)
+	}
 	if h.accountAdmission == nil || account.Platform != service.PlatformOpenAI {
-		return h.acquireResponsesAccountSlot(c, groupID, sessionHash, selection, reqStream, streamStarted, reqLog)
+		release, result := h.acquireResponsesAccountSlot(c, groupID, sessionHash, selection, reqStream, streamStarted, reqLog)
+		if result == openAISlotAcquireOK {
+			personaSessionHandedOff = true
+			release = wrapPersonaSessionRelease(release)
+		}
+		return release, result
 	}
 	cfg, err := h.accountAdmission.Config(c.Request.Context())
 	if err != nil {
@@ -2509,9 +2591,15 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "rate_limit_error", openAIAccountBusyClientMessage, *streamStarted)
 				return nil, openAISlotAcquireFailed
 			}
-			return wrapReleaseOnDone(ctx, release), openAISlotAcquireOK
+			personaSessionHandedOff = true
+			return wrapPersonaSessionRelease(wrapReleaseOnDone(ctx, release)), openAISlotAcquireOK
 		}
-		return h.acquireResponsesAccountSlot(c, groupID, sessionHash, selection, reqStream, streamStarted, reqLog)
+		release, result := h.acquireResponsesAccountSlot(c, groupID, sessionHash, selection, reqStream, streamStarted, reqLog)
+		if result == openAISlotAcquireOK {
+			personaSessionHandedOff = true
+			release = wrapPersonaSessionRelease(release)
+		}
+		return release, result
 	}
 
 	// 调度器可能已抢槽；启用统一准入后必须先释放，避免排队期间占用账号并发。
@@ -2584,7 +2672,8 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 	if err := h.gatewayService.BindStickySessionAfterProfitAdmission(ctx, groupID, sessionHash, latest.ID); err != nil {
 		reqLog.Warn("openai.bind_sticky_session_after_profit_admission_failed", zap.Int64("account_id", latest.ID), zap.Error(err))
 	}
-	return wrapReleaseOnDone(ctx, result.ReleaseFunc), openAISlotAcquireOK
+	personaSessionHandedOff = true
+	return wrapPersonaSessionRelease(wrapReleaseOnDone(ctx, result.ReleaseFunc)), openAISlotAcquireOK
 }
 
 // handleOpenAIAccountAdmissionError 将账号侧拥挤统一映射为平台可重试错误，避免伪装成上游 429。
@@ -3447,17 +3536,77 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		// 准入完成：门并入连接 ctx，turn 级复核与 failover 重选共用。
 		ctx = admissionCtx
 		if hasPersonaBinding && personaBinding.EffectiveMappingVersion() >= service.SessionPersonaScopeVersionV3 {
+			clientSessionHash, prepareErr := service.OpenAIPersonaClientSessionHash(ctx, sessionHash)
+			if prepareErr != nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				reqLog.Warn("openai.websocket_persona_active_session_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(prepareErr))
+				closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "Persona Session identity is temporarily unavailable")
+				return
+			}
+			personaSessionCtx, personaSessionRelease, allowed, reserveErr := h.gatewayService.ReserveOpenAIPersonaActiveSession(
+				ctx, account, personaBinding, clientSessionHash,
+			)
+			if reserveErr != nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				reqLog.Warn("openai.websocket_persona_active_session_reserve_failed", zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)), zap.Error(reserveErr))
+				closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "Persona Session capacity is temporarily unavailable")
+				return
+			}
+			if !allowed {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				selection.Acquired = false
+				selection.ReleaseFunc = nil
+				failedAccountIDs[account.ID] = struct{}{}
+				service.ClearSessionPersonaBindingFromGin(c)
+				h.gatewayService.RecordOpenAIUserAffinityFailure(ctx, account.ID)
+				reqLog.Info("openai.websocket_persona_active_session_capacity_rejected",
+					zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)),
+					zap.Int("max_active_client_sessions", h.gatewayService.EffectiveOpenAIPersonaAdmissionPolicy(ctx, account, personaBinding).MaxActiveClientSessions),
+				)
+				if sameAccountRetryActive {
+					if finishSameAccountRetry() {
+						continue
+					}
+					return
+				}
+				continue
+			}
+			ctx = attachOpenAIPersonaBindingContext(personaSessionCtx, c, personaBinding)
+			c.Request = c.Request.WithContext(ctx)
+			baseRelease := accountReleaseFunc
+			accountReleaseFunc = func() {
+				if baseRelease != nil {
+					baseRelease()
+				}
+				if personaSessionRelease != nil {
+					personaSessionRelease()
+				}
+			}
+		}
+		if hasPersonaBinding && personaBinding.EffectiveMappingVersion() >= service.SessionPersonaScopeVersionV3 {
 			releasePersonaWSLease()
 			policy := h.gatewayService.EffectiveOpenAIPersonaAdmissionPolicy(ctx, account, personaBinding)
 			personaLease, acquired, leaseErr := h.concurrencyHelper.AcquireOpenAIPersonaWSLease(
 				ctx, account.ID, personaBinding.PersonaID, personaBinding.SlotID, policy.MaxActiveWebSockets,
 			)
 			if leaseErr != nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
 				reqLog.Warn("openai.websocket_persona_lease_acquire_failed", zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)), zap.Int("slot_id", personaBinding.SlotID), zap.Error(leaseErr))
 				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "Persona WebSocket capacity is temporarily unavailable")
 				return
 			}
 			if !acquired {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
 				reqLog.Info("openai.websocket_persona_capacity_rejected", zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)), zap.Int("slot_id", personaBinding.SlotID), zap.Int("max_active_websockets", policy.MaxActiveWebSockets))
 				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "Persona WebSocket capacity is full, please retry later")
 				return

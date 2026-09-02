@@ -34,6 +34,7 @@ type OpenAIAccountAdmissionConfig struct {
 	QueueEnabled            bool  `json:"queue_enabled"`
 	MaxWaitSeconds          int   `json:"max_wait_seconds"`
 	MaxConcurrency          int   `json:"max_concurrency,omitempty"`
+	MaxActiveClientSessions int   `json:"max_active_client_sessions"`
 	RequestsPerMinute       int   `json:"requests_per_minute"`
 	TokensPerMinute         int64 `json:"tokens_per_minute"`
 	MaxSubagents            int   `json:"max_subagents,omitempty"`
@@ -60,6 +61,7 @@ func DefaultOpenAIAccountAdmissionConfig() OpenAIAccountAdmissionConfig {
 		Enabled:                 false,
 		QueueEnabled:            false,
 		MaxWaitSeconds:          45,
+		MaxActiveClientSessions: 1,
 		RequestsPerMinute:       0,
 		TokensPerMinute:         0,
 		DefaultOutputTokens:     4096,
@@ -81,6 +83,12 @@ func ValidateOpenAIAccountAdmissionConfig(cfg OpenAIAccountAdmissionConfig) (Ope
 	}
 	if cfg.MaxConcurrency < 0 || cfg.MaxConcurrency > maxPersonaPolicyConcurrency {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("max_concurrency must be between 0 and %d", maxPersonaPolicyConcurrency))
+	}
+	if cfg.MaxActiveClientSessions == 0 {
+		cfg.MaxActiveClientSessions = 1
+	}
+	if cfg.MaxActiveClientSessions < 1 || cfg.MaxActiveClientSessions > maxPersonaPolicySessions {
+		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("max_active_client_sessions must be between 1 and %d", maxPersonaPolicySessions))
 	}
 	if cfg.MaxSubagents < 0 || cfg.MaxSubagents > maxPersonaPolicySubagents {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("max_subagents must be between 0 and %d", maxPersonaPolicySubagents))

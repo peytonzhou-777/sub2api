@@ -18,6 +18,9 @@ func TestDefaultOpenAIAccountAdmissionConfig(t *testing.T) {
 	if cfg.InteractiveBurst != 4 || cfg.BackgroundAgingSeconds != 5 {
 		t.Fatalf("unexpected priority defaults: %+v", cfg)
 	}
+	if cfg.MaxActiveClientSessions != 1 {
+		t.Fatalf("default max active client Sessions = %d, want 1", cfg.MaxActiveClientSessions)
+	}
 }
 
 func TestValidateOpenAIAccountAdmissionConfig(t *testing.T) {
@@ -27,6 +30,7 @@ func TestValidateOpenAIAccountAdmissionConfig(t *testing.T) {
 	}{
 		{"max wait", func(c *OpenAIAccountAdmissionConfig) { c.MaxWaitSeconds = 121 }},
 		{"rpm", func(c *OpenAIAccountAdmissionConfig) { c.RequestsPerMinute = -1 }},
+		{"active client sessions", func(c *OpenAIAccountAdmissionConfig) { c.MaxActiveClientSessions = -1 }},
 		{"tpm", func(c *OpenAIAccountAdmissionConfig) { c.TokensPerMinute = 100000001 }},
 		{"jitter order", func(c *OpenAIAccountAdmissionConfig) { c.JitterMaxMS = c.JitterMinMS - 1 }},
 		{"queue depth", func(c *OpenAIAccountAdmissionConfig) { c.MaxQueueDepthPerAccount = 0 }},
@@ -49,6 +53,7 @@ func TestOpenAIAccountAdmissionConfigForPersona(t *testing.T) {
 	cfg.TokensPerMinute = 1000
 	cfg.PersonaPolicies = map[string]OpenAIPersonaAdmissionPolicy{
 		" OpenCode ": {
+			MaxActiveClientSessions: 2,
 			RequestsPerMinute:       20,
 			TokensPerMinute:         2000,
 			MaxQueueDepthPerAccount: 7,
@@ -59,11 +64,11 @@ func TestOpenAIAccountAdmissionConfigForPersona(t *testing.T) {
 		t.Fatalf("validate Persona policy: %v", err)
 	}
 	opencode := cfg.ForPersona(SessionPersonaOpenCode)
-	if opencode.RequestsPerMinute != 20 || opencode.TokensPerMinute != 2000 || opencode.MaxQueueDepthPerAccount != 7 {
+	if opencode.MaxActiveClientSessions != 2 || opencode.RequestsPerMinute != 20 || opencode.TokensPerMinute != 2000 || opencode.MaxQueueDepthPerAccount != 7 {
 		t.Fatalf("unexpected OpenCode policy: %+v", opencode)
 	}
 	strict := cfg.ForPersona(SessionPersonaCodexCLIStrict)
-	if strict.RequestsPerMinute != 10 || strict.TokensPerMinute != 1000 || strict.MaxQueueDepthPerAccount != cfg.MaxQueueDepthPerAccount {
+	if strict.MaxActiveClientSessions != 1 || strict.RequestsPerMinute != 10 || strict.TokensPerMinute != 1000 || strict.MaxQueueDepthPerAccount != cfg.MaxQueueDepthPerAccount {
 		t.Fatalf("legacy strict policy changed: %+v", strict)
 	}
 }

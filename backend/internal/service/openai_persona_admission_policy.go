@@ -9,6 +9,7 @@ import (
 // Persona 配置层。字段为 0 时继承旧的全局配置，避免历史 JSON 失效。
 type OpenAIPersonaAdmissionPolicy struct {
 	MaxConcurrency          int   `json:"max_concurrency,omitempty"`
+	MaxActiveClientSessions int   `json:"max_active_client_sessions,omitempty"`
 	RequestsPerMinute       int   `json:"requests_per_minute,omitempty"`
 	TokensPerMinute         int64 `json:"tokens_per_minute,omitempty"`
 	MaxSubagents            int   `json:"max_subagents,omitempty"`
@@ -19,6 +20,7 @@ type OpenAIPersonaAdmissionPolicy struct {
 
 const (
 	maxPersonaPolicyConcurrency = 100000
+	maxPersonaPolicySessions    = 10000
 	maxPersonaPolicyRPM         = 1000000
 	maxPersonaPolicyTPM         = 1000000000
 	maxPersonaPolicySubagents   = 100000
@@ -30,6 +32,9 @@ const (
 func (p OpenAIPersonaAdmissionPolicy) validate() error {
 	if p.MaxConcurrency < 0 || p.MaxConcurrency > maxPersonaPolicyConcurrency {
 		return fmt.Errorf("max_concurrency must be between 0 and %d", maxPersonaPolicyConcurrency)
+	}
+	if p.MaxActiveClientSessions < 0 || p.MaxActiveClientSessions > maxPersonaPolicySessions {
+		return fmt.Errorf("max_active_client_sessions must be between 0 and %d", maxPersonaPolicySessions)
 	}
 	if p.RequestsPerMinute < 0 || p.RequestsPerMinute > maxPersonaPolicyRPM {
 		return fmt.Errorf("requests_per_minute must be between 0 and %d", maxPersonaPolicyRPM)
@@ -57,6 +62,7 @@ func (p OpenAIPersonaAdmissionPolicy) validate() error {
 func (cfg OpenAIAccountAdmissionConfig) EffectiveOpenAIPersonaPolicy(persona SessionPersonaID) OpenAIPersonaAdmissionPolicy {
 	policy := OpenAIPersonaAdmissionPolicy{
 		MaxConcurrency:          cfg.MaxConcurrency,
+		MaxActiveClientSessions: cfg.MaxActiveClientSessions,
 		RequestsPerMinute:       cfg.RequestsPerMinute,
 		TokensPerMinute:         cfg.TokensPerMinute,
 		MaxSubagents:            cfg.MaxSubagents,
@@ -79,6 +85,9 @@ func (cfg OpenAIAccountAdmissionConfig) EffectiveOpenAIPersonaPolicy(persona Ses
 	if found {
 		if override.MaxConcurrency > 0 {
 			policy.MaxConcurrency = override.MaxConcurrency
+		}
+		if override.MaxActiveClientSessions > 0 {
+			policy.MaxActiveClientSessions = override.MaxActiveClientSessions
 		}
 		if override.RequestsPerMinute > 0 {
 			policy.RequestsPerMinute = override.RequestsPerMinute
@@ -161,6 +170,9 @@ func legacyOpenAIAccountConcurrency(account *Account) int {
 // 以便现有队列脚本和管理接口在迁移期间继续工作。
 func (cfg OpenAIAccountAdmissionConfig) ForPersona(persona SessionPersonaID) OpenAIAccountAdmissionConfig {
 	policy := cfg.EffectiveOpenAIPersonaPolicy(persona)
+	if policy.MaxActiveClientSessions > 0 {
+		cfg.MaxActiveClientSessions = policy.MaxActiveClientSessions
+	}
 	if policy.RequestsPerMinute > 0 {
 		cfg.RequestsPerMinute = policy.RequestsPerMinute
 	}

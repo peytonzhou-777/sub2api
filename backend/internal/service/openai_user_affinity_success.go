@@ -19,6 +19,7 @@ type openAIUserAffinityAcceptedState struct {
 
 // RecordOpenAIUserAffinityAccepted 在收到首个非错误上游响应时冻结成功判定配置。
 func (s *OpenAIGatewayService) RecordOpenAIUserAffinityAccepted(ctx context.Context, accountID int64, eventKeys ...string) {
+	commitOpenAIPersonaActiveSession(ctx, accountID)
 	if s == nil || s.settingService == nil || s.accountRepo == nil || accountID <= 0 {
 		return
 	}
@@ -76,6 +77,7 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinitySuccess(ctx context.Conte
 
 // RecordOpenAIUserAffinityFailure 清理失败终态，并让回流 followers 尽快进入 CAS 接棒。
 func (s *OpenAIGatewayService) RecordOpenAIUserAffinityFailure(ctx context.Context, accountID int64, eventKeys ...string) {
+	releaseOpenAIPersonaActiveSessionReservation(ctx, accountID)
 	if s == nil || accountID <= 0 {
 		return
 	}
