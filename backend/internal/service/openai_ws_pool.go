@@ -266,6 +266,7 @@ type openAIWSConn struct {
 	routingAffinity           string
 	fingerprintSessionScope   string
 	transportScopeFingerprint string
+	transportScope            OpenAITransportScope
 	wsURL                     string
 	proxyURL                  string
 	sessionAffinity           string
@@ -1650,6 +1651,31 @@ func (p *openAIWSConnPool) ClearSessionScope(accountID int64, sessionScope strin
 	closeOpenAIWSConns(conns)
 }
 
+func (p *openAIWSConnPool) ClearPersonaCredential(accountID int64, persona SessionPersonaID, slotID int, credentialChainID string) {
+	if p == nil {
+		return
+	}
+	ap, ok := p.getAccountPool(accountID)
+	if !ok || ap == nil {
+		return
+	}
+	ap.mu.Lock()
+	toClose := make([]*openAIWSConn, 0)
+	for connID, conn := range ap.conns {
+		if conn == nil || !conn.transportScope.MatchesCredential(accountID, persona, slotID, credentialChainID) {
+			continue
+		}
+		delete(ap.conns, connID)
+		delete(ap.pinnedConns, connID)
+		toClose = append(toClose, conn)
+	}
+	ap.mu.Unlock()
+	for _, conn := range toClose {
+		conn.close()
+	}
+	p.notifyAccountPoolChanged(accountID)
+}
+
 func (p *openAIWSConnPool) evictConn(accountID int64, connID string) {
 	if p == nil || accountID <= 0 || stringsTrim(connID) == "" {
 		return
@@ -1768,6 +1794,7 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 	pooledConn.routingAffinity = normalizeOpenAIWSRoutingAffinity(headers)
 	pooledConn.fingerprintSessionScope = strings.TrimSpace(req.FingerprintSessionScope)
 	pooledConn.transportScopeFingerprint = strings.TrimSpace(req.TransportScopeFingerprint)
+	pooledConn.transportScope = req.TransportScope
 	pooledConn.wsURL = stringsTrim(req.WSURL)
 	pooledConn.proxyURL = stringsTrim(req.ProxyURL)
 	pooledConn.sessionAffinity = stringsTrim(req.SessionAffinity)

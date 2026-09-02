@@ -1017,21 +1017,8 @@ func TestOpenAITokenProvider_GetAccessTokenForBinding_OpenCodeUsesOwnChain(t *te
 		Platform: PlatformOpenAI,
 		Type:     AccountTypeOAuth,
 		Credentials: map[string]any{
-			// These values belong to the strict Codex compatibility path and must
-			// never be used for an OpenCode binding.
 			"access_token":  "strict-token",
 			"refresh_token": "strict-refresh-token",
-			"persona_credentials": map[string]any{
-				string(SessionPersonaOpenCode): map[string]any{
-					"persona":             string(SessionPersonaOpenCode),
-					"slot_id":             1,
-					"credential_chain_id": chainID,
-					"access_token":        "opencode-token",
-					"refresh_token":       "opencode-refresh-token",
-					"expires_at":          time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
-					"ready":               true,
-				},
-			},
 		},
 	}
 	binding, err := NewDefaultSessionPersonaRegistry().ResolveSlot(
@@ -1042,11 +1029,21 @@ func TestOpenAITokenProvider_GetAccessTokenForBinding_OpenCodeUsesOwnChain(t *te
 	require.NoError(t, err)
 	binding.AccountID = account.ID
 	binding.CredentialChainID = chainID
+	binding.SlotGeneration = 1
+	binding.SlotSetGeneration = 1
+	personaRepo := newOpenAIPersonaCredentialRepoStub()
+	oauthService := NewOpenAIOAuthService(nil, nil)
+	defer oauthService.Stop()
+	oauthService.configurePersonaCredentialStore(personaRepo, openAIPersonaTestEncryptor{}, cache)
+	require.NoError(t, seedOpenAIPersonaCredential(personaRepo, oauthService, account, binding, &OpenAITokenInfo{
+		AccessToken: "opencode-token", RefreshToken: "opencode-refresh-token",
+		ExpiresAt: time.Now().Add(time.Hour).Unix(), ChatGPTAccountID: "acct-shared",
+	}))
 
 	// A legacy cache entry must not satisfy the namespaced OpenCode lookup.
 	legacyKey := OpenAITokenCacheKey(account)
 	cache.tokens[legacyKey] = "legacy-cache-token"
-	provider := NewOpenAITokenProvider(nil, cache, nil)
+	provider := NewOpenAITokenProvider(nil, cache, oauthService)
 
 	token, err := provider.GetAccessTokenForBinding(context.Background(), account, binding)
 	require.NoError(t, err)
@@ -1059,21 +1056,10 @@ func TestOpenAITokenProvider_GetAccessTokenForBinding_OpenCodeUsesNamespacedCach
 	cache := newOpenAITokenCacheStub()
 	chainID := "opencode-chain-cache"
 	account := &Account{
-		ID:       202,
-		Platform: PlatformOpenAI,
-		Type:     AccountTypeOAuth,
-		Credentials: map[string]any{
-			"access_token": "strict-token",
-			"persona_credentials": map[string]any{
-				string(SessionPersonaOpenCode): map[string]any{
-					"persona":             string(SessionPersonaOpenCode),
-					"slot_id":             1,
-					"credential_chain_id": chainID,
-					"access_token":        "opencode-db-token",
-					"expires_at":          time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
-				},
-			},
-		},
+		ID:          202,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Credentials: map[string]any{"access_token": "strict-token"},
 	}
 	binding := SessionPersonaSlotBinding{
 		AccountID:         account.ID,
@@ -1085,12 +1071,22 @@ func TestOpenAITokenProvider_GetAccessTokenForBinding_OpenCodeUsesNamespacedCach
 		State:             SessionPersonaSlotStateActive,
 		Enabled:           true,
 		Authorized:        true,
+		SlotGeneration:    1,
+		SlotSetGeneration: 1,
 	}
+	personaRepo := newOpenAIPersonaCredentialRepoStub()
+	oauthService := NewOpenAIOAuthService(nil, nil)
+	defer oauthService.Stop()
+	oauthService.configurePersonaCredentialStore(personaRepo, openAIPersonaTestEncryptor{}, cache)
+	require.NoError(t, seedOpenAIPersonaCredential(personaRepo, oauthService, account, binding, &OpenAITokenInfo{
+		AccessToken: "opencode-db-token", RefreshToken: "opencode-refresh",
+		ExpiresAt: time.Now().Add(time.Hour).Unix(), ChatGPTAccountID: "acct-shared",
+	}))
 	namespacedKey := OpenAITokenCacheKeyForBinding(account, binding)
 	cache.tokens[namespacedKey] = "opencode-cached-token"
 	cache.tokens[OpenAITokenCacheKey(account)] = "strict-cached-token"
 
-	provider := NewOpenAITokenProvider(nil, cache, nil)
+	provider := NewOpenAITokenProvider(nil, cache, oauthService)
 	token, err := provider.GetAccessTokenForBinding(context.Background(), account, binding)
 	require.NoError(t, err)
 	require.Equal(t, "opencode-cached-token", token)
@@ -1121,7 +1117,11 @@ func TestOpenAITokenProvider_GetAccessTokenForBinding_OpenCodeDoesNotBorrowTopLe
 		Authorized:        true,
 	}
 
-	provider := NewOpenAITokenProvider(nil, cache, nil)
+	personaRepo := newOpenAIPersonaCredentialRepoStub()
+	oauthService := NewOpenAIOAuthService(nil, nil)
+	defer oauthService.Stop()
+	oauthService.configurePersonaCredentialStore(personaRepo, openAIPersonaTestEncryptor{}, cache)
+	provider := NewOpenAITokenProvider(nil, cache, oauthService)
 	token, err := provider.GetAccessTokenForBinding(context.Background(), account, binding)
 	require.ErrorIs(t, err, ErrOpenAIPersonaCredentialChainMissing)
 	require.Empty(t, token)
@@ -1138,17 +1138,6 @@ func TestOpenAITokenProvider_GetAccessTokenForBinding_OpenCodeExpiredChainIsExpl
 		Credentials: map[string]any{
 			"access_token":  "strict-token",
 			"refresh_token": "strict-refresh-token",
-			"persona_credentials": map[string]any{
-				string(SessionPersonaOpenCode): map[string]any{
-					"persona":             string(SessionPersonaOpenCode),
-					"slot_id":             1,
-					"credential_chain_id": chainID,
-					"access_token":        "expired-opencode-token",
-					"expires_at":          time.Now().Add(-time.Minute).UTC().Format(time.RFC3339),
-					// Deliberately omit a nested refresh_token. The provider must
-					// report the chain state instead of borrowing the top-level one.
-				},
-			},
 		},
 	}
 	binding := SessionPersonaSlotBinding{
@@ -1161,9 +1150,19 @@ func TestOpenAITokenProvider_GetAccessTokenForBinding_OpenCodeExpiredChainIsExpl
 		State:             SessionPersonaSlotStateActive,
 		Enabled:           true,
 		Authorized:        true,
+		SlotGeneration:    1,
+		SlotSetGeneration: 1,
 	}
+	personaRepo := newOpenAIPersonaCredentialRepoStub()
+	oauthService := NewOpenAIOAuthService(nil, nil)
+	defer oauthService.Stop()
+	oauthService.configurePersonaCredentialStore(personaRepo, openAIPersonaTestEncryptor{}, cache)
+	require.NoError(t, seedOpenAIPersonaCredential(personaRepo, oauthService, account, binding, &OpenAITokenInfo{
+		AccessToken: "expired-opencode-token", ExpiresAt: time.Now().Add(-time.Minute).Unix(),
+		ChatGPTAccountID: "acct-shared",
+	}))
 
-	provider := NewOpenAITokenProvider(nil, cache, nil)
+	provider := NewOpenAITokenProvider(nil, cache, oauthService)
 	token, err := provider.GetAccessTokenForBinding(context.Background(), account, binding)
 	require.ErrorIs(t, err, ErrOpenAIPersonaCredentialChainExpired)
 	require.Contains(t, err.Error(), "independent refresh_token")
@@ -1171,7 +1170,7 @@ func TestOpenAITokenProvider_GetAccessTokenForBinding_OpenCodeExpiredChainIsExpl
 	require.Equal(t, int32(0), atomic.LoadInt32(&cache.getCalled))
 }
 
-func TestOpenAITokenProvider_GetAccessTokenForBinding_StrictCodexKeepsLegacyPath(t *testing.T) {
+func TestOpenAITokenProvider_GetAccessTokenForBinding_StrictCodexV3DoesNotUseLegacyPath(t *testing.T) {
 	cache := newOpenAITokenCacheStub()
 	account := &Account{
 		ID:       205,
@@ -1195,12 +1194,15 @@ func TestOpenAITokenProvider_GetAccessTokenForBinding_StrictCodexKeepsLegacyPath
 		Authorized:        true,
 	}
 	cache.tokens[OpenAITokenCacheKey(account)] = "strict-legacy-cache-token"
-
-	provider := NewOpenAITokenProvider(nil, cache, nil)
+	personaRepo := newOpenAIPersonaCredentialRepoStub()
+	oauthService := NewOpenAIOAuthService(nil, nil)
+	defer oauthService.Stop()
+	oauthService.configurePersonaCredentialStore(personaRepo, openAIPersonaTestEncryptor{}, cache)
+	provider := NewOpenAITokenProvider(nil, cache, oauthService)
 	token, err := provider.GetAccessTokenForBinding(context.Background(), account, binding)
-	require.NoError(t, err)
-	require.Equal(t, "strict-legacy-cache-token", token)
-	require.Equal(t, int32(1), atomic.LoadInt32(&cache.getCalled))
+	require.ErrorIs(t, err, ErrOpenAIPersonaCredentialChainMissing)
+	require.Empty(t, token)
+	require.Equal(t, int32(0), atomic.LoadInt32(&cache.getCalled))
 }
 
 func TestOpenAITokenProvider_GetAccessTokenForBinding_StrictCodexUsesExplicitPersonaChain(t *testing.T) {
@@ -1211,20 +1213,8 @@ func TestOpenAITokenProvider_GetAccessTokenForBinding_StrictCodexUsesExplicitPer
 		Platform: PlatformOpenAI,
 		Type:     AccountTypeOAuth,
 		Credentials: map[string]any{
-			// Keep the legacy row populated to prove the explicit v3 chain wins.
 			"access_token":  "strict-legacy-token",
 			"refresh_token": "strict-legacy-refresh",
-			"persona_credentials": []any{
-				map[string]any{
-					"persona":             string(SessionPersonaCodexCLIStrict),
-					"slot_id":             0,
-					"credential_chain_id": chainID,
-					"access_token":        "strict-persona-token",
-					"refresh_token":       "strict-persona-refresh",
-					"expires_at":          time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
-					"ready":               true,
-				},
-			},
 		},
 	}
 	binding := SessionPersonaSlotBinding{
@@ -1237,9 +1227,19 @@ func TestOpenAITokenProvider_GetAccessTokenForBinding_StrictCodexUsesExplicitPer
 		State:             SessionPersonaSlotStateActive,
 		Enabled:           true,
 		Authorized:        true,
+		SlotGeneration:    1,
+		SlotSetGeneration: 1,
 	}
+	personaRepo := newOpenAIPersonaCredentialRepoStub()
+	oauthService := NewOpenAIOAuthService(nil, nil)
+	defer oauthService.Stop()
+	oauthService.configurePersonaCredentialStore(personaRepo, openAIPersonaTestEncryptor{}, cache)
+	require.NoError(t, seedOpenAIPersonaCredential(personaRepo, oauthService, account, binding, &OpenAITokenInfo{
+		AccessToken: "strict-persona-token", RefreshToken: "strict-persona-refresh",
+		ExpiresAt: time.Now().Add(time.Hour).Unix(), ChatGPTAccountID: "acct-shared",
+	}))
 	cache.tokens[OpenAITokenCacheKey(account)] = "strict-legacy-cache-token"
-	provider := NewOpenAITokenProvider(nil, cache, nil)
+	provider := NewOpenAITokenProvider(nil, cache, oauthService)
 
 	token, err := provider.GetAccessTokenForBinding(context.Background(), account, binding)
 	require.NoError(t, err)

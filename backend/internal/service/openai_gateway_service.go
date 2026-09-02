@@ -592,10 +592,30 @@ func NewOpenAIGatewayService(
 	}
 	if openAITokenProvider != nil {
 		openAITokenProvider.SetAccountRuntimeBlocker(svc)
+		openAITokenProvider.SetPersonaTransportInvalidator(svc)
 	}
 	svc.logOpenAIWSModeBootstrap()
 	return svc
 }
+
+// InvalidateOpenAIPersonaTransport fences a revoked credential chain from all
+// new HTTP and WS reuse while closing matching pooled WebSocket connections.
+func (s *OpenAIGatewayService) InvalidateOpenAIPersonaTransport(accountID int64, persona SessionPersonaID, slotID int, credentialChainID string) {
+	if s == nil {
+		return
+	}
+	if invalidator, ok := s.httpUpstream.(OpenAIPersonaTransportInvalidator); ok {
+		invalidator.InvalidateOpenAIPersonaTransport(accountID, persona, slotID, credentialChainID)
+	}
+	if s.openaiWSPool != nil {
+		s.openaiWSPool.ClearPersonaCredential(accountID, persona, slotID, credentialChainID)
+	}
+	if dialer, ok := s.openaiWSPassthroughDialer.(*coderOpenAIWSClientDialer); ok {
+		dialer.invalidatePersonaTransport(accountID, persona, slotID, credentialChainID)
+	}
+}
+
+var _ OpenAIPersonaTransportInvalidator = (*OpenAIGatewayService)(nil)
 
 // ResolveChannelMapping 解析渠道级模型映射（代理到 ChannelService）
 func (s *OpenAIGatewayService) ResolveChannelMapping(ctx context.Context, groupID int64, model string) ChannelMappingResult {

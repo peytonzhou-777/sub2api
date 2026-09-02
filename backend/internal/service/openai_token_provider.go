@@ -135,6 +135,12 @@ func (p *OpenAITokenProvider) SetAccountRuntimeBlocker(blocker AccountRuntimeBlo
 	p.runtimeBlocker = blocker
 }
 
+func (p *OpenAITokenProvider) SetPersonaTransportInvalidator(invalidator OpenAIPersonaTransportInvalidator) {
+	if p != nil && p.openAIOAuthService != nil {
+		p.openAIOAuthService.SetPersonaTransportInvalidator(invalidator)
+	}
+}
+
 func (p *OpenAITokenProvider) SnapshotRuntimeMetrics() OpenAITokenRuntimeMetrics {
 	if p == nil {
 		return OpenAITokenRuntimeMetrics{}
@@ -312,7 +318,7 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 }
 
 // GetAccessTokenForBinding 按 Account×Persona×credential chain 读取 access_token。
-// v1/v2 以及明确的 legacy-codex 绑定保持旧账号级路径；v3 的显式链（包括
+// v1/v2 绑定保持旧账号级路径；v3 的显式链（包括
 // strict Codex 与 OpenCode）只读取绑定链自己的凭据和命名空间缓存，不会回退到
 // 其他 Persona 的 refresh_token，也不会把链级刷新伪装成账号级刷新。
 func (p *OpenAITokenProvider) GetAccessTokenForBinding(
@@ -347,12 +353,10 @@ func (p *OpenAITokenProvider) GetAccessTokenForBinding(
 		return "", fmt.Errorf("%w: account_id=%d does not match account %d", ErrOpenAITokenBindingInvalid, binding.AccountID, account.ID)
 	}
 
-	// v1/v2 以及显式 legacy-codex 的 strict Codex 绑定必须沿用旧账号级
-	// refresh/cache 语义。这样历史双 Codex 账号不会因为新增入口而改变行为；
-	// 一旦绑定带有其他 chain ID，则进入 Account×Persona×chain 读取路径。
+	// v1/v2 strict Codex 绑定沿用旧账号级 refresh/cache 语义；所有 v3
+	// 绑定必须进入 Account×Persona×chain 路径，禁止回落账号级 Token。
 	if persona == SessionPersonaCodexCLIStrict &&
-		(binding.Legacy || binding.EffectiveMappingVersion() < SessionPersonaScopeVersionV3 ||
-			(binding.SlotID == 0 && (binding.CredentialChainID == "" || binding.CredentialChainID == "legacy-codex"))) {
+		(binding.Legacy || binding.EffectiveMappingVersion() < SessionPersonaScopeVersionV3) {
 		return p.GetAccessToken(ctx, account)
 	}
 
@@ -365,87 +369,35 @@ func (p *OpenAITokenProvider) GetAccessTokenForBinding(
 	if binding.CredentialChainID == "" {
 		return "", fmt.Errorf("%w: persona=%q slot=%d", ErrOpenAIPersonaCredentialChainMissing, persona, binding.SlotID)
 	}
-	// Scheduler selections are intentionally lightweight snapshots and may not
-	// carry nested Account×Persona credential chains. Reload the authoritative
-	// row before resolving the requested Persona chain; never fall back to the
-	// account-level Codex row merely because the snapshot is incomplete.
-	if account.IsSchedulerSnapshot || account.findPersonaCredentialByChainID(persona, binding.SlotID, binding.CredentialChainID) == nil {
-		if p.accountRepo == nil {
-			if account.IsSchedulerSnapshot {
-				return "", fmt.Errorf("authoritative account repository is required for %s scheduler snapshot", persona)
-			}
-		} else {
-			authoritative, err := p.accountRepo.GetByID(ctx, account.ID)
-			if err != nil {
-				return "", fmt.Errorf("load authoritative %s account %d: %w", persona, account.ID, err)
-			}
-			if authoritative == nil || authoritative.ID != account.ID || !authoritative.IsOpenAIOAuth() {
-				return "", fmt.Errorf("authoritative account %d is not an OpenAI OAuth account", account.ID)
-			}
-			account = authoritative
-		}
-	}
-	return p.getPersonaAccessTokenForBinding(ctx, account, binding, persona)
+	return p.getPersonaAccessTokenForBinding(ctx, account, binding)
 }
 
-// getPersonaAccessTokenForBinding 只访问绑定的 Persona 链。临近过期时使用
-// 账号级凭据写锁重新加载权威行，再刷新并持久化同一条 chain；不会调用旧的
-// 账号级 RefreshIfNeeded，也不会借用其他 Persona 的 refresh_token。
+// getPersonaAccessTokenForBinding 只访问绑定的 Persona 链。临近过期时通过
+// 链级分布式锁、数据库刷新抢占和 token_version CAS 刷新同一条 chain；不会
+// 调用旧的账号级 RefreshIfNeeded，也不会借用其他 Persona 的 refresh_token。
 func (p *OpenAITokenProvider) getPersonaAccessTokenForBinding(
 	ctx context.Context,
 	account *Account,
 	binding SessionPersonaSlotBinding,
-	persona SessionPersonaID,
 ) (string, error) {
 	if binding.CredentialChainID == "" {
 		return "", fmt.Errorf("%w: persona=%q slot=%d", ErrOpenAIPersonaCredentialChainMissing, binding.PersonaID, binding.SlotID)
 	}
-
-	// A slot may retain more than one chain during OAuth rotation. Resolve by
-	// the requested chain ID first; selecting the first slot match would make
-	// map iteration order part of credential routing.
-	chain := account.findPersonaCredentialByChainID(persona, binding.SlotID, binding.CredentialChainID)
-	if chain == nil {
-		candidate := account.findPersonaCredential(persona, binding.SlotID)
-		if candidate == nil {
-			return "", fmt.Errorf("%w: persona=%q slot=%d chain=%q", ErrOpenAIPersonaCredentialChainMissing, persona, binding.SlotID, binding.CredentialChainID)
-		}
-		return "", fmt.Errorf("%w: persona=%q slot=%d requested_chain=%q stored_chain=%q", ErrOpenAIPersonaCredentialChainMismatch, persona, binding.SlotID, binding.CredentialChainID, strings.TrimSpace(openAIMapString(candidate, "credential_chain_id")))
+	if p.openAIOAuthService == nil {
+		return "", ErrOpenAIPersonaCredentialStoreUnavailable
 	}
-	if storedChainID := strings.TrimSpace(openAIMapString(chain, "credential_chain_id")); storedChainID == "" || storedChainID != binding.CredentialChainID {
-		return "", fmt.Errorf("%w: persona=%q slot=%d requested_chain=%q stored_chain=%q", ErrOpenAIPersonaCredentialChainMismatch, persona, binding.SlotID, binding.CredentialChainID, storedChainID)
+	info, _, err := p.openAIOAuthService.loadPersonaCredential(ctx, account, binding)
+	if err != nil {
+		return "", err
 	}
-	if chainPersona := strings.TrimSpace(openAIMapString(chain, "persona")); chainPersona != "" {
-		parsedPersona, personaOK := ParseSessionPersonaID(chainPersona)
-		if !personaOK || parsedPersona != persona {
-			return "", fmt.Errorf("%w: chain=%q has persona=%q", ErrOpenAIPersonaCredentialChainMismatch, binding.CredentialChainID, chainPersona)
-		}
-	}
-	if chainAccountID := strings.TrimSpace(openAIMapString(chain, "chatgpt_account_id")); chainAccountID != "" {
-		accountID := strings.TrimSpace(account.GetChatGPTAccountID())
-		if accountID != "" && chainAccountID != accountID {
-			return "", fmt.Errorf("%w: chain=%q belongs to chatgpt account %q, account is %q", ErrOpenAIPersonaCredentialChainMismatch, binding.CredentialChainID, chainAccountID, accountID)
-		}
-	}
-	if rawSlot, hasSlot := chain["slot_id"]; hasSlot && parseSessionPersonaInt64(rawSlot) != int64(binding.SlotID) {
-		return "", fmt.Errorf("%w: chain=%q has slot=%d, binding slot=%d", ErrOpenAIPersonaCredentialChainMismatch, binding.CredentialChainID, parseSessionPersonaInt64(rawSlot), binding.SlotID)
-	}
-	if chainInstallationID := strings.TrimSpace(openAIMapString(chain, "installation_id")); chainInstallationID != "" && strings.TrimSpace(binding.InstallationID) != "" &&
-		chainInstallationID != strings.TrimSpace(binding.InstallationID) {
-		return "", fmt.Errorf("%w: chain=%q has installation_id=%q, binding has %q", ErrOpenAIPersonaCredentialChainMismatch, binding.CredentialChainID, chainInstallationID, strings.TrimSpace(binding.InstallationID))
-	}
-	if !openAIPersonaCredentialReady(chain) {
-		return "", fmt.Errorf("%w: persona=%q slot=%d chain=%q", ErrOpenAIPersonaCredentialChainNotReady, persona, binding.SlotID, binding.CredentialChainID)
-	}
-
-	expiresAt := openAIPersonaCredentialExpiry(chain)
-	needsRefresh := expiresAt == nil || time.Until(*expiresAt) <= openAITokenRefreshSkew
-	if needsRefresh && strings.TrimSpace(openAIMapString(chain, "refresh_token")) == "" {
+	expiresAt := time.Unix(info.ExpiresAt, 0)
+	needsRefresh := info.ExpiresAt <= 0 || time.Until(expiresAt) <= openAITokenRefreshSkew
+	if needsRefresh && strings.TrimSpace(info.RefreshToken) == "" {
 		return "", fmt.Errorf("%w: chain=%q has no independent refresh_token", ErrOpenAIPersonaCredentialChainExpired, binding.CredentialChainID)
 	}
 
 	cacheKey := OpenAITokenCacheKeyForBinding(account, binding)
-	if p.tokenCache != nil {
+	if !needsRefresh && p.tokenCache != nil {
 		if token, err := p.tokenCache.GetAccessToken(ctx, cacheKey); err == nil && strings.TrimSpace(token) != "" {
 			slog.Debug("openai_persona_token_cache_hit", "account_id", account.ID, "persona", binding.PersonaID, "slot_id", binding.SlotID)
 			return token, nil
@@ -454,19 +406,25 @@ func (p *OpenAITokenProvider) getPersonaAccessTokenForBinding(
 		}
 	}
 	if needsRefresh {
-		return p.refreshPersonaAccessToken(ctx, account, binding, persona, cacheKey)
+		refreshed, refreshErr := p.openAIOAuthService.RefreshPersonaCredential(ctx, account, binding)
+		if refreshErr != nil {
+			return "", refreshErr
+		}
+		if strings.TrimSpace(refreshed.AccessToken) == "" {
+			return "", ErrOpenAIPersonaAccessTokenMissing
+		}
+		return refreshed.AccessToken, nil
 	}
 
-	// Cache 命中仍以命名空间为边界；没有缓存时只允许读取本链 access_token。
-	accessToken := strings.TrimSpace(openAIMapString(chain, "access_token"))
+	accessToken := strings.TrimSpace(info.AccessToken)
 	if accessToken == "" {
-		return "", fmt.Errorf("%w: persona=%q slot=%d chain=%q", ErrOpenAIPersonaAccessTokenMissing, persona, binding.SlotID, binding.CredentialChainID)
+		return "", fmt.Errorf("%w: persona=%q slot=%d chain=%q", ErrOpenAIPersonaAccessTokenMissing, binding.PersonaID, binding.SlotID, binding.CredentialChainID)
 	}
 
 	if p.tokenCache != nil {
 		ttl := 30 * time.Minute
-		if expiresAt != nil {
-			until := time.Until(*expiresAt)
+		if info.ExpiresAt > 0 {
+			until := time.Until(expiresAt)
 			switch {
 			case until > openAITokenCacheSkew:
 				ttl = until - openAITokenCacheSkew
@@ -484,138 +442,6 @@ func (p *OpenAITokenProvider) getPersonaAccessTokenForBinding(
 	}
 
 	return accessToken, nil
-}
-
-func (p *OpenAITokenProvider) refreshPersonaAccessToken(
-	ctx context.Context,
-	account *Account,
-	binding SessionPersonaSlotBinding,
-	persona SessionPersonaID,
-	cacheKey string,
-) (string, error) {
-	if p.accountRepo == nil || p.openAIOAuthService == nil {
-		return "", fmt.Errorf("%w: authoritative repository or OAuth service unavailable", ErrOpenAIPersonaCredentialRefreshUnsupported)
-	}
-	lockKey := OpenAITokenCacheKey(account) + ":persona-credentials-write"
-	locked := false
-	if p.tokenCache != nil {
-		var err error
-		locked, err = p.tokenCache.AcquireRefreshLock(ctx, lockKey, 30*time.Second)
-		if err != nil {
-			return "", fmt.Errorf("acquire OpenAI Persona credential write lock: %w", err)
-		}
-		if !locked {
-			if token, waitErr := p.waitForTokenAfterLockRace(ctx, cacheKey); waitErr == nil && strings.TrimSpace(token) != "" {
-				return token, nil
-			}
-			return "", fmt.Errorf("%w: credential write is already in progress for account %d", ErrOpenAIPersonaCredentialRefreshUnsupported, account.ID)
-		}
-		defer func() { _ = p.tokenCache.ReleaseRefreshLock(context.Background(), lockKey) }()
-	}
-
-	fresh, err := p.accountRepo.GetByID(ctx, account.ID)
-	if err != nil {
-		return "", fmt.Errorf("reload authoritative OpenAI Persona account %d: %w", account.ID, err)
-	}
-	if fresh == nil || !fresh.IsOpenAIOAuth() {
-		return "", fmt.Errorf("authoritative account %d is not an OpenAI OAuth account", account.ID)
-	}
-	chain := fresh.findPersonaCredentialByChainID(persona, binding.SlotID, binding.CredentialChainID)
-	if chain == nil || !openAIPersonaCredentialReady(chain) {
-		return "", fmt.Errorf("%w: chain=%q", ErrOpenAIPersonaCredentialChainNotReady, binding.CredentialChainID)
-	}
-	expiresAt := openAIPersonaCredentialExpiry(chain)
-	accessToken := strings.TrimSpace(openAIMapString(chain, "access_token"))
-	if expiresAt != nil && time.Until(*expiresAt) > openAITokenRefreshSkew && accessToken != "" {
-		return p.cachePersonaAccessToken(ctx, cacheKey, accessToken, expiresAt)
-	}
-
-	info, credentials, err := p.openAIOAuthService.RefreshPersonaCredential(ctx, fresh, binding)
-	if err != nil {
-		return "", err
-	}
-	if err := persistAccountCredentials(ctx, p.accountRepo, fresh, credentials); err != nil {
-		return "", fmt.Errorf("persist OpenAI Persona credential chain %q: %w", binding.CredentialChainID, err)
-	}
-	accessToken = strings.TrimSpace(info.AccessToken)
-	if accessToken == "" {
-		return "", fmt.Errorf("%w: chain=%q", ErrOpenAIPersonaAccessTokenMissing, binding.CredentialChainID)
-	}
-	refreshedExpiry := time.Unix(info.ExpiresAt, 0)
-	return p.cachePersonaAccessToken(ctx, cacheKey, accessToken, &refreshedExpiry)
-}
-
-func (p *OpenAITokenProvider) cachePersonaAccessToken(ctx context.Context, cacheKey, accessToken string, expiresAt *time.Time) (string, error) {
-	if p.tokenCache == nil {
-		return accessToken, nil
-	}
-	ttl := 30 * time.Minute
-	if expiresAt != nil {
-		until := time.Until(*expiresAt)
-		switch {
-		case until > openAITokenCacheSkew:
-			ttl = until - openAITokenCacheSkew
-		case until > 0:
-			ttl = until
-		default:
-			return "", ErrOpenAIPersonaCredentialChainExpired
-		}
-	}
-	if err := p.tokenCache.SetAccessToken(ctx, cacheKey, accessToken, ttl); err != nil {
-		slog.Warn("openai_persona_token_cache_set_failed", "cache_key", cacheKey, "error", err)
-	}
-	return accessToken, nil
-}
-
-// openAIPersonaCredentialReady interprets the optional readiness/state fields
-// used by imported credential-chain records without mutating the account map.
-func openAIPersonaCredentialReady(chain map[string]any) bool {
-	if chain == nil {
-		return false
-	}
-	if ready, ok := chain["ready"]; ok {
-		switch value := ready.(type) {
-		case bool:
-			if !value {
-				return false
-			}
-		case string:
-			if strings.EqualFold(strings.TrimSpace(value), "false") || strings.TrimSpace(value) == "0" {
-				return false
-			}
-		}
-	}
-	switch strings.ToLower(strings.TrimSpace(openAIMapString(chain, "state"))) {
-	case "", "ready":
-		return true
-	case "pending", "refreshing", "invalid", "revoked", "disabled":
-		return false
-	default:
-		// Unknown state is not treated as ready. Imported records must opt in
-		// explicitly once a state vocabulary is extended.
-		return false
-	}
-}
-
-func openAIPersonaCredentialExpiry(chain map[string]any) *time.Time {
-	if chain == nil {
-		return nil
-	}
-	if raw, ok := chain["expires_at"]; ok {
-		switch value := raw.(type) {
-		case time.Time:
-			copy := value
-			return &copy
-		case *time.Time:
-			if value != nil {
-				copy := *value
-				return &copy
-			}
-		}
-	}
-	// Reuse the account-level tolerant parser for RFC3339 and Unix seconds;
-	// this temporary wrapper only aliases the read-only map and never persists it.
-	return (&Account{Credentials: chain}).GetCredentialAsTime("expires_at")
 }
 
 // findPersonaCredentialByChainID resolves the exact chain in the account's

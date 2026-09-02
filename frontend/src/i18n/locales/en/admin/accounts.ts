@@ -677,7 +677,13 @@ export default {
             openCode: 'slot 1 · OpenCode login',
             authorize: 'Authorize this Persona',
             reauthorize: 'Reauthorize this Persona',
-            success: 'Persona OAuth authorization updated'
+            success: 'Persona OAuth authorization updated',
+            revoke: 'Revoke authorization',
+            revoking: 'Revoking',
+            revoked: 'Local Persona authorization revoked',
+            revokeTitle: 'Revoke Persona authorization',
+            revokeConfirm: 'Revoke every locally stored OAuth credential chain for this Persona? The slot will stop accepting new requests and existing connections will be isolated. Reauthorization is required before reuse.',
+            revokeFailed: 'Failed to revoke Persona authorization'
           },
           enable: 'Enable v3 mapping',
           enableDesc: 'Only new roots are affected. Slot 1 must have an independent OpenCode OAuth chain; otherwise requests fall back to slot 0 strict Codex.'

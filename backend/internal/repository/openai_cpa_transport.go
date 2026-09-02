@@ -234,6 +234,7 @@ func (s *httpUpstreamService) acquireOpenAICPAClient(
 		transportGeneration:     manager.generation,
 		scopeFingerprint:        scopeFingerprint,
 		transportProfileVersion: tlsfingerprint.CPAChromeProfileVersion,
+		openAITransportScope:    scope,
 	}
 	atomic.StoreInt64(&entry.lastUsed, nowUnix)
 	atomic.StoreInt64(&entry.inFlight, 1)
@@ -248,6 +249,34 @@ func (s *httpUpstreamService) acquireOpenAICPAClient(
 	)
 	return entry, nil
 }
+
+// InvalidateOpenAIPersonaTransport removes only the revoked credential scope
+// from the current CPA manager. Active responses may finish, but no new request
+// can register on or reuse the removed entry.
+func (s *httpUpstreamService) InvalidateOpenAIPersonaTransport(accountID int64, persona service.SessionPersonaID, slotID int, credentialChainID string) {
+	if s == nil {
+		return
+	}
+	s.openAICPAManagerMu.Lock()
+	manager := s.openAICPAManager
+	s.openAICPAManagerMu.Unlock()
+	if manager == nil {
+		return
+	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	for key, entry := range manager.clients {
+		if entry == nil || !entry.openAITransportScope.MatchesCredential(accountID, persona, slotID, credentialChainID) {
+			continue
+		}
+		if entry.client != nil {
+			entry.client.CloseIdleConnections()
+		}
+		delete(manager.clients, key)
+	}
+}
+
+var _ service.OpenAIPersonaTransportInvalidator = (*httpUpstreamService)(nil)
 
 func openAICPACanReuseEntry(entry *upstreamClientEntry, manager *openAITransportManager, scopeFingerprint, proxyKey, poolKey string) bool {
 	return entry != nil && manager != nil &&

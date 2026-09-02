@@ -166,3 +166,41 @@ func TestOpenAICPATransportIsolatedByScopeAndManagerGeneration(t *testing.T) {
 		t.Fatalf("unexpected CPA profile version: %q", entry0New.transportProfileVersion)
 	}
 }
+
+func TestOpenAICPATransportInvalidationOnlyRemovesMatchingCredential(t *testing.T) {
+	cfg := &config.Config{
+		Gateway: config.GatewayConfig{
+			OpenAIHTTP2:        config.GatewayOpenAIHTTP2Config{Enabled: true},
+			MaxUpstreamClients: 10,
+		},
+	}
+	svc := &httpUpstreamService{cfg: cfg, clients: make(map[string]*upstreamClientEntry)}
+	manager := svc.ensureOpenAICPAManager()
+	poolKey := "test-pool|profile:" + tlsfingerprint.CPAChromeProfileVersion
+	target := service.OpenAITransportScope{
+		AccountID: 42, Persona: service.SessionPersonaOpenCode, PersonaVersion: "1.18.23",
+		SlotID: 1, SessionEpoch: 1, SlotGeneration: 1, SlotSetGeneration: 1,
+		CredentialChainID: "chain-target", InstallationID: "install-target",
+	}
+	other := target
+	other.CredentialChainID = "chain-other"
+	other.InstallationID = "install-other"
+
+	for _, scope := range []service.OpenAITransportScope{target, other} {
+		fingerprint := openAITransportScopeFingerprint(scope, directProxyKey, poolKey)
+		_, err := svc.acquireOpenAICPAClient(manager, fingerprint, directProxyKey, nil, poolKey, poolSettings{}, 42, 1, scope)
+		if err != nil {
+			t.Fatalf("acquire CPA transport: %v", err)
+		}
+	}
+
+	svc.InvalidateOpenAIPersonaTransport(target.AccountID, target.Persona, target.SlotID, target.CredentialChainID)
+	if len(manager.clients) != 1 {
+		t.Fatalf("expected only the non-matching credential transport to remain, got %d", len(manager.clients))
+	}
+	for _, entry := range manager.clients {
+		if entry.openAITransportScope.CredentialChainID != other.CredentialChainID {
+			t.Fatalf("unexpected credential transport retained: %q", entry.openAITransportScope.CredentialChainID)
+		}
+	}
+}

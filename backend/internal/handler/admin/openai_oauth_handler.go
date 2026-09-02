@@ -179,7 +179,7 @@ func (h *OpenAIOAuthHandler) GetPersonaOAuthStatus(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	status, err := h.openaiOAuthService.GetPersonaOAuthStatus(account)
+	status, err := h.openaiOAuthService.GetPersonaOAuthStatus(c.Request.Context(), account)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -206,8 +206,7 @@ func (h *OpenAIOAuthHandler) GeneratePersonaAuthURL(c *gin.Context) {
 	response.Success(c, result)
 }
 
-// ExchangePersonaCode persists slot 0 through the legacy Codex row and slot 1
-// through its independent Account × Persona credential chain.
+// ExchangePersonaCode persists both fixed slots as independent Persona chains.
 func (h *OpenAIOAuthHandler) ExchangePersonaCode(c *gin.Context) {
 	accountID, slotID, ok := parseOpenAIPersonaTarget(c)
 	if !ok {
@@ -232,12 +231,12 @@ func (h *OpenAIOAuthHandler) ExchangePersonaCode(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	credentials, err := h.openaiOAuthService.BuildPersonaOAuthCredentials(account, result)
+	err = h.openaiOAuthService.PersistPersonaAuthorization(c.Request.Context(), account, result)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	updated, err := h.adminService.UpdateAccount(c.Request.Context(), accountID, &service.UpdateAccountInput{Credentials: credentials})
+	updated, err := h.adminService.GetAccount(c.Request.Context(), accountID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -253,15 +252,11 @@ func (h *OpenAIOAuthHandler) ExchangePersonaCode(c *gin.Context) {
 	response.Success(c, dto.AccountFromService(updated))
 }
 
-// RefreshPersonaToken refreshes the slot's active independent chain. Slot 0
-// continues to use the existing account-level refresh endpoint.
+// RefreshPersonaToken refreshes either Persona through the same chain-scoped
+// CAS path used by runtime requests.
 func (h *OpenAIOAuthHandler) RefreshPersonaToken(c *gin.Context) {
 	accountID, slotID, ok := parseOpenAIPersonaTarget(c)
 	if !ok {
-		return
-	}
-	if slotID == 0 {
-		h.RefreshAccountToken(c)
 		return
 	}
 	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
@@ -269,26 +264,64 @@ func (h *OpenAIOAuthHandler) RefreshPersonaToken(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	personaID := service.SessionPersonaOpenCode
-	chainID := account.GetOpenAIPersonaCredentialChainID(personaID, slotID)
-	if chainID == "" {
-		response.BadRequest(c, "OpenCode OAuth credential chain is not configured")
-		return
-	}
-	binding := service.SessionPersonaSlotBinding{
-		AccountID:         accountID,
-		PersonaID:         personaID,
-		SlotID:            slotID,
-		CredentialChainID: chainID,
-		ScopeVersion:      service.SessionPersonaScopeVersionV3,
-		MappingVersion:    service.SessionPersonaScopeVersionV3,
-	}
-	_, credentials, err := h.openaiOAuthService.RefreshPersonaCredential(c.Request.Context(), account, binding)
+	status, err := h.openaiOAuthService.GetPersonaOAuthStatus(c.Request.Context(), account)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	updated, err := h.adminService.UpdateAccount(c.Request.Context(), accountID, &service.UpdateAccountInput{Credentials: credentials})
+	var target *service.OpenAIPersonaOAuthSlotStatus
+	for index := range status.Slots {
+		if status.Slots[index].SlotID == slotID {
+			target = &status.Slots[index]
+			break
+		}
+	}
+	if target == nil || !target.Authorized || strings.TrimSpace(target.CredentialChainID) == "" {
+		response.BadRequest(c, "Persona OAuth credential chain is not configured")
+		return
+	}
+	binding := service.SessionPersonaSlotBinding{
+		AccountID:         accountID,
+		PersonaID:         target.PersonaID,
+		SlotID:            slotID,
+		CredentialChainID: target.CredentialChainID,
+		ScopeVersion:      service.SessionPersonaScopeVersionV3,
+		MappingVersion:    service.SessionPersonaScopeVersionV3,
+		SlotGeneration:    target.SlotGeneration,
+		SlotSetGeneration: target.SlotSetGeneration,
+		InstallationID:    target.InstallationID,
+	}
+	_, err = h.openaiOAuthService.RefreshPersonaCredential(c.Request.Context(), account, binding)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	updated, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.AccountFromService(updated))
+}
+
+// RevokePersonaAuthorization destroys the locally stored authorization. OpenAI
+// does not expose a remote revoke endpoint for this fixed client flow.
+func (h *OpenAIOAuthHandler) RevokePersonaAuthorization(c *gin.Context) {
+	accountID, slotID, ok := parseOpenAIPersonaTarget(c)
+	if !ok {
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if err = h.openaiOAuthService.RevokePersonaAuthorization(c.Request.Context(), account, slotID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	slog.Info("openai_persona_oauth_revoked_locally", "account_id", accountID, "slot_id", slotID)
+	updated, err := h.adminService.GetAccount(c.Request.Context(), accountID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

@@ -14,11 +14,11 @@ import (
 const (
 	openAIPersonaCredentialsKey       = "persona_credentials"
 	openAIOAuthCredentialChainsKey    = "oauth_credential_chains"
-	openAIPersonaActiveChainsKey      = "openai_persona_slot_active_chain_ids"
-	openAIPersonaSlotStateExtraKey    = "openai_persona_slot_states"
-	openAIPersonaSlotEnabledExtraKey  = "openai_persona_slot_enabled"
-	openAIPersonaSlotGenerationsKey   = "openai_persona_slot_generations"
-	openAIPersonaSlotSetGenerationKey = "openai_persona_slot_set_generation"
+	openAIPersonaActiveChainsKey      = OpenAIPersonaActiveChainsExtraKey
+	openAIPersonaSlotStateExtraKey    = OpenAIPersonaSlotStateExtraKey
+	openAIPersonaSlotEnabledExtraKey  = OpenAIPersonaSlotEnabledExtraKey
+	openAIPersonaSlotGenerationsKey   = OpenAIPersonaSlotGenerationsExtraKey
+	openAIPersonaSlotSetGenerationKey = OpenAIPersonaSlotSetGenerationExtraKey
 )
 
 var (
@@ -293,14 +293,6 @@ func resolveSessionPersonaBindingForSlot(account *Account, ids *codexFingerprint
 	binding.Enabled = account.GetOpenAIPersonaSlotEnabled(slotID)
 	binding.EnabledConfigured = account.IsOpenAIPersonaSlotEnabledConfigured(slotID)
 	binding.Authorized = account.HasOpenAIPersonaCredential(binding.PersonaID, slotID)
-	if !binding.Authorized && binding.PersonaID == SessionPersonaCodexCLIStrict {
-		// Existing dual-Codex accounts intentionally keep their account-level
-		// OAuth row for the strict slot while v3 is rolled out. Preserve that
-		// read-only compatibility (including v3 slot 0) without allowing an
-		// OpenCode slot to borrow the Codex refresh chain.
-		binding.Authorized = strings.TrimSpace(account.GetOpenAIAccessToken()) != "" &&
-			strings.TrimSpace(account.GetOpenAIRefreshToken()) != ""
-	}
 	binding.CredentialChainID = account.GetOpenAIPersonaCredentialChainID(binding.PersonaID, slotID)
 	return binding.NormalizeLifecycle(), true
 }
@@ -310,12 +302,6 @@ func sessionPersonaBindingHasSafeCredentialChain(binding SessionPersonaSlotBindi
 		return false
 	}
 	if binding.Legacy {
-		return true
-	}
-	// Strict Codex v3 can temporarily read the historical account-level OAuth
-	// row. Its token provider remains on the old account-scoped path until the
-	// independent strict chain is persisted; OpenCode never gets this fallback.
-	if binding.PersonaID == SessionPersonaCodexCLIStrict && binding.SlotID == 0 && strings.TrimSpace(binding.CredentialChainID) == "" {
 		return true
 	}
 	return strings.TrimSpace(binding.CredentialChainID) != ""
@@ -452,12 +438,14 @@ func (a *Account) GetOpenAIPersonaSlotSetGeneration() int64 {
 	return 1
 }
 
-// GetOpenAIPersonaCredentialChainID returns the chain ID without exposing token
-// material. Strict Codex keeps a stable legacy chain until its independent
-// v3 credential row is provisioned; OpenCode has no implicit fallback chain.
+// GetOpenAIPersonaCredentialChainID returns only the active non-secret chain
+// projection for Persona v3. Legacy mappings retain their historical reader.
 func (a *Account) GetOpenAIPersonaCredentialChainID(persona SessionPersonaID, slotID int) string {
 	if a == nil {
 		return ""
+	}
+	if a.IsOpenAIPersonaMappingEnabled() && a.GetOpenAIPersonaMappingVersion() >= SessionPersonaScopeVersionV3 {
+		return strings.TrimSpace(a.extraPersonaSlotString(OpenAIPersonaActiveChainsExtraKey, slotID))
 	}
 	if chain := a.findPersonaCredential(persona, slotID); chain != nil {
 		return strings.TrimSpace(openAIMapString(chain, "credential_chain_id"))
@@ -473,6 +461,10 @@ func (a *Account) GetOpenAIPersonaCredentialChainID(persona SessionPersonaID, sl
 func (a *Account) HasOpenAIPersonaCredential(persona SessionPersonaID, slotID int) bool {
 	if a == nil || !a.IsOpenAIOAuth() {
 		return false
+	}
+	if a.IsOpenAIPersonaMappingEnabled() && a.GetOpenAIPersonaMappingVersion() >= SessionPersonaScopeVersionV3 {
+		authorized, ok := a.extraPersonaSlotBool(OpenAIPersonaSlotAuthorizedExtraKey, slotID)
+		return ok && authorized && a.GetOpenAIPersonaCredentialChainID(persona, slotID) != ""
 	}
 	chain := a.findPersonaCredential(persona, slotID)
 	if chain != nil {
@@ -508,6 +500,30 @@ func (a *Account) HasOpenAIPersonaCredential(persona SessionPersonaID, slotID in
 		return strings.TrimSpace(a.GetOpenAIAccessToken()) != "" && strings.TrimSpace(a.GetOpenAIRefreshToken()) != ""
 	}
 	return false
+}
+
+func (a *Account) extraPersonaSlotString(key string, slotID int) string {
+	if a == nil || a.Extra == nil || slotID < 0 {
+		return ""
+	}
+	raw, ok := a.Extra[key]
+	if !ok {
+		return ""
+	}
+	value := copyOpenAICredentialContainer(raw)
+	return strings.TrimSpace(openAIMapString(value, strconv.Itoa(slotID)))
+}
+
+func (a *Account) extraPersonaSlotBool(key string, slotID int) (bool, bool) {
+	if a == nil || a.Extra == nil || slotID < 0 {
+		return false, false
+	}
+	raw, ok := a.Extra[key]
+	if !ok {
+		return false, false
+	}
+	value := copyOpenAICredentialContainer(raw)
+	return openAIMapBool(value, strconv.Itoa(slotID))
 }
 
 func (a *Account) findPersonaCredential(persona SessionPersonaID, slotID int) map[string]any {

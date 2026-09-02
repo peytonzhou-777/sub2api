@@ -1299,6 +1299,44 @@ func TestOpenAIWSConnPool_SessionScopeRotationOnlyTouchesTargetScope(t *testing.
 	}
 }
 
+func TestOpenAIWSConnPool_ClearPersonaCredentialOnlyTouchesMatchingScope(t *testing.T) {
+	pool := &openAIWSConnPool{}
+	accountID := int64(323)
+	targetScope := OpenAITransportScope{
+		AccountID: accountID, Persona: SessionPersonaOpenCode, SlotID: 1,
+		CredentialChainID: "chain-target",
+	}
+	otherScope := targetScope
+	otherScope.CredentialChainID = "chain-other"
+	target := newOpenAIWSConn("target-persona", accountID, &openAIWSFakeConn{}, nil)
+	target.transportScope = targetScope
+	other := newOpenAIWSConn("other-persona", accountID, &openAIWSFakeConn{}, nil)
+	other.transportScope = otherScope
+	ap := &openAIWSAccountPool{
+		conns:       map[string]*openAIWSConn{target.id: target, other.id: other},
+		pinnedConns: map[string]int{target.id: 1, other.id: 1},
+	}
+	pool.accounts.Store(accountID, ap)
+
+	pool.ClearPersonaCredential(accountID, targetScope.Persona, targetScope.SlotID, targetScope.CredentialChainID)
+
+	ap.mu.Lock()
+	_, targetExists := ap.conns[target.id]
+	_, otherExists := ap.conns[other.id]
+	_, targetPinned := ap.pinnedConns[target.id]
+	_, otherPinned := ap.pinnedConns[other.id]
+	ap.mu.Unlock()
+	require.False(t, targetExists)
+	require.False(t, targetPinned)
+	require.True(t, otherExists)
+	require.True(t, otherPinned)
+	select {
+	case <-target.closedCh:
+	default:
+		t.Fatal("目标 Persona 凭据连接未关闭")
+	}
+}
+
 func TestOpenAIWSConnPool_SessionScopeRotationTracksCreatingByScope(t *testing.T) {
 	pool := &openAIWSConnPool{}
 	accountID := int64(322)

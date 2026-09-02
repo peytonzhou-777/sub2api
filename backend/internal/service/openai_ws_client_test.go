@@ -68,6 +68,33 @@ func TestCoderOpenAIWSClientDialer_CPAClientIsScopedBySlotAndCredentialChain(t *
 	require.Equal(t, int64(3), snapshot.CPAClientCacheMisses)
 }
 
+func TestCoderOpenAIWSClientDialer_InvalidationOnlyRemovesMatchingCredential(t *testing.T) {
+	dialer := newDefaultOpenAIWSClientDialer()
+	impl, ok := dialer.(*coderOpenAIWSClientDialer)
+	require.True(t, ok)
+	target := OpenAITransportScope{
+		AccountID: 42, Persona: SessionPersonaOpenCode, PersonaVersion: "1.18.23",
+		SlotID: 1, SessionEpoch: 3, SlotGeneration: 2, SlotSetGeneration: 4,
+		CredentialChainID: "chain-target", InstallationID: "install-target",
+	}
+	other := target
+	other.CredentialChainID = "chain-other"
+	other.InstallationID = "install-other"
+
+	_, err := impl.cpaHTTPClient(target, "http://proxy-a.example:8080")
+	require.NoError(t, err)
+	_, err = impl.cpaHTTPClient(other, "http://proxy-a.example:8080")
+	require.NoError(t, err)
+	impl.invalidatePersonaTransport(target.AccountID, target.Persona, target.SlotID, target.CredentialChainID)
+
+	impl.cpaMu.Lock()
+	require.Len(t, impl.cpaClients, 1)
+	for _, entry := range impl.cpaClients {
+		require.Equal(t, other.CredentialChainID, entry.transportScope.CredentialChainID)
+	}
+	impl.cpaMu.Unlock()
+}
+
 func TestCoderOpenAIWSClientDialer_CPAClientRejectsIncompleteScope(t *testing.T) {
 	dialer := newDefaultOpenAIWSClientDialer()
 	impl, ok := dialer.(*coderOpenAIWSClientDialer)

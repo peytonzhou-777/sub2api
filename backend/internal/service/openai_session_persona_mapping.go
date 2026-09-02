@@ -97,6 +97,11 @@ func (a *Account) GetOpenAIPersonaInstallationID(persona SessionPersonaID, slotI
 	if a == nil {
 		return ""
 	}
+	if a.IsOpenAIPersonaMappingEnabled() && a.GetOpenAIPersonaMappingVersion() >= SessionPersonaScopeVersionV3 {
+		if installationID := a.extraPersonaSlotString(OpenAIPersonaInstallationIDsExtraKey, slotID); installationID != "" {
+			return installationID
+		}
+	}
 	if chain := a.findPersonaCredential(persona, slotID); chain != nil {
 		if installationID := strings.TrimSpace(openAIMapString(chain, "installation_id")); installationID != "" {
 			return installationID

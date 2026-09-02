@@ -335,17 +335,59 @@ func newOpenAIPersonaV3IntelligenceAccount(id int64) *Account {
 				"0": string(SessionPersonaSlotStateActive),
 				"1": string(SessionPersonaSlotStateActive),
 			},
-			openAIPersonaSlotEnabledExtraKey: map[string]any{"0": true, "1": true},
-			codexFingerprintModeExtraKey:     "off",
+			openAIPersonaSlotEnabledExtraKey:    map[string]any{"0": true, "1": true},
+			OpenAIPersonaSlotAuthorizedExtraKey: map[string]any{"0": true, "1": true},
+			OpenAIPersonaActiveChainsExtraKey: map[string]any{
+				"0": "strict-probe-chain",
+				"1": "opencode-probe-chain",
+			},
+			OpenAIPersonaInstallationIDsExtraKey: map[string]any{
+				"0": "strict-installation",
+				"1": "opencode-installation",
+			},
+			OpenAIPersonaSlotGenerationsExtraKey:   map[string]any{"0": int64(1), "1": int64(1)},
+			OpenAIPersonaSlotSetGenerationExtraKey: int64(1),
+			codexFingerprintModeExtraKey:           "off",
 		},
 	}
 }
 
-func newOpenAIPersonaV3IntelligenceService(repo AccountRepository, upstream HTTPUpstream) *AccountTestService {
+func newOpenAIPersonaV3IntelligenceService(t *testing.T, repo *openAIAccountTestRepo, upstream HTTPUpstream) *AccountTestService {
+	t.Helper()
+	personaRepo := newOpenAIPersonaCredentialRepoStub()
+	cache := newOpenAITokenCacheStub()
+	oauth := NewOpenAIOAuthService(nil, nil)
+	oauth.configurePersonaCredentialStore(personaRepo, openAIPersonaTestEncryptor{}, cache)
+	t.Cleanup(oauth.Stop)
+	for _, account := range repo.accountsByID {
+		if account == nil || !account.IsOpenAIPersonaMappingEnabled() {
+			continue
+		}
+		for _, seed := range []struct {
+			slotID  int
+			persona SessionPersonaID
+			chainID string
+			token   string
+			install string
+		}{
+			{slotID: 0, persona: SessionPersonaCodexCLIStrict, chainID: "strict-probe-chain", token: "strict-token", install: "strict-installation"},
+			{slotID: 1, persona: SessionPersonaOpenCode, chainID: "opencode-probe-chain", token: "opencode-token", install: "opencode-installation"},
+		} {
+			binding := SessionPersonaSlotBinding{
+				AccountID: account.ID, PersonaID: seed.persona, SlotID: seed.slotID,
+				CredentialChainID: seed.chainID, InstallationID: seed.install,
+				SlotGeneration: 1, SlotSetGeneration: 1,
+			}
+			require.NoError(t, seedOpenAIPersonaCredential(personaRepo, oauth, account, binding, &OpenAITokenInfo{
+				AccessToken: seed.token, RefreshToken: seed.token + "-refresh",
+				ExpiresAt: time.Now().Add(time.Hour).Unix(), ChatGPTAccountID: "org-persona-v3",
+			}))
+		}
+	}
 	return &AccountTestService{
 		accountRepo:         repo,
 		httpUpstream:        upstream,
-		openAITokenProvider: NewOpenAITokenProvider(repo, nil, nil),
+		openAITokenProvider: NewOpenAITokenProvider(repo, cache, oauth),
 		cfg: &config.Config{Gateway: config.GatewayConfig{
 			CodexOutboundProfileDefault: CodexOutboundProfileCLI0149,
 		}},
@@ -361,7 +403,7 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotZeroUsesStrictCode
 	resp := newJSONResponse(http.StatusOK, "")
 	resp.Body = io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\"}\n\n"))
 	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
-	svc := newOpenAIPersonaV3IntelligenceService(repo, upstream)
+	svc := newOpenAIPersonaV3IntelligenceService(t, repo, upstream)
 	slotID := 0
 
 	require.NoError(t, svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", &slotID))
@@ -385,7 +427,7 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotOneUsesOpenCodeCha
 	resp := newJSONResponse(http.StatusOK, "")
 	resp.Body = io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\"}\n\n"))
 	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
-	svc := newOpenAIPersonaV3IntelligenceService(repo, upstream)
+	svc := newOpenAIPersonaV3IntelligenceService(t, repo, upstream)
 	slotID := 1
 
 	require.NoError(t, svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", &slotID))
@@ -432,7 +474,7 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaShadowUsesParentChainA
 	resp := newJSONResponse(http.StatusOK, "")
 	resp.Body = io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\"}\n\n"))
 	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
-	svc := newOpenAIPersonaV3IntelligenceService(repo, upstream)
+	svc := newOpenAIPersonaV3IntelligenceService(t, repo, upstream)
 	slotID := 1
 
 	require.NoError(t, svc.TestOpenAIOAuthIntelligence(ctx, shadow.ID, "gpt-5.4", &slotID))
@@ -465,7 +507,8 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotFailsClosed(t *tes
 			name:   "unauthorized OpenCode slot",
 			slotID: func() *int { value := 1; return &value }(),
 			mutate: func(account *Account) {
-				delete(account.Credentials, openAIPersonaCredentialsKey)
+				account.Extra[OpenAIPersonaSlotAuthorizedExtraKey] = map[string]any{"0": true, "1": false}
+				account.Extra[OpenAIPersonaActiveChainsExtraKey] = map[string]any{"0": "strict-probe-chain"}
 			},
 			wantError: "authorized=false",
 		},
@@ -491,7 +534,7 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotFailsClosed(t *tes
 				accountsByID: map[int64]*Account{account.ID: account},
 			}}
 			upstream := &queuedHTTPUpstream{}
-			svc := newOpenAIPersonaV3IntelligenceService(repo, upstream)
+			svc := newOpenAIPersonaV3IntelligenceService(t, repo, upstream)
 
 			err := svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", testCase.slotID)
 			require.Error(t, err)

@@ -2229,16 +2229,30 @@
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                class="btn btn-secondary mt-3 w-full text-xs"
-                :data-testid="`openai-persona-slot-${slot.slotId}-oauth`"
-                @click="emit('authorizePersona', slot.slotId)"
-              >
-                {{ slot.authorization === 'authorized'
-                  ? t('admin.accounts.openai.personaMapping.oauth.reauthorize')
-                  : t('admin.accounts.openai.personaMapping.oauth.authorize') }}
-              </button>
+              <div class="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  class="btn btn-secondary min-w-0 flex-1 text-xs"
+                  :data-testid="`openai-persona-slot-${slot.slotId}-oauth`"
+                  @click="emit('authorizePersona', slot.slotId)"
+                >
+                  {{ slot.authorization === 'authorized'
+                    ? t('admin.accounts.openai.personaMapping.oauth.reauthorize')
+                    : t('admin.accounts.openai.personaMapping.oauth.authorize') }}
+                </button>
+                <button
+                  v-if="slot.authorization === 'authorized'"
+                  type="button"
+                  class="btn btn-danger min-w-0 flex-1 text-xs"
+                  :disabled="revokingPersonaSlot === slot.slotId"
+                  :data-testid="`openai-persona-slot-${slot.slotId}-revoke`"
+                  @click="requestPersonaAuthorizationRevoke(slot.slotId)"
+                >
+                  {{ revokingPersonaSlot === slot.slotId
+                    ? t('admin.accounts.openai.personaMapping.oauth.revoking')
+                    : t('admin.accounts.openai.personaMapping.oauth.revoke') }}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -3006,6 +3020,16 @@
     @confirm="handleMixedChannelConfirm"
     @cancel="handleMixedChannelCancel"
   />
+  <ConfirmDialog
+    :show="personaRevokeSlot !== null"
+    :title="t('admin.accounts.openai.personaMapping.oauth.revokeTitle')"
+    :message="t('admin.accounts.openai.personaMapping.oauth.revokeConfirm')"
+    :confirm-text="t('admin.accounts.openai.personaMapping.oauth.revoke')"
+    :cancel-text="t('common.cancel')"
+    :danger="true"
+    @confirm="confirmPersonaAuthorizationRevoke"
+    @cancel="personaRevokeSlot = null"
+  />
 </template>
 
 <script setup lang="ts">
@@ -3437,6 +3461,8 @@ interface OpenAIPersonaSlotView {
 }
 
 const openAIPersonaMappingEnabled = ref(false)
+const personaRevokeSlot = ref<0 | 1 | null>(null)
+const revokingPersonaSlot = ref<0 | 1 | null>(null)
 const openAIPersonaSlotStates = reactive<Record<number, OpenAIPersonaSlotState>>({
   0: 'active',
   1: 'active'
@@ -3464,6 +3490,28 @@ const openAIPersonaSlots = computed<OpenAIPersonaSlotView[]>(() => [
     authorization: openAIPersonaSlotAuthorizations[1]
   }
 ])
+
+function requestPersonaAuthorizationRevoke(slotId: 0 | 1) {
+  personaRevokeSlot.value = slotId
+}
+
+async function confirmPersonaAuthorizationRevoke() {
+  const slotId = personaRevokeSlot.value
+  const currentAccount = props.account
+  if (slotId === null || !currentAccount) return
+  personaRevokeSlot.value = null
+  revokingPersonaSlot.value = slotId
+  try {
+    const updated = await adminAPI.accounts.revokeOpenAIPersonaAuthorization(currentAccount.id, slotId)
+    emit('updated', updated)
+    await loadOpenAIPersonaOAuthStatus(updated)
+    appStore.showSuccess(t('admin.accounts.openai.personaMapping.oauth.revoked'))
+  } catch (error: any) {
+    appStore.showError(error?.message || t('admin.accounts.openai.personaMapping.oauth.revokeFailed'))
+  } finally {
+    revokingPersonaSlot.value = null
+  }
+}
 
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
 const codexImageToolMode = ref<CodexImageToolMode>('inherit')
@@ -3901,97 +3949,6 @@ function getOpenAIPersonaSlotValue(raw: unknown, slotId: number): unknown {
   return values[String(slotId)] ?? values[slotId]
 }
 
-function hasCredentialValue(value: unknown): boolean {
-  if (value === null || value === undefined) return false
-  if (typeof value === 'string') return value.trim().length > 0
-  return true
-}
-
-function findOpenAIPersonaCredential(
-  raw: unknown,
-  persona: 'codex_cli_strict' | 'opencode',
-  slotId: number
-): Record<string, unknown> | null {
-  if (typeof raw === 'string') {
-    const trimmed = raw.trim()
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      try {
-        return findOpenAIPersonaCredential(JSON.parse(trimmed), persona, slotId)
-      } catch {
-        return null
-      }
-    }
-    return null
-  }
-  if (Array.isArray(raw)) {
-    for (const value of raw) {
-      const found = findOpenAIPersonaCredential(value, persona, slotId)
-      if (found) return found
-    }
-    return null
-  }
-  if (!raw || typeof raw !== 'object') return null
-
-  const value = raw as Record<string, unknown>
-  const chainID = typeof value.credential_chain_id === 'string'
-    ? value.credential_chain_id.trim()
-    : ''
-  const personaValue = typeof value.persona_id === 'string'
-    ? value.persona_id
-    : typeof value.persona === 'string'
-      ? value.persona
-      : ''
-  const candidateSlot = Number(value.slot_id)
-  if (
-    chainID &&
-    personaValue.trim().toLowerCase() === persona &&
-    Number.isInteger(candidateSlot) &&
-    candidateSlot === slotId
-  ) {
-    return value
-  }
-
-  for (const nested of Object.values(value)) {
-    const found = findOpenAIPersonaCredential(nested, persona, slotId)
-    if (found) return found
-  }
-  return null
-}
-
-function resolveOpenAIPersonaAuthorization(
-  account: Account,
-  persona: 'codex_cli_strict' | 'opencode',
-  slotId: number
-): OpenAIPersonaAuthorizationState {
-  const credentials = (account.credentials as Record<string, unknown> | undefined) || {}
-  const chain = findOpenAIPersonaCredential(
-    credentials.persona_credentials ?? credentials.oauth_credential_chains,
-    persona,
-    slotId
-  )
-
-  if (chain) {
-    if (parseOptionalBoolean(chain.ready) === false) return 'not_ready'
-    const state = typeof chain.state === 'string' ? chain.state.trim().toLowerCase() : ''
-    if (state && state !== 'ready') return 'not_ready'
-    if (!hasCredentialValue(chain.credential_chain_id)) return 'not_ready'
-    if ('access_token' in chain && !hasCredentialValue(chain.access_token)) return 'not_ready'
-    if ('refresh_token' in chain && !hasCredentialValue(chain.refresh_token)) return 'not_ready'
-    return 'authorized'
-  }
-
-  // slot 0 keeps the legacy account-level OAuth credential as a valid
-  // compatibility source. OpenCode and strict non-zero slots never borrow it.
-  if (persona === 'codex_cli_strict' && slotId === 0) {
-    const status = account.credentials_status || {}
-    const hasAccess = status.has_access_token === true || hasCredentialValue(credentials.access_token)
-    const hasRefresh = status.has_refresh_token === true || hasCredentialValue(credentials.refresh_token)
-    if (hasAccess && hasRefresh) return 'authorized'
-    if (hasAccess || hasRefresh) return 'not_ready'
-  }
-  return 'missing'
-}
-
 function loadOpenAIPersonaMapping(newAccount: Account) {
   openAIPersonaMappingEnabled.value = false
   openAIPersonaSlotStates[0] = 'active'
@@ -4025,8 +3982,10 @@ function loadOpenAIPersonaMapping(newAccount: Account) {
       normalizeOpenAIPersonaSlotState(getOpenAIPersonaSlotValue(stateMap, slotId)) ||
       (parseOptionalBoolean(getOpenAIPersonaSlotValue(enabledMap, slotId)) === false ? 'draining' : 'active')
   }
-  openAIPersonaSlotAuthorizations[0] = resolveOpenAIPersonaAuthorization(newAccount, 'codex_cli_strict', 0)
-  openAIPersonaSlotAuthorizations[1] = resolveOpenAIPersonaAuthorization(newAccount, 'opencode', 1)
+  // Persona authorization is encrypted server-side state; only the status API
+  // is authoritative, so account DTO credentials are never used as a fallback.
+  openAIPersonaSlotAuthorizations[0] = 'missing'
+  openAIPersonaSlotAuthorizations[1] = 'missing'
   void loadOpenAIPersonaOAuthStatus(newAccount)
 }
 
@@ -4046,7 +4005,7 @@ async function loadOpenAIPersonaOAuthStatus(account: Account) {
           : 'missing'
     }
   } catch {
-    // Keep the redacted account snapshot as a compatibility fallback.
+    // 凭据状态只信任服务端接口；加载失败时保留未配置状态。
   }
 }
 

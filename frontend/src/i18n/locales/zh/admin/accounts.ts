@@ -755,7 +755,13 @@ export default {
             openCode: 'slot 1 · OpenCode 独立登录',
             authorize: '授权此 Persona',
             reauthorize: '重新授权此 Persona',
-            success: 'Persona OAuth 授权已更新'
+            success: 'Persona OAuth 授权已更新',
+            revoke: '撤销授权',
+            revoking: '正在撤销',
+            revoked: 'Persona 本地授权已撤销',
+            revokeTitle: '撤销 Persona 授权',
+            revokeConfirm: '确定撤销此 Persona 的全部本地 OAuth 凭据链吗？该槽位将停止接收新请求，已有连接会被隔离；重新使用前必须再次完成授权。',
+            revokeFailed: '撤销 Persona 授权失败'
           },
           enable: '启用 v3 映射',
           enableDesc: '启用后仅影响新根请求；slot 1 必须具备独立 OpenCode OAuth 授权链，否则自动回落 slot 0 strict Codex。'

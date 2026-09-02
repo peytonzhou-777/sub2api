@@ -14,10 +14,22 @@ import (
 
 // OpenAIOAuthService handles OpenAI OAuth authentication flows
 type OpenAIOAuthService struct {
-	sessionStore         *openai.SessionStore
-	proxyRepo            ProxyRepository
-	oauthClient          OpenAIOAuthClient
-	privacyClientFactory PrivacyClientFactory // 用于调用 chatgpt.com/backend-api（ImpersonateChrome）
+	sessionStore                *openai.SessionStore
+	proxyRepo                   ProxyRepository
+	oauthClient                 OpenAIOAuthClient
+	privacyClientFactory        PrivacyClientFactory // 用于调用 chatgpt.com/backend-api（ImpersonateChrome）
+	personaCredentialRepo       OpenAIPersonaCredentialRepository
+	personaCredentialEncryptor  SecretEncryptor
+	personaTokenCache           OpenAITokenCache
+	personaTransportInvalidator OpenAIPersonaTransportInvalidator
+}
+
+// SetPersonaTransportInvalidator connects credential revocation to the live
+// HTTP/WS transport owners after the gateway has been constructed.
+func (s *OpenAIOAuthService) SetPersonaTransportInvalidator(invalidator OpenAIPersonaTransportInvalidator) {
+	if s != nil {
+		s.personaTransportInvalidator = invalidator
+	}
 }
 
 // NewOpenAIOAuthService creates a new OpenAI OAuth service

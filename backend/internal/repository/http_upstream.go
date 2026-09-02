@@ -133,8 +133,9 @@ type upstreamClientEntry struct {
 	transportGeneration     uint64       // CPA Transport manager 代际
 	scopeFingerprint        string       // Account × Persona × Slot × Epoch 等作用域摘要
 	transportProfileVersion string       // TLS Profile 版本
-	lastUsed                int64        // 最后使用时间戳（纳秒），用于 LRU 淘汰
-	inFlight                int64        // 当前进行中的请求数，>0 时不可淘汰
+	openAITransportScope    service.OpenAITransportScope
+	lastUsed                int64 // 最后使用时间戳（纳秒），用于 LRU 淘汰
+	inFlight                int64 // 当前进行中的请求数，>0 时不可淘汰
 }
 
 type openAIHTTP2FallbackState struct {

@@ -73,6 +73,8 @@ func TestEffectiveOpenAIAccountAdmissionCapacityUsesActiveAuthorizedPersonaSlots
 	account.Concurrency = 4
 	account.Extra[openAIPersonaMappingEnabledExtraKey] = true
 	account.Extra[openAIPersonaMappingVersionExtraKey] = SessionPersonaScopeVersionV3
+	account.Extra[OpenAIPersonaSlotAuthorizedExtraKey] = map[string]any{"0": true, "1": true}
+	account.Extra[OpenAIPersonaActiveChainsExtraKey] = map[string]any{"0": "strict-chain", "1": "opencode-chain"}
 	cfg := DefaultOpenAIAccountAdmissionConfig()
 	cfg.PersonaPolicies = map[string]OpenAIPersonaAdmissionPolicy{
 		string(SessionPersonaCodexCLIStrict): {MaxConcurrency: 3},

@@ -849,6 +849,13 @@ export async function refreshOpenAIPersonaToken(id: number, slotId: 0 | 1): Prom
   return data
 }
 
+export async function revokeOpenAIPersonaAuthorization(id: number, slotId: 0 | 1): Promise<Account> {
+  const { data } = await apiClient.delete<Account>(
+    `/admin/openai/accounts/${id}/persona-slots/${slotId}/oauth`
+  )
+  return data
+}
+
 /**
  * Batch operation result type
  */
@@ -1147,6 +1154,7 @@ export const accountsAPI = {
   generateOpenAIPersonaAuthUrl,
   exchangeOpenAIPersonaCode,
   refreshOpenAIPersonaToken,
+  revokeOpenAIPersonaAuthorization,
   batchCreate,
   batchUpdateCredentials,
   bulkUpdate,

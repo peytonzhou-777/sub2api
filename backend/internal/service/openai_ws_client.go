@@ -109,6 +109,7 @@ type openAIWSCPAClientEntry struct {
 	client           *http.Client
 	lastUsedUnixNano int64
 	scopeFingerprint string
+	transportScope   OpenAITransportScope
 }
 
 func (d *coderOpenAIWSClientDialer) Dial(
@@ -229,10 +230,26 @@ func (d *coderOpenAIWSClientDialer) cpaHTTPClient(scope OpenAITransportScope, pr
 		client:           client,
 		lastUsedUnixNano: now,
 		scopeFingerprint: scopeFingerprint,
+		transportScope:   scope,
 	}
 	d.ensureCPAClientCapacityLocked()
 	d.cpaMisses.Add(1)
 	return client, nil
+}
+
+func (d *coderOpenAIWSClientDialer) invalidatePersonaTransport(accountID int64, persona SessionPersonaID, slotID int, credentialChainID string) {
+	if d == nil {
+		return
+	}
+	d.cpaMu.Lock()
+	defer d.cpaMu.Unlock()
+	for key, entry := range d.cpaClients {
+		if entry == nil || !entry.transportScope.MatchesCredential(accountID, persona, slotID, credentialChainID) {
+			continue
+		}
+		closeOpenAIWSProxyClient(entry.client)
+		delete(d.cpaClients, key)
+	}
 }
 
 func (d *coderOpenAIWSClientDialer) cleanupCPAClientsLocked(nowUnixNano int64) {

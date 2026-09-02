@@ -27,6 +27,15 @@ type OpenAITransportScope struct {
 	InstallationID    string
 }
 
+type OpenAIPersonaTransportInvalidator interface {
+	InvalidateOpenAIPersonaTransport(accountID int64, persona SessionPersonaID, slotID int, credentialChainID string)
+}
+
+func (s OpenAITransportScope) MatchesCredential(accountID int64, persona SessionPersonaID, slotID int, credentialChainID string) bool {
+	return s.AccountID == accountID && s.Persona == persona && s.SlotID == slotID &&
+		strings.TrimSpace(s.CredentialChainID) == strings.TrimSpace(credentialChainID)
+}
+
 // Fingerprint 返回不包含凭据内容的作用域摘要，用于 WS 连接池的严格复用判定。
 // 摘要把代际字段纳入键，确保 Session/slot/credential 链轮换后不会命中旧连接。
 func (s OpenAITransportScope) Fingerprint(profileVersion, proxyURL string) string {
