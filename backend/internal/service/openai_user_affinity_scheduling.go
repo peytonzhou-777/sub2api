@@ -29,6 +29,10 @@ func (s *OpenAIGatewayService) selectLegacyOpenAIAccountWithUserAffinity(ctx con
 				if selection.ReleaseFunc != nil {
 					selection.ReleaseFunc()
 				}
+				if errors.Is(reserveErr, ErrOpenAIUserAffinityReservationRetry) {
+					reselected, _, retryErr := s.reselectOpenAIUserAffinityAfterReservationConflict(ctx, req)
+					return reselected, retryErr
+				}
 				return nil, reserveErr
 			}
 		}
@@ -41,6 +45,10 @@ func (s *OpenAIGatewayService) selectLegacyOpenAIAccountWithUserAffinity(ctx con
 		if reserveErr := s.reserveOpenAIUserAffinityConversation(ctx, req, result.Account.ID); reserveErr != nil {
 			if result.ReleaseFunc != nil {
 				result.ReleaseFunc()
+			}
+			if errors.Is(reserveErr, ErrOpenAIUserAffinityReservationRetry) {
+				reselected, _, retryErr := s.reselectOpenAIUserAffinityAfterReservationConflict(ctx, req)
+				return reselected, retryErr
 			}
 			return nil, reserveErr
 		}

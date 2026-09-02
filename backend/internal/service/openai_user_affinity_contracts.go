@@ -3,12 +3,28 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 )
 
 // ErrOpenAIUserAffinityPlacementStale 表示归属投影在并发收敛期间已经失效。
 // 调度层应将其视为 placement miss 并重新选择，而不是转换成 503。
 var ErrOpenAIUserAffinityPlacementStale = errors.New("openai user affinity placement stale")
+
+var (
+	// ErrOpenAIUserAffinityReservationRetry 表示预留期间权威槽位或 binding 已并发变化，调度层应重读后重选。
+	ErrOpenAIUserAffinityReservationRetry = fmt.Errorf("%w: openai user affinity reservation retry", ErrNoAvailableAccounts)
+	// ErrOpenAIUserAffinityDrainingSlotConflict 表示目标账号仍被 draining 槽位占用，禁止接入新会话。
+	ErrOpenAIUserAffinityDrainingSlotConflict = fmt.Errorf("%w: resident slot is draining", ErrOpenAIUserAffinityReservationRetry)
+	// ErrOpenAIUserAffinityResidentSlotsFull 表示当前 scope 已达到居民槽位上限，应复用权威槽位。
+	ErrOpenAIUserAffinityResidentSlotsFull = fmt.Errorf("%w: resident slots are full", ErrOpenAIUserAffinityReservationRetry)
+	// ErrOpenAIUserAffinityReservationConflict 表示并发请求已改变 binding、active route 或槽位版本。
+	ErrOpenAIUserAffinityReservationConflict = fmt.Errorf("%w: reservation state changed concurrently", ErrOpenAIUserAffinityReservationRetry)
+	// ErrOpenAIUserAffinityAccountUnavailable 表示目标账号在预留时已不可调度，调度层应重读槽位后改选。
+	ErrOpenAIUserAffinityAccountUnavailable = fmt.Errorf("%w: selected account is not schedulable", ErrOpenAIUserAffinityReservationRetry)
+	// ErrOpenAIUserAffinityNoCandidateSlot 表示重读后确实没有可复用或可新建的居民槽位。
+	ErrOpenAIUserAffinityNoCandidateSlot = fmt.Errorf("%w: no reusable resident slot", ErrNoAvailableAccounts)
+)
 
 // OpenAIUserAffinityStore 是账号仓储可选的用户粘性状态能力。
 // 通过可选接口接入，保持现有测试替身和非 OpenAI 调度调用方兼容。

@@ -612,10 +612,13 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 		FROM accounts WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
 		[]any{reservation.AccountID}, &maxResidentUsers, &cooldownSeconds,
 		&cooldownUntil, &accountStatus, &accountSchedulable, &accountPlatform); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, false, service.ErrOpenAIUserAffinityAccountUnavailable
+		}
 		return nil, false, err
 	}
 	if accountStatus != service.StatusActive || !accountSchedulable || accountPlatform != service.PlatformOpenAI {
-		return nil, false, nil
+		return nil, false, service.ErrOpenAIUserAffinityAccountUnavailable
 	}
 
 	existing := aliasBinding
@@ -655,10 +658,10 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 		return nil, false, err
 	}
 	if residentUsers >= effectiveMax && !userAlreadyResident {
-		return nil, false, nil
+		return nil, false, service.ErrOpenAIUserAffinityAccountUnavailable
 	}
 	if cooldownUntil.Valid && now.Before(cooldownUntil.Time) && !userAlreadyResident {
-		return nil, false, nil
+		return nil, false, service.ErrOpenAIUserAffinityAccountUnavailable
 	}
 	reservationKind := "new_resident"
 	if userAlreadyResident {
@@ -724,6 +727,7 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 	var slotID, slotGeneration, maxGeneration int64
 	preferredSlotRequested := reservation.PreferredResidentSlotID > 0 && reservation.PreferredSlotGeneration > 0
 	preferredSlotFound := false
+	drainingAccountConflict := false
 	usedIndexes := make(map[int]struct{}, maxSlots)
 	activeSlotCount := 0
 	for rows.Next() {
@@ -741,9 +745,12 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 			activeSlotCount++
 			usedIndexes[slotIndex] = struct{}{}
 		}
+		if accountID == reservation.AccountID && status == service.OpenAIUserResidentSlotStatusDraining {
+			drainingAccountConflict = true
+		}
 		if preferredSlotRequested && id == reservation.PreferredResidentSlotID &&
 			accountID == reservation.AccountID && generation == reservation.PreferredSlotGeneration &&
-			status != service.OpenAIUserResidentSlotStatusReplacementPending {
+			status != service.OpenAIUserResidentSlotStatusDraining {
 			slotID = id
 			slotGeneration = generation
 			preferredSlotFound = true
@@ -755,12 +762,28 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 	if err := rows.Close(); err != nil {
 		return nil, false, err
 	}
+	var historicalMaxGeneration int64
+	if err := scanSingleRow(ctx, exec, `
+		SELECT COALESCE(MAX(generation), 0) FROM openai_user_resident_slots
+		WHERE user_id = $1 AND scope_key = $2`,
+		[]any{reservation.UserID, reservation.ScopeKey}, &historicalMaxGeneration); err != nil {
+		return nil, false, err
+	}
+	if historicalMaxGeneration > maxGeneration {
+		maxGeneration = historicalMaxGeneration
+	}
 	if preferredSlotRequested && !preferredSlotFound {
-		return nil, false, nil
+		if drainingAccountConflict {
+			return nil, false, service.ErrOpenAIUserAffinityDrainingSlotConflict
+		}
+		return nil, false, service.ErrOpenAIUserAffinityReservationConflict
 	}
 	if slotID == 0 {
+		if drainingAccountConflict {
+			return nil, false, service.ErrOpenAIUserAffinityDrainingSlotConflict
+		}
 		if activeSlotCount >= maxSlots {
-			return nil, false, nil
+			return nil, false, service.ErrOpenAIUserAffinityResidentSlotsFull
 		}
 		slotIndex := 1
 		for ; slotIndex <= maxSlots; slotIndex++ {
@@ -782,12 +805,19 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 			[]any{reservation.UserID, reservation.ScopeKey, slotIndex, reservation.AccountID,
 				slotGeneration, now, provisionalExpiresAt, reservation.ProvisionalToken, reservation.Config.ConfigVersion}, &slotID)
 		if errors.Is(slotErr, sql.ErrNoRows) {
+			var conflictingStatus string
 			slotErr = scanSingleRow(ctx, exec, `
-				SELECT id, generation FROM openai_user_resident_slots
+				SELECT id, generation, status FROM openai_user_resident_slots
 				WHERE user_id = $1 AND scope_key = $2 AND account_id = $3
-				  AND status IN ('provisional', 'active', 'replacement_pending')
+				  AND status IN ('provisional', 'active', 'replacement_pending', 'draining')
 				ORDER BY generation DESC LIMIT 1 FOR UPDATE`,
-				[]any{reservation.UserID, reservation.ScopeKey, reservation.AccountID}, &slotID, &slotGeneration)
+				[]any{reservation.UserID, reservation.ScopeKey, reservation.AccountID}, &slotID, &slotGeneration, &conflictingStatus)
+			if slotErr == nil && conflictingStatus == service.OpenAIUserResidentSlotStatusDraining {
+				return nil, false, service.ErrOpenAIUserAffinityDrainingSlotConflict
+			}
+			if errors.Is(slotErr, sql.ErrNoRows) {
+				return nil, false, service.ErrOpenAIUserAffinityReservationConflict
+			}
 		}
 		if slotErr != nil {
 			return nil, false, slotErr
@@ -800,7 +830,7 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 		return nil, false, err
 	}
 	if !activeRouteAccepted {
-		return nil, false, nil
+		return nil, false, service.ErrOpenAIUserAffinityReservationConflict
 	}
 
 	bindingExpiresAt := now.Add(openAIUserAffinityProvisionalTTL(reservation.Config))
@@ -834,6 +864,9 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 	}
 	if err != nil {
 		return nil, false, err
+	}
+	if binding == nil {
+		return nil, false, service.ErrOpenAIUserAffinityReservationConflict
 	}
 	if err := upsertOpenAIUserConversationAliases(ctx, exec, binding, aliases, bindingExpiresAt); err != nil {
 		return nil, false, err

@@ -87,20 +87,22 @@ type schedulerAffinityCache struct {
 
 type schedulerConversationAffinityRepo struct {
 	*schedulerAffinityAccountRepo
-	binding        *OpenAIUserConversationBinding
-	bindingsByHash map[string]*OpenAIUserConversationBinding
-	bindingLookups []string
-	slots          []OpenAIUserResidentSlot
-	reservations   []OpenAIUserConversationReservation
-	failovers      []OpenAIUserConversationFailoverReservation
-	replacements   []OpenAIUserResidentSlotReplacementReservation
-	activeRoute    *OpenAIUserActiveRoute
-	occupancies    map[int64]OpenAIAccountSoftOccupancy
-	converges      int
-	evictedSlots   []OpenAIUserResidentSlotVersion
-	aliasType      string
-	aliasHash      string
-	aliasBindings  map[string]*OpenAIUserConversationBinding
+	binding                    *OpenAIUserConversationBinding
+	bindingsByHash             map[string]*OpenAIUserConversationBinding
+	bindingLookups             []string
+	slots                      []OpenAIUserResidentSlot
+	reservations               []OpenAIUserConversationReservation
+	failovers                  []OpenAIUserConversationFailoverReservation
+	replacements               []OpenAIUserResidentSlotReplacementReservation
+	activeRoute                *OpenAIUserActiveRoute
+	occupancies                map[int64]OpenAIAccountSoftOccupancy
+	converges                  int
+	evictedSlots               []OpenAIUserResidentSlotVersion
+	aliasType                  string
+	aliasHash                  string
+	aliasBindings              map[string]*OpenAIUserConversationBinding
+	reservationErrors          map[int64]error
+	slotsAfterReservationError map[int64][]OpenAIUserResidentSlot
 }
 
 func withOpenAICodexThreadAffinityTestState(ctx context.Context, selfHash string, parentHashes ...string) (context.Context, *openAICodexThreadAffinityState) {
@@ -179,6 +181,13 @@ func (r *schedulerConversationAffinityRepo) GetOpenAIUserConversationBindingByAl
 
 func (r *schedulerConversationAffinityRepo) ReserveOpenAIUserConversationBinding(_ context.Context, reservation OpenAIUserConversationReservation) (*OpenAIUserConversationBinding, bool, error) {
 	r.reservations = append(r.reservations, reservation)
+	if reserveErr := r.reservationErrors[reservation.AccountID]; reserveErr != nil {
+		delete(r.reservationErrors, reservation.AccountID)
+		if slots, ok := r.slotsAfterReservationError[reservation.AccountID]; ok {
+			r.slots = append([]OpenAIUserResidentSlot(nil), slots...)
+		}
+		return nil, false, reserveErr
+	}
 	if existing := r.bindingsByHash[reservation.ConversationHash]; existing != nil {
 		copy := *existing
 		r.binding = &copy
@@ -550,6 +559,156 @@ func TestOpenAIGatewayService_MultiSlotUsesLeastSharedResidentWhenFull(t *testin
 	require.True(t, found)
 	require.Equal(t, int64(36232), selection.Account.ID)
 	require.Len(t, repo.reservations, 1)
+}
+
+func TestOpenAIGatewayService_DrainingConflictReloadsAndReusesActiveResident(t *testing.T) {
+	now := time.Now().UTC()
+	scopeKey := openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE)
+	activeAccount := Account{ID: 36281, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1}
+	drainingAccount := Account{ID: 36282, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Extra: openAIUserAffinityTestQuotaExtra(now, 5)}
+	activeSlot := OpenAIUserResidentSlot{
+		ID: 81, UserID: 42, ScopeKey: scopeKey, AccountID: activeAccount.ID, Generation: 1,
+		Status: OpenAIUserResidentSlotStatusActive, ScoreUpdatedAt: now, AdmittedAt: now,
+		ExpiresAt: now.Add(time.Hour), ActiveRouteUserCount: 2, SoftOwnerUserID: 99,
+	}
+	drainingSlot := OpenAIUserResidentSlot{
+		ID: 82, UserID: 42, ScopeKey: scopeKey, AccountID: drainingAccount.ID, Generation: 2,
+		Status: OpenAIUserResidentSlotStatusDraining, ScoreUpdatedAt: now, AdmittedAt: now,
+		ExpiresAt: now.Add(time.Hour),
+	}
+	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t,
+		[]OpenAIUserResidentSlot{activeSlot}, []Account{activeAccount, drainingAccount},
+		map[int64]OpenAIUserAffinityCandidate{drainingAccount.ID: {AccountID: drainingAccount.ID}}, 2)
+	repo.reservationErrors = map[int64]error{drainingAccount.ID: ErrOpenAIUserAffinityDrainingSlotConflict}
+	repo.slotsAfterReservationError = map[int64][]OpenAIUserResidentSlot{
+		drainingAccount.ID: {activeSlot, drainingSlot},
+	}
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = "draining-conflict-reload"
+
+	selection, found, err := svc.selectOpenAIUserAffinityResidentSlots(ctx, req)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, selection)
+	require.Equal(t, activeAccount.ID, selection.Account.ID)
+	require.Len(t, repo.reservations, 2)
+	require.Equal(t, drainingAccount.ID, repo.reservations[0].AccountID)
+	require.Equal(t, activeAccount.ID, repo.reservations[1].AccountID)
+}
+
+func TestOpenAIGatewayService_AccountUnavailableReloadsAndReusesActiveResident(t *testing.T) {
+	now := time.Now().UTC()
+	scopeKey := openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE)
+	activeAccount := Account{ID: 36287, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1}
+	unavailableAccount := Account{ID: 36288, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Extra: openAIUserAffinityTestQuotaExtra(now, 5)}
+	activeSlot := OpenAIUserResidentSlot{
+		ID: 87, UserID: 42, ScopeKey: scopeKey, AccountID: activeAccount.ID, Generation: 1,
+		Status: OpenAIUserResidentSlotStatusActive, ScoreUpdatedAt: now, AdmittedAt: now,
+		ExpiresAt: now.Add(time.Hour), ActiveRouteUserCount: 2, SoftOwnerUserID: 99,
+	}
+	drainingSlot := OpenAIUserResidentSlot{
+		ID: 88, UserID: 42, ScopeKey: scopeKey, AccountID: unavailableAccount.ID, Generation: 2,
+		Status: OpenAIUserResidentSlotStatusDraining, ScoreUpdatedAt: now, AdmittedAt: now,
+		ExpiresAt: now.Add(time.Hour),
+	}
+	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t,
+		[]OpenAIUserResidentSlot{activeSlot}, []Account{activeAccount, unavailableAccount},
+		map[int64]OpenAIUserAffinityCandidate{unavailableAccount.ID: {AccountID: unavailableAccount.ID}}, 2)
+	repo.reservationErrors = map[int64]error{unavailableAccount.ID: ErrOpenAIUserAffinityAccountUnavailable}
+	repo.slotsAfterReservationError = map[int64][]OpenAIUserResidentSlot{
+		unavailableAccount.ID: {activeSlot, drainingSlot},
+	}
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = "account-unavailable-reload"
+
+	selection, found, err := svc.selectOpenAIUserAffinityResidentSlots(ctx, req)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, selection)
+	require.Equal(t, activeAccount.ID, selection.Account.ID)
+	require.Len(t, repo.reservations, 2)
+	require.Equal(t, unavailableAccount.ID, repo.reservations[0].AccountID)
+	require.Equal(t, activeAccount.ID, repo.reservations[1].AccountID)
+}
+
+func TestOpenAIGatewayService_MissingAliasAndBindingRebuildsFromActiveRoute(t *testing.T) {
+	now := time.Now().UTC()
+	scopeKey := openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE)
+	account := Account{ID: 36283, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1}
+	slot := OpenAIUserResidentSlot{
+		ID: 83, UserID: 42, ScopeKey: scopeKey, AccountID: account.ID, Generation: 4,
+		Status: OpenAIUserResidentSlotStatusActive, ScoreUpdatedAt: now, AdmittedAt: now,
+		ExpiresAt: now.Add(time.Hour), SoftOwnerUserID: 42,
+	}
+	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t, []OpenAIUserResidentSlot{slot}, []Account{account}, nil, 2)
+	activeUntil := now.Add(time.Hour)
+	repo.activeRoute = &OpenAIUserActiveRoute{
+		UserID: 42, ScopeKey: scopeKey, ResidentSlotID: slot.ID, AccountID: account.ID,
+		SlotGeneration: slot.Generation, ActiveUntil: &activeUntil,
+	}
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "missing-response", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = "missing-binding-active-route"
+	req.PreviousResponseCanMove = true
+
+	selection, found, err := svc.selectOpenAIUserAffinityConversation(ctx, req)
+	require.NoError(t, err)
+	require.False(t, found)
+	require.Nil(t, selection)
+
+	selection, found, err = svc.selectOpenAIUserAffinityResidentSlots(ctx, req)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, selection)
+	require.Equal(t, account.ID, selection.Account.ID)
+	require.Len(t, repo.reservations, 1)
+	require.Equal(t, slot.ID, repo.binding.ResidentSlotID)
+}
+
+func TestOpenAIGatewayService_FullProvisionalResidentSlotIsReused(t *testing.T) {
+	now := time.Now().UTC()
+	scopeKey := openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE)
+	account := Account{ID: 36284, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1}
+	otherAccount := Account{ID: 36286, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1}
+	slot := OpenAIUserResidentSlot{
+		ID: 84, UserID: 42, ScopeKey: scopeKey, AccountID: account.ID, Generation: 7,
+		Status: OpenAIUserResidentSlotStatusProvisional, ScoreUpdatedAt: now, AdmittedAt: now,
+		ExpiresAt: now.Add(time.Hour),
+	}
+	otherSlot := OpenAIUserResidentSlot{
+		ID: 86, UserID: 42, ScopeKey: scopeKey, AccountID: otherAccount.ID, Generation: 8,
+		Status: OpenAIUserResidentSlotStatusReplacementPending, ScoreUpdatedAt: now.Add(-time.Minute), AdmittedAt: now,
+		ExpiresAt: now.Add(time.Hour),
+	}
+	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t,
+		[]OpenAIUserResidentSlot{slot, otherSlot}, []Account{account, otherAccount}, nil, 2)
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = "full-provisional-slot"
+
+	selection, found, err := svc.selectOpenAIUserAffinityResidentSlots(ctx, req)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, selection)
+	require.Equal(t, account.ID, selection.Account.ID)
+	require.Len(t, repo.reservations, 1)
+	require.Equal(t, slot.ID, repo.binding.ResidentSlotID)
+}
+
+func TestOpenAIGatewayService_AllResidentCandidatesUnavailableReturnsDomainError(t *testing.T) {
+	now := time.Now().UTC()
+	scopeKey := openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE)
+	drainingSlot := OpenAIUserResidentSlot{
+		ID: 85, UserID: 42, ScopeKey: scopeKey, AccountID: 36285, Generation: 1,
+		Status: OpenAIUserResidentSlotStatusDraining, ScoreUpdatedAt: now, AdmittedAt: now,
+		ExpiresAt: now.Add(time.Hour),
+	}
+	svc, _, ctx := newMultiSlotAffinitySchedulerTestService(t, []OpenAIUserResidentSlot{drainingSlot}, nil, nil, 2)
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = "no-reusable-resident"
+
+	selection, found, err := svc.selectOpenAIUserAffinityResidentSlots(ctx, req)
+	require.ErrorIs(t, err, ErrOpenAIUserAffinityNoCandidateSlot)
+	require.True(t, found)
+	require.Nil(t, selection)
 }
 
 func TestOpenAIGatewayService_ConversationBindingPrecedesResidentPlacement(t *testing.T) {

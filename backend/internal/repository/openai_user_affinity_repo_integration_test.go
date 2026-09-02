@@ -5,7 +5,9 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -541,7 +543,7 @@ func TestOpenAIUserConversationBindingEnforcesResidentSlotLimit(t *testing.T) {
 	require.True(t, created)
 	require.NotNil(t, second)
 	blocked, _, created, err := reserve(accounts[2], "3")
-	require.NoError(t, err)
+	require.ErrorIs(t, err, service.ErrOpenAIUserAffinityResidentSlotsFull)
 	require.False(t, created)
 	require.Nil(t, blocked)
 
@@ -567,6 +569,189 @@ func TestOpenAIUserConversationBindingEnforcesResidentSlotLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, created)
 	require.NotNil(t, replacement)
+}
+
+func TestReserveOpenAIUserConversationBindingDrainingConflictReturnsDomainErrorAndAllowsReselection(t *testing.T) {
+	ctx := context.Background()
+	client := integrationEntClient
+	repo := newAccountRepositoryWithSQL(client, integrationDB, nil)
+	user := mustCreateUser(t, client, &service.User{
+		Email: "affinity-draining-conflict-" + uuid.NewString() + "@example.com", PasswordHash: "hash",
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID, Key: "sk-affinity-draining-conflict-" + uuid.NewString(), Name: "affinity",
+	})
+	drainingAccount := mustCreateAccount(t, client, &service.Account{
+		Name: "openai-affinity-draining-conflict-" + uuid.NewString(), Platform: service.PlatformOpenAI,
+	})
+	activeAccount := mustCreateAccount(t, client, &service.Account{
+		Name: "openai-affinity-draining-reselect-" + uuid.NewString(), Platform: service.PlatformOpenAI,
+	})
+	t.Cleanup(func() {
+		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM users WHERE id = $1`, user.ID)
+		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM accounts WHERE id IN ($1, $2)`, drainingAccount.ID, activeAccount.ID)
+	})
+	scopeKey := "openai:v1:group:simple:lane:draining-conflict"
+	now := time.Now().UTC()
+	_, err := integrationDB.ExecContext(ctx, `
+		INSERT INTO openai_user_resident_slots
+			(user_id, scope_key, slot_index, account_id, generation, status, admitted_at, expires_at, score_updated_at)
+		VALUES ($1, $2, 1, $3, 4, 'draining', $4, $5, $4)`,
+		user.ID, scopeKey, drainingAccount.ID, now, now.Add(time.Hour))
+	require.NoError(t, err)
+	config := service.DefaultOpenAIUserAffinityConfig()
+	config.ResidentAccountSlotCount = 2
+
+	binding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+		UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey,
+		ConversationHash: strings.Repeat("d", 64), AccountID: drainingAccount.ID,
+		PlacementGeneration: 5, MaxResidentSlots: 2, ContextRebuildable: true,
+		ProvisionalToken: uuid.NewString(), Config: config,
+	})
+	require.ErrorIs(t, err, service.ErrOpenAIUserAffinityDrainingSlotConflict)
+	require.False(t, errors.Is(err, sql.ErrNoRows))
+	require.False(t, created)
+	require.Nil(t, binding)
+
+	binding, created, err = repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+		UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey,
+		ConversationHash: strings.Repeat("d", 64), AccountID: activeAccount.ID,
+		PlacementGeneration: 5, MaxResidentSlots: 2, ContextRebuildable: true,
+		ProvisionalToken: uuid.NewString(), Config: config,
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+	require.NotNil(t, binding)
+	require.Equal(t, activeAccount.ID, binding.AccountID)
+}
+
+func TestReserveOpenAIUserConversationBindingUsesGenerationAfterExpiredHistory(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	client := tx.Client()
+	repo := newAccountRepositoryWithSQL(client, tx, nil)
+	user := mustCreateUser(t, client, &service.User{
+		Email: "affinity-expired-generation-" + uuid.NewString() + "@example.com", PasswordHash: "hash",
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID, Key: "sk-affinity-expired-generation-" + uuid.NewString(), Name: "affinity",
+	})
+	account := mustCreateAccount(t, client, &service.Account{
+		Name: "openai-affinity-expired-generation-" + uuid.NewString(), Platform: service.PlatformOpenAI,
+	})
+	scopeKey := "openai:v1:group:simple:lane:expired-generation"
+	now := time.Now().UTC()
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO openai_user_resident_slots
+			(user_id, scope_key, slot_index, account_id, generation, status, admitted_at, expires_at, score_updated_at)
+		VALUES ($1, $2, 1, $3, 1, 'expired', $4, $4, $4)`,
+		user.ID, scopeKey, account.ID, now)
+	require.NoError(t, err)
+
+	binding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+		UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey,
+		ConversationHash: strings.Repeat("f", 64), AccountID: account.ID,
+		PlacementGeneration: 1, MaxResidentSlots: 2, ContextRebuildable: true,
+		ProvisionalToken: uuid.NewString(), Config: service.DefaultOpenAIUserAffinityConfig(),
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+	require.NotNil(t, binding)
+	require.Equal(t, int64(2), binding.SlotGeneration)
+}
+
+func TestReserveOpenAIUserConversationBindingMissingAccountReturnsDomainError(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	client := tx.Client()
+	repo := newAccountRepositoryWithSQL(client, tx, nil)
+	user := mustCreateUser(t, client, &service.User{
+		Email: "affinity-missing-account-" + uuid.NewString() + "@example.com", PasswordHash: "hash",
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID, Key: "sk-affinity-missing-account-" + uuid.NewString(), Name: "affinity",
+	})
+
+	binding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+		UserID: user.ID, APIKeyID: apiKey.ID,
+		ScopeKey:         "openai:v1:group:simple:lane:missing-account",
+		ConversationHash: strings.Repeat("a", 64), AccountID: 1<<62 - 1,
+		PlacementGeneration: 1, MaxResidentSlots: 2, ContextRebuildable: true,
+		ProvisionalToken: uuid.NewString(), Config: service.DefaultOpenAIUserAffinityConfig(),
+	})
+	require.ErrorIs(t, err, service.ErrOpenAIUserAffinityAccountUnavailable)
+	require.False(t, errors.Is(err, sql.ErrNoRows))
+	require.False(t, created)
+	require.Nil(t, binding)
+}
+
+func TestReserveOpenAIUserConversationBindingConcurrentSameConversationIsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	client := integrationEntClient
+	repo := newAccountRepositoryWithSQL(client, integrationDB, nil)
+	user := mustCreateUser(t, client, &service.User{
+		Email: "affinity-concurrent-binding-" + uuid.NewString() + "@example.com", PasswordHash: "hash",
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID, Key: "sk-affinity-concurrent-binding-" + uuid.NewString(), Name: "affinity",
+	})
+	account := mustCreateAccount(t, client, &service.Account{
+		Name: "openai-affinity-concurrent-binding-" + uuid.NewString(), Platform: service.PlatformOpenAI,
+	})
+	t.Cleanup(func() {
+		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM users WHERE id = $1`, user.ID)
+		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM accounts WHERE id = $1`, account.ID)
+	})
+	config := service.DefaultOpenAIUserAffinityConfig()
+	config.ResidentAccountSlotCount = 2
+	scopeKey := "openai:v1:group:simple:lane:concurrent-binding"
+	conversationHash := strings.Repeat("e", 64)
+	type reserveResult struct {
+		binding *service.OpenAIUserConversationBinding
+		created bool
+		err     error
+	}
+	results := make(chan reserveResult, 2)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			binding, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+				UserID: user.ID, APIKeyID: apiKey.ID, ScopeKey: scopeKey,
+				ConversationHash: conversationHash, AccountID: account.ID,
+				PlacementGeneration: 1, MaxResidentSlots: 2, ContextRebuildable: true,
+				ProvisionalToken: uuid.NewString(), Config: config,
+			})
+			results <- reserveResult{binding: binding, created: created, err: err}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	createdCount := 0
+	bindingID := int64(0)
+	for result := range results {
+		require.NoError(t, result.err)
+		require.NotNil(t, result.binding)
+		if result.created {
+			createdCount++
+		}
+		if bindingID == 0 {
+			bindingID = result.binding.ID
+		}
+		require.Equal(t, bindingID, result.binding.ID)
+	}
+	require.Equal(t, 1, createdCount)
+	var bindingCount int
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM openai_user_conversation_bindings
+		WHERE user_id = $1 AND api_key_id = $2 AND scope_key = $3 AND conversation_hash = $4`,
+		user.ID, apiKey.ID, scopeKey, conversationHash).Scan(&bindingCount))
+	require.Equal(t, 1, bindingCount)
 }
 
 // 会话级切号提交前必须保留源绑定，失败回滚和成功提交都不能搬迁其他会话。

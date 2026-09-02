@@ -472,6 +472,19 @@ func (s *defaultOpenAIAccountScheduler) Select(
 		if selection != nil && selection.ReleaseFunc != nil {
 			selection.ReleaseFunc()
 		}
+		if errors.Is(reserveErr, ErrOpenAIUserAffinityReservationRetry) {
+			reselected, found, retryErr := s.service.reselectOpenAIUserAffinityAfterReservationConflict(ctx, req)
+			if retryErr != nil {
+				return nil, decision, retryErr
+			}
+			if !found || reselected == nil || reselected.Account == nil {
+				return nil, decision, ErrOpenAIUserAffinityNoCandidateSlot
+			}
+			decision.Layer = openAIAccountScheduleLayerUserAffinity
+			decision.SelectedAccountID = reselected.Account.ID
+			decision.SelectedAccountType = reselected.Account.Type
+			return reselected, decision, nil
+		}
 		return nil, decision, reserveErr
 	}
 	return selection, decision, nil

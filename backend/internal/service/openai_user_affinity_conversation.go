@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -323,13 +324,19 @@ func (s *OpenAIGatewayService) reserveOpenAIUserAffinityConversationWithAliases(
 		ProvisionalToken: token, ManageActiveRoute: manageActiveRoute, Config: config,
 	})
 	if err != nil {
+		slog.Warn("openai_user_affinity.conversation_reservation_rejected",
+			"user_id", identity.userID, "scope_key", identity.scopeKey, "account_id", accountID,
+			"reason", openAIUserAffinityReservationErrorReason(err), "error", err)
 		return err
 	}
 	if binding == nil && preferredBinding != nil {
 		return ErrOpenAICodexParentThreadUnavailable
 	}
-	if binding == nil || binding.AccountID != accountID {
-		return errors.New("openai conversation was concurrently bound to another account")
+	if binding == nil {
+		return ErrOpenAIUserAffinityNoCandidateSlot
+	}
+	if binding.AccountID != accountID {
+		return ErrOpenAIUserAffinityReservationConflict
 	}
 	if !created && (binding.Status == "provisional" || !binding.FirstOutputCommitted) {
 		return ErrNoAvailableAccounts

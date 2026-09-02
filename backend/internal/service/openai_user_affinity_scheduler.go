@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -76,6 +77,9 @@ func (s *defaultOpenAIAccountScheduler) selectOpenAIUserAffinity(ctx context.Con
 	if err := s.service.reserveOpenAIUserAffinityConversation(ctx, req, selection.Account.ID); err != nil {
 		if selection.ReleaseFunc != nil {
 			selection.ReleaseFunc()
+		}
+		if errors.Is(err, ErrOpenAIUserAffinityReservationRetry) {
+			return s.service.reselectOpenAIUserAffinityAfterReservationConflict(ctx, req)
 		}
 		return nil, true, err
 	}
@@ -153,6 +157,9 @@ func (s *OpenAIGatewayService) selectLegacyOpenAIUserAffinityPreflight(
 		if err := s.reserveOpenAIUserAffinityConversation(ctx, req, selection.Account.ID); err != nil {
 			if selection.ReleaseFunc != nil {
 				selection.ReleaseFunc()
+			}
+			if errors.Is(err, ErrOpenAIUserAffinityReservationRetry) {
+				return s.reselectOpenAIUserAffinityAfterReservationConflict(ctx, req)
 			}
 			return nil, true, err
 		}

@@ -3,13 +3,39 @@ package service
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"math"
 	"sort"
 	"time"
 )
 
+const openAIUserAffinityReservationReloadAttempts = 2
+
 // selectOpenAIUserAffinityResidentSlots 让新会话优先收敛到用户活动路由，并在共享时软退让。
 func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlots(ctx context.Context, req OpenAIAccountScheduleRequest) (*AccountSelectionResult, bool, error) {
+	for attempt := 1; attempt <= openAIUserAffinityReservationReloadAttempts; attempt++ {
+		selection, handled, err := s.selectOpenAIUserAffinityResidentSlotsOnce(ctx, req)
+		if !errors.Is(err, ErrOpenAIUserAffinityReservationRetry) {
+			return selection, handled, err
+		}
+		slog.Info("openai_user_affinity.reservation_retry",
+			"attempt", attempt, "reason", openAIUserAffinityReservationErrorReason(err))
+		if conversationSelection, found, conversationErr := s.selectOpenAIUserAffinityConversation(ctx, req); conversationErr != nil || found {
+			return conversationSelection, found, conversationErr
+		}
+	}
+	return nil, true, ErrOpenAIUserAffinityNoCandidateSlot
+}
+
+// reselectOpenAIUserAffinityAfterReservationConflict 先回读并发创建的 binding，再按最新槽位重选。
+func (s *OpenAIGatewayService) reselectOpenAIUserAffinityAfterReservationConflict(ctx context.Context, req OpenAIAccountScheduleRequest) (*AccountSelectionResult, bool, error) {
+	if selection, found, err := s.selectOpenAIUserAffinityConversation(ctx, req); err != nil || found {
+		return selection, found, err
+	}
+	return s.selectOpenAIUserAffinityResidentSlots(ctx, req)
+}
+
+func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlotsOnce(ctx context.Context, req OpenAIAccountScheduleRequest) (*AccountSelectionResult, bool, error) {
 	if s == nil || s.settingService == nil || s.accountRepo == nil || NormalizeOpenAICompatiblePlatform(req.Platform) != PlatformOpenAI {
 		return nil, false, nil
 	}
@@ -122,7 +148,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlots(ctx context
 	for _, tier := range []int{0, 1} {
 		for i := range activeSlots {
 			slot := &activeSlots[i]
-			if slot.Status != OpenAIUserResidentSlotStatusActive || routeSlot != nil && slot.ID == routeSlot.ID ||
+			if !isOpenAIUserAffinityResidentSlotReusable(slot.Status) || routeSlot != nil && slot.ID == routeSlot.ID ||
 				openAIUserAffinityResidentSlotOwnershipTier(*slot, identity.userID) != tier {
 				continue
 			}
@@ -162,7 +188,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlots(ctx context
 	})
 	for i := range activeSlots {
 		slot := &activeSlots[i]
-		if slot.Status != OpenAIUserResidentSlotStatusActive || routeSlot != nil && slot.ID == routeSlot.ID {
+		if !isOpenAIUserAffinityResidentSlotReusable(slot.Status) || routeSlot != nil && slot.ID == routeSlot.ID {
 			continue
 		}
 		admission, admissionErr := s.openAIUserAffinityResidentSlotAdmission(ctx, req, slot)
@@ -174,7 +200,30 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlots(ctx context
 		}
 		return s.selectOpenAIUserAffinityResidentSlot(ctx, req, config, identity, slot)
 	}
-	return nil, true, ErrNoAvailableAccounts
+	return nil, true, ErrOpenAIUserAffinityNoCandidateSlot
+}
+
+func isOpenAIUserAffinityResidentSlotReusable(status string) bool {
+	return status == OpenAIUserResidentSlotStatusActive ||
+		status == OpenAIUserResidentSlotStatusProvisional ||
+		status == OpenAIUserResidentSlotStatusReplacementPending
+}
+
+func openAIUserAffinityReservationErrorReason(err error) string {
+	switch {
+	case errors.Is(err, ErrOpenAIUserAffinityDrainingSlotConflict):
+		return "draining_conflict"
+	case errors.Is(err, ErrOpenAIUserAffinityResidentSlotsFull):
+		return "resident_slots_full"
+	case errors.Is(err, ErrOpenAIUserAffinityReservationConflict):
+		return "concurrent_conflict"
+	case errors.Is(err, ErrOpenAIUserAffinityAccountUnavailable):
+		return "account_unavailable"
+	case errors.Is(err, ErrOpenAIUserAffinityNoCandidateSlot):
+		return "no_candidate"
+	default:
+		return "storage_error"
+	}
 }
 
 func (s *OpenAIGatewayService) openAIUserAffinityResidentSlotAdmission(ctx context.Context, req OpenAIAccountScheduleRequest, slot *OpenAIUserResidentSlot) (openAIUserAffinityResidentAdmission, error) {
