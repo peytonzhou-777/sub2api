@@ -442,9 +442,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			resp.Body = newGrokResponsesClientToolStreamBody(resp.Body, mapping, maxLineSize)
 		}
 
-		// x-codex-turn-state 溯源：下游回传由 writeOpenAIPassthroughResponseHeaders
-		// 在各 handler 的写头点强制放行，铸造账号在此统一记录，供出站守卫剥离
-		// failover 换号后的跨账号回带（openai_codex_turn_state.go）。
+		// 下游回传仍记录旧账号级快速索引；完整 Session/Persona/slot/turn/
+		// credential/transport scope 由 openai_turn_state_guard.go 独立提交。
 		if extractOpenAICodexTurnState(resp.Header) != "" {
 			s.noteOpenAICodexTurnStateProvenance(c, account)
 		}
@@ -514,7 +513,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	// 不会互相覆盖，下一轮回带仍可由 attempt 守卫验证账号归属。
 	if turnState := extractOpenAICodexTurnState(resp.Header); turnState != "" {
 		s.bindOpenAITurnStateProvenance(
-			ctx, c, account.ID, openAITurnStateSessionHash(c), turnState, s.openAIWSSessionStickyTTL(),
+			ctx, c, account, openAITurnStateSessionHash(c), turnState, s.openAIWSSessionStickyTTL(),
 		)
 	}
 
@@ -2510,9 +2509,8 @@ func writeOpenAIPassthroughResponseHeaders(dst http.Header, src http.Header, fil
 		}
 	}
 
-	// x-codex-turn-state：Codex 回合状态头，客户端会在同回合后续请求回带。
-	// 与上面的用量头不同，这里在上游缺失时也主动清除——failover 换号后残留
-	// 上一账号的 blob 会构成跨账号矛盾（openai_codex_turn_state.go）。
+	// x-codex-turn-state 仅允许同一逻辑 turn 回带。上游缺失时主动清除，
+	// 避免响应 writer 残留旧 turn 或旧完整身份 scope 的状态。
 	turnStateKey := http.CanonicalHeaderKey(openAICodexTurnStateHeader)
 	dst.Del(turnStateKey)
 	for _, v := range getCaseInsensitiveValues(src, openAICodexTurnStateHeader) {

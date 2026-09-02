@@ -16,6 +16,7 @@ import (
 
 const stickySessionPrefix = "sticky_session:"
 const openAIResponsesSessionWindowPrefix = "openai_responses_session_window:"
+const openAITurnStateScopePrefix = "openai_turn_state_scope:"
 const liveCallPrefix = "live:call:"
 
 type gatewayCache struct {
@@ -34,6 +35,10 @@ func buildSessionKey(groupID int64, sessionHash string) string {
 
 func buildOpenAIResponsesSessionWindowKey(groupID int64, sessionHash string) string {
 	return fmt.Sprintf("%s%d:%s", openAIResponsesSessionWindowPrefix, groupID, sessionHash)
+}
+
+func buildOpenAITurnStateScopeKey(groupID int64, key string) string {
+	return fmt.Sprintf("%s%d:%s", openAITurnStateScopePrefix, groupID, key)
 }
 
 func (c *gatewayCache) GetSessionAccountID(ctx context.Context, groupID int64, sessionHash string) (int64, error) {
@@ -68,6 +73,51 @@ func (c *gatewayCache) RefreshSessionTTL(ctx context.Context, groupID int64, ses
 func (c *gatewayCache) DeleteSessionAccountID(ctx context.Context, groupID int64, sessionHash string) error {
 	key := buildSessionKey(groupID, sessionHash)
 	return c.rdb.Del(ctx, key).Err()
+}
+
+var setOpenAITurnStateScopeScript = redis.NewScript(`
+local current = redis.call('GET', KEYS[1])
+if current == false then
+  redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+  return 1
+end
+if current ~= ARGV[1] then
+  return -1
+end
+redis.call('PEXPIRE', KEYS[1], ARGV[2])
+return 2
+`)
+
+// SetOpenAITurnStateScope 原子执行 first-write-wins；同一 state 不得改绑到另一身份作用域。
+func (c *gatewayCache) SetOpenAITurnStateScope(ctx context.Context, groupID int64, key string, value []byte, ttl time.Duration) error {
+	if c == nil || c.rdb == nil || strings.TrimSpace(key) == "" || len(value) == 0 || ttl <= 0 {
+		return errors.New("invalid OpenAI turn-state scope binding")
+	}
+	result, err := setOpenAITurnStateScopeScript.Run(
+		ctx,
+		c.rdb,
+		[]string{buildOpenAITurnStateScopeKey(groupID, key)},
+		value,
+		ttl.Milliseconds(),
+	).Int64()
+	if err != nil {
+		return err
+	}
+	if result < 0 {
+		return service.ErrOpenAITurnStateScopeConflict
+	}
+	return nil
+}
+
+func (c *gatewayCache) GetOpenAITurnStateScope(ctx context.Context, groupID int64, key string) ([]byte, error) {
+	if c == nil || c.rdb == nil || strings.TrimSpace(key) == "" {
+		return nil, service.ErrOpenAITurnStateScopeNotFound
+	}
+	value, err := c.rdb.Get(ctx, buildOpenAITurnStateScopeKey(groupID, key)).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, service.ErrOpenAITurnStateScopeNotFound
+	}
+	return value, err
 }
 
 var claimOpenAIResponsesSessionWindowScript = redis.NewScript(`

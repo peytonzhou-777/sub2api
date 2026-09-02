@@ -119,6 +119,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	compatContinuationDisabled := compatContinuationEnabled &&
 		s.isOpenAICompatSessionContinuationDisabled(ctx, c, account, promptCacheKey)
 	compatTurnState := ""
+	compatToolContinuation := isOpenAICompatToolContinuation(&anthropicReq)
+	var compatTurnStateBinding openAICompatSessionResponseBinding
+	hasCompatTurnStateBinding := false
 	// ChatGPT/Codex credentials rely on session_id + x-codex-turn-state; trimming to a
 	// sliding 12-message window makes the cached prefix stall at system/tools.
 	// Keep full replay there so upstream prompt caching can grow turn by turn.
@@ -239,7 +242,14 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		applyCodexAccountIdentityClientMetadataMap(reqBody, codexAccountIdentitySource(c, account), apiKeyID)
 		delete(reqBody, "prompt_cache_key")
 		if shouldAutoInjectPromptCacheKeyForCompat(upstreamModel) {
-			compatTurnState = s.getOpenAICompatSessionTurnState(ctx, c, account, promptCacheKey)
+			if compatToolContinuation {
+				compatTurnStateBinding, hasCompatTurnStateBinding = s.getOpenAICompatSessionTurnStateBinding(c, account, promptCacheKey)
+				if hasCompatTurnStateBinding && strings.TrimSpace(compatTurnStateBinding.TurnSource) != "" {
+					c.Set(codexFingerprintLogicalTurnSourceContextKey, strings.TrimSpace(compatTurnStateBinding.TurnSource))
+				}
+			} else {
+				s.clearOpenAICompatSessionTurnState(c, account, promptCacheKey)
+			}
 		}
 		// OAuth codex transform forces stream=true upstream, so always use
 		// the streaming response handler regardless of what the client asked.
@@ -281,6 +291,16 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			return nil, gateErr
 		}
 		defer releaseSubagentSlot()
+		turnStateSessionHash := s.GenerateSessionHash(c, body)
+		c.Set(openAITurnStateSessionHashContextKey, turnStateSessionHash)
+		if hasCompatTurnStateBinding {
+			if currentScope, ok := openAITurnStateScopeForAttempt(ctx, c, account); ok &&
+				compatTurnStateBinding.TurnScope.Valid() && compatTurnStateBinding.TurnScope.Equal(currentScope) {
+				compatTurnState = strings.TrimSpace(compatTurnStateBinding.TurnState)
+			} else {
+				s.clearOpenAICompatSessionTurnState(c, account, promptCacheKey)
+			}
+		}
 	}
 	if account.Platform == PlatformOpenAI {
 		policyBody, changed, policyErr := ApplyOpenAIReasoningEffortPolicyFromContext(ctx, responsesBody)
@@ -490,10 +510,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		s.updateGrokUsageFromResponse(withGrokTeamRateLimitModel(ctx, upstreamModel), account, resp.Header, resp.StatusCode)
 	}
 
+	responseTurnState := ""
 	if account.UsesOpenAICodexProtocol() && !isOpenCodePersona && promptCacheKey != "" {
-		if turnState := strings.TrimSpace(resp.Header.Get("x-codex-turn-state")); turnState != "" {
-			s.bindOpenAICompatSessionTurnState(ctx, c, account, promptCacheKey, turnState)
-		}
+		responseTurnState = strings.TrimSpace(resp.Header.Get("x-codex-turn-state"))
 	}
 
 	// 9. Handle normal response
@@ -518,6 +537,13 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 
 	// Propagate ServiceTier and ReasoningEffort to result for billing
 	if handleErr == nil && result != nil {
+		if responseTurnState != "" {
+			turnSource := codexFingerprintLogicalTurnSource(c)
+			s.bindOpenAICompatSessionTurnState(ctx, c, account, promptCacheKey, responseTurnState, turnSource)
+			s.bindOpenAITurnStateProvenance(
+				ctx, c, account, openAITurnStateSessionHash(c), responseTurnState, s.openAIWSSessionStickyTTL(),
+			)
+		}
 		if compatContinuationEnabled && promptCacheKey != "" && result.ResponseID != "" {
 			s.bindOpenAICompatSessionResponseID(ctx, c, account, promptCacheKey, result.ResponseID)
 		}

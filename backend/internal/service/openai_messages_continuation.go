@@ -16,8 +16,52 @@ import (
 type openAICompatSessionResponseBinding struct {
 	ResponseID           string
 	TurnState            string
+	TurnSource           string
+	TurnScope            OpenAITurnStateScope
 	ContinuationDisabled bool
 	ExpiresAt            time.Time
+}
+
+// isOpenAICompatToolContinuation 只接受标准 Anthropic 工具循环：最新 user 消息的
+// tool_result 必须由紧邻的 assistant 消息声明。普通 user 消息即使 Session 未变，
+// 也必须开始新的 Codex 逻辑 turn。
+func isOpenAICompatToolContinuation(req *apicompat.AnthropicRequest) bool {
+	if req == nil || len(req.Messages) < 2 {
+		return false
+	}
+	current := req.Messages[len(req.Messages)-1]
+	previous := req.Messages[len(req.Messages)-2]
+	if current.Role != "user" || previous.Role != "assistant" {
+		return false
+	}
+	var currentBlocks, previousBlocks []apicompat.AnthropicContentBlock
+	if err := json.Unmarshal(current.Content, &currentBlocks); err != nil {
+		return false
+	}
+	if err := json.Unmarshal(previous.Content, &previousBlocks); err != nil {
+		return false
+	}
+	announced := make(map[string]struct{})
+	for _, block := range previousBlocks {
+		if block.Type == "tool_use" && strings.TrimSpace(block.ID) != "" {
+			announced[strings.TrimSpace(block.ID)] = struct{}{}
+		}
+	}
+	matched := 0
+	for _, block := range currentBlocks {
+		if block.Type != "tool_result" {
+			continue
+		}
+		toolUseID := strings.TrimSpace(block.ToolUseID)
+		if toolUseID == "" {
+			return false
+		}
+		if _, ok := announced[toolUseID]; !ok {
+			return false
+		}
+		matched++
+	}
+	return matched > 0
 }
 
 func openAICompatContinuationEnabled(account *Account, model string) bool {
@@ -210,6 +254,8 @@ func (s *OpenAIGatewayService) bindOpenAICompatSessionResponseID(_ context.Conte
 				return
 			}
 			binding.TurnState = existing.TurnState
+			binding.TurnSource = existing.TurnSource
+			binding.TurnScope = existing.TurnScope
 		}
 	}
 	s.openaiCompatSessionResponses.Store(key, binding)
@@ -256,6 +302,8 @@ func (s *OpenAIGatewayService) disableOpenAICompatSessionContinuation(_ context.
 	if raw, ok := s.openaiCompatSessionResponses.Load(key); ok {
 		if existing, ok := raw.(openAICompatSessionResponseBinding); ok {
 			binding.TurnState = existing.TurnState
+			binding.TurnSource = existing.TurnSource
+			binding.TurnScope = existing.TurnScope
 		}
 	}
 	s.openaiCompatSessionResponses.Store(key, binding)
@@ -285,30 +333,30 @@ func (s *OpenAIGatewayService) isOpenAICompatSessionContinuationDisabled(_ conte
 	return binding.ContinuationDisabled
 }
 
-func (s *OpenAIGatewayService) getOpenAICompatSessionTurnState(_ context.Context, c *gin.Context, account *Account, promptCacheKey string) string {
+func (s *OpenAIGatewayService) getOpenAICompatSessionTurnStateBinding(c *gin.Context, account *Account, promptCacheKey string) (openAICompatSessionResponseBinding, bool) {
 	if s == nil {
-		return ""
+		return openAICompatSessionResponseBinding{}, false
 	}
 	key := openAICompatSessionResponseKey(c, account, promptCacheKey)
 	if key == "" {
-		return ""
+		return openAICompatSessionResponseBinding{}, false
 	}
 	raw, ok := s.openaiCompatSessionResponses.Load(key)
 	if !ok {
-		return ""
+		return openAICompatSessionResponseBinding{}, false
 	}
 	binding, ok := raw.(openAICompatSessionResponseBinding)
 	if !ok || strings.TrimSpace(binding.TurnState) == "" {
-		return ""
+		return openAICompatSessionResponseBinding{}, false
 	}
 	if !binding.ExpiresAt.IsZero() && time.Now().After(binding.ExpiresAt) {
 		s.openaiCompatSessionResponses.Delete(key)
-		return ""
+		return openAICompatSessionResponseBinding{}, false
 	}
-	return strings.TrimSpace(binding.TurnState)
+	return binding, true
 }
 
-func (s *OpenAIGatewayService) bindOpenAICompatSessionTurnState(_ context.Context, c *gin.Context, account *Account, promptCacheKey, turnState string) {
+func (s *OpenAIGatewayService) bindOpenAICompatSessionTurnState(ctx context.Context, c *gin.Context, account *Account, promptCacheKey, turnState, turnSource string) {
 	if s == nil {
 		return
 	}
@@ -318,14 +366,52 @@ func (s *OpenAIGatewayService) bindOpenAICompatSessionTurnState(_ context.Contex
 		return
 	}
 	binding := openAICompatSessionResponseBinding{
-		TurnState: state,
-		ExpiresAt: time.Now().Add(s.openAIWSResponseStickyTTL()),
+		TurnState:  state,
+		TurnSource: strings.TrimSpace(turnSource),
+		ExpiresAt:  time.Now().Add(s.openAIWSResponseStickyTTL()),
+	}
+	if scope, ok := openAITurnStateScopeForAttempt(ctx, c, account); ok {
+		binding.TurnScope = scope
+	} else {
+		return
 	}
 	if raw, ok := s.openaiCompatSessionResponses.Load(key); ok {
 		if existing, ok := raw.(openAICompatSessionResponseBinding); ok {
 			binding.ResponseID = existing.ResponseID
 			binding.ContinuationDisabled = existing.ContinuationDisabled
+			if existing.TurnScope.Valid() && existing.TurnScope.Equal(binding.TurnScope) && strings.TrimSpace(existing.TurnState) != "" {
+				binding.TurnState = existing.TurnState
+				binding.TurnSource = existing.TurnSource
+			}
 		}
 	}
+	s.openaiCompatSessionResponses.Store(key, binding)
+}
+
+func (s *OpenAIGatewayService) clearOpenAICompatSessionTurnState(c *gin.Context, account *Account, promptCacheKey string) {
+	if s == nil {
+		return
+	}
+	key := openAICompatSessionResponseKey(c, account, promptCacheKey)
+	if key == "" {
+		return
+	}
+	raw, ok := s.openaiCompatSessionResponses.Load(key)
+	if !ok {
+		return
+	}
+	binding, ok := raw.(openAICompatSessionResponseBinding)
+	if !ok {
+		s.openaiCompatSessionResponses.Delete(key)
+		return
+	}
+	binding.TurnState = ""
+	binding.TurnSource = ""
+	binding.TurnScope = OpenAITurnStateScope{}
+	if strings.TrimSpace(binding.ResponseID) == "" && !binding.ContinuationDisabled {
+		s.openaiCompatSessionResponses.Delete(key)
+		return
+	}
+	binding.ExpiresAt = time.Now().Add(s.openAIWSResponseStickyTTL())
 	s.openaiCompatSessionResponses.Store(key, binding)
 }

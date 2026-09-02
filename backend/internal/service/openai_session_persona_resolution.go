@@ -493,10 +493,9 @@ func (a *Account) HasOpenAIPersonaCredential(persona SessionPersonaID, slotID in
 			strings.TrimSpace(openAIMapString(chain, "refresh_token")) != "" &&
 			strings.TrimSpace(openAIMapString(chain, "credential_chain_id")) != ""
 	}
-	if persona == SessionPersonaCodexCLIStrict && slotID == 0 {
-		// Legacy v1/v2 and the initial strict slot 0 migration may still use the
-		// account-level OAuth row. This fallback is intentionally unavailable to
-		// OpenCode and to strict non-zero slots.
+	if persona == SessionPersonaCodexCLIStrict {
+		// Legacy v1/v2 的所有 Session 槽位共用账号级 Codex OAuth。v3 已在上方
+		// 按 Persona 凭据链处理，因此这里不会把账号级凭据借给 OpenCode。
 		return strings.TrimSpace(a.GetOpenAIAccessToken()) != "" && strings.TrimSpace(a.GetOpenAIRefreshToken()) != ""
 	}
 	return false

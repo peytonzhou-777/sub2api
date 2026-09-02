@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -13,14 +15,19 @@ import (
 )
 
 const (
-	openAIWSResponseAccountCachePrefix  = "openai:response:"
-	openAIWSTurnStateAccountCachePrefix = "openai:turn-state:"
-	openAIHTTPResponseOwnerUserPrefix   = "openai:http-response-owner:user:"
-	openAIHTTPResponseOwnerKeyPrefix    = "openai:http-response-owner:key:"
-	openAIWSStateStoreCleanupInterval   = time.Minute
-	openAIWSStateStoreCleanupMaxPerMap  = 512
-	openAIWSStateStoreMaxEntriesPerMap  = 65536
-	openAIWSStateStoreRedisTimeout      = 3 * time.Second
+	openAIWSResponseAccountCachePrefix = "openai:response:"
+	openAIWSTurnStateScopeCachePrefix  = "openai:turn-state:v2:"
+	openAIHTTPResponseOwnerUserPrefix  = "openai:http-response-owner:user:"
+	openAIHTTPResponseOwnerKeyPrefix   = "openai:http-response-owner:key:"
+	openAIWSStateStoreCleanupInterval  = time.Minute
+	openAIWSStateStoreCleanupMaxPerMap = 512
+	openAIWSStateStoreMaxEntriesPerMap = 65536
+	openAIWSStateStoreRedisTimeout     = 3 * time.Second
+)
+
+var (
+	ErrOpenAITurnStateScopeNotFound = errors.New("openai turn state scope not found")
+	ErrOpenAITurnStateScopeConflict = errors.New("openai turn state scope conflict")
 )
 
 type openAIWSAccountBinding struct {
@@ -35,7 +42,7 @@ type openAIWSConnBinding struct {
 }
 
 type openAIWSTurnStateBinding struct {
-	accountID int64
+	scope     OpenAITurnStateScope
 	expiresAt time.Time
 }
 
@@ -151,8 +158,8 @@ type OpenAIWSStateStore interface {
 	GetResponseConn(responseID string) (string, bool)
 	DeleteResponseConn(responseID string)
 
-	BindTurnStateAccount(ctx context.Context, groupID, apiKeyID int64, sessionHash, turnState string, accountID int64, ttl time.Duration) error
-	GetTurnStateAccount(ctx context.Context, groupID, apiKeyID int64, sessionHash, turnState string) (int64, error)
+	BindTurnStateScope(ctx context.Context, groupID, apiKeyID int64, sessionHash, turnState string, scope OpenAITurnStateScope, ttl time.Duration) error
+	GetTurnStateScope(ctx context.Context, groupID, apiKeyID int64, sessionHash, turnState string) (OpenAITurnStateScope, error)
 	BindSessionTurnState(groupID int64, sessionHash, turnState string, ttl time.Duration)
 	GetSessionTurnState(groupID int64, sessionHash string) (string, bool)
 	DeleteSessionTurnState(groupID int64, sessionHash string)
@@ -160,6 +167,13 @@ type OpenAIWSStateStore interface {
 	BindSessionConn(groupID int64, sessionHash, connID string, ttl time.Duration)
 	GetSessionConn(groupID int64, sessionHash string) (string, bool)
 	DeleteSessionConn(groupID int64, sessionHash string)
+}
+
+// OpenAITurnStateScopeCache 是 turn-state 专用的可选共享缓存能力。
+// 独立接口避免扩大 GatewayCache，未实现时仅使用当前进程的有界热缓存。
+type OpenAITurnStateScopeCache interface {
+	SetOpenAITurnStateScope(ctx context.Context, groupID int64, key string, value []byte, ttl time.Duration) error
+	GetOpenAITurnStateScope(ctx context.Context, groupID int64, key string) ([]byte, error)
 }
 
 // openAIWSTargetStateStore 为连接索引增加 expected-target 校验。
@@ -185,8 +199,8 @@ type defaultOpenAIWSStateStore struct {
 	responseOwners       map[string]openAIHTTPResponseOwnerBinding
 	responseToConnMu     sync.RWMutex
 	responseToConn       map[string]openAIWSConnBinding
-	turnStateToAccountMu sync.RWMutex
-	turnStateToAccount   map[string]openAIWSTurnStateBinding
+	turnStateToScopeMu sync.RWMutex
+	turnStateToScope   map[string]openAIWSTurnStateBinding
 	sessionToTurnStateMu sync.RWMutex
 	sessionToTurnState   map[string]openAIWSSessionTurnStateBinding
 	sessionToConnMu      sync.RWMutex
@@ -203,7 +217,7 @@ func NewOpenAIWSStateStore(cache GatewayCache) OpenAIWSStateStore {
 		responseToAccount:  make(map[string]openAIWSAccountBinding, 256),
 		responseOwners:     make(map[string]openAIHTTPResponseOwnerBinding, 256),
 		responseToConn:     make(map[string]openAIWSConnBinding, 256),
-		turnStateToAccount: make(map[string]openAIWSTurnStateBinding, 256),
+		turnStateToScope: make(map[string]openAIWSTurnStateBinding, 256),
 		sessionToTurnState: make(map[string]openAIWSSessionTurnStateBinding, 256),
 		sessionToConn:      make(map[string]openAIWSSessionConnBinding, 256),
 	}
@@ -409,58 +423,91 @@ func (s *defaultOpenAIWSStateStore) DeleteResponseConn(responseID string) {
 	s.responseToConnMu.Unlock()
 }
 
-func (s *defaultOpenAIWSStateStore) BindTurnStateAccount(ctx context.Context, groupID, apiKeyID int64, sessionHash, turnState string, accountID int64, ttl time.Duration) error {
-	key := openAIWSTurnStateAccountKey(apiKeyID, sessionHash, turnState)
-	if key == "" || accountID <= 0 {
+func (s *defaultOpenAIWSStateStore) BindTurnStateScope(
+	ctx context.Context,
+	groupID, apiKeyID int64,
+	sessionHash, turnState string,
+	scope OpenAITurnStateScope,
+	ttl time.Duration,
+) error {
+	key := openAIWSTurnStateScopeKey(apiKeyID, sessionHash, turnState)
+	scope = scope.Normalize()
+	if key == "" || !scope.Valid() {
 		return nil
 	}
 	ttl = normalizeOpenAIWSTTL(ttl)
 	s.maybeCleanup()
 
-	mapKey := openAIWSTurnStateAccountMapKey(groupID, key)
-	s.turnStateToAccountMu.Lock()
-	ensureBindingCapacity(s.turnStateToAccount, mapKey, openAIWSStateStoreMaxEntriesPerMap)
-	s.turnStateToAccount[mapKey] = openAIWSTurnStateBinding{
-		accountID: accountID,
-		expiresAt: time.Now().Add(ttl),
+	mapKey := openAIWSTurnStateScopeMapKey(groupID, key)
+	now := time.Now()
+	if cache, ok := s.cache.(OpenAITurnStateScopeCache); ok {
+		encoded, err := json.Marshal(scope)
+		if err != nil {
+			return err
+		}
+		cacheCtx, cancel := withOpenAIWSStateStoreRedisTimeout(ctx)
+		defer cancel()
+		if err := cache.SetOpenAITurnStateScope(cacheCtx, groupID, key, encoded, ttl); err != nil {
+			return err
+		}
 	}
-	s.turnStateToAccountMu.Unlock()
 
-	if s.cache == nil {
-		return nil
+	s.turnStateToScopeMu.Lock()
+	if existing, ok := s.turnStateToScope[mapKey]; ok && now.Before(existing.expiresAt) && !existing.scope.Equal(scope) {
+		s.turnStateToScopeMu.Unlock()
+		return ErrOpenAITurnStateScopeConflict
 	}
-	cacheCtx, cancel := withOpenAIWSStateStoreRedisTimeout(ctx)
-	defer cancel()
-	return s.cache.SetSessionAccountID(cacheCtx, groupID, key, accountID, ttl)
+	ensureBindingCapacity(s.turnStateToScope, mapKey, openAIWSStateStoreMaxEntriesPerMap)
+	s.turnStateToScope[mapKey] = openAIWSTurnStateBinding{
+		scope:     scope,
+		expiresAt: now.Add(ttl),
+	}
+	s.turnStateToScopeMu.Unlock()
+	return nil
 }
 
-func (s *defaultOpenAIWSStateStore) GetTurnStateAccount(ctx context.Context, groupID, apiKeyID int64, sessionHash, turnState string) (int64, error) {
-	key := openAIWSTurnStateAccountKey(apiKeyID, sessionHash, turnState)
+func (s *defaultOpenAIWSStateStore) GetTurnStateScope(
+	ctx context.Context,
+	groupID, apiKeyID int64,
+	sessionHash, turnState string,
+) (OpenAITurnStateScope, error) {
+	key := openAIWSTurnStateScopeKey(apiKeyID, sessionHash, turnState)
 	if key == "" {
-		return 0, nil
+		return OpenAITurnStateScope{}, ErrOpenAITurnStateScopeNotFound
 	}
 	s.maybeCleanup()
 
 	now := time.Now()
-	mapKey := openAIWSTurnStateAccountMapKey(groupID, key)
-	s.turnStateToAccountMu.RLock()
-	binding, ok := s.turnStateToAccount[mapKey]
-	s.turnStateToAccountMu.RUnlock()
-	if ok && now.Before(binding.expiresAt) && binding.accountID > 0 {
-		return binding.accountID, nil
-	}
-	if s.cache == nil {
-		return 0, nil
+	mapKey := openAIWSTurnStateScopeMapKey(groupID, key)
+	if cache, ok := s.cache.(OpenAITurnStateScopeCache); ok {
+		cacheCtx, cancel := withOpenAIWSStateStoreRedisTimeout(ctx)
+		encoded, err := cache.GetOpenAITurnStateScope(cacheCtx, groupID, key)
+		cancel()
+		if err != nil {
+			return OpenAITurnStateScope{}, err
+		}
+		var scope OpenAITurnStateScope
+		if err := json.Unmarshal(encoded, &scope); err != nil {
+			return OpenAITurnStateScope{}, err
+		}
+		scope = scope.Normalize()
+		if !scope.Valid() {
+			return OpenAITurnStateScope{}, ErrOpenAITurnStateScopeNotFound
+		}
+		s.turnStateToScopeMu.Lock()
+		ensureBindingCapacity(s.turnStateToScope, mapKey, openAIWSStateStoreMaxEntriesPerMap)
+		s.turnStateToScope[mapKey] = openAIWSTurnStateBinding{scope: scope, expiresAt: now.Add(time.Minute)}
+		s.turnStateToScopeMu.Unlock()
+		return scope, nil
 	}
 
-	cacheCtx, cancel := withOpenAIWSStateStoreRedisTimeout(ctx)
-	defer cancel()
-	accountID, err := s.cache.GetSessionAccountID(cacheCtx, groupID, key)
-	if err != nil || accountID <= 0 {
-		// 溯源缓存不可用时按未知来源处理，安全优先剥离状态。
-		return 0, nil
+	s.turnStateToScopeMu.RLock()
+	binding, ok := s.turnStateToScope[mapKey]
+	s.turnStateToScopeMu.RUnlock()
+	if ok && now.Before(binding.expiresAt) && binding.scope.Valid() {
+		return binding.scope.Normalize(), nil
 	}
-	return accountID, nil
+	return OpenAITurnStateScope{}, ErrOpenAITurnStateScopeNotFound
 }
 
 // BindSessionTurnState 保存当前会话的最近回合状态，仅在本进程内保留原文。
@@ -666,9 +713,9 @@ func (s *defaultOpenAIWSStateStore) maybeCleanup() {
 	cleanupExpiredConnBindings(s.responseToConn, now, openAIWSStateStoreCleanupMaxPerMap)
 	s.responseToConnMu.Unlock()
 
-	s.turnStateToAccountMu.Lock()
-	cleanupExpiredTurnStateBindings(s.turnStateToAccount, now, openAIWSStateStoreCleanupMaxPerMap)
-	s.turnStateToAccountMu.Unlock()
+	s.turnStateToScopeMu.Lock()
+	cleanupExpiredTurnStateBindings(s.turnStateToScope, now, openAIWSStateStoreCleanupMaxPerMap)
+	s.turnStateToScopeMu.Unlock()
 
 	s.sessionToTurnStateMu.Lock()
 	cleanupExpiredSessionTurnStateBindings(s.sessionToTurnState, now, openAIWSStateStoreCleanupMaxPerMap)
@@ -812,18 +859,18 @@ func openAIWSResponseAccountMapKey(groupID int64, responseID string) string {
 	return fmt.Sprintf("%d:%s", groupID, responseID)
 }
 
-// openAIWSTurnStateAccountKey 只保存状态哈希溯源，避免原始 state blob 进入共享缓存。
-func openAIWSTurnStateAccountKey(apiKeyID int64, sessionHash, turnState string) string {
+// openAIWSTurnStateScopeKey 只保存状态哈希溯源，避免原始 state blob 进入共享缓存。
+func openAIWSTurnStateScopeKey(apiKeyID int64, sessionHash, turnState string) string {
 	session := strings.TrimSpace(sessionHash)
 	state := strings.TrimSpace(turnState)
 	if apiKeyID <= 0 || session == "" || state == "" {
 		return ""
 	}
 	sum := sha256.Sum256([]byte(fmt.Sprintf("%d:%s:%s", apiKeyID, session, state)))
-	return openAIWSTurnStateAccountCachePrefix + hex.EncodeToString(sum[:])
+	return openAIWSTurnStateScopeCachePrefix + hex.EncodeToString(sum[:])
 }
 
-func openAIWSTurnStateAccountMapKey(groupID int64, cacheKey string) string {
+func openAIWSTurnStateScopeMapKey(groupID int64, cacheKey string) string {
 	return fmt.Sprintf("%d:%s", groupID, cacheKey)
 }
 

@@ -136,7 +136,6 @@ func SessionPersonaRequestHasContinuation(c *gin.Context, body []byte) bool {
 		for _, name := range []string{
 			"previous_response_id",
 			"previous-response-id",
-			"x-codex-turn-state",
 			"x-codex-parent-thread-id",
 			"x-codex-forked-from-thread-id",
 			"parent-thread-id",
@@ -166,7 +165,7 @@ func sessionPersonaValueHasContinuation(value any, depth int) bool {
 		for key, child := range typed {
 			normalized := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(key), "-", "_"))
 			switch normalized {
-			case "previous_response_id", "x_codex_turn_state", "x_codex_parent_thread_id",
+			case "previous_response_id", "x_codex_parent_thread_id",
 				"parent_thread_id", "forked_from_thread_id", "parent_turn_id", "root_turn_id",
 				"continuation", "resume", "resume_from":
 				if sessionPersonaValueIsNonEmpty(child) {

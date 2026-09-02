@@ -1423,9 +1423,8 @@ func TestOpenAIGatewayService_Forward_WSv2_TurnStateAndMetadataReplayOnReconnect
 
 	sessionHash := svc.GenerateSessionHash(c1, reqBody)
 	store := svc.getOpenAIWSStateStore()
-	turnStateAccountID, lookupErr := store.GetTurnStateAccount(context.Background(), 0, 7001, sessionHash, "turn_state_first")
-	require.NoError(t, lookupErr)
-	require.Equal(t, account.ID, turnStateAccountID)
+	_, lookupErr := store.GetTurnStateScope(context.Background(), 0, 7001, sessionHash, "turn_state_first")
+	require.ErrorIs(t, lookupErr, ErrOpenAITurnStateScopeNotFound, "API Key transport must not create OAuth turn-state provenance")
 	require.Equal(t, "turn_state_first", rec1.Header().Get("X-Codex-Turn-State"))
 
 	// 主动淘汰连接，模拟下一次请求发生重连。
@@ -1448,7 +1447,7 @@ func TestOpenAIGatewayService_Forward_WSv2_TurnStateAndMetadataReplayOnReconnect
 	secondHandshakeHeaders := <-headersCh
 	require.Equal(t, "turn_meta_1", firstHandshakeHeaders.Get("X-Codex-Turn-Metadata"))
 	require.Equal(t, "turn_meta_2", secondHandshakeHeaders.Get("X-Codex-Turn-Metadata"))
-	require.Equal(t, "turn_state_first", secondHandshakeHeaders.Get("X-Codex-Turn-State"))
+	require.Empty(t, secondHandshakeHeaders.Get("X-Codex-Turn-State"), "a new logical turn must not inherit the prior turn-state")
 }
 
 func TestOpenAIGatewayService_Forward_WSv2_GeneratePrewarm(t *testing.T) {

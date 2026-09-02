@@ -708,6 +708,7 @@ func (c stubConcurrencyCache) GetAccountWaitingCount(ctx context.Context, accoun
 type stubGatewayCache struct {
 	sessionBindings map[string]int64
 	deletedSessions map[string]int
+	turnStateScopes map[string][]byte
 }
 
 func (c *stubGatewayCache) GetSessionAccountID(ctx context.Context, groupID int64, sessionHash string) (int64, error) {
@@ -760,6 +761,26 @@ func (c *stubGatewayCache) SetReasoningContent(_ context.Context, _ string, _ st
 }
 func (c *stubGatewayCache) GetReasoningContent(_ context.Context, _ string) (string, error) {
 	return "", ErrReasoningContentNotFound
+}
+
+func (c *stubGatewayCache) SetOpenAITurnStateScope(_ context.Context, groupID int64, key string, value []byte, _ time.Duration) error {
+	if c.turnStateScopes == nil {
+		c.turnStateScopes = make(map[string][]byte)
+	}
+	cacheKey := fmt.Sprintf("%d:%s", groupID, key)
+	if existing, ok := c.turnStateScopes[cacheKey]; ok && !bytes.Equal(existing, value) {
+		return ErrOpenAITurnStateScopeConflict
+	}
+	c.turnStateScopes[cacheKey] = append([]byte(nil), value...)
+	return nil
+}
+
+func (c *stubGatewayCache) GetOpenAITurnStateScope(_ context.Context, groupID int64, key string) ([]byte, error) {
+	value, ok := c.turnStateScopes[fmt.Sprintf("%d:%s", groupID, key)]
+	if !ok {
+		return nil, ErrOpenAITurnStateScopeNotFound
+	}
+	return append([]byte(nil), value...), nil
 }
 
 func TestOpenAISelectAccountWithLoadAwareness_FiltersUnschedulable(t *testing.T) {

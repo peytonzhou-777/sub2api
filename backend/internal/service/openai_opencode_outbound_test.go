@@ -163,17 +163,31 @@ func TestPrepareOpenCodeOutboundBodyHTTPRemovesWSEnvelopeType(t *testing.T) {
 }
 
 func TestPrepareOpenCodeOutboundBodyRejectsCodexContinuation(t *testing.T) {
-	for _, body := range []string{
-		`{"model":"gpt-5","previous_response_id":"resp_codex","input":[]}`,
-		`{"model":"gpt-5","x-codex-turn-state":"continuation","input":[]}`,
-	} {
-		projected, err := PrepareOpenCodeOutboundBody([]byte(body), SessionPersonaTransportHTTP, false)
-		if !errors.Is(err, ErrOpenCodePersonaContinuationUnsupported) {
-			t.Fatalf("PrepareOpenCodeOutboundBody(%s) error = %v, want continuation rejection", body, err)
-		}
-		if projected != nil {
-			t.Fatalf("continuation rejection returned a projected body: %s", projected)
-		}
+	body := []byte(`{"model":"gpt-5","previous_response_id":"resp_codex","input":[]}`)
+	projected, err := PrepareOpenCodeOutboundBody(body, SessionPersonaTransportHTTP, false)
+	if !errors.Is(err, ErrOpenCodePersonaContinuationUnsupported) {
+		t.Fatalf("PrepareOpenCodeOutboundBody(%s) error = %v, want continuation rejection", body, err)
+	}
+	if projected != nil {
+		t.Fatalf("continuation rejection returned a projected body: %s", projected)
+	}
+}
+
+func TestPrepareOpenCodeOutboundBodyStripsCodexTurnState(t *testing.T) {
+	body := []byte(`{"model":"gpt-5","x-codex-turn-state":"continuation","client_metadata":{"x-codex-turn-state":"continuation"},"input":[]}`)
+	projected, err := PrepareOpenCodeOutboundBody(body, SessionPersonaTransportHTTP, false)
+	if err != nil {
+		t.Fatalf("PrepareOpenCodeOutboundBody() error = %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(projected, &got); err != nil {
+		t.Fatalf("decode projected body: %v", err)
+	}
+	if _, ok := got["x-codex-turn-state"]; ok {
+		t.Fatalf("Codex turn-state leaked into OpenCode body: %s", projected)
+	}
+	if _, ok := got["client_metadata"]; ok {
+		t.Fatalf("Codex client metadata leaked into OpenCode body: %s", projected)
 	}
 }
 

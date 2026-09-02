@@ -201,33 +201,54 @@ func TestOpenAIWSStateStore_ResponseConnTTL(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestOpenAIWSStateStore_TurnStateAccountTTL(t *testing.T) {
+func testOpenAITurnStateScope(accountID int64, turnID string) OpenAITurnStateScope {
+	return OpenAITurnStateScope{
+		Version:              2,
+		AccountID:            accountID,
+		Persona:              SessionPersonaCodexCLIStrict,
+		PersonaVersion:       "codex_cli_0_149_0",
+		MappingVersion:       SessionPersonaScopeVersionV3,
+		SlotID:               0,
+		SessionEpoch:         11,
+		SlotGeneration:       3,
+		SlotSetGeneration:    5,
+		CredentialChainID:    "codex-chain",
+		InstallationID:       "installation-1",
+		SessionScopeHash:     "scope-hash-1",
+		UpstreamSessionID:    "session-1",
+		UpstreamThreadID:     "thread-1",
+		UpstreamTurnID:       turnID,
+		OutboundProfile:      "codex_cli_0_149_0",
+		TransportScopeDigest: "transport-scope-1",
+	}
+}
+
+func TestOpenAIWSStateStore_TurnStateScopeTTLAndFirstWriteWins(t *testing.T) {
 	store := NewOpenAIWSStateStore(nil)
 	ctx := context.Background()
-	require.NoError(t, store.BindTurnStateAccount(ctx, 9, 101, "session_hash_1", "turn_state_1", 501, 30*time.Millisecond))
-	require.NoError(t, store.BindTurnStateAccount(ctx, 9, 101, "session_hash_1", "turn_state_2", 502, 30*time.Millisecond))
+	scope1 := testOpenAITurnStateScope(501, "turn-1")
+	scope2 := testOpenAITurnStateScope(502, "turn-2")
+	require.NoError(t, store.BindTurnStateScope(ctx, 9, 101, "session_hash_1", "turn_state_1", scope1, 30*time.Millisecond))
+	require.NoError(t, store.BindTurnStateScope(ctx, 9, 101, "session_hash_1", "turn_state_2", scope2, 30*time.Millisecond))
+	require.ErrorIs(t, store.BindTurnStateScope(ctx, 9, 101, "session_hash_1", "turn_state_1", scope2, time.Minute), ErrOpenAITurnStateScopeConflict)
 
-	accountID, err := store.GetTurnStateAccount(ctx, 9, 101, "session_hash_1", "turn_state_1")
+	actual, err := store.GetTurnStateScope(ctx, 9, 101, "session_hash_1", "turn_state_1")
 	require.NoError(t, err)
-	require.Equal(t, int64(501), accountID)
-	accountID, err = store.GetTurnStateAccount(ctx, 9, 101, "session_hash_1", "turn_state_2")
+	require.True(t, scope1.Equal(actual))
+	actual, err = store.GetTurnStateScope(ctx, 9, 101, "session_hash_1", "turn_state_2")
 	require.NoError(t, err)
-	require.Equal(t, int64(502), accountID, "同一 session 的并发状态不能互相覆盖")
+	require.True(t, scope2.Equal(actual), "同一 session 的并发状态不能互相覆盖")
 
-	accountID, err = store.GetTurnStateAccount(ctx, 10, 101, "session_hash_1", "turn_state_1")
-	require.NoError(t, err)
-	require.Zero(t, accountID, "group 必须隔离")
-	accountID, err = store.GetTurnStateAccount(ctx, 9, 102, "session_hash_1", "turn_state_1")
-	require.NoError(t, err)
-	require.Zero(t, accountID, "API Key 必须隔离")
-	accountID, err = store.GetTurnStateAccount(ctx, 9, 101, "session_hash_2", "turn_state_1")
-	require.NoError(t, err)
-	require.Zero(t, accountID, "session 必须隔离")
+	_, err = store.GetTurnStateScope(ctx, 10, 101, "session_hash_1", "turn_state_1")
+	require.ErrorIs(t, err, ErrOpenAITurnStateScopeNotFound, "group 必须隔离")
+	_, err = store.GetTurnStateScope(ctx, 9, 102, "session_hash_1", "turn_state_1")
+	require.ErrorIs(t, err, ErrOpenAITurnStateScopeNotFound, "API Key 必须隔离")
+	_, err = store.GetTurnStateScope(ctx, 9, 101, "session_hash_2", "turn_state_1")
+	require.ErrorIs(t, err, ErrOpenAITurnStateScopeNotFound, "session 必须隔离")
 
 	time.Sleep(60 * time.Millisecond)
-	accountID, err = store.GetTurnStateAccount(ctx, 9, 101, "session_hash_1", "turn_state_1")
-	require.NoError(t, err)
-	require.Zero(t, accountID)
+	_, err = store.GetTurnStateScope(ctx, 9, 101, "session_hash_1", "turn_state_1")
+	require.ErrorIs(t, err, ErrOpenAITurnStateScopeNotFound)
 }
 
 func TestOpenAIWSStateStore_TurnStateProvenanceSharedWithoutRawState(t *testing.T) {
@@ -235,15 +256,18 @@ func TestOpenAIWSStateStore_TurnStateProvenanceSharedWithoutRawState(t *testing.
 	writer := NewOpenAIWSStateStore(cache)
 	ctx := context.Background()
 
-	require.NoError(t, writer.BindTurnStateAccount(ctx, 7, 31, "session_shared", "sensitive_state_blob", 901, time.Minute))
+	scope := testOpenAITurnStateScope(901, "turn-shared")
+	require.NoError(t, writer.BindTurnStateScope(ctx, 7, 31, "session_shared", "sensitive_state_blob", scope, time.Minute))
 	reader := NewOpenAIWSStateStore(cache)
-	accountID, err := reader.GetTurnStateAccount(ctx, 7, 31, "session_shared", "sensitive_state_blob")
+	actual, err := reader.GetTurnStateScope(ctx, 7, 31, "session_shared", "sensitive_state_blob")
 	require.NoError(t, err)
-	require.Equal(t, int64(901), accountID)
+	require.True(t, scope.Equal(actual))
 
-	for key := range cache.sessionBindings {
+	for key, value := range cache.turnStateScopes {
 		require.NotContains(t, key, "sensitive_state_blob")
 		require.NotContains(t, key, "session_shared")
+		require.NotContains(t, string(value), "sensitive_state_blob")
+		require.NotContains(t, string(value), "session_shared")
 	}
 }
 

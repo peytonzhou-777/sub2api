@@ -121,7 +121,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
 		// 同时记录本地持久化溯源，覆盖流已提交但随后失败的场景。
 		if pendingTurnState != "" {
 			c.Header(http.CanonicalHeaderKey(openAIWSTurnStateHeader), pendingTurnState)
-			s.bindOpenAITurnStateProvenance(ctx, c, account.ID, openAITurnStateSessionHash(c), pendingTurnState, s.openAIWSSessionStickyTTL())
+			s.bindOpenAITurnStateProvenance(ctx, c, account, openAITurnStateSessionHash(c), pendingTurnState, s.openAIWSSessionStickyTTL())
 		}
 		// These headers describe this gateway's SSE stream and are stable across
 		// account attempts. Keep them authoritative over upstream values.

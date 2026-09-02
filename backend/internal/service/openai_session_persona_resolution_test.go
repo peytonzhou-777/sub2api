@@ -49,6 +49,19 @@ func newSessionPersonaResolverIDs(scope, slot, count int) *codexFingerprintIDs {
 	}
 }
 
+func TestSessionPersonaRequestTurnStateAloneIsNewRoot(t *testing.T) {
+	c := newSessionPersonaResolverTestContext(newSessionPersonaResolverIDs(SessionPersonaScopeVersionV3, 0, 2))
+	c.Request.Header.Set(openAIWSTurnStateHeader, "stale-turn-state")
+	body := []byte(`{"model":"gpt-5.1","client_metadata":{"x-codex-turn-state":"stale-turn-state"}}`)
+	if SessionPersonaRequestHasContinuation(c, body) {
+		t.Fatal("turn-state alone must not pin a request to a legacy Persona continuation")
+	}
+	c.Request.Header.Set("previous_response_id", "resp_1")
+	if !SessionPersonaRequestHasContinuation(c, body) {
+		t.Fatal("previous_response_id must remain a Persona continuation signal")
+	}
+}
+
 func TestResolveSessionPersonaBindingForNewRootUsesOnlyActiveAuthorizedSlots(t *testing.T) {
 	account := newSessionPersonaOAuthAccount()
 	account.Extra[openAIPersonaSlotStateExtraKey] = map[string]any{"1": string(SessionPersonaSlotStateDraining)}

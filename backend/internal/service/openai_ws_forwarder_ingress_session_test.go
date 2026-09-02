@@ -1344,8 +1344,17 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughHeade
 			return
 		}
 		sessionHash := svc.GenerateSessionHash(ginCtx, firstMessage)
-		if bindErr := svc.getOpenAIWSStateStore().BindTurnStateAccount(
-			r.Context(), groupID, apiKeyID, sessionHash, "turn-state-1", account.ID, time.Minute,
+		if prepareErr := svc.PrepareCodexFingerprintForAdmission(r.Context(), ginCtx, account, firstMessage, false); prepareErr != nil {
+			serverErrCh <- prepareErr
+			return
+		}
+		turnScope, scopeOK := openAITurnStateScopeForAttempt(r.Context(), ginCtx, account)
+		if !scopeOK {
+			serverErrCh <- errors.New("turn-state scope was not prepared")
+			return
+		}
+		if bindErr := svc.getOpenAIWSStateStore().BindTurnStateScope(
+			r.Context(), groupID, apiKeyID, sessionHash, "turn-state-1", turnScope, time.Minute,
 		); bindErr != nil {
 			serverErrCh <- bindErr
 			return

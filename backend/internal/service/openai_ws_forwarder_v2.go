@@ -328,7 +328,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		if turnStateCommitted || handshakeTurnState == "" {
 			return
 		}
-		s.bindOpenAITurnStateProvenance(ctx, c, account.ID, sessionHash, handshakeTurnState, s.openAIWSSessionStickyTTL())
+		s.bindOpenAITurnStateProvenance(ctx, c, account, sessionHash, handshakeTurnState, s.openAIWSSessionStickyTTL())
 		if c != nil {
 			c.Header(http.CanonicalHeaderKey(openAIWSTurnStateHeader), handshakeTurnState)
 		}

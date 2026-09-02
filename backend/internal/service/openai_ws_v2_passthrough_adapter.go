@@ -387,6 +387,7 @@ func (l *openAIWSPassthroughTurnLifecycle) finishTerminalWrite(succeeded bool, o
 type openAIWSPassthroughFirstOutputFrameConn struct {
 	inner             openaiwsv2.FrameConn
 	resolveDeadline   func(payload []byte) openAIWSPassthroughFirstOutputDeadline
+	observeFrame      func(msgType coderws.MessageType, payload []byte)
 	activeReadTimeout time.Duration
 
 	mu              sync.Mutex
@@ -454,6 +455,9 @@ func (c *openAIWSPassthroughFirstOutputFrameConn) ReadFrame(ctx context.Context)
 		case result := <-readResultCh:
 			if result.err == nil {
 				c.observeUpstreamActivity(result.msgType, result.payload)
+				if c.observeFrame != nil {
+					c.observeFrame(result.msgType, result.payload)
+				}
 			}
 			return result.msgType, result.payload, result.err
 		case <-c.deadlineChanged:
@@ -835,6 +839,21 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			return errors.New("failed to attach initial subagent concurrency slot")
 		}
 	}
+	turnStateSessionHash := openAITurnStateSessionHash(c)
+	firstTurnID := ""
+	if ids := stagedCodexFingerprintIDsForAccount(c, account); ids != nil {
+		firstTurnID = strings.TrimSpace(ids.turnID)
+	}
+	firstClientMessage, firstPayloadTurnState := s.validateOpenAITurnStatePayload(
+		ctx, c, account, turnStateSessionHash, firstClientMessage,
+	)
+	turnStateLifecycle := &openAITurnStateLifecycle{}
+	initialTurnState := strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader))
+	if firstPayloadTurnState != "" {
+		initialTurnState = firstPayloadTurnState
+	}
+	initialTurnState = turnStateLifecycle.BeginTurn(firstTurnID, initialTurnState)
+	firstClientMessage = applyOpenAITurnStateToPayload(firstClientMessage, initialTurnState)
 	lineageFirst, _, lineageErr := stripOpenAICodexLineageRaw(c, account, firstClientMessage)
 	if lineageErr != nil {
 		return fmt.Errorf("strip first passthrough Codex lineage: %w", lineageErr)
@@ -883,10 +902,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
 		isCodexCLI = true
 	}
-	turnState := ""
+	turnState := initialTurnState
 	turnMetadata := ""
 	if c != nil {
-		turnState = strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader))
 		turnMetadata = strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader))
 	}
 	headers, _, buildHdrErr := s.buildOpenAIWSHeaders(
@@ -965,9 +983,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		if handshakeTurnState == "" || !handshakeTurnStateCommitted.CompareAndSwap(false, true) {
 			return
 		}
-		s.bindOpenAITurnStateProvenance(
-			ctx, c, account.ID, openAITurnStateSessionHash(c), handshakeTurnState, s.openAIWSSessionStickyTTL(),
-		)
+		if committedState, committed := turnStateLifecycle.Commit(firstTurnID, handshakeTurnState); committed {
+			s.bindOpenAITurnStateProvenance(
+				ctx, c, account, turnStateSessionHash, committedState, s.openAIWSSessionStickyTTL(),
+			)
+		}
 	}
 	logOpenAIWSV2Passthrough(
 		"relay_dial_ok account_id=%d status_code=%d upstream_request_id=%s",
@@ -984,6 +1004,24 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		inner:             upstreamFrameConn,
 		activeReadTimeout: s.openAIWSPassthroughIdleTimeout(),
 		deadlineChanged:   make(chan struct{}, 1),
+		observeFrame: func(msgType coderws.MessageType, payload []byte) {
+			if msgType != coderws.MessageText && msgType != coderws.MessageBinary {
+				return
+			}
+			eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
+			state := extractOpenAITurnStateFromMetadataEvent(eventType, payload)
+			if state == "" {
+				return
+			}
+			ids := stagedCodexFingerprintIDsForAccount(c, account)
+			turnID := ""
+			if ids != nil {
+				turnID = ids.turnID
+			}
+			if committedState, committed := turnStateLifecycle.Commit(turnID, state); committed {
+				s.bindOpenAITurnStateProvenance(ctx, c, account, turnStateSessionHash, committedState, s.openAIWSSessionStickyTTL())
+			}
+		},
 		resolveDeadline: func(payload []byte) openAIWSPassthroughFirstOutputDeadline {
 			reasoningEffort := ""
 			if current := usageMeta.reasoningEffort.Load(); current != nil {
@@ -1156,6 +1194,14 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					return payload, nil, fmt.Errorf("apply passthrough codex fingerprint: %w", fpErr)
 				}
 				out = fingerprinted
+				ids := stagedCodexFingerprintIDsForAccount(c, account)
+				turnID := ""
+				if ids != nil {
+					turnID = strings.TrimSpace(ids.turnID)
+				}
+				out, payloadTurnState := s.validateOpenAITurnStatePayload(ctx, c, account, turnStateSessionHash, out)
+				activeTurnState := turnStateLifecycle.BeginTurn(turnID, payloadTurnState)
+				out = applyOpenAITurnStateToPayload(out, activeTurnState)
 				releaseSubagentSlot, gateErr := s.acquireCodexSubagentSlot(ctx, account, stagedCodexFingerprintIDs(c))
 				if gateErr != nil {
 					return payload, nil, gateErr

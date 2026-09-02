@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestOpenAITurnStateAttemptStripsCrossAccountWithoutMutatingOriginalHeader(t *testing.T) {
@@ -20,7 +21,8 @@ func TestOpenAITurnStateAttemptStripsCrossAccountWithoutMutatingOriginalHeader(t
 	groupID := int64(7)
 	svc := &OpenAIGatewayService{cache: &stubGatewayCache{}}
 	stateStore := svc.getOpenAIWSStateStore()
-	body := []byte(`{"model":"gpt-5.1","prompt_cache_key":"session-a"}`)
+	body := []byte(`{"model":"gpt-5.1","prompt_cache_key":"session-a","client_metadata":{"turn_id":"turn-a","x-codex-turn-state":"state-from-account-a"}}`)
+	account := &Account{ID: 202, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"access_token": "oauth-token"}}
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -28,18 +30,148 @@ func TestOpenAITurnStateAttemptStripsCrossAccountWithoutMutatingOriginalHeader(t
 	c.Set("api_key", &APIKey{ID: 81, GroupID: &groupID})
 	c.Request.Header.Set("session_id", "session-a")
 	c.Request.Header.Set(openAIWSTurnStateHeader, "state-from-account-a")
+	stageOpenAITurnStateTestScope(c, account, "turn-a")
 	sessionHash := svc.GenerateSessionHash(c, body)
 	originalRequest := c.Request
-	require.NoError(t, stateStore.BindTurnStateAccount(context.Background(), groupID, 81, sessionHash, "state-from-account-a", 101, time.Minute))
+	sourceScope, ok := openAITurnStateScopeForAttempt(context.Background(), c, account)
+	require.True(t, ok)
+	sourceScope.AccountID = 101
+	require.NoError(t, stateStore.BindTurnStateScope(context.Background(), groupID, 81, sessionHash, "state-from-account-a", sourceScope, time.Minute))
 
-	restore := svc.isolateOpenAITurnStateAttempt(context.Background(), c, &Account{ID: 202, Platform: PlatformOpenAI}, body)
+	sanitized, restore, err := svc.isolateOpenAITurnStateAttempt(context.Background(), c, account, body)
+	require.NoError(t, err)
 	require.NotSame(t, originalRequest, c.Request)
 	require.Empty(t, c.GetHeader(openAIWSTurnStateHeader))
+	require.NotContains(t, string(sanitized), "x-codex-turn-state")
 	restore()
 
 	require.Same(t, originalRequest, c.Request)
 	require.Equal(t, "state-from-account-a", c.GetHeader(openAIWSTurnStateHeader))
 	require.Equal(t, int64(1), svc.SnapshotOpenAIWSRetryMetrics().TurnStateStrippedTotal)
+}
+
+func stageOpenAITurnStateTestScope(c *gin.Context, account *Account, turnID string) {
+	ids := &codexFingerprintIDs{
+		accountID:           account.ID,
+		sessionScopeVersion: codexFingerprintScopeV2,
+		sessionSlot:         0,
+		sessionSlotCount:    2,
+		sessionEpoch:        11,
+		installationID:      "installation-guard",
+		sessionScopeHash:    "scope-hash-guard",
+		sessionID:           "session-guard",
+		threadID:            "thread-guard",
+		turnID:              turnID,
+	}
+	stageCodexFingerprintIDs(c, ids)
+	c.Set(codexFingerprintAdmissionPreparedContextKey, account.ID)
+	binding := SessionPersonaSlotBinding{
+		AccountID:               account.ID,
+		SlotID:                  0,
+		SlotCount:               2,
+		ScopeVersion:            SessionPersonaScopeVersionV3,
+		MappingVersion:          SessionPersonaScopeVersionV3,
+		FingerprintScopeVersion: codexFingerprintScopeV2,
+		PersonaID:               SessionPersonaCodexCLIStrict,
+		PersonaVersion:          ResolveCodexOutboundProfile(account),
+		CredentialChainID:       "codex-chain-guard",
+		InstallationID:          ids.installationID,
+		State:                   SessionPersonaSlotStateActive,
+		Enabled:                 true,
+		Authorized:              true,
+		SessionEpoch:            ids.sessionEpoch,
+		SlotGeneration:          3,
+		SlotSetGeneration:       5,
+	}
+	requireAttach := AttachSessionPersonaBindingToGin(c, binding)
+	if !requireAttach {
+		panic("failed to attach test Persona binding")
+	}
+}
+
+func TestOpenAITurnStateScopeMismatchReasons(t *testing.T) {
+	base := testOpenAITurnStateScope(42, "turn-1")
+	tests := []struct {
+		name   string
+		mutate func(*OpenAITurnStateScope)
+		reason string
+	}{
+		{name: "account", mutate: func(scope *OpenAITurnStateScope) { scope.AccountID++ }, reason: "cross_account"},
+		{name: "persona", mutate: func(scope *OpenAITurnStateScope) { scope.Persona = SessionPersonaOpenCode }, reason: "cross_persona"},
+		{name: "persona version", mutate: func(scope *OpenAITurnStateScope) { scope.PersonaVersion = "other-version" }, reason: "scope_mismatch"},
+		{name: "mapping version", mutate: func(scope *OpenAITurnStateScope) { scope.MappingVersion-- }, reason: "scope_mismatch"},
+		{name: "slot", mutate: func(scope *OpenAITurnStateScope) { scope.SlotID++ }, reason: "cross_slot"},
+		{name: "turn", mutate: func(scope *OpenAITurnStateScope) { scope.UpstreamTurnID = "turn-2" }, reason: "cross_turn"},
+		{name: "epoch", mutate: func(scope *OpenAITurnStateScope) { scope.SessionEpoch++ }, reason: "cross_generation"},
+		{name: "slot generation", mutate: func(scope *OpenAITurnStateScope) { scope.SlotGeneration++ }, reason: "cross_generation"},
+		{name: "slot set generation", mutate: func(scope *OpenAITurnStateScope) { scope.SlotSetGeneration++ }, reason: "cross_generation"},
+		{name: "credential chain", mutate: func(scope *OpenAITurnStateScope) { scope.CredentialChainID = "other-chain" }, reason: "cross_credential"},
+		{name: "installation", mutate: func(scope *OpenAITurnStateScope) { scope.InstallationID = "other-installation" }, reason: "scope_mismatch"},
+		{name: "session scope", mutate: func(scope *OpenAITurnStateScope) { scope.SessionScopeHash = "other-scope" }, reason: "scope_mismatch"},
+		{name: "upstream session", mutate: func(scope *OpenAITurnStateScope) { scope.UpstreamSessionID = "other-session" }, reason: "scope_mismatch"},
+		{name: "upstream thread", mutate: func(scope *OpenAITurnStateScope) { scope.UpstreamThreadID = "other-thread" }, reason: "scope_mismatch"},
+		{name: "profile", mutate: func(scope *OpenAITurnStateScope) { scope.OutboundProfile = "other-profile" }, reason: "scope_mismatch"},
+		{name: "transport", mutate: func(scope *OpenAITurnStateScope) { scope.TransportScopeDigest = "other-transport" }, reason: "scope_mismatch"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			current := base
+			tt.mutate(&current)
+			require.False(t, base.Equal(current))
+			require.Equal(t, tt.reason, openAITurnStateScopeMismatchReason(base, current))
+		})
+	}
+}
+
+func TestOpenAITurnStateAttemptAllowsOnlyExactScope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	groupID := int64(9)
+	svc := &OpenAIGatewayService{cache: &stubGatewayCache{}}
+	account := &Account{ID: 303, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"access_token": "oauth-token"}}
+	body := []byte(`{"model":"gpt-5.1","client_metadata":{"turn_id":"turn-exact","x-codex-turn-state":"state-exact"}}`)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Request.Header.Set("session_id", "session-exact")
+	c.Request.Header.Set(openAIWSTurnStateHeader, "state-exact")
+	c.Set("api_key", &APIKey{ID: 83, GroupID: &groupID})
+	stageOpenAITurnStateTestScope(c, account, "turn-exact")
+	sessionHash := svc.GenerateSessionHash(c, body)
+	scope, ok := openAITurnStateScopeForAttempt(context.Background(), c, account)
+	require.True(t, ok)
+	require.NoError(t, svc.getOpenAIWSStateStore().BindTurnStateScope(
+		context.Background(), groupID, 83, sessionHash, "state-exact", scope, time.Minute,
+	))
+
+	sanitized, restore, err := svc.isolateOpenAITurnStateAttempt(context.Background(), c, account, body)
+	require.NoError(t, err)
+	require.Equal(t, "state-exact", c.GetHeader(openAIWSTurnStateHeader))
+	require.Equal(t, "state-exact", gjson.GetBytes(sanitized, "client_metadata.x-codex-turn-state").String())
+	restore()
+}
+
+func TestOpenAITurnStateLifecycleClearsAcrossTurns(t *testing.T) {
+	lifecycle := &openAITurnStateLifecycle{}
+	require.Equal(t, "state-1", lifecycle.BeginTurn("turn-1", "state-1"))
+	require.Equal(t, "state-1", lifecycle.BeginTurn("turn-1", "state-conflict"), "same-turn state is first-write-wins")
+	_, committed := lifecycle.Commit("turn-1", "state-late")
+	require.False(t, committed)
+	require.Empty(t, lifecycle.BeginTurn("turn-2", ""), "a new turn must start without prior state")
+	state, committed := lifecycle.Commit("turn-2", "state-2")
+	require.True(t, committed)
+	require.Equal(t, "state-2", state)
+}
+
+func TestExtractOpenAITurnStateFromMetadataEvent(t *testing.T) {
+	require.Equal(t, "state-meta", extractOpenAITurnStateFromMetadataEvent(
+		"response.metadata", []byte(`{"type":"response.metadata","headers":{"x-codex-turn-state":"state-meta"}}`),
+	))
+	require.Equal(t, "state-codex", extractOpenAITurnStateFromMetadataEvent(
+		"codex.response.metadata", []byte(`{"type":"codex.response.metadata","response":{"headers":{"x_codex_turn_state":"state-codex"}}}`),
+	))
+	require.Empty(t, extractOpenAITurnStateFromMetadataEvent(
+		"response.completed", []byte(`{"headers":{"x-codex-turn-state":"ignored"}}`),
+	))
 }
 
 func TestOpenAITurnStateAttemptStripsCrossAccountFromWSHTTPBridge(t *testing.T) {
@@ -54,26 +186,33 @@ func TestOpenAITurnStateAttemptStripsCrossAccountFromWSHTTPBridge(t *testing.T) 
 		)),
 	}}
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, cache: &stubGatewayCache{}, httpUpstream: upstream}
-	payload := []byte(`{"type":"response.create","model":"gpt-5.1","stream":true,"prompt_cache_key":"bridge-session","input":"hello"}`)
+	payload := []byte(`{"type":"response.create","model":"gpt-5.1","stream":true,"prompt_cache_key":"bridge-session","input":"hello","client_metadata":{"turn_id":"turn-bridge"}}`)
+	account := &Account{ID: 202, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1, Credentials: map[string]any{"access_token": "oauth-token"}}
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
 	c.Set("api_key", &APIKey{ID: 82, GroupID: &groupID})
+	c.Request.Header.Set("session_id", "bridge-session")
 	c.Request.Header.Set(openAIWSTurnStateHeader, "state-from-account-a")
+	stageOpenAITurnStateTestScope(c, account, "turn-bridge")
 	sessionHash := svc.GenerateSessionHash(c, payload)
 	originalRequest := c.Request
-	require.NoError(t, svc.getOpenAIWSStateStore().BindTurnStateAccount(
-		context.Background(), groupID, 82, sessionHash, "state-from-account-a", 101, time.Minute,
+	sourceScope, ok := openAITurnStateScopeForAttempt(context.Background(), c, account)
+	require.True(t, ok)
+	sourceScope.AccountID = 101
+	require.NoError(t, svc.getOpenAIWSStateStore().BindTurnStateScope(
+		context.Background(), groupID, 82, sessionHash, "state-from-account-a", sourceScope, time.Minute,
 	))
 
-	restore := svc.isolateOpenAITurnStateAttempt(
-		context.Background(), c, &Account{ID: 202, Platform: PlatformOpenAI}, payload,
+	sanitized, restore, isolateErr := svc.isolateOpenAITurnStateAttempt(
+		context.Background(), c, account, payload,
 	)
+	require.NoError(t, isolateErr)
 	result, err := svc.proxyOpenAIWSHTTPBridgeTurn(
 		context.Background(), c,
-		&Account{ID: 202, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1},
-		"sk-test", payload, len(payload), "gpt-5.1", "", "", "", "", 1,
+		account,
+		"oauth-token", sanitized, len(sanitized), "gpt-5.1", "", "", "", "", 1,
 		func([]byte) error { return nil },
 	)
 	restore()
@@ -142,9 +281,8 @@ func TestOpenAIWSV2HandshakeStateIsNotCommittedBeforeValidOutput(t *testing.T) {
 	require.Empty(t, recorder.Header().Get(openAIWSTurnStateHeader))
 
 	sessionHash := svc.GenerateSessionHash(c, nil)
-	accountID, lookupErr := svc.getOpenAIWSStateStore().GetTurnStateAccount(
+	_, lookupErr := svc.getOpenAIWSStateStore().GetTurnStateScope(
 		context.Background(), 0, 91, sessionHash, "state-from-failed-handshake",
 	)
-	require.NoError(t, lookupErr)
-	require.Zero(t, accountID)
+	require.ErrorIs(t, lookupErr, ErrOpenAITurnStateScopeNotFound)
 }

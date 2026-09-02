@@ -20,8 +20,12 @@ import (
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
 	beginUpstreamResponseModelObservation(c)
-	restoreAttemptRequest := s.isolateOpenAITurnStateAttempt(ctx, c, account, body)
+	sanitizedBody, restoreAttemptRequest, isolateErr := s.isolateOpenAITurnStateAttempt(ctx, c, account, body)
 	defer restoreAttemptRequest()
+	if isolateErr != nil {
+		return nil, isolateErr
+	}
+	body = sanitizedBody
 	if !codexFingerprintAdmissionPreparedForAccount(c, account) {
 		stageCodexFingerprintIDs(c, nil)
 	}
@@ -1258,7 +1262,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 		markOpenAITimingUpstreamBodyDone(c, time.Now())
 		if turnState := strings.TrimSpace(resp.Header.Get(openAIWSTurnStateHeader)); turnState != "" {
-			s.bindOpenAITurnStateProvenance(ctx, c, account.ID, openAITurnStateSessionHash(c), turnState, s.openAIWSSessionStickyTTL())
+			s.bindOpenAITurnStateProvenance(ctx, c, account, openAITurnStateSessionHash(c), turnState, s.openAIWSSessionStickyTTL())
 		}
 		s.bindHTTPResponseAccount(ctx, c, account, responseID)
 
@@ -1434,8 +1438,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			}
 		}
 	}
-	// 客户端回带的 x-codex-turn-state 若已知由其他账号铸造（failover 换号），
-	// 剥离后再出站——异账号 blob 与本账号的（指纹收敛后）出站身份自相矛盾。
+	// x-codex-turn-state 已在 attempt 入口按完整 Session/Persona/slot/turn/
+	// credential/transport scope 校验；这里保留旧账号级守卫作为兼容兜底。
 	// OpenCode 使用独立 event/session 状态，不能把 Codex turn-state 带入其协议。
 	if !isOpenCodePersona {
 		s.guardOpenAICodexTurnStateEcho(c, account, req.Header)

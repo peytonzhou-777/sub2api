@@ -109,8 +109,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	if err := validateOpenAIWSBearerToken(account, token); err != nil {
 		return err
 	}
-	restoreAttemptRequest := s.isolateOpenAITurnStateAttempt(ctx, c, account, firstClientMessage)
+	sanitizedFirstMessage, restoreAttemptRequest, isolateErr := s.isolateOpenAITurnStateAttempt(ctx, c, account, firstClientMessage)
 	defer restoreAttemptRequest()
+	if isolateErr != nil {
+		return isolateErr
+	}
+	firstClientMessage = sanitizedFirstMessage
 
 	// 预取一次 OpenAI Fast Policy settings，绑定到 ctx，让该 WS session
 	// 内所有帧的 evaluateOpenAIFastPolicy 调用复用同一份快照，避免每帧
@@ -220,8 +224,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		payloadBytes             int
 		fingerprintIDs           *codexFingerprintIDs
 		requestedReasoningEffort *string
+		turnID                   string
+		turnState                string
 	}
 	ingressSessionOriginalModel := ""
+	sessionHash := openAITurnStateSessionHash(c)
 
 	applyPayloadMutation := func(current []byte, path string, value any) ([]byte, error) {
 		next, err := sjson.SetBytes(current, path, value)
@@ -498,6 +505,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			fingerprintIDs = stagedCodexFingerprintIDs(c)
 			promptCacheKey = strings.TrimSpace(gjson.GetBytes(normalized, "prompt_cache_key").String())
 		}
+		turnID := strings.TrimSpace(gjson.GetBytes(normalized, "client_metadata.turn_id").String())
+		if fingerprintIDs != nil {
+			turnID = strings.TrimSpace(fingerprintIDs.turnID)
+		}
+		var payloadTurnState string
+		normalized, payloadTurnState = s.validateOpenAITurnStatePayload(ctx, c, account, sessionHash, normalized)
 		lineageNormalized, _, lineageErr := stripOpenAICodexLineageRaw(c, account, normalized)
 		if lineageErr != nil {
 			return openAIWSClientPayload{}, fmt.Errorf("strip ingress Codex lineage: %w", lineageErr)
@@ -518,6 +531,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			payloadBytes:             len(normalized),
 			fingerprintIDs:           fingerprintIDs,
 			requestedReasoningEffort: requestedReasoningEffort,
+			turnID:                   turnID,
+			turnState:                payloadTurnState,
 		}, nil
 	}
 
@@ -560,9 +575,15 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 
 	turnState := strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader))
+	turnStateLifecycle := &openAITurnStateLifecycle{}
+	if firstPayload.turnState != "" {
+		turnState = firstPayload.turnState
+	}
+	turnState = turnStateLifecycle.BeginTurn(firstPayload.turnID, turnState)
+	firstPayload.payloadRaw = applyOpenAITurnStateToPayload(firstPayload.payloadRaw, turnState)
+	firstPayload.payloadBytes = len(firstPayload.payloadRaw)
 	stateStore := s.getOpenAIWSStateStore()
 	groupID := getOpenAIGroupIDFromContext(c)
-	sessionHash := ""
 	preferredConnID := ""
 	storeDisabled := false
 	refreshIngressRouteState := func(payload openAIWSClientPayload) {
@@ -614,8 +635,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					return err
 				}
 			}
-			if turnState != "" && c != nil && c.Request != nil {
-				c.Request.Header.Set(openAIWSTurnStateHeader, turnState)
+			turnState = turnStateLifecycle.BeginTurn(currentBridgePayload.turnID, currentBridgePayload.turnState)
+			currentBridgePayload.payloadRaw = applyOpenAITurnStateToPayload(currentBridgePayload.payloadRaw, turnState)
+			currentBridgePayload.payloadBytes = len(currentBridgePayload.payloadRaw)
+			if c != nil && c.Request != nil {
+				c.Request.Header = cloneOpenAIAttemptHeaderWithTurnState(c.Request.Header, turnState)
 			}
 			bridgePayloadRaw := currentBridgePayload.payloadRaw
 			bridgePayloadBytes := currentBridgePayload.payloadBytes
@@ -735,8 +759,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				bridgeAccountFailoverInputExists = true
 			}
 			if bridgeTurnState := strings.TrimSpace(result.ResponseHeaders.Get(openAIWSTurnStateHeader)); bridgeTurnState != "" && openAIForwardResultAllowsTurnStateCommit(result) {
-				turnState = bridgeTurnState
-				s.bindOpenAITurnStateProvenance(ctx, c, account.ID, sessionHash, bridgeTurnState, s.openAIWSSessionStickyTTL())
+				if committedState, committed := turnStateLifecycle.Commit(currentBridgePayload.turnID, bridgeTurnState); committed {
+					turnState = committedState
+					s.bindOpenAITurnStateProvenance(ctx, c, account, sessionHash, committedState, s.openAIWSSessionStickyTTL())
+				}
 			}
 			responseID := strings.TrimSpace(result.RequestID)
 			if responseID != "" && stateStore != nil {
@@ -813,15 +839,18 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		SessionAffinity: sessionHash,
 		ForceNewConn:    false,
 	}
+	baseAcquireReq.Headers = cloneOpenAIAttemptHeaderWithTurnState(baseAcquireReq.Headers, "")
 	pendingTurnState := ""
+	currentTurnID := firstPayload.turnID
 	commitPendingTurnState := func() {
 		state := strings.TrimSpace(pendingTurnState)
 		if state == "" {
 			return
 		}
-		turnState = state
-		baseAcquireReq.Headers = cloneOpenAIAttemptHeaderWithTurnState(baseAcquireReq.Headers, state)
-		s.bindOpenAITurnStateProvenance(ctx, c, account.ID, sessionHash, state, s.openAIWSSessionStickyTTL())
+		if committedState, committed := turnStateLifecycle.Commit(currentTurnID, state); committed {
+			turnState = committedState
+			s.bindOpenAITurnStateProvenance(ctx, c, account, sessionHash, committedState, s.openAIWSSessionStickyTTL())
+		}
 		pendingTurnState = ""
 	}
 	pool := s.getOpenAIWSConnPool()
@@ -885,6 +914,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		// 上一次未被有效输出确认的握手状态不能进入下一次连接尝试。
 		pendingTurnState = ""
 		req := cloneOpenAIWSAcquireRequest(baseAcquireReq)
+		req.Headers = cloneOpenAIAttemptHeaderWithTurnState(req.Headers, turnState)
 		req.PreferredConnID = strings.TrimSpace(preferred)
 		req.ForcePreferredConn = forcePreferredConn
 		// dedicated 模式下每次获取均新建连接，避免跨会话复用残留上下文。
@@ -1079,6 +1109,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 
 			eventType, eventResponseID, _ := parseOpenAIWSEventEnvelope(upstreamMessage)
+			if metadataTurnState := extractOpenAITurnStateFromMetadataEvent(eventType, upstreamMessage); metadataTurnState != "" {
+				if committedState, committed := turnStateLifecycle.Commit(currentTurnID, metadataTurnState); committed {
+					turnState = committedState
+					s.bindOpenAITurnStateProvenance(ctx, c, account, sessionHash, committedState, s.openAIWSSessionStickyTTL())
+				}
+			}
 			if isOpenAIWSTurnStateCommitEvent(eventType) {
 				commitPendingTurnState()
 			}
@@ -2028,28 +2064,30 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if parseErr != nil {
 			return parseErr
 		}
+		turnState = turnStateLifecycle.BeginTurn(nextPayload.turnID, nextPayload.turnState)
+		currentTurnID = nextPayload.turnID
+		nextPayload.payloadRaw = applyOpenAITurnStateToPayload(nextPayload.payloadRaw, turnState)
+		nextPayload.payloadBytes = len(nextPayload.payloadRaw)
 		nextRoutingFields := gjson.GetManyBytes(nextPayload.payloadRaw, "model", "service_tier")
-		if nextPayload.promptCacheKey != "" {
-			// ingress 会话在整个客户端 WS 生命周期内复用同一上游连接；
-			// prompt_cache_key 对握手头的更新仅在未来需要重新建连时生效。
-			updatedHeaders, _, updHdrErr := s.buildOpenAIWSHeaders(
-				ctx,
-				c,
-				account,
-				token,
-				wsDecision,
-				isCodexCLI,
-				turnState,
-				strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader)),
-				nextPayload.promptCacheKey,
-				nextRoutingFields[0].String(),
-				nextRoutingFields[1].String(),
-			)
-			if updHdrErr != nil {
-				logOpenAIWSModeInfo("ingress_ws_update_headers_failed account_id=%d err=%v", account.ID, updHdrErr)
-			} else {
-				baseAcquireReq.Headers = updatedHeaders
-			}
+		// 每个 turn 都重建未来握手快照。物理连接可以保持打开，但重连必须携带
+		// 新 turn 的 metadata，且不得继承上一 turn 的状态。
+		updatedHeaders, _, updHdrErr := s.buildOpenAIWSHeaders(
+			ctx,
+			c,
+			account,
+			token,
+			wsDecision,
+			isCodexCLI,
+			turnState,
+			strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader)),
+			nextPayload.promptCacheKey,
+			nextRoutingFields[0].String(),
+			nextRoutingFields[1].String(),
+		)
+		if updHdrErr != nil {
+			logOpenAIWSModeInfo("ingress_ws_update_headers_failed account_id=%d err=%v", account.ID, updHdrErr)
+		} else {
+			baseAcquireReq.Headers = cloneOpenAIAttemptHeaderWithTurnState(updatedHeaders, "")
 		}
 		setOpenAICodexRoutingHint(baseAcquireReq.Headers, account, nextRoutingFields[0].String(), nextRoutingFields[1].String())
 		if nextPayload.previousResponseID != "" {
