@@ -165,13 +165,16 @@ func TestOpenAICodexThreadAffinityStripsUnauthorizedHTTPAndBodyLineage(t *testin
 	require.Equal(t, "parent", c.Request.Header.Get("x-codex-parent-thread-id"))
 
 	require.True(t, applyStagedCodexFingerprintClientMetadata(c, account, body))
-	metadata := body["client_metadata"].(map[string]any)
+	metadata, ok := body["client_metadata"].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, "ok", metadata["keep"])
 	require.NotContains(t, metadata, "parent_thread_id")
 	require.NotContains(t, metadata, "forked_from_thread_id")
 	require.NotContains(t, metadata, "x-openai-subagent")
 	embedded := map[string]any{}
-	require.NoError(t, json.Unmarshal([]byte(metadata["x-codex-turn-metadata"].(string)), &embedded))
+	turnMetadata, ok := metadata["x-codex-turn-metadata"].(string)
+	require.True(t, ok)
+	require.NoError(t, json.Unmarshal([]byte(turnMetadata), &embedded))
 	require.Equal(t, "ok", embedded["keep"])
 	require.NotContains(t, embedded, "parent_thread_id")
 }
@@ -182,7 +185,9 @@ func TestOpenAICodexThreadAffinityRawProjectionStripsMarkerOnly(t *testing.T) {
 	account := &Account{ID: 92, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 	body := []byte(`{"model":"gpt-5.4","client_metadata":{"session_id":"session","thread_id":"child","parent_thread_id":"parent","forked_from_thread_id":"fork","x-openai-subagent":"collab_spawn","subagent_kind":"thread_spawn","payload":"kept"}}`)
 
-	projected, err := (&OpenAIGatewayService{}).applyCodexFingerprintForAttempt(context.Background(), c, account, body, true, true)
+	svc := &OpenAIGatewayService{}
+	configureOpenAICodexGatewayTest(svc)
+	projected, err := svc.applyCodexFingerprintForAttempt(context.Background(), c, account, body, true, true)
 	require.NoError(t, err)
 	require.Equal(t, "kept", gjsonString(projected, "client_metadata.payload"))
 	require.Empty(t, gjsonString(projected, "client_metadata.parent_thread_id"))
@@ -222,7 +227,9 @@ func TestOpenAICodexThreadAffinityPreservesAuthorizedLineage(t *testing.T) {
 	require.Equal(t, "collab_spawn", headers.Get("x-openai-subagent"))
 	require.Equal(t, "parent", headers.Get("x-codex-parent-thread-id"))
 	require.False(t, applyStagedCodexFingerprintClientMetadata(c, account, body))
-	require.Equal(t, "parent", body["client_metadata"].(map[string]any)["parent_thread_id"])
+	metadata, ok := body["client_metadata"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "parent", metadata["parent_thread_id"])
 }
 
 func TestOpenAICodexThreadAffinityPreservesRootTurnChainWithoutDerivedSignal(t *testing.T) {
@@ -235,7 +242,8 @@ func TestOpenAICodexThreadAffinityPreservesRootTurnChainWithoutDerivedSignal(t *
 	}}
 
 	require.False(t, stripOpenAICodexLineageClientMetadata(c, account, body))
-	metadata := body["client_metadata"].(map[string]any)
+	metadata, ok := body["client_metadata"].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, "previous-turn", metadata["parent_turn_id"])
 	require.Equal(t, "root-turn", metadata["root_turn_id"])
 }

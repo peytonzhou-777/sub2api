@@ -81,6 +81,10 @@ const (
 
 var openAIImageTryAgainPattern = regexp.MustCompile(`(?i)try again in\s+([0-9]+(?:\.[0-9]+)?)\s*(ms|s|sec|secs|second|seconds|m|min|mins|minute|minutes)`)
 
+var openCodeGoUsageLimitResetPattern = regexp.MustCompile(`(?i)\bresets\s+in\s+`)
+
+var openCodeGoUsageLimitDurationPartPattern = regexp.MustCompile(`(?i)^([0-9]+(?:\.[0-9]+)?)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks)\b`)
+
 const (
 	openAI403CooldownMinutesDefault = 10
 	openAI403DisableThreshold       = 3
@@ -165,6 +169,7 @@ func (s *RateLimitService) ApplyAccountSchedulingThreshold(ctx context.Context, 
 	thresholds := s.settingService.GetAccountSchedulingThresholds(ctx)
 	decision := EvaluateAccountSchedulingThreshold(account, thresholds, now)
 	if !decision.ShouldPause || decision.Until == nil || !decision.Until.After(now) {
+		s.applyAnthropicFableSchedulingThreshold(ctx, account, thresholds, now)
 		return false
 	}
 
@@ -216,6 +221,43 @@ func (s *RateLimitService) ApplyAccountSchedulingThreshold(ctx context.Context, 
 		"used_percent", decision.UsedPercent,
 		"until", decision.Until.UTC())
 	return true
+}
+
+func (s *RateLimitService) applyAnthropicFableSchedulingThreshold(ctx context.Context, account *Account, thresholds map[string]int, now time.Time) {
+	decision := evaluateAnthropicFableSchedulingThreshold(account, thresholds, now)
+	if !decision.ShouldPause || decision.Until == nil || !decision.Until.After(now) {
+		return
+	}
+	if account.isRateLimitActiveForKey(anthropicFableRateLimitKey) {
+		return
+	}
+
+	reason := BuildDetailedAccountSchedulingThresholdReason(AccountSchedulingThresholdReasonInput{
+		Platform:         decision.Platform,
+		Window:           decision.Window,
+		Scope:            decision.Scope,
+		ThresholdPercent: decision.ThresholdPercent,
+		UsedPercent:      decision.UsedPercent,
+		Until:            *decision.Until,
+		Now:              now,
+	})
+	setAccountModelRateLimitSnapshot(account, anthropicFableRateLimitKey, *decision.Until, reason, now)
+	if err := s.accountRepo.SetModelRateLimit(ctx, account.ID, anthropicFableRateLimitKey, *decision.Until, reason); err != nil {
+		slog.Warn("anthropic_fable_scheduling_threshold_set_model_limit_failed",
+			"account_id", account.ID,
+			"threshold_percent", decision.ThresholdPercent,
+			"used_percent", decision.UsedPercent,
+			"until", decision.Until.UTC(),
+			"error", err)
+		return
+	}
+
+	slog.Info("anthropic_fable_scheduling_threshold_model_limited",
+		"account_id", account.ID,
+		"scope", anthropicFableRateLimitKey,
+		"threshold_percent", decision.ThresholdPercent,
+		"used_percent", decision.UsedPercent,
+		"until", decision.Until.UTC())
 }
 
 func accountHasSameSchedulingThresholdPause(account *Account, until time.Time, reason string) bool {
@@ -1646,9 +1688,9 @@ func parseOpenAIRateLimitResetTime(body []byte) *int64 {
 		return nil
 	}
 
-	// 检查是否为 usage_limit_reached 或 rate_limit_exceeded 类型
+	// 检查是否为已知的账号用量限制类型。
 	errType, _ := errObj["type"].(string)
-	if errType != "usage_limit_reached" && errType != "rate_limit_exceeded" {
+	if errType != "usage_limit_reached" && errType != "rate_limit_exceeded" && errType != "GoUsageLimitError" {
 		return nil
 	}
 
@@ -1675,7 +1717,71 @@ func parseOpenAIRateLimitResetTime(body []byte) *int64 {
 		}
 	}
 
+	// OpenCode Go 订阅只在人类可读消息中返回 reset。
+	if errType == "GoUsageLimitError" {
+		message, _ := errObj["message"].(string)
+		if resetAfter := parseOpenCodeGoUsageLimitResetDuration(message); resetAfter > 0 {
+			ts := time.Now().Add(resetAfter).Unix()
+			return &ts
+		}
+	}
+
 	return nil
+}
+
+func parseOpenCodeGoUsageLimitResetDuration(message string) time.Duration {
+	resetPrefix := openCodeGoUsageLimitResetPattern.FindStringIndex(message)
+	if resetPrefix == nil {
+		return 0
+	}
+
+	remainder := message[resetPrefix[1]:]
+	var total time.Duration
+	for {
+		remainder = strings.TrimSpace(remainder)
+		matches := openCodeGoUsageLimitDurationPartPattern.FindStringSubmatchIndex(remainder)
+		if matches == nil {
+			break
+		}
+
+		value, err := strconv.ParseFloat(remainder[matches[2]:matches[3]], 64)
+		if err != nil || value <= 0 {
+			return 0
+		}
+		unit := openCodeGoUsageLimitDurationUnit(remainder[matches[4]:matches[5]])
+		if unit <= 0 {
+			return 0
+		}
+		const maxDuration = time.Duration(1<<63 - 1)
+		if value >= float64(maxDuration)/float64(unit) {
+			return 0
+		}
+		part := time.Duration(value * float64(unit))
+		if part <= 0 || total > maxDuration-part {
+			return 0
+		}
+		total += part
+		remainder = remainder[matches[1]:]
+	}
+
+	return total
+}
+
+func openCodeGoUsageLimitDurationUnit(raw string) time.Duration {
+	switch strings.ToLower(raw) {
+	case "s", "sec", "secs", "second", "seconds":
+		return time.Second
+	case "m", "min", "mins", "minute", "minutes":
+		return time.Minute
+	case "h", "hr", "hrs", "hour", "hours":
+		return time.Hour
+	case "d", "day", "days":
+		return 24 * time.Hour
+	case "w", "week", "weeks":
+		return 7 * 24 * time.Hour
+	default:
+		return 0
+	}
 }
 
 func parseOpenAIRateLimitPlanType(body []byte) string {
@@ -2105,6 +2211,52 @@ func (s *RateLimitService) HandleOpenAIImageRateLimit(ctx context.Context, accou
 	}
 	slog.Info("openai_image_rate_limited", "account_id", account.ID, "scope", openAIImageGenerationRateLimitKey, "reset_at", resetAt, "reset_in", time.Until(resetAt).Truncate(time.Second))
 	return true
+}
+
+// HandleOpenAICodexSparkRateLimit 将 Spark 独立配额窗口记录为模型级限流。
+// Spark 的 x-codex-* 使用率和 reset 时间只代表 Spark 模型维度，不能写入账号级
+// RateLimitResetAt，否则同一 OAuth 账号上的其他模型也会被错误停调。
+func (s *RateLimitService) HandleOpenAICodexSparkRateLimit(ctx context.Context, account *Account, requestedModel string, statusCode int, headers http.Header, _ []byte) bool {
+	if s == nil || account == nil || s.accountRepo == nil || statusCode != http.StatusTooManyRequests || !isOpenAIOAuthAccount(account) {
+		return false
+	}
+	if !isCodexSparkModel(requestedModel) || !account.ShouldHandleErrorCode(statusCode) {
+		return false
+	}
+
+	modelKey := normalizeCodexModel(modelRateLimitKeyForUpstreamModelNotFound(ctx, account, requestedModel))
+	if modelKey == "" {
+		return false
+	}
+	now := time.Now()
+	var resetAt *time.Time
+	// Spark 只有明确耗尽 5h/7d 窗口时才能使用上游长 reset；普通瞬时 429
+	// 即使携带全局 reset 头，也只能使用短时回避，避免错误冷却数天。
+	if openAICodexSparkQuotaExhausted(headers) {
+		resetAt = calculateOpenAI429ResetTime(headers)
+	}
+	if resetAt == nil || !resetAt.After(now) {
+		cooldown, ok := s.get429FallbackCooldown(ctx, account)
+		if !ok || cooldown <= 0 {
+			cooldown = time.Duration(defaultRateLimit429CooldownSeconds) * time.Second
+		}
+		reset := now.Add(cooldown)
+		resetAt = &reset
+	}
+	if err := s.accountRepo.SetModelRateLimit(ctx, account.ID, modelKey, *resetAt, openAICodexSparkRateLimitReason); err != nil {
+		slog.Warn("openai_codex_spark_model_rate_limit_set_failed", "account_id", account.ID, "model", modelKey, "error", err)
+	}
+	slog.Info("openai_codex_spark_model_rate_limited", "account_id", account.ID, "model", modelKey, "reset_at", *resetAt)
+	return true
+}
+
+func openAICodexSparkQuotaExhausted(headers http.Header) bool {
+	snapshot := ParseCodexRateLimitHeaders(headers)
+	if snapshot == nil {
+		return false
+	}
+	return snapshot.PrimaryUsedPercent != nil && *snapshot.PrimaryUsedPercent >= 100 ||
+		snapshot.SecondaryUsedPercent != nil && *snapshot.SecondaryUsedPercent >= 100
 }
 
 func (s *RateLimitService) HandleOpenAIImageCapabilityLoss(ctx context.Context, account *Account, statusCode int, responseBody []byte) bool {

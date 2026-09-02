@@ -649,12 +649,14 @@ func TestOpenAIGatewayService_ComposesProactiveNamespaceStripWithRejectedFieldRe
 }
 
 func newOpenAIRejectedFieldTestService(upstream *httpUpstreamRecorder) *OpenAIGatewayService {
-	return &OpenAIGatewayService{
+	svc := &OpenAIGatewayService{
 		cfg: &config.Config{Security: config.SecurityConfig{
 			URLAllowlist: config.URLAllowlistConfig{Enabled: false},
 		}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
+	return svc
 }
 
 func newOpenAIRejectedFieldTestContext(body []byte) *gin.Context {

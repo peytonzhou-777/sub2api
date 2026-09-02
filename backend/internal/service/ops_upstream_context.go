@@ -259,6 +259,12 @@ func markOpsStreamError(c *gin.Context, streamErr OpsStreamError) {
 			errorsForRequest, _ = value.([]OpsStreamError)
 		}
 		if len(errorsForRequest) > 0 && errorsForRequest[len(errorsForRequest)-1].Turn == streamErr.Turn {
+			last := errorsForRequest[len(errorsForRequest)-1]
+			if streamErr.CountTowardsSLA && !last.CountTowardsSLA {
+				errorsForRequest[len(errorsForRequest)-1] = streamErr
+				c.Set(OpsStreamErrorsKey, errorsForRequest)
+				c.Set(OpsStreamErrorKey, streamErr)
+			}
 			return
 		}
 		errorsForRequest = append(errorsForRequest, streamErr)
@@ -269,7 +275,10 @@ func markOpsStreamError(c *gin.Context, streamErr OpsStreamError) {
 		c.Set(OpsStreamErrorKey, streamErr)
 		return
 	}
-	if _, exists := c.Get(OpsStreamErrorKey); exists {
+	if current, exists := c.Get(OpsStreamErrorKey); exists {
+		if previous, ok := current.(OpsStreamError); ok && streamErr.CountTowardsSLA && !previous.CountTowardsSLA {
+			c.Set(OpsStreamErrorKey, streamErr)
+		}
 		return
 	}
 	c.Set(OpsStreamErrorKey, streamErr)

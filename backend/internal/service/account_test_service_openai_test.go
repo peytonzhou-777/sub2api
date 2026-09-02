@@ -144,6 +144,7 @@ func TestAccountTestService_OpenAISuccessPersistsSnapshotFromHeaders(t *testing.
 		Concurrency: 1,
 		Credentials: map[string]any{"access_token": "test-token"},
 	}
+	configureOpenAICodexOAuthProbeTest(svc, account)
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.NoError(t, err)
@@ -173,13 +174,13 @@ func TestAccountTestService_OpenAIOAuthTestNormalizesGPT56Alias(t *testing.T) {
 		Concurrency: 1,
 		Credentials: map[string]any{"access_token": "test-token"},
 	}
+	configureOpenAICodexOAuthProbeTest(svc, account)
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.6", "", "")
 	require.NoError(t, err)
 	require.Len(t, upstream.requests, 1)
 
-	body, err := io.ReadAll(upstream.requests[0].Body)
-	require.NoError(t, err)
+	body := readOpenAITestRequestBody(t, upstream.requests[0])
 	require.Equal(t, "gpt-5.6-sol", gjson.GetBytes(body, "model").String())
 }
 
@@ -228,6 +229,7 @@ func TestAccountTestService_OpenAIShadowUsesParentCredentialsAndShadowModel(t *t
 	}
 	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
 	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
+	configureOpenAICodexOAuthProbeTest(svc, parent, shadow)
 
 	err := svc.TestAccountConnection(ctx, shadow.ID, "gpt-5.3-codex-spark", "", "")
 	require.NoError(t, err)
@@ -235,8 +237,7 @@ func TestAccountTestService_OpenAIShadowUsesParentCredentialsAndShadowModel(t *t
 	req := upstream.requests[0]
 	require.Equal(t, "Bearer parent-token", req.Header.Get("Authorization"))
 	require.Equal(t, "org-parent", req.Header.Get("chatgpt-account-id"))
-	body, err := io.ReadAll(req.Body)
-	require.NoError(t, err)
+	body := readOpenAITestRequestBody(t, req)
 	require.Equal(t, "gpt-5.3-codex-spark", gjson.GetBytes(body, "model").String())
 	require.Contains(t, recorder.Body.String(), `"success":true`)
 }
@@ -586,6 +587,7 @@ func TestAccountTestService_OpenAIStreamEOFBeforeCompletedFails(t *testing.T) {
 		Concurrency: 1,
 		Credentials: map[string]any{"access_token": "test-token"},
 	}
+	configureOpenAICodexOAuthProbeTest(svc, account)
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.Error(t, err)
@@ -723,6 +725,7 @@ func TestAccountTestService_OpenAI429PersistsSnapshotAndRateLimitState(t *testin
 		Concurrency: 1,
 		Credentials: map[string]any{"access_token": "test-token"},
 	}
+	configureOpenAICodexOAuthProbeTest(svc, account)
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.Error(t, err)
@@ -754,6 +757,7 @@ func TestAccountTestService_OpenAI429BodyOnlyPersistsRateLimitAndClearsStaleErro
 		Concurrency:  1,
 		Credentials:  map[string]any{"access_token": "test-token"},
 	}
+	configureOpenAICodexOAuthProbeTest(svc, account)
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.Error(t, err)
@@ -783,6 +787,7 @@ func TestAccountTestService_OpenAI429SyncsObservedPlanType(t *testing.T) {
 		Concurrency: 1,
 		Credentials: map[string]any{"access_token": "test-token", "plan_type": "plus"},
 	}
+	configureOpenAICodexOAuthProbeTest(svc, account)
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.Error(t, err)
@@ -810,6 +815,7 @@ func TestAccountTestService_OpenAI429ActiveAccountDoesNotClearError(t *testing.T
 		Concurrency: 1,
 		Credentials: map[string]any{"access_token": "test-token"},
 	}
+	configureOpenAICodexOAuthProbeTest(svc, account)
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.Error(t, err)
@@ -838,6 +844,7 @@ func TestAccountTestService_OpenAI429WithoutResetSignalDoesNotMutateRuntimeState
 		Concurrency:  1,
 		Credentials:  map[string]any{"access_token": "test-token"},
 	}
+	configureOpenAICodexOAuthProbeTest(svc, account)
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.Error(t, err)
@@ -866,6 +873,7 @@ func TestAccountTestService_OpenAI401SetsPermanentErrorOnly(t *testing.T) {
 		Concurrency: 1,
 		Credentials: map[string]any{"access_token": "test-token"},
 	}
+	configureOpenAICodexOAuthProbeTest(svc, account)
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.Error(t, err)

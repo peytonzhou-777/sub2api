@@ -272,17 +272,6 @@ func hashOpenAISubagentThread(threadID string) string {
 	return hex.EncodeToString(digest[:])
 }
 
-func isOpenCodePersonaBindingForAccount(ctx context.Context, account *Account) bool {
-	if ctx == nil {
-		return false
-	}
-	binding, ok := SessionPersonaBindingFromContext(ctx)
-	if !ok || !IsOpenCodePersona(binding) {
-		return false
-	}
-	return binding.AccountID == 0 || account == nil || binding.AccountID == account.ID
-}
-
 // codexSubagentAdmissionScopeHash keeps the legacy fingerprint scope as the
 // base while adding Persona/slot generations when a binding is available. This
 // prevents Codex and OpenCode subagent limits from consuming one another's

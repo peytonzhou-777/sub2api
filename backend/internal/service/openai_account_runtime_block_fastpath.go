@@ -12,6 +12,9 @@ import (
 const (
 	openAIAccountStateUpdateTimeout       = 5 * time.Second
 	openAIOAuth429FallbackCooldown        = 5 * time.Second
+	openAIOAuth429RetryWindow             = 2 * time.Minute
+	openAIOAuth429RetryDelay              = 500 * time.Millisecond
+	openAIOAuth429MaxRetryDelay           = 8 * time.Second
 	openAIStopSchedulingBridgeCooldown    = 2 * time.Minute
 	openAIOAuth429StormWindow             = 10 * time.Second
 	openAIOAuth429StormThreshold          = 20
@@ -26,6 +29,45 @@ type OpenAIOAuth429FailoverState struct {
 }
 
 type openAI429AccountFailureDeferredContextKey struct{}
+
+type openAIOAuth429Disposition uint8
+
+const (
+	openAIOAuth429Transient openAIOAuth429Disposition = iota
+	openAIOAuth429Quota5h
+	openAIOAuth429Quota7d
+	openAIOAuth429QuotaReset
+)
+
+// classifyOpenAIOAuth429 区分账号配额耗尽信号与普通瞬时 429。
+func classifyOpenAIOAuth429(headers http.Header, responseBody []byte) (openAIOAuth429Disposition, *time.Time) {
+	if snapshot := ParseCodexRateLimitHeaders(headers); snapshot != nil {
+		if normalized := snapshot.Normalize(); normalized != nil {
+			if normalized.Used7dPercent != nil && *normalized.Used7dPercent >= 100 {
+				if normalized.Reset7dSeconds != nil {
+					resetAt := time.Now().Add(time.Duration(*normalized.Reset7dSeconds) * time.Second)
+					return openAIOAuth429Quota7d, &resetAt
+				}
+				return openAIOAuth429Quota7d, nil
+			}
+			if normalized.Used5hPercent != nil && *normalized.Used5hPercent >= 100 {
+				if normalized.Reset5hSeconds != nil {
+					resetAt := time.Now().Add(time.Duration(*normalized.Reset5hSeconds) * time.Second)
+					return openAIOAuth429Quota5h, &resetAt
+				}
+				return openAIOAuth429Quota5h, nil
+			}
+		}
+	}
+	if resetAt := calculateOpenAI429ResetTime(headers); resetAt != nil {
+		return openAIOAuth429QuotaReset, resetAt
+	}
+	if resetUnix := parseOpenAIRateLimitResetTime(responseBody); resetUnix != nil {
+		resetAt := time.Unix(*resetUnix, 0)
+		return openAIOAuth429QuotaReset, &resetAt
+	}
+	return openAIOAuth429Transient, nil
+}
 
 // WithOpenAI429AccountFailureDeferred 延后本次安全重放链中的账号级 429 处分。
 // 调用方必须在同账号重试恢复成功时丢弃该失败，或在重试终止/换号前显式提交。
@@ -42,6 +84,15 @@ func openAI429AccountFailureDeferred(ctx context.Context) bool {
 	}
 	deferred, _ := ctx.Value(openAI429AccountFailureDeferredContextKey{}).(bool)
 	return deferred
+}
+
+// withoutOpenAI429AccountFailureDeferred marks a delivered/final failure as
+// non-replayable so it can commit account state even when its attempt was deferred.
+func withoutOpenAI429AccountFailureDeferred(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, openAI429AccountFailureDeferredContextKey{}, false)
 }
 
 func openAIAccountStateContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -81,6 +132,19 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 	}
 	stateCtx, cancel := openAIAccountStateContext(ctx)
 	defer cancel()
+	if account != nil && account.Platform == PlatformOpenAI && isOpenAIHTTPUpstreamAccessStateError(statusCode, "", responseBody) {
+		message := "OpenAI upstream account or workspace is unavailable"
+		if upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(responseBody)); upstreamMsg != "" {
+			message = upstreamMsg
+		}
+		if s != nil && s.rateLimitService != nil {
+			s.rateLimitService.handleAuthError(stateCtx, account, message)
+		}
+		if s != nil {
+			s.BlockAccountScheduling(account, time.Time{}, "openai_access_state")
+		}
+		return true
+	}
 
 	if account != nil && account.Platform == PlatformOpenAI && isOpenAIContextWindowError("", responseBody) {
 		return false
@@ -127,6 +191,10 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 	if s.rateLimitService != nil && statusCode != http.StatusUnauthorized && len(canonicalModel) > 0 && strings.TrimSpace(canonicalModel[0]) != "" &&
 		s.rateLimitService.HandleTempUnschedulable(stateCtx, account, statusCode, responseBody, canonicalModel[0]) {
 		return true
+	}
+	if statusCode == http.StatusTooManyRequests && s.rateLimitService != nil && len(canonicalModel) > 0 &&
+		s.rateLimitService.HandleOpenAICodexSparkRateLimit(stateCtx, account, canonicalModel[0], statusCode, headers, responseBody) {
+		return false
 	}
 	if statusCode == http.StatusTooManyRequests {
 		s.markOpenAIOAuth429RateLimited(stateCtx, account, headers, responseBody)
@@ -175,11 +243,16 @@ func (s *OpenAIGatewayService) FinalizeOpenAI429AccountFailure(
 		failoverErr == nil || failoverErr.StatusCode != http.StatusTooManyRequests {
 		return
 	}
+	headers := failoverErr.ResponseHeaders
+	eventType, _, _ := parseOpenAIWSEventEnvelope(failoverErr.ResponseBody)
+	if eventType == "error" || isOpenAIWSTerminalEvent(eventType) {
+		headers = openAIWSSemantic429Headers(account, canonicalModel, headers)
+	}
 	s.handleOpenAIAccountUpstreamError(
-		ctx,
+		withoutOpenAI429AccountFailureDeferred(ctx),
 		account,
 		failoverErr.StatusCode,
-		failoverErr.ResponseHeaders,
+		headers,
 		failoverErr.ResponseBody,
 		canonicalModel,
 	)
@@ -220,6 +293,65 @@ func (s *OpenAIGatewayService) markOpenAIOAuth429RateLimited(ctx context.Context
 		}
 	}
 	s.BlockAccountScheduling(account, cooldownUntil, "429")
+}
+
+func (s *OpenAIGatewayService) shouldRetryOpenAIOAuth429OnSameAccountWithResponse(account *Account, statusCode int, shouldDisable bool, headers http.Header, responseBody []byte) bool {
+	if s == nil || shouldDisable || statusCode != http.StatusTooManyRequests || account == nil ||
+		!account.IsOpenAIOAuthLike() || account.IsShadow() {
+		return false
+	}
+	disposition, _ := classifyOpenAIOAuth429(headers, responseBody)
+	if disposition != openAIOAuth429Transient || s.isOpenAIAccountRuntimeBlocked(account) {
+		return false
+	}
+	return s.openAIOAuth429RetryWindowActive(account)
+}
+
+func (s *OpenAIGatewayService) openAIOAuth429RetryWindowActive(account *Account) bool {
+	if s == nil || account == nil || !account.IsOpenAIOAuthLike() || account.IsShadow() {
+		return false
+	}
+	now := time.Now()
+	value, _ := s.openaiOAuth429RetryStartedAt.LoadOrStore(account.ID, now)
+	startedAt, ok := value.(time.Time)
+	if !ok {
+		s.openaiOAuth429RetryStartedAt.Store(account.ID, now)
+		startedAt = now
+	}
+	return now.Before(startedAt.Add(openAIOAuth429RetryWindow))
+}
+
+func (s *OpenAIGatewayService) openAIOAuth429RetryDeadline(account *Account) time.Time {
+	if s == nil || account == nil || !account.IsOpenAIOAuthLike() || account.IsShadow() {
+		return time.Time{}
+	}
+	value, ok := s.openaiOAuth429RetryStartedAt.Load(account.ID)
+	if !ok {
+		return time.Time{}
+	}
+	startedAt, ok := value.(time.Time)
+	if !ok {
+		return time.Time{}
+	}
+	return startedAt.Add(openAIOAuth429RetryWindow)
+}
+
+func openAIOAuth429SameAccountRetryDelay(headers http.Header, deadline time.Time) time.Duration {
+	delay := openAIOAuth429RetryDelay
+	now := time.Now()
+	if resetAt := parseRetryAfterResetTime(headers, now); resetAt != nil && resetAt.After(now) {
+		delay = resetAt.Sub(now)
+	}
+	if delay > openAIOAuth429MaxRetryDelay {
+		delay = openAIOAuth429MaxRetryDelay
+	}
+	if remaining := time.Until(deadline); !deadline.IsZero() && delay > remaining {
+		delay = remaining
+	}
+	if delay < 0 {
+		return 0
+	}
+	return delay
 }
 
 func (s *OpenAIGatewayService) BlockAccountScheduling(account *Account, until time.Time, reason string) {
@@ -285,6 +417,7 @@ func (s *OpenAIGatewayService) ClearAccountSchedulingBlock(accountID int64) {
 	mu.Lock()
 	defer mu.Unlock()
 	s.openaiAccountRuntimeBlockUntil.Delete(accountID)
+	s.openaiOAuth429RetryStartedAt.Delete(accountID)
 	s.openaiAccountRuntimeBlockGeneration.Store(accountID, s.openaiAccountRuntimeBlockSequence.Add(1))
 }
 
@@ -329,6 +462,9 @@ func canonicalOpenAIAccountSchedulingModel(account *Account, requestedModel stri
 	model := strings.TrimSpace(requestedModel)
 	if account == nil || model == "" {
 		return model
+	}
+	if account.IsOpenAI() {
+		return resolveOpenAIAccountUpstreamModelForRequest(account, model, false)
 	}
 	if mapped := strings.TrimSpace(account.GetMappedModel(model)); mapped != "" {
 		return mapped

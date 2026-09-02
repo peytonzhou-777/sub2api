@@ -52,17 +52,16 @@ func sanitizeOpenAITokenCacheKeyPart(value string) string {
 	if value == "" {
 		return ""
 	}
-	var builder strings.Builder
-	builder.Grow(len(value))
+	normalized := make([]byte, 0, len(value))
 	for _, r := range value {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
-			builder.WriteRune(r)
+			normalized = append(normalized, byte(r))
 		default:
-			builder.WriteByte('_')
+			normalized = append(normalized, '_')
 		}
 	}
-	return strings.Trim(builder.String(), "_")
+	return strings.Trim(string(normalized), "_")
 }
 
 // ClaudeTokenCacheKey 生成 Claude (Anthropic) OAuth 账号的缓存键

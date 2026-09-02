@@ -88,6 +88,7 @@ func TestOpenAIGatewayForwardUsesGlobalCompactModelOnInitialLegacyRequest(t *tes
 		cfg:          &config.Config{Gateway: config.GatewayConfig{OpenAICompactModel: "global-compact"}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID: 1, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
@@ -201,6 +202,7 @@ func TestOpenAIGatewayForwardRetriesExplicitNativeCompactHTTPFailureOnce(t *test
 		cfg:          &config.Config{Gateway: config.GatewayConfig{OpenAICompactModel: "gpt-5.4"}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID: 1, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
@@ -252,6 +254,7 @@ func TestOpenAIGatewayForwardRetriesExplicitNativeCompactSSEFailureBeforeOutput(
 		cfg:          &config.Config{Gateway: config.GatewayConfig{OpenAICompactModel: "gpt-5.4"}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID: 1, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
@@ -291,6 +294,7 @@ func TestOpenAIGatewayForwardRetriesStreamingCompactFailureBeforeOutput(t *testi
 		cfg:          &config.Config{Gateway: config.GatewayConfig{OpenAICompactModel: "gpt-5.4"}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID: 1, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
@@ -330,6 +334,7 @@ func TestOpenAIGatewayForwardDoesNotRecurseWhenCompactFallbackAlsoFails(t *testi
 		cfg:          &config.Config{Gateway: config.GatewayConfig{OpenAICompactModel: "gpt-5.4"}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID: 1, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
@@ -376,6 +381,7 @@ func TestOpenAIPassthroughCompactFallbackSecondStreamFailureUsesStandardErrorPat
 		cfg:          &config.Config{Gateway: config.GatewayConfig{OpenAICompactModel: "gpt-5.4"}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID: 1, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},

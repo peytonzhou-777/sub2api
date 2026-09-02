@@ -53,6 +53,7 @@ func TestClearSessionPersonaBindingFromGinHandlesNilInputs(t *testing.T) {
 	if ClearSessionPersonaBindingFromGin(c) {
 		t.Fatal("Gin context without request reported a clear")
 	}
+	//nolint:staticcheck // 显式覆盖历史调用方传入 nil context 的兼容保护。
 	if got := ClearSessionPersonaBindingFromContext(nil); got != nil {
 		t.Fatal("nil context was not preserved")
 	}

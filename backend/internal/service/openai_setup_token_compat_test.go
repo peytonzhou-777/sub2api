@@ -78,6 +78,7 @@ func TestOpenAISetupTokenImagesUsesOAuthResponsesPath(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"rate limited"}}`)),
 	}}
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          73,
 		Platform:    PlatformOpenAI,
@@ -157,6 +158,7 @@ func TestOpenAISetupTokenChatCompletionsUsesCodexTransform(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","message":"stop after request capture"}}`)),
 	}}
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := openAISetupTokenCompatAccount(71)
 
 	result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "gpt-5.4")
@@ -187,6 +189,7 @@ func TestOpenAISetupTokenMessagesUsesCodexBridgeAndTurnState(t *testing.T) {
 		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := openAISetupTokenCompatAccount(72)
 
 	messages := make([]string, 0, openAICompatAnthropicReplayMaxTailMessages+3)
@@ -227,7 +230,7 @@ func TestOpenAISetupTokenMessagesUsesCodexBridgeAndTurnState(t *testing.T) {
 	require.NotNil(t, secondResult)
 	require.True(t, isOpenAICompatMessagesBridgeContext(secondCtx))
 	require.Equal(t, "turn_state_setup", upstream.requests[1].Header.Get("x-codex-turn-state"))
-	require.Equal(t, generateSessionUUID(isolateOpenAIUpstreamSessionID(0, account, "stable-cache-key")), upstream.requests[1].Header.Get("session_id"))
+	require.Equal(t, upstream.requests[0].Header.Get("session_id"), upstream.requests[1].Header.Get("session_id"))
 	require.Empty(t, upstream.requests[1].Header.Get("conversation_id"))
 	requireOpenAIMessagesCodexIdentity(t, upstream.requests[1], codexCLIUserAgent, "codex-tui")
 }

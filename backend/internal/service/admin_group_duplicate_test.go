@@ -166,6 +166,8 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 		SortOrder:                       9,
 		AllowMessagesDispatch:           true,
 		AllowLive:                       true,
+		ForceOpenAIFast:                 true,
+		FreeOpenAIFast:                  true,
 		RequireOAuthOnly:                true,
 		RequirePrivacySet:               true,
 		DefaultMappedModel:              "gpt-5.4",
@@ -178,6 +180,7 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 		ModelsListConfig:                 GroupModelsListConfig{Enabled: true, Models: []string{"gpt-5.4", "gpt-5-mini"}},
 		RPMLimit:                         99,
 		MaxReasoningEffort:               "medium",
+		MaxReasoningEffortOverLimit:      ReasoningEffortOverLimitDeny,
 		ReasoningEffortMappings:          []ReasoningEffortMapping{{From: "max", To: "xhigh"}},
 		SecurityDepositBaseRequiredCents: 12500,
 		SecurityDepositPolicyVersion:     "deposit-v3",
@@ -214,9 +217,12 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 	require.Equal(t, source.FallbackGroupID, duplicate.FallbackGroupID)
 	require.Equal(t, source.ModelRouting, duplicate.ModelRouting)
 	require.Equal(t, source.MessagesDispatchModelConfig, duplicate.MessagesDispatchModelConfig)
+	require.Equal(t, source.ForceOpenAIFast, duplicate.ForceOpenAIFast)
+	require.Equal(t, source.FreeOpenAIFast, duplicate.FreeOpenAIFast)
 	require.Equal(t, source.ModelsListConfig, duplicate.ModelsListConfig)
 	require.Equal(t, source.RPMLimit, duplicate.RPMLimit)
 	require.Equal(t, source.MaxReasoningEffort, duplicate.MaxReasoningEffort)
+	require.Equal(t, source.MaxReasoningEffortOverLimit, duplicate.MaxReasoningEffortOverLimit)
 	require.Equal(t, source.ReasoningEffortMappings, duplicate.ReasoningEffortMappings)
 	require.Equal(t, source.SecurityDepositBaseRequiredCents, duplicate.SecurityDepositBaseRequiredCents)
 	require.Equal(t, source.SecurityDepositPolicyVersion, duplicate.SecurityDepositPolicyVersion)

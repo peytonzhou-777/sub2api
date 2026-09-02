@@ -42,13 +42,18 @@ func TestParseOpenAIWSResponseUsageFromCompletedEvent(t *testing.T) {
 		[]byte(`{"type":"response.completed","response":{"usage":{"input_tokens":0,"output_tokens":0,"input_tokens_details":{"cached_tokens":0}}}}`),
 		usage,
 	)
-	require.Equal(t, OpenAIUsage{InputTokens: 19, OutputTokens: 5, CacheReadInputTokens: 4}, *usage)
+	require.Equal(t, OpenAIUsage{
+		InputTokens: 19, OutputTokens: 5, CacheReadInputTokens: 4,
+		UsageSource: "response.usage", CacheReadSource: "prompt_tokens_details.cached_tokens",
+	}, *usage)
 
 	parseOpenAIWSResponseUsageFromCompletedEvent(
 		[]byte(`{"type":"response.failed","response":{"usage":{"input_tokens":3,"output_tokens":0,"input_tokens_details":{"cached_tokens":0}}}}`),
 		usage,
 	)
-	require.Equal(t, OpenAIUsage{InputTokens: 3}, *usage)
+	require.Equal(t, OpenAIUsage{
+		InputTokens: 3, UsageSource: "response.usage", CacheReadSource: "input_tokens_details.cached_tokens",
+	}, *usage)
 }
 
 func TestOpenAIWSEventShouldParseUsageTerminalEvents(t *testing.T) {

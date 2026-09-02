@@ -83,6 +83,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_SanitizesNativeToolItemIDs(t *tes
 				Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
 			}}
 			svc := newOpenAIImageGenerationControlTestService(upstream)
+			configureOpenAICodexGatewayTest(svc)
 			c, _ := newOpenAIImageGenerationControlTestContext(true, "codex_cli_rs/0.144.1")
 			account := newOpenAIImageGenerationControlTestAccount()
 			account.Type = accountType

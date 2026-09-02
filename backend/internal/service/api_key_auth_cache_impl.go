@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 21 // v21: 同时携带保证金门槛、长上下文与模型定价字段
+const apiKeyAuthSnapshotVersion = 23 // v23: 合并本地分组策略与上游 Fast/reasoning 字段
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -418,6 +418,8 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			SupportedModelScopes:             apiKey.Group.SupportedModelScopes,
 			AllowMessagesDispatch:            apiKey.Group.AllowMessagesDispatch,
 			AllowLive:                        apiKey.Group.AllowLive,
+			ForceOpenAIFast:                  apiKey.Group.ForceOpenAIFast,
+			FreeOpenAIFast:                   apiKey.Group.FreeOpenAIFast,
 			DefaultMappedModel:               apiKey.Group.DefaultMappedModel,
 			MessagesDispatchModelConfig:      apiKey.Group.MessagesDispatchModelConfig,
 			ModelsListConfig:                 apiKey.Group.ModelsListConfig,
@@ -425,6 +427,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			SecurityDepositBaseRequiredCents: apiKey.Group.SecurityDepositBaseRequiredCents,
 			SecurityDepositPolicyVersion:     apiKey.Group.SecurityDepositPolicyVersion,
 			MaxReasoningEffort:               apiKey.Group.MaxReasoningEffort,
+			MaxReasoningEffortOverLimit:      apiKey.Group.MaxReasoningEffortOverLimit,
 			ReasoningEffortMappings:          apiKey.Group.ReasoningEffortMappings,
 			PeakRateEnabled:                  apiKey.Group.PeakRateEnabled,
 			PeakStart:                        apiKey.Group.PeakStart,
@@ -518,6 +521,8 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			SupportedModelScopes:             snapshot.Group.SupportedModelScopes,
 			AllowMessagesDispatch:            snapshot.Group.AllowMessagesDispatch,
 			AllowLive:                        snapshot.Group.AllowLive,
+			ForceOpenAIFast:                  snapshot.Group.ForceOpenAIFast,
+			FreeOpenAIFast:                   snapshot.Group.FreeOpenAIFast,
 			DefaultMappedModel:               snapshot.Group.DefaultMappedModel,
 			MessagesDispatchModelConfig:      snapshot.Group.MessagesDispatchModelConfig,
 			ModelsListConfig:                 snapshot.Group.ModelsListConfig,
@@ -525,6 +530,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			SecurityDepositBaseRequiredCents: snapshot.Group.SecurityDepositBaseRequiredCents,
 			SecurityDepositPolicyVersion:     snapshot.Group.SecurityDepositPolicyVersion,
 			MaxReasoningEffort:               snapshot.Group.MaxReasoningEffort,
+			MaxReasoningEffortOverLimit:      snapshot.Group.MaxReasoningEffortOverLimit,
 			ReasoningEffortMappings:          snapshot.Group.ReasoningEffortMappings,
 			PeakRateEnabled:                  snapshot.Group.PeakRateEnabled,
 			PeakStart:                        snapshot.Group.PeakStart,

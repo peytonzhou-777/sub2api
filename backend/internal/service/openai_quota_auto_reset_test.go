@@ -54,6 +54,7 @@ func TestShouldAutoPauseOpenAIAccountByQuota_AutoResetCreditStates(t *testing.T)
 		"auto_pause_5h_threshold":                0.8,
 		"auto_pause_7d_disabled":                 true,
 		"codex_5h_used_percent":                  90.0,
+		"codex_5h_window_minutes":                300,
 		"codex_usage_updated_at":                 now.Format(time.RFC3339),
 		"codex_5h_reset_at":                      now.Add(time.Hour).Format(time.RFC3339),
 	}
@@ -233,6 +234,8 @@ func TestOpenAIQuotaAutoResetService_ConcurrentInstancesConsumeOnce(t *testing.T
 			OpenAIAutoResetCredit7dThresholdExtraKey: 1.0,
 			"codex_5h_used_percent":                  100.0,
 			"codex_7d_used_percent":                  10.0,
+			"codex_5h_window_minutes":                300,
+			"codex_7d_window_minutes":                10080,
 			"codex_usage_updated_at":                 now.Format(time.RFC3339),
 			"codex_5h_reset_at":                      now.Add(time.Hour).Format(time.RFC3339),
 			"codex_7d_reset_at":                      now.Add(24 * time.Hour).Format(time.RFC3339),
@@ -258,21 +261,39 @@ func TestOpenAIQuotaAutoResetService_ConcurrentInstancesConsumeOnce(t *testing.T
 	config.ProcessingTimeout = time.Second
 	serviceA := NewOpenAIQuotaAutoResetService(repo, quota, autoResetTestRecoverer{}, NewIdempotencyCoordinator(idempotencyRepo, config), nil, nil, nil)
 	serviceB := NewOpenAIQuotaAutoResetService(repo, quota, autoResetTestRecoverer{}, NewIdempotencyCoordinator(idempotencyRepo, config), nil, nil, nil)
+	resolvedConfig := ResolveOpenAIAutoResetCreditConfig(account)
+	require.True(t, serviceA.assessExtra(account, resolvedConfig, now).resetReached)
+	freshUpdates := buildOpenAIAutoResetUsageUpdates(usage, now)
+	require.Equal(t, 100.0, readOpenAIQuotaUsedPercent(freshUpdates, "5h"))
+	require.True(t, serviceA.assessUsage(usage, account, resolvedConfig, now).resetReached)
 
 	var wg sync.WaitGroup
+	firstDone := make(chan error, 1)
+	secondDone := make(chan error, 1)
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_ = serviceA.evaluateAccount(context.Background(), account.ID)
+		firstDone <- serviceA.evaluateAccount(context.Background(), account.ID)
 	}()
-	<-quota.resetEntered
+	select {
+	case <-quota.resetEntered:
+	case err := <-firstDone:
+		repo.mu.Lock()
+		state := openAIAutoResetStateFromExtra(repo.account.Extra)
+		repo.mu.Unlock()
+		t.Fatalf("first evaluator returned before entering targeted reset: err=%v state=%+v", err, state)
+	case <-time.After(5 * time.Second):
+		t.Fatal("first evaluator did not enter targeted reset")
+	}
 	go func() {
 		defer wg.Done()
-		_ = serviceB.evaluateAccount(context.Background(), account.ID)
+		secondDone <- serviceB.evaluateAccount(context.Background(), account.ID)
 	}()
 	time.Sleep(50 * time.Millisecond)
 	close(quota.releaseReset)
 	wg.Wait()
+	require.NoError(t, <-firstDone)
+	require.NoError(t, <-secondDone)
 
 	require.Equal(t, int32(1), quota.resetCalls.Load())
 	repo.mu.Lock()
@@ -295,6 +316,7 @@ func TestOpenAIQuotaAutoResetService_TimeoutRetryReusesRequestBody(t *testing.T)
 			OpenAIAutoResetCredit5hThresholdExtraKey: 1.0,
 			OpenAIAutoResetCredit7dThresholdExtraKey: 1.0,
 			"codex_5h_used_percent":                  100.0,
+			"codex_5h_window_minutes":                300,
 			"codex_usage_updated_at":                 now.Format(time.RFC3339),
 			"codex_5h_reset_at":                      now.Add(time.Hour).Format(time.RFC3339),
 		},

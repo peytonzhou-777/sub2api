@@ -147,6 +147,7 @@ func TestOpenAIWSHTTPBridgeLaterTurn429RetriesCurrentTurnOnReplacementAccount(t 
 		openaiWSResolver: NewOpenAIWSProtocolResolver(cfg),
 		toolCorrector:    NewCodexToolCorrector(),
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID: 129, Name: "limited", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Status: StatusActive, Schedulable: true, Concurrency: 1,
@@ -253,11 +254,17 @@ func TestOpenAIWSHTTPBridgeLaterTurn429RetriesCurrentTurnOnReplacementAccount(t 
 	}
 	require.Len(t, upstream.bodies, 3)
 	require.Contains(t, string(upstream.bodies[0]), "first")
-	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "session", "client-session"), gjson.GetBytes(upstream.bodies[1], "client_metadata.session_id").String())
-	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "thread", "client-thread"), gjson.GetBytes(upstream.bodies[1], "client_metadata.thread_id").String())
+	firstSessionID := gjson.GetBytes(upstream.bodies[1], "client_metadata.session_id").String()
+	firstThreadID := gjson.GetBytes(upstream.bodies[1], "client_metadata.thread_id").String()
+	requireCodexFingerprintV3UUID(t, firstSessionID)
+	requireCodexFingerprintV3UUID(t, firstThreadID)
 	require.NotContains(t, string(upstream.bodies[2]), "previous_response_id")
 	require.Contains(t, string(upstream.bodies[2]), "second")
-	require.Equal(t, scopeCodexAccountIdentityValue(&nextAccount, 0, "session", "client-session"), gjson.GetBytes(upstream.bodies[2], "client_metadata.session_id").String())
-	require.Equal(t, scopeCodexAccountIdentityValue(&nextAccount, 0, "thread", "client-thread"), gjson.GetBytes(upstream.bodies[2], "client_metadata.thread_id").String())
+	secondSessionID := gjson.GetBytes(upstream.bodies[2], "client_metadata.session_id").String()
+	secondThreadID := gjson.GetBytes(upstream.bodies[2], "client_metadata.thread_id").String()
+	requireCodexFingerprintV3UUID(t, secondSessionID)
+	requireCodexFingerprintV3UUID(t, secondThreadID)
+	require.NotEqual(t, firstSessionID, secondSessionID, "failover 换号必须切换账号级 Session 身份")
+	require.NotEqual(t, firstThreadID, secondThreadID, "failover 换号必须切换账号级 Thread 身份")
 	require.Empty(t, upstream.requests[2].Header.Get(openAIWSTurnStateHeader))
 }

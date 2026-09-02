@@ -15,6 +15,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
@@ -121,6 +122,7 @@ func TestOpenAIGatewayService_ResponsesUnknownModelDoesNotFallbackToGPT54(t *tes
 		Status:      StatusActive,
 		Schedulable: true,
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	result, err := svc.Forward(context.Background(), c, account, originalBody)
 	require.Error(t, err)
@@ -145,6 +147,7 @@ func TestOpenAIGatewayService_OAuthResponsesPromotesSystemMessageWithoutDuplicat
 
 	upstream := &httpUpstreamRecorder{err: errors.New("stop after capture")}
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          124,
 		Name:        "openai-oauth",
@@ -239,6 +242,7 @@ func TestOpenAIGatewayService_OAuthMessagesBridgeDoesNotInjectDefaultInstruction
 		cfg:          &config.Config{},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          123,
 		Name:        "acc",
@@ -258,8 +262,9 @@ func TestOpenAIGatewayService_OAuthMessagesBridgeDoesNotInjectDefaultInstruction
 	require.Nil(t, result)
 	require.NotNil(t, upstream.lastReq)
 	require.Equal(t, "", gjson.GetBytes(upstream.lastBody, "instructions").String())
-	require.False(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").Exists())
-	require.NotEmpty(t, upstream.lastReq.Header.Get("Session_Id"))
+	promptCacheKey := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
+	require.NotEmpty(t, promptCacheKey)
+	require.Equal(t, promptCacheKey, upstream.lastReq.Header.Get("Session_Id"))
 	require.Empty(t, upstream.lastReq.Header.Get("Conversation_Id"))
 	require.Empty(t, upstream.lastReq.Header.Get("OpenAI-Beta"))
 	require.Empty(t, upstream.lastReq.Header.Get("originator"))
@@ -421,6 +426,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 			accountRepo: nil,
 		},
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	account := &Account{
 		ID:             123,
@@ -473,6 +479,39 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 	require.NotContains(t, body, "\"name\":\"edit\"")
 }
 
+func TestOpenAIGatewayService_OAuthPassthrough_GroupForceOpenAIFastInjectsMissingTier(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.144.1")
+	body := []byte(`{"model":"gpt-5.6-sol","stream":true,"instructions":"test","input":"hi"}`)
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
+	}}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
+	account := &Account{
+		ID: 123, Name: "oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
+		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
+		Extra:       map[string]any{"openai_passthrough": true}, Status: StatusActive, Schedulable: true,
+		RateMultiplier: f64p(1),
+	}
+	ctx := context.WithValue(context.Background(), ctxkey.Group, &Group{
+		ID: 7, Platform: PlatformOpenAI, Status: StatusActive, Hydrated: true, ForceOpenAIFast: true,
+	})
+
+	result, err := svc.Forward(ctx, c, account, body)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, OpenAIFastTierPriority, gjson.GetBytes(upstream.lastBody, "service_tier").String())
+	require.NotNil(t, result.ServiceTier)
+	require.Equal(t, OpenAIFastTierPriority, *result.ServiceTier)
+}
+
 // 「自动透传（仅替换认证）」的默认行为必须真的只替换认证：namespace 声明、
 // namespace 形态的 tool_choice、历史调用项上的 namespace 都原样转发，只清掉
 // 非调用项上的残留 namespace（Codex 协议里只有调用项会带该字段）。
@@ -513,6 +552,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_PreservesNamespaceRequest(t *test
 		Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
 	}}
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID: 125, Name: "acc", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
@@ -582,6 +622,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_FlattenEnabledNamespaceRequestAnd
 		Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
 	}}
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID: 123, Name: "acc", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
@@ -642,6 +683,7 @@ func TestOpenAIGatewayService_NativeOAuth_FlattenEnabledNamespaceRequestAndStrea
 		Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
 	}}
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID: 124, Name: "native", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
@@ -729,6 +771,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_FlattenEnabledNamespaceCollisionR
 	}`)
 	upstream := &httpUpstreamRecorder{}
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID: 123, Name: "acc", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
@@ -771,6 +814,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_CompactUsesJSONAndKeepsNonStreami
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	account := &Account{
 		ID:          123,
@@ -834,6 +878,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_UpstreamRequestIgnoresClientCance
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:             123,
 		Name:           "acc",
@@ -882,6 +927,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_CodexMissingInstructionsGetsDefau
 				Body:       io.NopCloser(strings.NewReader(responseBody)),
 			}}
 			svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			configureOpenAICodexGatewayTest(svc)
 			account := &Account{
 				ID: 123, Name: "acc", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 				Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
@@ -925,6 +971,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_DisabledUsesLegacyTransform(t *te
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	account := &Account{
 		ID:             123,
@@ -946,6 +993,75 @@ func TestOpenAIGatewayService_OAuthPassthrough_DisabledUsesLegacyTransform(t *te
 	require.NotEqual(t, inputBody, upstream.lastBody)
 	require.Contains(t, string(upstream.lastBody), `"store":false`)
 	require.Contains(t, string(upstream.lastBody), `"stream":true`)
+}
+
+func TestOpenAIGatewayService_OAuthLegacy_GroupForceOpenAIFastInjectsMissingTier(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.1.0")
+	inputBody := []byte(`{"model":"gpt-5.6-sol","stream":false,"input":[{"type":"text","text":"hi"}]}`)
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_group_fast_legacy"}},
+		Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
+	}}
+	svc := newOpenAIGatewayServiceWithSettings(t, DefaultOpenAIFastPolicySettings())
+	svc.cfg = &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}}
+	svc.httpUpstream = upstream
+	configureOpenAICodexGatewayTest(svc)
+	account := &Account{
+		ID: 123, Name: "acc", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
+		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
+		Extra:       map[string]any{"openai_passthrough": false, "openai_oauth_responses_websockets_v2_mode": OpenAIWSIngressModeOff},
+		Status:      StatusActive, Schedulable: true, RateMultiplier: f64p(1),
+	}
+	ctx := context.WithValue(context.Background(), ctxkey.Group, &Group{
+		ID: 7, Platform: PlatformOpenAI, Status: StatusActive, Hydrated: true, ForceOpenAIFast: true,
+	})
+
+	result, err := svc.Forward(ctx, c, account, inputBody)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, OpenAIFastTierPriority, gjson.GetBytes(upstream.lastBody, "service_tier").String())
+	require.NotNil(t, result.ServiceTier)
+	require.Equal(t, OpenAIFastTierPriority, *result.ServiceTier)
+}
+
+func TestOpenAIGatewayService_OAuthLegacy_GroupForceStillHonorsGlobalFilter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.1.0")
+	inputBody := []byte(`{"model":"gpt-5.6-sol","stream":false,"input":[{"type":"text","text":"hi"}]}`)
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_group_fast_filter"}},
+		Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
+	}}
+	svc := newOpenAIGatewayServiceWithSettings(t, openAIFastFilterPriorityPolicy())
+	svc.cfg = &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}}
+	svc.httpUpstream = upstream
+	configureOpenAICodexGatewayTest(svc)
+	account := &Account{
+		ID: 123, Name: "acc", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
+		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
+		Extra:       map[string]any{"openai_passthrough": false, "openai_oauth_responses_websockets_v2_mode": OpenAIWSIngressModeOff},
+		Status:      StatusActive, Schedulable: true, RateMultiplier: f64p(1),
+	}
+	ctx := context.WithValue(context.Background(), ctxkey.Group, &Group{
+		ID: 7, Platform: PlatformOpenAI, Status: StatusActive, Hydrated: true, ForceOpenAIFast: true,
+	})
+
+	result, err := svc.Forward(ctx, c, account, inputBody)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.False(t, gjson.GetBytes(upstream.lastBody, "service_tier").Exists())
+	require.Nil(t, result.ServiceTier)
 }
 
 func TestOpenAIGatewayService_OAuthLegacy_UpstreamRequestIgnoresClientCancel(t *testing.T) {
@@ -974,6 +1090,7 @@ func TestOpenAIGatewayService_OAuthLegacy_UpstreamRequestIgnoresClientCancel(t *
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:             123,
 		Name:           "acc",
@@ -1016,6 +1133,7 @@ func TestOpenAIGatewayService_OAuthLegacy_CompositeCodexUAUsesCodexOriginator(t 
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	account := &Account{
 		ID:             123,
@@ -1077,6 +1195,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_ResponseHeadersAllowXCodex(t *tes
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	account := &Account{
 		ID:             123,
@@ -1119,6 +1238,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_UpstreamErrorIncludesPassthroughF
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	account := &Account{
 		ID:             123,
@@ -1548,6 +1668,7 @@ func TestOpenAIGatewayService_OpenAIPassthrough_RetryableStatusesTriggerFailover
 				httpUpstream:     upstream,
 				rateLimitService: rateSvc,
 			}
+			configureOpenAICodexGatewayTest(svc)
 
 			account := newAccount(tc.accountType)
 			start := time.Now()
@@ -1819,6 +1940,7 @@ func TestOpenAIGatewayService_OpenAIPassthrough_CompactNetworkErrorsTriggerFailo
 				cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 				httpUpstream: upstream,
 			}
+			configureOpenAICodexGatewayTest(svc)
 			account := &Account{
 				ID:             123,
 				Name:           "acc",
@@ -1871,6 +1993,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_NonCodexUAFallbackToCodexUA(t *te
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	account := &Account{
 		ID:             123,
@@ -1920,6 +2043,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_OfficialIdentityUnified(t *testin
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	account := &Account{
 		ID:             123,
@@ -1964,6 +2088,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_CodexTuiIdentityUnified(t *testin
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	account := &Account{
 		ID:             123,
@@ -2280,6 +2405,7 @@ func TestOpenAIGatewayService_CodexCLIOnly_AllowOfficialClientFamilies(t *testin
 				cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 				httpUpstream: upstream,
 			}
+			configureOpenAICodexGatewayTest(svc)
 
 			account := &Account{
 				ID:             123,
@@ -2328,6 +2454,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamingSetsFirstTokenMs(t *test
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	account := &Account{
 		ID:             123,
@@ -2384,6 +2511,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamClientDisconnectStillCollec
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	account := &Account{
 		ID:             123,
@@ -2457,6 +2585,7 @@ func TestOpenAIGatewayService_APIKeyPassthrough_PreservesBodyAndUsesResponsesEnd
 	require.Equal(t, "flex", *result.ServiceTier)
 	require.NotNil(t, upstream.lastReq)
 	require.Equal(t, originalBody, upstream.lastBody)
+	require.False(t, gjson.GetBytes(upstream.lastBody, "instructions").Exists())
 	require.Equal(t, "https://api.openai.com/v1/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer sk-api-key", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "curl/8.0", upstream.lastReq.Header.Get("User-Agent"))
@@ -2488,6 +2617,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_WarnOnTimeoutHeadersForStream(t *
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:             321,
 		Name:           "acc",
@@ -2529,6 +2659,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_InfoWhenStreamEndsWithoutDone(t *
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:             654,
 		Name:           "acc",
@@ -2575,6 +2706,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_DefaultFiltersTimeoutHeaders(t *t
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:             111,
 		Name:           "acc",
@@ -2624,6 +2756,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_AllowTimeoutHeadersWhenConfigured
 		}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:             222,
 		Name:           "acc",

@@ -215,6 +215,7 @@ type SystemSettings struct {
 	BackendModeEnabled bool `json:"backend_mode_enabled"`
 
 	// Gateway forwarding behavior
+	OpenAITTFTMode                         string `json:"openai_ttft_mode"`
 	EnableFingerprintUnification           bool   `json:"enable_fingerprint_unification"`
 	CodexFingerprintMinSessionAgeHours     int    `json:"codex_fingerprint_min_session_age_hours"`
 	CodexFingerprintMaxSessionAgeHours     int    `json:"codex_fingerprint_max_session_age_hours"`
@@ -489,6 +490,10 @@ type OverloadCooldownSettings struct {
 type RateLimit429CooldownSettings struct {
 	Enabled         bool `json:"enabled"`
 	CooldownSeconds int  `json:"cooldown_seconds"`
+}
+
+type OpenAIImagesOAuthUnavailableCooldownSettings struct {
+	CooldownMinutes int `json:"cooldown_minutes"`
 }
 
 // PanelRateLimitSettings 面板 API 限流配置 DTO

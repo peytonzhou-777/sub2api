@@ -59,6 +59,7 @@ func TestForwardAsChatCompletions_BufferedCyberPolicyNoFailover(t *testing.T) {
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	svc := &OpenAIGatewayService{httpUpstream: compatCyberUpstreamRecorder()}
+	configureOpenAICodexGatewayTest(svc)
 
 	result, err := svc.ForwardAsChatCompletions(context.Background(), c, compatCyberOAuthAccount(), body, "", "gpt-5.5")
 	require.Error(t, err)
@@ -82,6 +83,7 @@ func TestForwardAsChatCompletions_StreamCyberPolicyDropsResult(t *testing.T) {
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	svc := &OpenAIGatewayService{httpUpstream: compatCyberUpstreamRecorder()}
+	configureOpenAICodexGatewayTest(svc)
 
 	result, err := svc.ForwardAsChatCompletions(context.Background(), c, compatCyberOAuthAccount(), body, "", "gpt-5.5")
 	require.Error(t, err)
@@ -102,6 +104,7 @@ func TestForwardAsAnthropic_BufferedCyberPolicyNoFailover(t *testing.T) {
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	svc := &OpenAIGatewayService{httpUpstream: compatCyberUpstreamRecorder()}
+	configureOpenAICodexGatewayTest(svc)
 
 	result, err := svc.ForwardAsAnthropic(context.Background(), c, compatCyberOAuthAccount(), body, "", "gpt-5.5")
 	require.Error(t, err)
@@ -125,6 +128,7 @@ func TestForwardAsAnthropic_StreamCyberPolicyNoFailover(t *testing.T) {
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	svc := &OpenAIGatewayService{httpUpstream: compatCyberUpstreamRecorder()}
+	configureOpenAICodexGatewayTest(svc)
 
 	result, err := svc.ForwardAsAnthropic(context.Background(), c, compatCyberOAuthAccount(), body, "", "gpt-5.5")
 	require.Error(t, err)

@@ -62,6 +62,7 @@ func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream service.HTTPUp
 			Concurrency: 0,
 			Priority:    0,
 			Credentials: map[string]any{"access_token": "token-1"},
+			Extra:       map[string]any{"codex_fingerprint_mode": "off"},
 		},
 		{
 			ID:          2,
@@ -73,6 +74,7 @@ func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream service.HTTPUp
 			Concurrency: 0,
 			Priority:    1,
 			Credentials: map[string]any{"access_token": "token-2"},
+			Extra:       map[string]any{"codex_fingerprint_mode": "off"},
 		},
 	}
 	accountRepo := openAIImagesFailoverAccountRepo{accounts: accounts}
@@ -159,7 +161,7 @@ func TestOpenAIGatewayHandlerResponses_FailoverAbortsWhenClientDisconnected(t *t
 
 	handler.Responses(c)
 
-	require.Equal(t, []int64{1}, upstream.calls(), "客户端断开后不应再切换到账号 2")
+	require.Equal(t, []int64{1}, upstream.calls(), "客户端断开后不应再切换到账号 2; status=%d body=%s", rec.Code, rec.Body.String())
 	require.Equal(t, statusClientClosedRequest, c.Writer.Status(), "应按 499 归类")
 	require.Zero(t, rec.Body.Len(), "不应写入 502 错误响应体")
 
@@ -188,7 +190,7 @@ func TestOpenAIGatewayHandlerResponses_FailoverContinuesForConnectedClient(t *te
 
 	handler.Responses(c)
 
-	require.Equal(t, []int64{1, 2}, upstream.calls(), "在线客户端应正常切换账号")
+	require.Equal(t, []int64{1, 2}, upstream.calls(), "在线客户端应正常切换账号; status=%d body=%s", rec.Code, rec.Body.String())
 	require.Equal(t, http.StatusBadGateway, rec.Code)
 	require.Equal(t, "upstream_error", gjson.GetBytes(rec.Body.Bytes(), "error.type").String())
 }

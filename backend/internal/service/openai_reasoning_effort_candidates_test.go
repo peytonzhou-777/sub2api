@@ -93,6 +93,7 @@ func TestOpenAIGatewayServiceForwardOAuthDerivesEffortFromSuffixModel(t *testing
 	cfg := &config.Config{}
 	cfg.Security.URLAllowlist.Enabled = false
 	svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          11,
 		Name:        "openai-oauth-suffix",

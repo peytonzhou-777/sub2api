@@ -421,6 +421,7 @@ func TestOpenAIGatewayServiceForward_NormalizesResponsesLiteToolsForOAuth(t *tes
 				)),
 			}}
 			svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			configureOpenAICodexGatewayTest(svc)
 			account := &Account{
 				ID: 501, Name: "responses-lite", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 				Concurrency: 1, Status: StatusActive, Schedulable: true, RateMultiplier: f64p(1),
@@ -541,6 +542,7 @@ func TestOpenAIGatewayServiceForward_PinsParallelToolCallsForToollessResponsesLi
 						)),
 					}}
 					svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+					configureOpenAICodexGatewayTest(svc)
 					account := &Account{
 						ID: 502, Name: "responses-lite-no-tools", Platform: PlatformOpenAI, Type: accountCase.accountType,
 						Concurrency: 1, Status: StatusActive, Schedulable: true, RateMultiplier: f64p(1),

@@ -14,6 +14,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestAccountTestServiceOpenAICompactAgentIdentityUsesFreshAssertion(t *testing.T) {
@@ -43,6 +44,7 @@ func TestAccountTestServiceOpenAICompactAgentIdentityUsesFreshAssertion(t *testi
 		Body:       io.NopCloser(strings.NewReader(`{"id":"compact-agent","status":"completed","output":[{"type":"compaction","id":"cmp_agent_fresh","encrypted_content":"blob"}]}`)),
 	}}
 	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
+	configureOpenAICodexOAuthProbeTest(svc, &account)
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -91,6 +93,7 @@ func TestAccountTestServiceOpenAICompactAgentIdentityRecoversInvalidTaskOnce(t *
 	}}
 	invalidator := &agentIdentityWSInvalidationRecorder{}
 	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream, agentIdentityWS: invalidator}
+	configureOpenAICodexOAuthProbeTest(svc, account)
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/22/test", bytes.NewReader(nil))
@@ -329,6 +332,7 @@ func TestOpenAIAgentIdentityTaskInvalidRetriesExactlyOnce(t *testing.T) {
 	}}
 	require.True(t, isAgentIdentityTaskInvalidHTTPResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"invalid_task_id"}}`)))
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, accountRepo: repo, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5.4","instructions":"Reply OK","input":[],"stream":false}`))
@@ -431,6 +435,7 @@ func TestOpenAIAgentIdentityCompatRoutesRecoverInvalidTaskOnce(t *testing.T) {
 				{StatusCode: http.StatusUnauthorized, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"invalid_task_id"}}`))},
 			}}
 			svc := &OpenAIGatewayService{cfg: &config.Config{}, accountRepo: repo, httpUpstream: upstream}
+			configureOpenAICodexGatewayTest(svc)
 			rec := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(rec)
 			c.Request = httptest.NewRequest(http.MethodPost, tt.path, bytes.NewReader(tt.body))
@@ -442,6 +447,52 @@ func TestOpenAIAgentIdentityCompatRoutesRecoverInvalidTaskOnce(t *testing.T) {
 			require.Equal(t, "task-compat-new", account.GetCredential("task_id"))
 		})
 	}
+}
+
+func TestOpenAIAgentIdentityChatRecoveryKeepsAutoDerivedSessionIsolationStable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	key, privateKey := newTestAgentIdentityKey(t)
+	account := &Account{
+		ID: 52, Name: "agent-identity", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Status: StatusActive, Schedulable: true, Concurrency: 1,
+		Credentials: map[string]any{
+			"auth_mode":         OpenAIAuthModeAgentIdentity,
+			"agent_runtime_id":  key.runtimeID,
+			"agent_private_key": privateKey,
+			"task_id":           "task-cache-old",
+		},
+		Extra: map[string]any{"openai_responses_supported": true},
+	}
+	repo := &agentIdentityForwardRepo{account: account}
+	registerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"task_id":"task-cache-new"}`)
+	}))
+	defer registerServer.Close()
+	oldBase := openAIAgentIdentityAuthAPIBaseURL
+	openAIAgentIdentityAuthAPIBaseURL = registerServer.URL
+	t.Cleanup(func() { openAIAgentIdentityAuthAPIBaseURL = oldBase })
+
+	invalidTask := func() *http.Response {
+		return &http.Response{StatusCode: http.StatusUnauthorized, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"invalid_task_id"}}`))}
+	}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{invalidTask(), invalidTask()}}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, accountRepo: repo, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
+	body := []byte(`{"model":"gpt-5.4","stream":false,"messages":[{"role":"user","content":"hi"}]}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Set("api_key", &APIKey{ID: 99})
+
+	_, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "gpt-5.4")
+	require.Error(t, err)
+	require.Len(t, upstream.requests, 2)
+	firstKey := gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").String()
+	secondKey := gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").String()
+	require.NotEmpty(t, firstKey)
+	require.Equal(t, firstKey, secondKey)
+	require.Equal(t, firstKey, upstream.requests[0].Header.Get("session_id"))
+	require.Equal(t, upstream.requests[0].Header.Get("session_id"), upstream.requests[1].Header.Get("session_id"))
 }
 
 func decodeAgentAssertionTask(t *testing.T, header string) string {
@@ -479,6 +530,11 @@ func (r *accountTestAgentIdentityRepo) GetByID(_ context.Context, _ int64) (*Acc
 	return r.account, nil
 }
 
+func (r *accountTestAgentIdentityRepo) Update(_ context.Context, account *Account) error {
+	r.account = account
+	return nil
+}
+
 func (r *accountTestAgentIdentityRepo) UpdateCredentials(_ context.Context, _ int64, credentials map[string]any) error {
 	r.account.Credentials = credentials
 	return nil
@@ -495,6 +551,11 @@ func (r *accountTestAgentIdentityRepo) SetError(_ context.Context, _ int64, _ st
 
 func (r *agentIdentityForwardRepo) GetByID(_ context.Context, _ int64) (*Account, error) {
 	return r.account, nil
+}
+
+func (r *agentIdentityForwardRepo) Update(_ context.Context, account *Account) error {
+	r.account = account
+	return nil
 }
 
 func (r *agentIdentityForwardRepo) UpdateCredentials(_ context.Context, _ int64, credentials map[string]any) error {

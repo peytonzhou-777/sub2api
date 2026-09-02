@@ -195,7 +195,10 @@ func TestResolveSessionPersonaBindingForNewRootKeepsOpenCodeWhenSlotZeroDisabled
 func TestResolveSessionPersonaBindingForNewRootDoesNotRouteOpenCodeToUnreadyWSAdapter(t *testing.T) {
 	account := newSessionPersonaOAuthAccount()
 	account.Extra[openAIPersonaMappingEnabledExtraKey] = true
-	credentials := account.Credentials[openAIPersonaCredentialsKey].([]any)
+	credentials, ok := account.Credentials[openAIPersonaCredentialsKey].([]any)
+	if !ok {
+		t.Fatal("OpenAI persona credentials fixture has an unexpected type")
+	}
 	account.Credentials[openAIPersonaCredentialsKey] = append(credentials, map[string]any{
 		"persona_id":          string(SessionPersonaCodexCLIStrict),
 		"slot_id":             0,

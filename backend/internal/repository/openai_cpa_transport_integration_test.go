@@ -131,7 +131,9 @@ func startTestHTTPConnectProxyWithAuth(t *testing.T) (string, *atomic.Int64, *at
 			go serveTestHTTPConnectConn(conn, authSeen)
 		}
 	}()
-	return "http://127.0.0.1:" + fmt.Sprintf("%d", listener.Addr().(*net.TCPAddr).Port), calls, authSeen
+	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
+	require.True(t, ok)
+	return "http://127.0.0.1:" + fmt.Sprintf("%d", tcpAddr.Port), calls, authSeen
 }
 
 func serveTestHTTPConnectConn(client net.Conn, authSeen *atomic.Bool) {

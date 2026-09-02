@@ -24,7 +24,8 @@ const compactProbeSSESuccessBody = "data: {\"type\":\"response.output_item.done\
 
 type compactFingerprintAccountRepo struct {
 	*snapshotUpdateAccountRepo
-	state CodexFingerprintState
+	state              CodexFingerprintState
+	lastSessionRequest CodexFingerprintSessionRequest
 }
 
 func (r *compactFingerprintAccountRepo) ValidateCodexFingerprintSecret(_ context.Context, _ string, _ time.Time) error {
@@ -37,6 +38,7 @@ func (r *compactFingerprintAccountRepo) GetOrInitializeCodexFingerprintState(_ c
 }
 
 func (r *compactFingerprintAccountRepo) ResolveCodexFingerprintSessionState(_ context.Context, request CodexFingerprintSessionRequest) (*CodexFingerprintSessionResolution, error) {
+	r.lastSessionRequest = request
 	return &CodexFingerprintSessionResolution{
 		State:                   r.state,
 		BoundEpoch:              r.state.Epoch,
@@ -45,6 +47,19 @@ func (r *compactFingerprintAccountRepo) ResolveCodexFingerprintSessionState(_ co
 		BoundSessionScopeHash:   request.SessionScopeHash,
 		Created:                 true,
 	}, nil
+}
+
+func newCompactOAuthTestFingerprintEnvironment(baseRepo *snapshotUpdateAccountRepo) (*compactFingerprintAccountRepo, *config.Config) {
+	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	state := CodexFingerprintState{
+		Seed:           testCodexFingerprintV3Seed(),
+		Version:        codexFingerprintAlgorithmV3,
+		Epoch:          3,
+		EpochStartedAt: startedAt,
+	}
+	return &compactFingerprintAccountRepo{snapshotUpdateAccountRepo: baseRepo, state: state}, &config.Config{
+		Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV3Secret())},
+	}
 }
 
 func TestAccountTestService_TestAccountConnection_OpenAICompactOAuthSuccessPersistsSupport(t *testing.T) {
@@ -65,10 +80,11 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactOAuthSuccessPersi
 			"chatgpt_account_is_fedramp": true,
 		},
 	}
-	repo := &snapshotUpdateAccountRepo{
+	baseRepo := &snapshotUpdateAccountRepo{
 		stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}},
 		updateExtraCalls:      updateCalls,
 	}
+	repo, cfg := newCompactOAuthTestFingerprintEnvironment(baseRepo)
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid-probe"}},
@@ -77,6 +93,7 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactOAuthSuccessPersi
 	svc := &AccountTestService{
 		accountRepo:  repo,
 		httpUpstream: upstream,
+		cfg:          cfg,
 	}
 
 	rec := httptest.NewRecorder()
@@ -126,10 +143,11 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactOAuth404MarksUnsu
 			"chatgpt_account_id": "chatgpt-acc",
 		},
 	}
-	repo := &snapshotUpdateAccountRepo{
+	baseRepo := &snapshotUpdateAccountRepo{
 		stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}},
 		updateExtraCalls:      updateCalls,
 	}
+	repo, cfg := newCompactOAuthTestFingerprintEnvironment(baseRepo)
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusNotFound,
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
@@ -138,6 +156,7 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactOAuth404MarksUnsu
 	svc := &AccountTestService{
 		accountRepo:  repo,
 		httpUpstream: upstream,
+		cfg:          cfg,
 	}
 
 	rec := httptest.NewRecorder()
@@ -262,10 +281,11 @@ func TestAccountTestService_TestAccountConnection_OpenAICompact2xxWithoutItemMar
 			"chatgpt_account_id": "chatgpt-acc",
 		},
 	}
-	repo := &snapshotUpdateAccountRepo{
+	baseRepo := &snapshotUpdateAccountRepo{
 		stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}},
 		updateExtraCalls:      updateCalls,
 	}
+	repo, cfg := newCompactOAuthTestFingerprintEnvironment(baseRepo)
 	// 200 但流里没有 compaction item：链路吞掉了 compaction_trigger 的形态
 	//（#5478 的 "got 0 items"），必须判定为不支持。
 	noItemBody := "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\",\"id\":\"msg_1\"}}\n\n" +
@@ -278,6 +298,7 @@ func TestAccountTestService_TestAccountConnection_OpenAICompact2xxWithoutItemMar
 	svc := &AccountTestService{
 		accountRepo:  repo,
 		httpUpstream: upstream,
+		cfg:          cfg,
 	}
 
 	rec := httptest.NewRecorder()
@@ -339,11 +360,21 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeIdentityMatc
 
 	require.NoError(t, svc.TestAccountConnection(c, account.ID, "gpt-5.4", "", AccountTestModeCompact))
 
-	// 显式 session 收敛模式：探测使用与真实 Responses 流量相同的 v3 作用域。
+	// 显式 session 收敛模式：探测使用与真实 Responses 流量相同的双槽 v3 作用域。
+	require.Equal(t, DefaultSessionPersonaSlotCount, repo.lastSessionRequest.SessionSlotCount)
+	sessionScope := resolveCodexFingerprintSlottedSessionScope(
+		"protocol:responses",
+		repo.lastSessionRequest.SessionSlot,
+		repo.lastSessionRequest.SessionSlotCount,
+	)
+	require.Equal(t,
+		codexFingerprintSessionScopeHashV2([]byte(secret), sessionScope),
+		repo.lastSessionRequest.SessionScopeHash,
+	)
 	converged, err := deriveCodexFingerprintSessionUUIDV7(
 		[]byte(secret), mustDecodeCodexFingerprintSeedForTest(t, state.Seed), state.Epoch,
 		state.EpochStartedAt,
-		codexFingerprintScopedDerivationSource("protocol:responses", "account-session"),
+		codexFingerprintScopedDerivationSource(sessionScope, "account-session"),
 	)
 	require.NoError(t, err)
 	require.Equal(t, converged, upstream.lastReq.Header.Get("session-id"))

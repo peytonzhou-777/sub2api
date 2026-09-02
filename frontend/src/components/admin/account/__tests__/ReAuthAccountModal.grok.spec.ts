@@ -11,13 +11,16 @@ describe('ReAuthAccountModal Grok re-auth paths', () => {
   it('exposes SSO cookie and refresh-token options; password auth stays hidden', () => {
     expect(source).toContain(':show-sso-option="isGrok"')
     expect(source).toContain(':show-email-password-option="false"')
-    expect(source).toContain(':show-refresh-token-option="isOpenAI || isAntigravity || isGrok"')
+    expect(source).toContain(
+      ':show-refresh-token-option="(isOpenAI && !isOpenAIPersonaFlow) || isAntigravity || isGrok"'
+    )
     expect(source).not.toContain('@authorize-password=')
   })
 
   it('wires SSO and RT reauth without batch account create', () => {
     expect(source).toContain('@import-sso="handleGrokImportSSO"')
-    expect(source).toContain('@validate-refresh-token="handleGrokValidateRefreshToken"')
+    expect(source).toContain('@validate-refresh-token="handleValidateRefreshToken"')
+    expect(source).toContain('await handleGrokValidateRefreshToken(refreshTokenInput)')
     expect(source).toContain('grokOAuth.validateSSOToken')
     expect(source).toContain('grokOAuth.buildCredentials')
     // Re-auth updates the existing account; must not call createFromSSO batch create

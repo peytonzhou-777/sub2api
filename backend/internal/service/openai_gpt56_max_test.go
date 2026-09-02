@@ -112,6 +112,7 @@ func TestOpenAIGatewayServiceForwardPreservesGPT56MaxEffort(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Security.URLAllowlist.Enabled = false
 	svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          7,
 		Name:        "openai-apikey",
@@ -151,6 +152,7 @@ func TestOpenAIGatewayServiceForwardPreservesMappedGPT56MaxEffort(t *testing.T) 
 	cfg := &config.Config{}
 	cfg.Security.URLAllowlist.Enabled = false
 	svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          9,
 		Name:        "openai-apikey-mapped",
@@ -194,6 +196,7 @@ func TestOpenAIGatewayServiceForwardOAuthCompactDowngradesMaxEffort(t *testing.T
 	cfg := &config.Config{}
 	cfg.Security.URLAllowlist.Enabled = false
 	svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          8,
 		Name:        "openai-oauth",
@@ -240,6 +243,7 @@ func TestOpenAIGatewayServiceForwardOAuthRemoteCompactV2PreservesResponsesWire(t
 	cfg := &config.Config{}
 	cfg.Security.URLAllowlist.Enabled = false
 	svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          10,
 		Name:        "openai-oauth-responses",

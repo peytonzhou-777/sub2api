@@ -13,6 +13,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type oauth429RateLimitRepo struct {
+	mockAccountRepoForGemini
+	setRateLimitedCalls       int
+	lastRateLimitedUntil      time.Time
+	setModelRateLimitCalls    int
+	lastModelRateLimitKey     string
+	lastModelRateLimitedUntil time.Time
+}
+
+func (r *oauth429RateLimitRepo) SetRateLimited(_ context.Context, _ int64, until time.Time) error {
+	r.setRateLimitedCalls++
+	r.lastRateLimitedUntil = until
+	return nil
+}
+
+func (r *oauth429RateLimitRepo) SetModelRateLimit(_ context.Context, _ int64, scope string, until time.Time, _ ...string) error {
+	r.setModelRateLimitCalls++
+	r.lastModelRateLimitKey = scope
+	r.lastModelRateLimitedUntil = until
+	return nil
+}
+
 func TestOpenAI429FastPath_MarksOAuthAccountCoolingDown(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	account := &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
@@ -51,6 +73,152 @@ func TestOpenAI429FastPath_DefersUntilSameAccountRetryFinishes(t *testing.T) {
 
 	svc.FinalizeOpenAI429AccountFailure(context.Background(), account, failoverErr, "gpt-5.1")
 	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account), "重试终止后必须提交一次账号级 429 状态")
+}
+
+func TestOpenAI429FastPath_SparkQuotaOnlyBlocksSparkModel(t *testing.T) {
+	repo := &oauth429RateLimitRepo{}
+	rateLimits := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	svc := &OpenAIGatewayService{rateLimitService: rateLimits}
+	rateLimits.SetAccountRuntimeBlocker(svc)
+	account := &Account{ID: 425, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-reset-after-seconds", "604800")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-secondary-used-percent", "20")
+	headers.Set("x-codex-secondary-reset-after-seconds", "3600")
+	headers.Set("x-codex-secondary-window-minutes", "300")
+
+	shouldDisable := svc.handleOpenAIAccountUpstreamError(
+		context.Background(), account, http.StatusTooManyRequests, headers,
+		[]byte(`{"error":{"type":"rate_limit_error","code":"rate_limit_exceeded"}}`),
+		"gpt-5.3-codex-spark",
+	)
+
+	require.False(t, shouldDisable)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account), "Spark quota must not create an account runtime block")
+	require.Equal(t, 0, repo.setRateLimitedCalls, "Spark quota must not persist account-level rate limit")
+	require.Equal(t, 1, repo.setModelRateLimitCalls)
+	require.Equal(t, "gpt-5.3-codex-spark", repo.lastModelRateLimitKey)
+	require.Greater(t, time.Until(repo.lastModelRateLimitedUntil), 6*24*time.Hour)
+}
+
+func TestOpenAI429FastPath_SparkTransient429UsesShortFallback(t *testing.T) {
+	repo := &oauth429RateLimitRepo{}
+	rateLimits := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	svc := &OpenAIGatewayService{rateLimitService: rateLimits}
+	rateLimits.SetAccountRuntimeBlocker(svc)
+	account := &Account{ID: 428, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "37")
+	headers.Set("x-codex-primary-reset-after-seconds", "604800")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-secondary-used-percent", "20")
+	headers.Set("x-codex-secondary-reset-after-seconds", "3600")
+	headers.Set("x-codex-secondary-window-minutes", "300")
+
+	shouldDisable := svc.handleOpenAIAccountUpstreamError(
+		context.Background(), account, http.StatusTooManyRequests, headers,
+		[]byte(`{"error":{"type":"rate_limit_error","code":"rate_limit_exceeded"}}`),
+		"gpt-5.3-codex-spark",
+	)
+
+	require.False(t, shouldDisable)
+	require.Equal(t, 1, repo.setModelRateLimitCalls)
+	require.Less(t, time.Until(repo.lastModelRateLimitedUntil), time.Minute)
+	require.Greater(t, time.Until(repo.lastModelRateLimitedUntil), time.Second)
+}
+
+func TestOpenAIStream429_SparkQuotaUsesQuotaHeaders(t *testing.T) {
+	repo := &oauth429RateLimitRepo{}
+	rateLimits := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	svc := &OpenAIGatewayService{rateLimitService: rateLimits}
+	rateLimits.SetAccountRuntimeBlocker(svc)
+	account := &Account{ID: 429, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-reset-after-seconds", "604800")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-secondary-used-percent", "20")
+	headers.Set("x-codex-secondary-reset-after-seconds", "3600")
+	headers.Set("x-codex-secondary-window-minutes", "300")
+	payload := []byte(`{"type":"error","error":{"type":"rate_limit_error","code":"rate_limit_exceeded"}}`)
+
+	status, shouldDisable := svc.handleOpenAIStreamTerminalAccountSideEffects(
+		nil, account, payload, "quota exhausted", headers, "gpt-5.3-codex-spark",
+	)
+
+	require.Equal(t, http.StatusTooManyRequests, status)
+	require.False(t, shouldDisable)
+	require.Equal(t, 1, repo.setModelRateLimitCalls)
+	require.Equal(t, "gpt-5.3-codex-spark", repo.lastModelRateLimitKey)
+	require.Greater(t, time.Until(repo.lastModelRateLimitedUntil), 6*24*time.Hour)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
+}
+
+func TestOpenAIStreamFailover_Spark429KeepsModelScope(t *testing.T) {
+	repo := &oauth429RateLimitRepo{}
+	rateLimits := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	svc := &OpenAIGatewayService{rateLimitService: rateLimits}
+	rateLimits.SetAccountRuntimeBlocker(svc)
+	account := &Account{ID: 432, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-reset-after-seconds", "604800")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-secondary-used-percent", "20")
+	headers.Set("x-codex-secondary-reset-after-seconds", "3600")
+	headers.Set("x-codex-secondary-window-minutes", "300")
+	payload := []byte(`{"type":"error","error":{"type":"rate_limit_error","code":"rate_limit_exceeded"}}`)
+
+	failoverErr := svc.newOpenAIStreamFailoverErrorWithModel(
+		nil, account, false, "", payload, "quota exhausted", "gpt-5.3-codex-spark", headers,
+	)
+
+	require.Equal(t, http.StatusTooManyRequests, failoverErr.StatusCode)
+	require.Equal(t, 0, repo.setRateLimitedCalls)
+	require.Equal(t, 1, repo.setModelRateLimitCalls)
+	require.Equal(t, "gpt-5.3-codex-spark", repo.lastModelRateLimitKey)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
+}
+
+func TestOpenAIWSErrorEvent_OrdinaryModelIgnoresHandshakeQuotaHeadersAndUsesFallback(t *testing.T) {
+	repo := &oauth429RateLimitRepo{}
+	rateLimits := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	svc := &OpenAIGatewayService{rateLimitService: rateLimits}
+	rateLimits.SetAccountRuntimeBlocker(svc)
+	account := &Account{ID: 430, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-reset-after-seconds", "604800")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	payload := []byte(`{"type":"error","error":{"type":"rate_limit_error","code":"rate_limit_exceeded"}}`)
+
+	svc.persistOpenAIWSRateLimitSignal(context.Background(), account, headers, payload, "rate_limit_exceeded", "rate_limit_error", "quota exhausted", "gpt-5.3-codex")
+
+	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
+	require.Equal(t, 1, repo.setRateLimitedCalls)
+	require.Less(t, time.Until(repo.lastRateLimitedUntil), time.Minute, "普通模型不得继承握手的 7d quota reset")
+}
+
+func TestOpenAIWSErrorEvent_SparkQuotaUsesHandshakeQuotaHeaders(t *testing.T) {
+	repo := &oauth429RateLimitRepo{}
+	rateLimits := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	svc := &OpenAIGatewayService{rateLimitService: rateLimits}
+	rateLimits.SetAccountRuntimeBlocker(svc)
+	account := &Account{ID: 431, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-reset-after-seconds", "604800")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	payload := []byte(`{"type":"error","error":{"type":"rate_limit_error","code":"rate_limit_exceeded"}}`)
+
+	svc.persistOpenAIWSRateLimitSignal(context.Background(), account, headers, payload, "rate_limit_exceeded", "rate_limit_error", "quota exhausted", "gpt-5.3-codex-spark")
+
+	require.Equal(t, 1, repo.setModelRateLimitCalls)
+	require.Equal(t, "gpt-5.3-codex-spark", repo.lastModelRateLimitKey)
+	require.Greater(t, time.Until(repo.lastModelRateLimitedUntil), 6*24*time.Hour)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 }
 
 // TestOpenAI429FastPath_SkipsSparkShadow 外审第8轮 P1:spark 影子被选中后若 /responses 返回 429,

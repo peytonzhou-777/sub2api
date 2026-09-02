@@ -147,7 +147,7 @@ func TestForwardEmbeddingsUsesAuthoritativeCredentialsWhenSchedulerSnapshotHasNo
 	require.Equal(t, "Bearer sk-authoritative-embedding", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "authoritative-embedding-agent", upstream.lastReq.Header.Get("User-Agent"))
 	require.Empty(t, snapshotAccount.GetOpenAIApiKey(), "读取权威凭据不得回填调度快照")
-	}
+}
 func TestForwardEmbeddings_AccessStateUsesTypedFailover(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

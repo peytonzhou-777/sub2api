@@ -685,6 +685,7 @@ export interface SystemSettings {
   allow_ungrouped_key_scheduling: boolean;
 
   // Gateway forwarding behavior
+  openai_ttft_mode: string;
   enable_fingerprint_unification: boolean;
   codex_fingerprint_min_session_age_hours: number;
   codex_fingerprint_max_session_age_hours: number;
@@ -1034,6 +1035,7 @@ export interface UpdateSettingsRequest {
   min_claude_code_version?: string;
   max_claude_code_version?: string;
   allow_ungrouped_key_scheduling?: boolean;
+  openai_ttft_mode?: string;
   enable_fingerprint_unification?: boolean;
   codex_fingerprint_min_session_age_hours?: number;
   codex_fingerprint_max_session_age_hours?: number;

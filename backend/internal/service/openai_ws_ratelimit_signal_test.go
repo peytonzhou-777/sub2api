@@ -15,7 +15,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
-	"github.com/tidwall/gjson"
 )
 
 type openAIWSRateLimitSignalRepo struct {
@@ -367,7 +366,8 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_ErrorEventUsageL
 			return
 		}
 
-		serverErrCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, &account, "sk-test", firstMessage, nil)
+		attemptCtx := WithOpenAI429AccountFailureDeferred(r.Context())
+		serverErrCh <- svc.ProxyResponsesWebSocketFromClient(attemptCtx, ginCtx, conn, &account, "sk-test", firstMessage, nil)
 	}))
 	defer wsServer.Close()
 
@@ -383,20 +383,20 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_ErrorEventUsageL
 	require.NoError(t, err)
 
 	readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
-	msgType, message, readErr := clientConn.Read(readCtx)
+	_, _, readErr := clientConn.Read(readCtx)
 	cancelRead()
-	require.NoError(t, readErr)
-	require.Equal(t, coderws.MessageText, msgType)
-	require.Equal(t, "error", gjson.GetBytes(message, "type").String())
-	require.Equal(t, "rate_limit_exceeded", gjson.GetBytes(message, "error.code").String())
-	require.NoError(t, clientConn.Close(coderws.StatusNormalClosure, "done"))
+	require.Error(t, readErr, "可安全重放的 429 不得先写给客户端")
 
 	select {
 	case serverErr := <-serverErrCh:
-		require.NoError(t, serverErr, "已返回的上游业务错误不得转换为传输故障切换")
+		var failoverErr *UpstreamFailoverError
+		require.ErrorAs(t, serverErr, &failoverErr)
+		require.Equal(t, http.StatusTooManyRequests, failoverErr.StatusCode)
+		require.Empty(t, repo.rateLimitCalls, "安全重放阶段不得提前写账号状态")
+		svc.FinalizeOpenAI429AccountFailure(context.Background(), &account, failoverErr, "gpt-5.1")
 		require.Len(t, repo.rateLimitCalls, 1)
 		require.WithinDuration(t, time.Unix(resetAt, 0), repo.rateLimitCalls[0], 2*time.Second)
-		require.Equal(t, 1, captureDialer.DialCount(), "业务错误事件不得触发内部重连")
+		require.Equal(t, 1, captureDialer.DialCount(), "服务层只返回 failover，不得自行整回合重连")
 	case <-time.After(5 * time.Second):
 		t.Fatal("等待 ingress websocket 结束超时")
 	}

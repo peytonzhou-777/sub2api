@@ -152,6 +152,7 @@ func TestForwardAsAnthropic_UsesExactFableMessagesDispatchModel(t *testing.T) {
 		httpUpstream: upstream,
 		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -201,6 +202,7 @@ func TestForwardAsAnthropic_NormalizesRoutingAndEffortForGpt54XHigh(t *testing.T
 		httpUpstream: upstream,
 		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -300,6 +302,7 @@ func TestForwardAsAnthropic_PreservesMaxForFinalGPT56ResponsesModel(t *testing.T
 				httpUpstream: upstream,
 				cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 			}
+			configureOpenAICodexGatewayTest(svc)
 
 			result, err := svc.ForwardAsAnthropic(context.Background(), c, tt.account, []byte(body), "", tt.defaultMapped)
 			require.NoError(t, err)
@@ -623,6 +626,7 @@ func TestForwardAsAnthropic_OAuthCompatKeepsFullReplayForCacheGrowth(t *testing.
 		httpUpstream: upstream,
 		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -643,7 +647,7 @@ func TestForwardAsAnthropic_OAuthCompatKeepsFullReplayForCacheGrowth(t *testing.
 	require.Contains(t, gjson.GetBytes(upstream.lastBody, "input.0.content.0.text").String(), "<sub2api-claude-code-todo-guard>")
 	require.Equal(t, "message-00", gjson.GetBytes(upstream.lastBody, "input.1.content.0.text").String())
 	require.Equal(t, "message-14", gjson.GetBytes(upstream.lastBody, "input.15.content.0.text").String())
-	require.False(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").Exists())
+	require.Equal(t, upstream.lastReq.Header.Get("session_id"), gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
 }
 
 func TestForwardAsAnthropic_AttachesPreviousResponseIDForCompatContinuation(t *testing.T) {
@@ -937,6 +941,7 @@ func TestForwardAsAnthropic_DoesNotAttachPreviousResponseIDForOAuthCompat(t *tes
 		httpUpstream: upstream,
 		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -976,6 +981,7 @@ func TestForwardAsAnthropic_ReusesOAuthCodexTurnState(t *testing.T) {
 		httpUpstream: upstream,
 		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1010,10 +1016,13 @@ func TestForwardAsAnthropic_ReusesOAuthCodexTurnState(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, secondResult)
 	require.Equal(t, "turn_state_first", upstream.requests[1].Header.Get("x-codex-turn-state"))
-	require.Equal(t, generateSessionUUID(isolateOpenAIUpstreamSessionID(0, account, "stable-cache-key")), upstream.requests[1].Header.Get("session_id"))
+	firstPromptCacheKey := gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").String()
+	secondPromptCacheKey := gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").String()
+	require.NotEmpty(t, firstPromptCacheKey)
+	require.Equal(t, firstPromptCacheKey, secondPromptCacheKey)
+	require.Equal(t, secondPromptCacheKey, upstream.requests[1].Header.Get("session_id"))
 	require.Empty(t, upstream.requests[1].Header.Get("conversation_id"))
 	requireOpenAIMessagesCodexIdentity(t, upstream.requests[1], codexCLIUserAgent, openai.CodexDefaultOriginator)
-	require.False(t, gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").Exists())
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "previous_response_id").Exists())
 }
 
@@ -1048,6 +1057,7 @@ func TestForwardAsAnthropic_OAuthRestoresCodexIdentityHeaders(t *testing.T) {
 				httpUpstream: upstream,
 				cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 			}
+			configureOpenAICodexGatewayTest(svc)
 			account := &Account{
 				ID:          1,
 				Name:        "openai-oauth",
@@ -1082,6 +1092,7 @@ func TestForwardAsAnthropic_OAuthDigestFallbackReusesTurnStateWithoutExplicitKey
 		httpUpstream: upstream,
 		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1107,7 +1118,8 @@ func TestForwardAsAnthropic_OAuthDigestFallbackReusesTurnStateWithoutExplicitKey
 	require.NotEmpty(t, firstSessionID)
 	require.Empty(t, upstream.requests[0].Header.Get("x-codex-turn-state"))
 	requireOpenAIMessagesCodexIdentity(t, upstream.requests[0], codexCLIUserAgent, openai.CodexDefaultOriginator)
-	require.False(t, gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").Exists())
+	firstPromptCacheKey := gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").String()
+	require.Equal(t, firstSessionID, firstPromptCacheKey)
 
 	secondBody := []byte(`{"model":"claude-sonnet-4-5","max_tokens":16,"messages":[{"role":"user","content":"first"},{"role":"assistant","content":"ok"},{"role":"user","content":"second"}],"stream":false}`)
 	secondRec := httptest.NewRecorder()
@@ -1122,7 +1134,7 @@ func TestForwardAsAnthropic_OAuthDigestFallbackReusesTurnStateWithoutExplicitKey
 	require.Equal(t, "turn_state_digest_first", upstream.requests[1].Header.Get("x-codex-turn-state"))
 	require.Empty(t, upstream.requests[1].Header.Get("conversation_id"))
 	requireOpenAIMessagesCodexIdentity(t, upstream.requests[1], codexCLIUserAgent, openai.CodexDefaultOriginator)
-	require.False(t, gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").Exists())
+	require.Equal(t, firstPromptCacheKey, gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").String())
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "previous_response_id").Exists())
 }
 
@@ -1140,6 +1152,7 @@ func TestForwardAsAnthropic_OAuthMetadataSessionSurvivesDigestPrefixRewrite(t *t
 		httpUpstream: upstream,
 		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1165,7 +1178,8 @@ func TestForwardAsAnthropic_OAuthMetadataSessionSurvivesDigestPrefixRewrite(t *t
 	firstSessionID := upstream.requests[0].Header.Get("session_id")
 	require.NotEmpty(t, firstSessionID)
 	require.Empty(t, upstream.requests[0].Header.Get("x-codex-turn-state"))
-	require.False(t, gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").Exists())
+	firstPromptCacheKey := gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").String()
+	require.Equal(t, firstSessionID, firstPromptCacheKey)
 
 	secondBody := []byte(`{"model":"claude-sonnet-4-5","max_tokens":16,"metadata":` + metadata + `,"messages":[{"role":"user","content":"rewritten plan"},{"role":"assistant","content":"ok"},{"role":"user","content":"second"}],"stream":false}`)
 	secondRec := httptest.NewRecorder()
@@ -1179,7 +1193,7 @@ func TestForwardAsAnthropic_OAuthMetadataSessionSurvivesDigestPrefixRewrite(t *t
 	require.Equal(t, firstSessionID, upstream.requests[1].Header.Get("session_id"))
 	require.Equal(t, "turn_state_metadata_first", upstream.requests[1].Header.Get("x-codex-turn-state"))
 	require.Empty(t, upstream.requests[1].Header.Get("conversation_id"))
-	require.False(t, gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").Exists())
+	require.Equal(t, firstPromptCacheKey, gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").String())
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "previous_response_id").Exists())
 }
 
@@ -1197,6 +1211,7 @@ func TestForwardAsAnthropic_OAuthMetadataSessionSurvivesChangingCacheControlAnch
 		httpUpstream: upstream,
 		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1222,7 +1237,8 @@ func TestForwardAsAnthropic_OAuthMetadataSessionSurvivesChangingCacheControlAnch
 	firstSessionID := upstream.requests[0].Header.Get("session_id")
 	require.NotEmpty(t, firstSessionID)
 	require.Empty(t, upstream.requests[0].Header.Get("x-codex-turn-state"))
-	require.False(t, gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").Exists())
+	firstPromptCacheKey := gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").String()
+	require.Equal(t, firstSessionID, firstPromptCacheKey)
 
 	secondBody := []byte(`{"model":"claude-sonnet-4-5","max_tokens":16,"metadata":` + metadata + `,"system":[{"type":"text","text":"anchor two","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"user","content":"first"},{"role":"assistant","content":"ok"},{"role":"user","content":"second"}],"stream":false}`)
 	secondRec := httptest.NewRecorder()
@@ -1236,7 +1252,7 @@ func TestForwardAsAnthropic_OAuthMetadataSessionSurvivesChangingCacheControlAnch
 	require.Equal(t, firstSessionID, upstream.requests[1].Header.Get("session_id"))
 	require.Equal(t, "turn_state_cache_anchor_first", upstream.requests[1].Header.Get("x-codex-turn-state"))
 	require.Empty(t, upstream.requests[1].Header.Get("conversation_id"))
-	require.False(t, gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").Exists())
+	require.Equal(t, firstPromptCacheKey, gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").String())
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "previous_response_id").Exists())
 }
 
@@ -1249,6 +1265,7 @@ func TestForwardAsAnthropic_OAuthKeepsSystemAsDeveloperInput(t *testing.T) {
 		httpUpstream: upstream,
 		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1288,6 +1305,7 @@ func TestForwardAsAnthropic_OAuthAddsClaudeCodeTodoGuardForCompatModel(t *testin
 		httpUpstream: upstream,
 		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1325,6 +1343,7 @@ func TestForwardAsAnthropic_OAuthPreservesClaudeCodeToolCallID(t *testing.T) {
 		httpUpstream: upstream,
 		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1469,6 +1488,7 @@ func TestForwardAsAnthropic_ForcedCodexInstructionsTemplatePrependsRenderedInstr
 		}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1516,6 +1536,7 @@ func TestForwardAsAnthropic_ForcedCodexInstructionsTemplateUsesCachedTemplateCon
 		}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1561,6 +1582,7 @@ func TestForwardAsAnthropic_ClientDisconnectDrainsUpstreamUsage(t *testing.T) {
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1603,6 +1625,7 @@ func TestForwardAsAnthropic_TerminalUsageWithoutUpstreamCloseReturns(t *testing.
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1664,6 +1687,7 @@ func TestForwardAsAnthropic_EventNamedTerminalWithoutUpstreamCloseReturns(t *tes
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1732,6 +1756,7 @@ func TestForwardAsAnthropic_EventNamedTerminalWithKeepaliveReturns(t *testing.T)
 		}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1787,6 +1812,7 @@ func TestForwardAsAnthropic_BufferedTerminalWithoutUpstreamCloseReturns(t *testi
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1885,6 +1911,7 @@ func TestForwardAsAnthropic_BufferedEventNamedTerminalWithoutUpstreamCloseReturn
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1937,6 +1964,7 @@ func TestForwardAsAnthropic_MissingTerminalBeforeOutputReturnsFailoverAndOps(t *
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -1992,6 +2020,7 @@ func TestForwardAsAnthropic_MissingTerminalAfterOutputRecordsOpsWithoutFailover(
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -2045,6 +2074,7 @@ func TestForwardAsAnthropic_MissingTerminalAfterClientDisconnectSkipsOpsAndFailo
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -2095,6 +2125,7 @@ func TestForwardAsAnthropic_CompleteStreamDoesNotRecordMissingTerminalOps(t *tes
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -2150,6 +2181,7 @@ func TestForwardAsAnthropic_UpstreamRequestIgnoresClientCancel(t *testing.T) {
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",

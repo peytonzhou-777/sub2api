@@ -242,8 +242,9 @@ type OpenAIForwardResult struct {
 	// UpstreamEndpoint is the actual upstream API path used for this request.
 	// It avoids guessing when one downstream protocol can use multiple upstream endpoints.
 	UpstreamEndpoint string
-	// ServiceTier 优先取上游实际响应回显的 tier；缺失时回退到最终出站 body 的
-	// tier。nil 表示两者都无识别 tier。
+	// ServiceTier is the final tier sent upstream after policy rewriting.
+	// The upstream response declaration remains separate above and is reconciled
+	// at usage-recording time, where the credential protocol is available.
 	ServiceTier *string
 	// ReasoningEffort is extracted from request body (reasoning.effort) or derived from model suffix
 	// after group policy rewriting and model-family remapping.
@@ -493,6 +494,7 @@ type OpenAIGatewayService struct {
 	openaiAccountRuntimeBlockLocks      sync.Map // key: int64(accountID), value: *sync.Mutex
 	openaiAccountRuntimeBlockGeneration sync.Map // key: int64(accountID), value: uint64
 	openaiAccountRuntimeBlockSequence   atomic.Uint64
+	openaiOAuth429RetryStartedAt        sync.Map // key: int64(accountID), value: time.Time
 	grokCredentialMutationLocks         sync.Map // key: int64(accountID), value: *sync.Mutex
 	openaiOAuth429WindowStartUnixNano   atomic.Int64
 	openaiOAuth429WindowCount           atomic.Int64

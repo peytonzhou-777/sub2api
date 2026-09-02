@@ -50,6 +50,121 @@ func configureCodexFingerprintV3TestState(svc *OpenAIGatewayService, account *Ac
 	svc.accountRepo = &codexFingerprintSessionRepoStub{state: state}
 }
 
+type codexOAuthProbeTestRepo struct {
+	AccountRepository
+	accounts map[int64]*Account
+	states   map[int64]CodexFingerprintState
+}
+
+func codexFingerprintV3TestStateForAccount(accountID int64) CodexFingerprintState {
+	return CodexFingerprintState{
+		Seed:           fmt.Sprintf("%064x", accountID),
+		Version:        codexFingerprintAlgorithmV3,
+		Epoch:          3,
+		EpochStartedAt: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+	}
+}
+
+func (r *codexOAuthProbeTestRepo) GetByID(ctx context.Context, accountID int64) (*Account, error) {
+	if account := r.accounts[accountID]; account != nil {
+		return account, nil
+	}
+	if r.AccountRepository == nil {
+		return nil, nil
+	}
+	return r.AccountRepository.GetByID(ctx, accountID)
+}
+
+func (r *codexOAuthProbeTestRepo) ValidateCodexFingerprintSecret(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}
+
+func (r *codexOAuthProbeTestRepo) GetOrInitializeCodexFingerprintState(_ context.Context, accountID int64, _ time.Time) (*CodexFingerprintState, error) {
+	state := r.states[accountID]
+	if !state.valid() {
+		state = codexFingerprintV3TestStateForAccount(accountID)
+	}
+	return &state, nil
+}
+
+func (r *codexOAuthProbeTestRepo) ResolveCodexFingerprintSessionState(
+	_ context.Context,
+	request CodexFingerprintSessionRequest,
+) (*CodexFingerprintSessionResolution, error) {
+	state := r.states[request.AccountID]
+	if !state.valid() {
+		state = codexFingerprintV3TestStateForAccount(request.AccountID)
+	}
+	matchedThreadSourceHash := ""
+	if len(request.ThreadSourceHashes) > 0 {
+		matchedThreadSourceHash = request.ThreadSourceHashes[0]
+	}
+	return &CodexFingerprintSessionResolution{
+		State:                   state,
+		BoundEpoch:              state.Epoch,
+		BoundEpochStartedAt:     state.EpochStartedAt,
+		MatchedThreadSourceHash: matchedThreadSourceHash,
+		BoundSessionScopeHash:   request.SessionScopeHash,
+		BoundScopeVersion:       request.SessionScopeVersion,
+		BoundSessionSlot:        request.SessionSlot,
+		BoundSessionSlotCount:   request.SessionSlotCount,
+		Created:                 true,
+	}, nil
+}
+
+// configureOpenAICodexGatewayTest 为 OAuth 出站测试提供生产等价的 session v3 状态。
+func configureOpenAICodexGatewayTest(svc *OpenAIGatewayService) {
+	if svc.cfg == nil {
+		svc.cfg = &config.Config{}
+	}
+	svc.cfg.Gateway.CodexFingerprintSecret = string(testCodexFingerprintV3Secret())
+	baseRepo := svc.accountRepo
+	svc.accountRepo = &codexOAuthProbeTestRepo{
+		AccountRepository: baseRepo,
+		accounts:          make(map[int64]*Account),
+		states:            make(map[int64]CodexFingerprintState),
+	}
+}
+
+func requireCodexFingerprintV3UUID(t *testing.T, value string) {
+	t.Helper()
+	parsed, err := uuid.Parse(value)
+	require.NoError(t, err, "Codex v3 指纹必须是合法 UUID: %s", value)
+	require.Equal(t, uuid.Version(7), parsed.Version())
+}
+
+// configureOpenAICodexOAuthProbeTest 让管理员探测测试走与生产一致的 session v3 指纹路径。
+func configureOpenAICodexOAuthProbeTest(svc *AccountTestService, accounts ...*Account) {
+	if svc.cfg == nil {
+		svc.cfg = &config.Config{}
+	}
+	svc.cfg.Gateway.CodexFingerprintSecret = string(testCodexFingerprintV3Secret())
+	baseRepo := svc.accountRepo
+	repo := &codexOAuthProbeTestRepo{
+		AccountRepository: baseRepo,
+		accounts:          make(map[int64]*Account, len(accounts)),
+		states:            make(map[int64]CodexFingerprintState, len(accounts)),
+	}
+	for _, account := range accounts {
+		if account == nil {
+			continue
+		}
+		if account.Extra == nil {
+			account.Extra = make(map[string]any)
+		}
+		account.Extra[codexFingerprintModeExtraKey] = string(codexFingerprintSession)
+		account.Extra[codexOutboundProfileExtraKey] = CodexOutboundProfileCLI0149
+		state := codexFingerprintV3TestStateForAccount(account.ID)
+		account.CodexFingerprintSeed = state.Seed
+		account.CodexFingerprintVersion = state.Version
+		account.CodexFingerprintEpoch = state.Epoch
+		account.CodexFingerprintEpochStartedAt = &state.EpochStartedAt
+		repo.accounts[account.ID] = account
+		repo.states[account.ID] = state
+	}
+	svc.accountRepo = repo
+}
+
 func TestCodexFingerprintStateAcceptsOnlyV3(t *testing.T) {
 	startedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	state := CodexFingerprintState{
@@ -950,13 +1065,14 @@ func TestApplyCodexFingerprintForAttemptMakesPromptCacheFollowSession(t *testing
 		CodexFingerprintSeed: state.Seed, CodexFingerprintVersion: state.Version,
 		CodexFingerprintEpoch: state.Epoch, CodexFingerprintEpochStartedAt: &startedAt,
 	}
+	repo := &codexFingerprintSessionRepoStub{state: state}
 	svc := &OpenAIGatewayService{
 		cfg:         &config.Config{Gateway: config.GatewayConfig{CodexFingerprintSecret: string(testCodexFingerprintV3Secret())}},
-		accountRepo: &codexFingerprintSessionRepoStub{state: state},
+		accountRepo: repo,
 	}
 	const originalPromptCacheKey = "018f0c7a-b740-7cc0-98c7-4f4a3f975e52"
 	body := []byte(`{"prompt_cache_key":"` + originalPromptCacheKey + `","client_metadata":{"session_id":"` + originalPromptCacheKey + `","thread_id":"root-thread"},"input":"hello"}`)
-	apply := func(transport OpenAIClientTransport, userID, apiKeyID int64, requestBody []byte) (sessionID, promptCacheKey string, headers http.Header, outgoing []byte) {
+	apply := func(transport OpenAIClientTransport, userID, apiKeyID int64, requestBody []byte) (sessionID, promptCacheKey string, headers http.Header, outgoing []byte, request CodexFingerprintSessionRequest) {
 		c, _ := gin.CreateTestContext(nil)
 		c.Request, _ = http.NewRequest(http.MethodPost, "/v1/responses", nil)
 		c.Request.Header.Set("User-Agent", "codex_cli_rs/0.141.0")
@@ -971,30 +1087,39 @@ func TestApplyCodexFingerprintForAttemptMakesPromptCacheFollowSession(t *testing
 		outgoingHeaders := make(http.Header)
 		applyStagedCodexFingerprintHeaders(c, account, outgoingHeaders)
 		return gjson.GetBytes(updated, "client_metadata.session_id").String(),
-			gjson.GetBytes(updated, "prompt_cache_key").String(), outgoingHeaders, updated
+			gjson.GetBytes(updated, "prompt_cache_key").String(), outgoingHeaders, updated, repo.lastRequest
+	}
+	assertSessionScope := func(sessionID, promptCacheKey string, request CodexFingerprintSessionRequest) {
+		t.Helper()
+		require.Equal(t, sessionID, promptCacheKey)
+		require.Equal(t, codexFingerprintScopeV2, request.SessionScopeVersion)
+		require.Equal(t, DefaultSessionPersonaSlotCount, request.SessionSlotCount)
+		scope := resolveCodexFingerprintSlottedSessionScope("protocol:responses", request.SessionSlot, request.SessionSlotCount)
+		require.Equal(t, codexFingerprintSessionScopeHashV2(testCodexFingerprintV3Secret(), scope), request.SessionScopeHash)
 	}
 
-	httpSession, httpCache, httpHeaders, httpBody := apply(OpenAIClientTransportHTTP, 42, 101, body)
-	wsSession, wsCache, _, _ := apply(OpenAIClientTransportWS, 42, 202, body)
-	require.Equal(t, httpSession, httpCache)
-	require.Equal(t, wsSession, wsCache)
+	httpSession, httpCache, httpHeaders, httpBody, httpRequest := apply(OpenAIClientTransportHTTP, 42, 101, body)
+	wsSession, wsCache, _, _, wsRequest := apply(OpenAIClientTransportWS, 42, 202, body)
+	assertSessionScope(httpSession, httpCache, httpRequest)
+	assertSessionScope(wsSession, wsCache, wsRequest)
 	require.Equal(t, httpSession, wsSession, "HTTP/WS 只负责传输，必须复用同一逻辑 Session")
 	require.Equal(t, httpCache, wsCache, "缓存身份必须跟随传输无关的 Session 作用域")
+	require.Equal(t, httpRequest.SessionSlot, wsRequest.SessionSlot)
 	require.NotContains(t, string(httpBody), originalPromptCacheKey)
 	for name, values := range httpHeaders {
 		require.NotContains(t, strings.Join(values, ","), originalPromptCacheKey, name)
 	}
 
 	otherBody := []byte(`{"prompt_cache_key":"other-explicit-cache","client_metadata":{"session_id":"other-client-session","thread_id":"other-thread"},"input":"hello"}`)
-	otherSession, otherCache, _, otherOutgoing := apply(OpenAIClientTransportHTTP, 43, 202, otherBody)
-	require.Equal(t, httpSession, otherSession)
-	require.Equal(t, httpCache, otherCache, "下游用户、API Key 和原始 cache key 不得拆分账号级缓存身份")
+	otherSession, otherCache, _, otherOutgoing, otherRequest := apply(OpenAIClientTransportHTTP, 43, 202, otherBody)
+	assertSessionScope(otherSession, otherCache, otherRequest)
+	require.Equal(t, httpRequest.SessionSlot == otherRequest.SessionSlot, httpSession == otherSession,
+		"独立根请求仅在命中同一槽位时共享账号 Session")
 	require.NotContains(t, string(otherOutgoing), "other-explicit-cache")
 
 	missingPromptBody := []byte(`{"client_metadata":{"session_id":"third-client-session","thread_id":"third-thread"},"input":"hello"}`)
-	missingSession, missingCache, _, missingOutgoing := apply(OpenAIClientTransportHTTP, 0, 303, missingPromptBody)
-	require.Equal(t, httpSession, missingSession)
-	require.Equal(t, missingSession, missingCache, "session 模式必须补齐缺省 prompt_cache_key")
+	missingSession, missingCache, _, missingOutgoing, missingRequest := apply(OpenAIClientTransportHTTP, 0, 303, missingPromptBody)
+	assertSessionScope(missingSession, missingCache, missingRequest)
 	require.True(t, gjson.GetBytes(missingOutgoing, "prompt_cache_key").Exists())
 }
 

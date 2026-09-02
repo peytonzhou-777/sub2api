@@ -76,7 +76,8 @@ func TestLiveLeaseExpiresWithoutRefresh(t *testing.T) {
 func TestOpenAIPersonaSlotsAreIsolatedByPersonaSlotAndTransport(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
-	cache := NewConcurrencyCache(client, 15, 900).(*concurrencyCache)
+	cache, ok := NewConcurrencyCache(client, 15, 900).(*concurrencyCache)
+	require.True(t, ok)
 	ctx := context.Background()
 
 	acquired, err := cache.AcquireOpenAIPersonaSlot(ctx, 10, "codex_cli_strict", 0, 1, "codex-http")

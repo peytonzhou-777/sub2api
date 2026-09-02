@@ -61,6 +61,7 @@ func TestOpenAIForwardFirstOutputTimeoutIncludesResponseHeaderWait(t *testing.T)
 		}},
 		httpUpstream: upstream,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	body := []byte(`{"model":"gpt-5.5","stream":true,"reasoning":{"effort":"low"},"input":"hello"}`)
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -403,6 +404,16 @@ func assertOpenAINativeLargeOpenEventTimesOutWithoutLeak(t *testing.T, line stri
 }
 
 func TestOpenAINativeFirstOutputEOFDispatchesTerminalEventWithoutBlankLine(t *testing.T) {
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		openAITTFTMode: OpenAITTFTModeVisible,
+		expiresAt:      time.Now().Add(time.Minute).UnixNano(),
+	})
+	t.Cleanup(func() {
+		gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+			openAITTFTMode: OpenAITTFTModeSemantic,
+			expiresAt:      time.Now().Add(time.Minute).UnixNano(),
+		})
+	})
 	cfg := &config.Config{Gateway: config.GatewayConfig{
 		OpenAIFirstOutputTimeoutSeconds: 1,
 		MaxLineSize:                     defaultMaxLineSize,

@@ -273,6 +273,9 @@ type OpenAIWSIngressHooks struct {
 	InitialTurnStartedAt time.Time
 	// MaxReasoningEffort limits explicit reasoning effort values for this WS session.
 	MaxReasoningEffort string
+	// MaxReasoningEffortOverLimit is the access control when an explicit effort
+	// exceeds the ceiling: downgrade (default) or deny.
+	MaxReasoningEffortOverLimit string
 	// ReasoningEffortMappings rewrites explicit effort values for this WS session.
 	ReasoningEffortMappings []ReasoningEffortMapping
 	TurnStarted             func(turn int, startedAt time.Time)
@@ -360,13 +363,10 @@ func (s *OpenAIGatewayService) openAIWSResponseStickyTTL() time.Duration {
 	return time.Hour
 }
 
-// openAIWSIngressPreviousResponseRecoveryEnabled 控制上游 previous_response_id
-// 丢失时的单次协议恢复；本地账号粘性与指纹边界仍由入口调度逻辑负责。
+// openAIWSIngressPreviousResponseRecoveryEnabled 保留旧配置入口，但 ctx_pool
+// 不再删除 previous_response_id 重放业务请求，避免破坏上游连续性。
 func (s *OpenAIGatewayService) openAIWSIngressPreviousResponseRecoveryEnabled() bool {
-	if s != nil && s.cfg != nil {
-		return s.cfg.Gateway.OpenAIWS.IngressPreviousResponseRecoveryEnabled
-	}
-	return true
+	return false
 }
 
 func (s *OpenAIGatewayService) openAIWSReadTimeout() time.Duration {

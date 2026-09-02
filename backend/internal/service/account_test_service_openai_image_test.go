@@ -42,6 +42,7 @@ func TestAccountTestService_OpenAIImageOAuthHandlesOutputItemDoneFallback(t *tes
 			"access_token": "token-123",
 		},
 	}
+	configureOpenAICodexOAuthProbeTest(svc, account)
 
 	err := svc.testOpenAIImageOAuth(c, context.Background(), account, "gpt-image-2", "draw a cat")
 	require.NoError(t, err)

@@ -333,6 +333,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		MaxClaudeCodeVersion:                                   settings.MaxClaudeCodeVersion,
 		AllowUngroupedKeyScheduling:                            settings.AllowUngroupedKeyScheduling,
 		BackendModeEnabled:                                     settings.BackendModeEnabled,
+		OpenAITTFTMode:                                         settings.OpenAITTFTMode,
 		EnableFingerprintUnification:                           settings.EnableFingerprintUnification,
 		CodexFingerprintMinSessionAgeHours:                     settings.CodexFingerprintMinSessionAgeHours,
 		CodexFingerprintMaxSessionAgeHours:                     settings.CodexFingerprintMaxSessionAgeHours,
@@ -440,8 +441,8 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 
 		AffiliateEnabled: settings.AffiliateEnabled,
 
-		AccountSchedulingThresholds: settings.AccountSchedulingThresholds,
-		AllowUserViewErrorRequests:  settings.AllowUserViewErrorRequests,
+		AccountSchedulingThresholds:   settings.AccountSchedulingThresholds,
+		AllowUserViewErrorRequests:    settings.AllowUserViewErrorRequests,
 		UserSpendingRankingThresholds: settings.UserSpendingRankingThresholds,
 	}
 

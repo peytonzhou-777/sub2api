@@ -44,7 +44,7 @@ func ResolveSessionPersonaBindingForRequest(c *gin.Context, account *Account) (S
 // 该入口不枚举候选、不回退 Persona，也不建立 Thread/response ID 映射。
 func ResolveSessionPersonaBindingForAdminProbe(account *Account, slotID int) (SessionPersonaSlotBinding, error) {
 	if account == nil || !account.IsOpenAIOAuth() {
-		return SessionPersonaSlotBinding{}, fmt.Errorf("Persona slot probe only supports OpenAI OAuth accounts")
+		return SessionPersonaSlotBinding{}, fmt.Errorf("persona slot probe only supports OpenAI OAuth accounts")
 	}
 	if !account.IsOpenAIPersonaMappingEnabled() || account.GetOpenAIPersonaMappingVersion() < SessionPersonaScopeVersionV3 {
 		return SessionPersonaSlotBinding{}, fmt.Errorf("persona_slot_id is only supported by Persona v3 accounts")
@@ -76,7 +76,7 @@ func ResolveSessionPersonaBindingForAdminProbe(account *Account, slotID int) (Se
 
 	if !binding.AcceptsNewRoot() {
 		return SessionPersonaSlotBinding{}, fmt.Errorf(
-			"Persona slot %d is not available for a new probe (state=%s, enabled=%t, authorized=%t)",
+			"persona slot %d is not available for a new probe (state=%s, enabled=%t, authorized=%t)",
 			slotID,
 			binding.State,
 			binding.Enabled,
@@ -84,10 +84,10 @@ func ResolveSessionPersonaBindingForAdminProbe(account *Account, slotID int) (Se
 		)
 	}
 	if !sessionPersonaBindingHasSafeCredentialChain(binding) {
-		return SessionPersonaSlotBinding{}, fmt.Errorf("Persona slot %d has no safe credential chain", slotID)
+		return SessionPersonaSlotBinding{}, fmt.Errorf("persona slot %d has no safe credential chain", slotID)
 	}
 	if IsOpenCodePersona(binding) && !OpenCodePersonaTransportReady(SessionPersonaTransportHTTP) {
-		return SessionPersonaSlotBinding{}, fmt.Errorf("OpenCode Persona HTTP adapter is not enabled")
+		return SessionPersonaSlotBinding{}, fmt.Errorf("OpenCode persona HTTP adapter is not enabled")
 	}
 	return binding, nil
 }

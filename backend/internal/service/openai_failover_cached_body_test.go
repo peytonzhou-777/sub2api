@@ -89,6 +89,7 @@ func TestOpenAIGatewayService_Forward_FailoverReparsesCachedBodyForNextAccount(t
 				},
 			}}
 			svc := &OpenAIGatewayService{httpUpstream: upstream}
+			configureOpenAICodexGatewayTest(svc)
 
 			firstAccount := openAIFailoverCachedBodyTestAccount(1, "account-a", tt.firstMapping)
 			secondAccount := openAIFailoverCachedBodyTestAccount(2, "account-b", tt.secondMapping)

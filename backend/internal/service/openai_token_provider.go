@@ -567,16 +567,6 @@ func (p *OpenAITokenProvider) cachePersonaAccessToken(ctx context.Context, cache
 	return accessToken, nil
 }
 
-// getOpenCodeAccessTokenForBinding 保留旧的内部别名，实际实现统一走 Persona
-// 通用读取逻辑，避免已有测试或同包调用依赖旧函数名。
-func (p *OpenAITokenProvider) getOpenCodeAccessTokenForBinding(
-	ctx context.Context,
-	account *Account,
-	binding SessionPersonaSlotBinding,
-) (string, error) {
-	return p.getPersonaAccessTokenForBinding(ctx, account, binding, SessionPersonaOpenCode)
-}
-
 // openAIPersonaCredentialReady interprets the optional readiness/state fields
 // used by imported credential-chain records without mutating the account map.
 func openAIPersonaCredentialReady(chain map[string]any) bool {

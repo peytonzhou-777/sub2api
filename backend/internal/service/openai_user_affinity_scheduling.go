@@ -573,11 +573,6 @@ func removeOpenAIUserAffinityCandidate(candidates []OpenAIUserAffinityCandidate,
 	return remaining
 }
 
-// reserveOpenAIUserAffinityPlacement 原子建立新居民归属、触达预留和账号长冷却。
-func (s *OpenAIGatewayService) reserveOpenAIUserAffinityPlacement(ctx context.Context, accountID int64, scopeKey string) bool {
-	return s.reserveOpenAIUserAffinityPlacementForRequest(ctx, OpenAIAccountScheduleRequest{}, accountID, scopeKey)
-}
-
 // openAIUserAffinityStalePlacementContextKey 标记本次请求已确认旧 projection 失效。
 type openAIUserAffinityStalePlacementContextKey struct{}
 

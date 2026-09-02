@@ -31,6 +31,7 @@ func TestOpenAIGatewayService_Forward_CompactOnlyModelMappingOverridesOAuthUpstr
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -112,6 +113,7 @@ func TestOpenAIGatewayService_Forward_NormalizesCompactionTriggerAfterHistoryCle
 		Body:       io.NopCloser(strings.NewReader(`{"id":"resp_trigger","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}`)),
 	}}
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID: 4, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
@@ -145,6 +147,7 @@ func TestOpenAIGatewayService_Forward_NonCompactRequestIgnoresCompactOnlyModelMa
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          2,
 		Name:        "openai-oauth",
@@ -185,6 +188,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_CompactOnlyModelMappingOverridesU
 	}}
 
 	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          3,
 		Name:        "openai-oauth-pass",

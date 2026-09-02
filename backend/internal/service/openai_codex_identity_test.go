@@ -324,6 +324,10 @@ func TestBuildCodexCLIUserAgent(t *testing.T) {
 }
 
 func TestCodexCanonicalUserAgentFollowsResolver(t *testing.T) {
+	previousProfile, _ := codexOutboundDefaultProfile.Load().(string)
+	previousForceLegacy := codexOutboundForceLegacy.Load()
+	SetCodexOutboundProfileConfig(CodexOutboundProfileLegacy, false)
+	t.Cleanup(func() { SetCodexOutboundProfileConfig(previousProfile, previousForceLegacy) })
 	SetCodexCanonicalUserAgentResolver(func() string {
 		return "codex_cli_rs/0.200.1" + codexCLIUserAgentSuffix
 	})
@@ -341,6 +345,10 @@ func TestCodexCanonicalUserAgentFollowsResolver(t *testing.T) {
 }
 
 func TestCodexCanonicalUserAgentFallsBackWithoutResolver(t *testing.T) {
+	previousProfile, _ := codexOutboundDefaultProfile.Load().(string)
+	previousForceLegacy := codexOutboundForceLegacy.Load()
+	SetCodexOutboundProfileConfig(CodexOutboundProfileLegacy, false)
+	t.Cleanup(func() { SetCodexOutboundProfileConfig(previousProfile, previousForceLegacy) })
 	SetCodexCanonicalUserAgentResolver(nil)
 
 	require.Equal(t, codexCLIUserAgent, CodexCanonicalUserAgent())

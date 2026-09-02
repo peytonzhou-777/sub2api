@@ -251,7 +251,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		)
 		var dialErr *openAIWSDialError
 		if errors.As(err, &dialErr) && dialErr != nil && dialErr.StatusCode == http.StatusTooManyRequests {
-			s.persistOpenAIWSRateLimitSignal(ctx, account, dialErr.ResponseHeaders, nil, "rate_limit_exceeded", "rate_limit_error", strings.TrimSpace(err.Error()))
+			s.persistOpenAIWSRateLimitSignal(ctx, account, dialErr.ResponseHeaders, nil, "rate_limit_exceeded", "rate_limit_error", strings.TrimSpace(err.Error()), mappedModel)
 		}
 		return nil, wrapOpenAIWSFallback(classifyOpenAIWSAcquireError(err), err)
 	}
@@ -618,23 +618,22 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		}
 		imageCounter.AddSSEData(message)
 
-		if eventType == "response.failed" {
-			if hit, code, msg := detectOpenAICyberPolicy(message); hit {
-				MarkOpsCyberPolicy(c, CyberPolicyMark{
-					Code:           code,
-					Message:        msg,
-					Body:           truncateString(string(message), 4096),
-					UpstreamStatus: http.StatusOK,
-					UpstreamInTok:  usage.InputTokens,
-					UpstreamOutTok: usage.OutputTokens,
-				})
-			}
-		}
+		failureEvent := eventType == "error" || eventType == "response.failed"
+		cyberPolicyFailure := failureEvent && markOpenAIWSCyberPolicy(c, message)
 
 		if eventType == "error" {
-			s.handleOpenAIWSErrorEventTransientFailure(ctx, account, mappedModel, lease.HandshakeHeaders(), message)
 			errCodeRaw, errTypeRaw, errMsgRaw := parseOpenAIWSErrorEventFields(message)
-			s.persistOpenAIWSRateLimitSignal(ctx, account, lease.HandshakeHeaders(), message, errCodeRaw, errTypeRaw, errMsgRaw)
+			isRateLimit := isOpenAIWSRateLimitError(errCodeRaw, errTypeRaw, errMsgRaw)
+			if !cyberPolicyFailure {
+				if isRateLimit {
+					s.persistOpenAIWSRateLimitSignal(
+						withoutOpenAI429AccountFailureDeferred(ctx), account, lease.HandshakeHeaders(), message,
+						errCodeRaw, errTypeRaw, errMsgRaw, mappedModel,
+					)
+				} else {
+					s.handleOpenAIWSFailureAccountSideEffects(ctx, account, mappedModel, lease.HandshakeHeaders(), message)
+				}
+			}
 			errMsg := strings.TrimSpace(errMsgRaw)
 			if errMsg == "" {
 				errMsg = "Upstream websocket error"
@@ -737,7 +736,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			if !clientDisconnected {
 				markOpenAIWSClientVisibleFailure(c, eventType, message)
 			}
-			upstreamTerminalEvent = s.handleOpenAIWSTerminalTransientFailure(ctx, account, mappedModel, lease.HandshakeHeaders(), message)
+			if eventType == "response.failed" && !cyberPolicyFailure {
+				s.handleOpenAIWSFailureAccountSideEffects(ctx, account, mappedModel, lease.HandshakeHeaders(), message)
+			}
+			upstreamTerminalEvent = normalizeOpenAIWSTerminalEvent(eventType)
 			// A terminal event must be the final JSON document in its WS message.
 			// Ignore any tail for the completed client turn, but never reuse the
 			// ambiguous upstream connection for another request.

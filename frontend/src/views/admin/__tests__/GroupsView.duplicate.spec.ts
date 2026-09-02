@@ -84,6 +84,7 @@ const sourceGroup: AdminGroup = {
   daily_limit_usd: null,
   weekly_limit_usd: null,
   monthly_limit_usd: null,
+  long_context_pricing_enabled: false,
   allow_image_generation: false,
   allow_batch_image_generation: false,
   image_rate_independent: false,
@@ -99,6 +100,10 @@ const sourceGroup: AdminGroup = {
   video_price_720p: null,
   video_price_1080p: null,
   web_search_price_per_call: null,
+  search_price_per_1k: null,
+  audio_realtime_price_per_min: null,
+  audio_tts_price_per_million_chars: null,
+  audio_stt_price_per_hour: null,
   peak_rate_enabled: false,
   peak_start: '',
   peak_end: '',
@@ -111,6 +116,13 @@ const sourceGroup: AdminGroup = {
   messages_dispatch_model_config: undefined,
   require_oauth_only: false,
   require_privacy_set: false,
+  allow_live: false,
+  force_openai_fast: false,
+  free_openai_fast: false,
+  model_pricing: [],
+  profit_control_enabled: false,
+  profit_min_margin: 0,
+  profit_safety_buffer: 0,
   created_at: '2026-07-16T00:00:00Z',
   updated_at: '2026-07-16T00:00:00Z',
   model_routing: null,
@@ -142,7 +154,9 @@ const DataTableStub = defineComponent({
 })
 
 const BaseDialogStub = defineComponent({
-  props: { show: { type: Boolean, default: false } },
+  props: {
+    show: { type: Boolean, default: false }
+  },
   template: '<div v-if="show"><slot /><slot name="footer" /></div>'
 })
 
@@ -352,6 +366,28 @@ describe('GroupsView duplicate action', () => {
     expect(showSuccess).toHaveBeenCalledWith('admin.groups.duplicateSuccess')
     expect(showError).toHaveBeenCalledWith('admin.groups.failedToLoad')
     expect(showError).not.toHaveBeenCalledWith('admin.groups.duplicateFailed')
+    wrapper.unmount()
+  })
+
+  it('shows the standardized API message when updating a group fails', async () => {
+    updateGroup.mockRejectedValueOnce({
+      status: 409,
+      code: 409,
+      message: 'group name already exists',
+      reason: 'GROUP_EXISTS'
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((button) => button.text() === 'common.edit')
+    expect(editButton).toBeTruthy()
+    await editButton!.trigger('click')
+    await flushPromises()
+    await wrapper.get('#edit-group-form').trigger('submit')
+    await flushPromises()
+
+    expect(updateGroup).toHaveBeenCalledTimes(1)
+    expect(showError).toHaveBeenCalledWith('group name already exists')
     wrapper.unmount()
   })
 })

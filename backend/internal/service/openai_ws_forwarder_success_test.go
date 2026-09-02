@@ -767,6 +767,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 		toolCorrector:    NewCodexToolCorrector(),
 		openaiWSPool:     pool,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          29,
 		Name:        "openai-oauth",
@@ -798,9 +799,12 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.Equal(t, "native-wsv2", gjson.Get(requestJSON, "input.0.namespace").String(), "OAuth WSv2 应保留原生 namespace")
 	require.Equal(t, openAIWSBetaV2Value, captureDialer.lastHeaders.Get("OpenAI-Beta"))
 	require.Equal(t, "remote_compaction_v2", captureDialer.lastHeaders.Get("x-codex-beta-features"))
-	// OAuth 账号的 session_id/conversation_id 应同时按 API key 和上游账号隔离，
-	// 测试中未设置 api_key 到 context，apiKeyID=0。
-	require.Equal(t, isolateOpenAIUpstreamSessionID(0, account, "sess-oauth-1"), captureDialer.lastHeaders.Get("session_id"))
+	// OAuth 主线使用 v3 Session，WS 握手与请求体必须复用同一个 UUIDv7；
+	// conversation_id 仍保留旧兼容隔离路径。
+	sessionID := captureDialer.lastHeaders.Get("session_id")
+	requireCodexFingerprintV3UUID(t, sessionID)
+	require.Equal(t, sessionID, gjson.Get(requestJSON, "prompt_cache_key").String())
+	require.Equal(t, sessionID, gjson.Get(requestJSON, "client_metadata.session_id").String())
 	require.Equal(t, isolateOpenAIUpstreamSessionID(0, account, "conv-oauth-1"), captureDialer.lastHeaders.Get("conversation_id"))
 }
 
@@ -840,6 +844,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthSanitizesInvalidNativeToolItemID
 		toolCorrector:    NewCodexToolCorrector(),
 		openaiWSPool:     pool,
 	}
+	configureOpenAICodexGatewayTest(svc)
 
 	account := &Account{
 		ID:          5662,
@@ -936,6 +941,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testi
 				toolCorrector:    NewCodexToolCorrector(),
 				openaiWSPool:     pool,
 			}
+			configureOpenAICodexGatewayTest(svc)
 			account := &Account{
 				ID:          129,
 				Name:        "openai-oauth",
@@ -1002,6 +1008,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthHonorsAccountUserAgent(t *testin
 		toolCorrector:    NewCodexToolCorrector(),
 		openaiWSPool:     pool,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          130,
 		Name:        "openai-oauth-custom-ua",
@@ -1068,6 +1075,7 @@ func TestOpenAIGatewayService_Forward_WSv2_HeaderSessionFallbackFromPromptCacheK
 		toolCorrector:    NewCodexToolCorrector(),
 		openaiWSPool:     pool,
 	}
+	configureOpenAICodexGatewayTest(svc)
 	account := &Account{
 		ID:          31,
 		Name:        "openai-oauth",
@@ -1090,11 +1098,15 @@ func TestOpenAIGatewayService_Forward_WSv2_HeaderSessionFallbackFromPromptCacheK
 	require.NotNil(t, result)
 	require.Equal(t, "resp_prompt_cache_key", result.RequestID)
 
-	// OAuth 账号的 session_id 应同时按 API key 和上游账号隔离（apiKeyID=0）。
-	require.Equal(t, isolateOpenAIUpstreamSessionID(0, account, "pcache_123"), captureDialer.lastHeaders.Get("session_id"))
+	// OAuth 主线将 prompt_cache_key 收敛到账号 Session UUIDv7，并保持头体一致。
+	sessionID := captureDialer.lastHeaders.Get("session_id")
+	requireCodexFingerprintV3UUID(t, sessionID)
+	requestJSON := requestToJSONString(captureConn.lastWrite)
+	require.Equal(t, sessionID, gjson.Get(requestJSON, "prompt_cache_key").String())
+	require.Equal(t, sessionID, gjson.Get(requestJSON, "client_metadata.session_id").String())
 	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))
 	require.NotNil(t, captureConn.lastWrite)
-	require.True(t, gjson.Get(requestToJSONString(captureConn.lastWrite), "stream").Exists())
+	require.True(t, gjson.Get(requestJSON, "stream").Exists())
 }
 
 func TestOpenAIGatewayService_Forward_WSv2_CodexFingerprintHandshakeBodyParityAndDefaultCacheKey(t *testing.T) {

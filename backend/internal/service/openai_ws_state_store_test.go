@@ -165,7 +165,7 @@ func TestOpenAIWSStateStoreConnectionTargetIsolation(t *testing.T) {
 	require.False(t, ok)
 	_, ok = getOpenAIWSSessionConn(store, 9, "session_target", targetB)
 	require.False(t, ok)
-	}
+}
 
 func TestOpenAIWSStateStore_HTTPResponseOwnerPersistsAcrossStoreInstances(t *testing.T) {
 	cache := &stubGatewayCache{}

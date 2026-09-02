@@ -1183,11 +1183,13 @@ func TestOpenAIGatewayService_StalePlacementWithoutLiveSlotFallsBackToNewResiden
 		OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
 	req.SessionHash = "stale-placement-session"
 
-	selection, found, err := svc.selectOpenAIUserAffinityPlacementForRequest(ctx, req)
+	decision := OpenAIAccountScheduleDecision{}
+	selection, found, err := svc.selectLegacyOpenAIUserAffinityPreflight(ctx, req, &decision)
 	require.NoError(t, err)
 	require.True(t, found)
 	require.NotNil(t, selection)
 	require.Equal(t, targetAccountID, selection.Account.ID)
+	require.Equal(t, openAIAccountScheduleLayerUserAffinity, decision.Layer)
 	require.Len(t, repo.reservations, 1)
 }
 

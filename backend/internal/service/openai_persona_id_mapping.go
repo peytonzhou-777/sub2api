@@ -386,22 +386,3 @@ func (s *OpenAIGatewayService) ResolveOpenAIPersonaBindingForClientResponse(ctx 
 	}
 	return binding, true, nil
 }
-
-// rewriteOpenCodeResponseIDForClient is kept as a small helper for callers
-// that need to project an event after its response ID has already been mapped.
-func rewriteOpenCodeResponseIDForClient(payload []byte, clientID string) []byte {
-	if len(payload) == 0 || strings.TrimSpace(clientID) == "" || !gjson.ValidBytes(payload) {
-		return payload
-	}
-	if gjson.GetBytes(payload, "response.id").Exists() {
-		if next, err := sjson.SetBytes(payload, "response.id", clientID); err == nil {
-			payload = next
-		}
-	}
-	if gjson.GetBytes(payload, "object").String() == "response" && gjson.GetBytes(payload, "id").Exists() {
-		if next, err := sjson.SetBytes(payload, "id", clientID); err == nil {
-			payload = next
-		}
-	}
-	return payload
-}

@@ -298,9 +298,12 @@ func newOpenAIUpstreamFailoverError(
 		RequestScopedTransient: requestScopedCapacity,
 	}
 	failoverErr.OpenAIRateLimitClass = classifyOpenAIRateLimit(statusCode, responseBody, upstreamMsg)
-	if failoverErr.OpenAIRateLimitClass == OpenAIRateLimitClassUsageQuota ||
-		failoverErr.OpenAIRateLimitClass == OpenAIRateLimitClassAccountConcurrency {
+	switch failoverErr.OpenAIRateLimitClass {
+	case OpenAIRateLimitClassUsageQuota:
 		failoverErr.RetryableOnSameAccount = false
+		failoverErr.MaxNextAccountSwitches = 1
+	case OpenAIRateLimitClassAccountConcurrency:
+		// 本地高粘性策略先耗尽安全的同账号重试，再限制为最多换号一次。
 		failoverErr.MaxNextAccountSwitches = 1
 	}
 	if isOpenAIRequestBodyTooLargeError(statusCode, upstreamMsg, responseBody) {
@@ -353,7 +356,7 @@ func classifyOpenAIRateLimit(statusCode int, payload []byte, message string) Ope
 }
 
 // newOpenAIAccountFailoverError 统一构造账号级故障，调用方的本地调度策略
-// 决定同账号重试和后续换号；本函数不引入上游独立的 429 重试窗口。
+// 决定同账号重试和后续换号；瞬时 OAuth 429 只在错误上附加有界重试元数据。
 func (s *OpenAIGatewayService) newOpenAIAccountFailoverError(
 	account *Account,
 	statusCode int,
@@ -376,13 +379,22 @@ func (s *OpenAIGatewayService) newOpenAIAccountFailoverErrorWithClassificationHe
 	shouldDisable bool,
 	retryableOnSameAccount bool,
 ) *UpstreamFailoverError {
+	oauth429Retry := s.shouldRetryOpenAIOAuth429OnSameAccountWithResponse(
+		account, statusCode, shouldDisable, classificationHeaders, responseBody,
+	)
 	failoverErr := newOpenAIUpstreamFailoverError(
 		statusCode,
 		responseHeaders,
 		responseBody,
 		upstreamMsg,
-		retryableOnSameAccount,
+		retryableOnSameAccount || oauth429Retry,
 	)
+	if oauth429Retry {
+		failoverErr.SameAccountRetryDeadline = s.openAIOAuth429RetryDeadline(account)
+		failoverErr.SameAccountRetryDelay = openAIOAuth429SameAccountRetryDelay(
+			responseHeaders, failoverErr.SameAccountRetryDeadline,
+		)
+	}
 	return failoverErr
 }
 
