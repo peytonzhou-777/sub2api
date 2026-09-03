@@ -5,6 +5,35 @@ import (
 	"testing"
 )
 
+func TestOpenAITransportScopeFromExecutionTargetUsesDynamicPersonaIdentity(t *testing.T) {
+	proxyID := int64(9)
+	target := OpenAIExecutionTarget{
+		AccountID: 42, AccountPersonaID: 81, PersonaGeneration: 3, SessionEpoch: 7,
+		CredentialChainID: "chain-dynamic", ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: "1.18.23", InstallationID: "install-dynamic",
+		UpstreamSessionID: "session-dynamic", EffectiveProxyID: &proxyID, ProxyRevision: 11,
+	}
+	ctx := ContextWithOpenAIExecutionTarget(context.Background(), target)
+	scope, ok := OpenAITransportScopeFromContext(ctx, target.AccountID)
+	if !ok {
+		t.Fatal("complete dynamic execution target was not accepted")
+	}
+	if scope.AccountPersonaID != target.AccountPersonaID || scope.ProfileID != target.ProfileID ||
+		scope.PersonaGeneration != target.PersonaGeneration || scope.ProxyRevision != target.ProxyRevision {
+		t.Fatalf("dynamic transport scope mismatch: %#v", scope)
+	}
+	other := scope
+	other.AccountPersonaID++
+	if scope.OpenAICPAScopeFingerprint("proxy") == other.OpenAICPAScopeFingerprint("proxy") {
+		t.Fatal("different AccountPersona instances shared a transport fingerprint")
+	}
+	other = scope
+	other.ProxyRevision++
+	if scope.OpenAICPAScopeFingerprint("proxy") == other.OpenAICPAScopeFingerprint("proxy") {
+		t.Fatal("different proxy revisions shared a transport fingerprint")
+	}
+}
+
 func TestOpenAITransportScopeFromContextRequiresV3AndFullGenerations(t *testing.T) {
 	binding := SessionPersonaSlotBinding{
 		AccountID:         42,

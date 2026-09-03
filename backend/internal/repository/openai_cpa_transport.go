@@ -101,19 +101,7 @@ func (s *httpUpstreamService) ensureOpenAICPAManager() *openAITransportManager {
 
 func openAITransportScopeFingerprint(scope service.OpenAITransportScope, proxyKey, poolKey string) string {
 	// 只保存不可逆摘要，避免把 CredentialChainID/InstallationID 写入缓存键日志。
-	raw := fmt.Sprintf("%d|%s|%s|%d|%d|%d|%d|%s|%s|%s|%s",
-		scope.AccountID,
-		scope.Persona,
-		scope.PersonaVersion,
-		scope.SlotID,
-		scope.SessionEpoch,
-		scope.SlotGeneration,
-		scope.SlotSetGeneration,
-		scope.CredentialChainID,
-		scope.InstallationID,
-		proxyKey,
-		poolKey,
-	)
+	raw := scope.Fingerprint(poolKey, proxyKey)
 	digest := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(digest[:])
 }
@@ -241,8 +229,9 @@ func (s *httpUpstreamService) acquireOpenAICPAClient(
 	manager.clients[cacheKey] = entry
 	slog.Debug("openai_cpa_transport_created",
 		"account_id", accountID,
-		"persona", scope.Persona,
-		"slot_id", scope.SlotID,
+		"account_persona_id", scope.AccountPersonaID,
+		"profile", effectiveOpenAITransportProfile(scope),
+		"session_epoch", scope.SessionEpoch,
 		"manager_generation", manager.generation,
 		"scope_fingerprint", scopeFingerprint[:12],
 		"account_concurrency", accountConcurrency,
@@ -250,10 +239,35 @@ func (s *httpUpstreamService) acquireOpenAICPAClient(
 	return entry, nil
 }
 
+func effectiveOpenAITransportProfile(scope service.OpenAITransportScope) service.SessionPersonaID {
+	if scope.ProfileID != "" {
+		return scope.ProfileID
+	}
+	return scope.Persona
+}
+
 // InvalidateOpenAIPersonaTransport removes only the revoked credential scope
 // from the current CPA manager. Active responses may finish, but no new request
 // can register on or reuse the removed entry.
 func (s *httpUpstreamService) InvalidateOpenAIPersonaTransport(accountID int64, persona service.SessionPersonaID, slotID int, credentialChainID string) {
+	s.invalidateOpenAICPATransports(func(scope service.OpenAITransportScope) bool {
+		return scope.MatchesCredential(accountID, persona, slotID, credentialChainID)
+	})
+}
+
+func (s *httpUpstreamService) InvalidateOpenAIAccountPersonaCredentialTransport(_ int64, accountPersonaID int64, credentialChainID string) {
+	s.invalidateOpenAICPATransports(func(scope service.OpenAITransportScope) bool {
+		return scope.MatchesAccountPersonaCredential(accountPersonaID, credentialChainID)
+	})
+}
+
+func (s *httpUpstreamService) InvalidateOpenAIAccountPersonaSessionTransport(_, accountPersonaID, sessionEpoch int64) {
+	s.invalidateOpenAICPATransports(func(scope service.OpenAITransportScope) bool {
+		return scope.MatchesAccountPersonaSession(accountPersonaID, sessionEpoch)
+	})
+}
+
+func (s *httpUpstreamService) invalidateOpenAICPATransports(matches func(service.OpenAITransportScope) bool) {
 	if s == nil {
 		return
 	}
@@ -266,7 +280,7 @@ func (s *httpUpstreamService) InvalidateOpenAIPersonaTransport(accountID int64, 
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	for key, entry := range manager.clients {
-		if entry == nil || !entry.openAITransportScope.MatchesCredential(accountID, persona, slotID, credentialChainID) {
+		if entry == nil || matches == nil || !matches(entry.openAITransportScope) {
 			continue
 		}
 		if entry.client != nil {

@@ -116,6 +116,7 @@ func ProvideOpenAIOAuthService(
 	privacyClientFactory PrivacyClientFactory,
 	personaCredentialRepo OpenAIPersonaCredentialRepository,
 	accountPersonaRepo OpenAIAccountPersonaRepository,
+	settingService *SettingService,
 	encryptor SecretEncryptor,
 	tokenCache GeminiTokenCache,
 ) *OpenAIOAuthService {
@@ -123,6 +124,7 @@ func ProvideOpenAIOAuthService(
 	svc.SetPrivacyClientFactory(privacyClientFactory)
 	svc.configurePersonaCredentialStore(personaCredentialRepo, encryptor, tokenCache)
 	svc.configureAccountPersonaStore(accountPersonaRepo)
+	svc.configureAccountPersonaSessionPolicy(settingService)
 	return svc
 }
 

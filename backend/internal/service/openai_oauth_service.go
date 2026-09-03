@@ -23,11 +23,18 @@ type OpenAIOAuthService struct {
 	personaCredentialEncryptor  SecretEncryptor
 	personaTokenCache           OpenAITokenCache
 	personaTransportInvalidator OpenAIPersonaTransportInvalidator
+	settingService              *SettingService
 }
 
 func (s *OpenAIOAuthService) configureAccountPersonaStore(repo OpenAIAccountPersonaRepository) {
 	if s != nil {
 		s.accountPersonaRepo = repo
+	}
+}
+
+func (s *OpenAIOAuthService) configureAccountPersonaSessionPolicy(settingService *SettingService) {
+	if s != nil {
+		s.settingService = settingService
 	}
 }
 

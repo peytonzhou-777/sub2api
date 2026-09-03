@@ -1652,6 +1652,24 @@ func (p *openAIWSConnPool) ClearSessionScope(accountID int64, sessionScope strin
 }
 
 func (p *openAIWSConnPool) ClearPersonaCredential(accountID int64, persona SessionPersonaID, slotID int, credentialChainID string) {
+	p.clearTransportScopes(accountID, func(scope OpenAITransportScope) bool {
+		return scope.MatchesCredential(accountID, persona, slotID, credentialChainID)
+	})
+}
+
+func (p *openAIWSConnPool) ClearAccountPersonaCredential(accountID, accountPersonaID int64, credentialChainID string) {
+	p.clearTransportScopes(accountID, func(scope OpenAITransportScope) bool {
+		return scope.MatchesAccountPersonaCredential(accountPersonaID, credentialChainID)
+	})
+}
+
+func (p *openAIWSConnPool) ClearAccountPersonaSession(accountID, accountPersonaID, sessionEpoch int64) {
+	p.clearTransportScopes(accountID, func(scope OpenAITransportScope) bool {
+		return scope.MatchesAccountPersonaSession(accountPersonaID, sessionEpoch)
+	})
+}
+
+func (p *openAIWSConnPool) clearTransportScopes(accountID int64, matches func(OpenAITransportScope) bool) {
 	if p == nil {
 		return
 	}
@@ -1662,7 +1680,7 @@ func (p *openAIWSConnPool) ClearPersonaCredential(accountID int64, persona Sessi
 	ap.mu.Lock()
 	toClose := make([]*openAIWSConn, 0)
 	for connID, conn := range ap.conns {
-		if conn == nil || !conn.transportScope.MatchesCredential(accountID, persona, slotID, credentialChainID) {
+		if conn == nil || matches == nil || !matches(conn.transportScope) {
 			continue
 		}
 		delete(ap.conns, connID)

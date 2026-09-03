@@ -38,6 +38,9 @@ var (
 	ErrOpenAIAccountPersonaCASConflict      = errors.New("OpenAI AccountPersona version changed")
 	ErrOpenAIDefaultPersonaProtected        = errors.New("DEFAULT_PERSONA_PROTECTED")
 	ErrOpenAIAccountPersonaIdentityMismatch = errors.New("OpenAI AccountPersona identity mismatch")
+	ErrOpenAIAccountPersonaSessionNotFound  = errors.New("OpenAI AccountPersona Session not found")
+	ErrOpenAIAccountPersonaSessionExpired   = errors.New("OpenAI AccountPersona Session expired")
+	ErrOpenAIAccountPersonaSessionOccupied  = errors.New("OpenAI AccountPersona Session is occupied")
 )
 
 // OpenAIAccountPersona 是账号下稳定的应用/设备实例，Position 仅用于管理排序。
@@ -85,6 +88,9 @@ type OpenAIAccountPersonaSession struct {
 	ProfileVersion    string
 	EffectiveProxyID  *int64
 	ProxyRevision     int64
+	EffectiveProxyURL string `json:"-"`
+	InstallationID    string
+	ProxySnapshotSet  bool
 	StartedAt         time.Time
 	LastActiveAt      *time.Time
 	DrainingStartedAt *time.Time
@@ -112,19 +118,21 @@ type OpenAIAccountPersonaUpdate struct {
 	MaxActiveSessionsConfigured     bool
 	MaxActiveClientSessionsOverride *int
 	NewUpstreamSessionID            string
+	OldSessionExpiresAt             time.Time
 }
 
 type OpenAIAccountPersonaAuthorization struct {
-	AccountID          int64
-	AccountPersonaID   int64
-	ExpectedRowVersion int64
-	PersonaGeneration  int64
-	CredentialChainID  string
-	EncryptedPayload   json.RawMessage
-	ChatGPTAccountID   string
-	OAuthClientID      string
-	InstallationID     string
-	UpstreamSessionID  string
+	AccountID           int64
+	AccountPersonaID    int64
+	ExpectedRowVersion  int64
+	PersonaGeneration   int64
+	CredentialChainID   string
+	EncryptedPayload    json.RawMessage
+	ChatGPTAccountID    string
+	OAuthClientID       string
+	InstallationID      string
+	UpstreamSessionID   string
+	OldSessionExpiresAt time.Time
 }
 
 type OpenAIAccountPersonaCredentialUpdate struct {
@@ -133,6 +141,24 @@ type OpenAIAccountPersonaCredentialUpdate struct {
 	EncryptedPayload  json.RawMessage
 	ChatGPTAccountID  string
 	InstallationID    string
+}
+
+// OpenAIAccountPersonaSessionPrepareInput 描述新根请求或管理员操作对 current epoch 的原子准备。
+type OpenAIAccountPersonaSessionPrepareInput struct {
+	AccountID          int64
+	AccountPersonaID   int64
+	ExpectedRowVersion int64
+	Now                time.Time
+	Policy             CodexFingerprintEpochPolicy
+	NewUpstreamSession string
+	Manual             bool
+	Force              bool
+}
+
+type OpenAIAccountPersonaSessionPrepareResult struct {
+	Persona OpenAIAccountPersona
+	Session OpenAIAccountPersonaSession
+	Rotated bool
 }
 
 // OpenAIPrimaryPersonaCreate 由账号首次 Codex OAuth 回调生成，并与账号同事务落库。
@@ -159,6 +185,9 @@ type OpenAIAccountPersonaRepository interface {
 	ClaimAccountPersonaCredentialRefresh(ctx context.Context, accountPersonaID int64, credentialChainID string, expectedVersion int64) (bool, error)
 	CompareAndSwapAccountPersonaToken(ctx context.Context, input OpenAIAccountPersonaCredentialUpdate, expectedVersion int64) (bool, error)
 	MarkAccountPersonaCredentialInvalid(ctx context.Context, accountPersonaID int64, credentialChainID string, expectedVersion int64, reason string) error
+	PrepareAccountPersonaSession(ctx context.Context, input OpenAIAccountPersonaSessionPrepareInput) (*OpenAIAccountPersonaSessionPrepareResult, error)
+	GetAccountPersonaSession(ctx context.Context, accountID, accountPersonaID, sessionEpoch int64, now time.Time) (*OpenAIAccountPersonaSession, error)
+	TouchAccountPersonaSession(ctx context.Context, accountPersonaID, sessionEpoch int64, now time.Time) error
 }
 
 // OpenAIExecutionTarget 是选定账号后贯穿 HTTP、WS、compact 与 OAuth 的完整身份边界。
@@ -174,6 +203,7 @@ type OpenAIExecutionTarget struct {
 	UpstreamSessionID string
 	EffectiveProxyID  *int64
 	ProxyRevision     int64
+	EffectiveProxyURL string `json:"-"`
 	UserGroupLeaseID  int64
 	PersonaLeaseID    int64
 	ReservationToken  string
@@ -183,6 +213,28 @@ func (t OpenAIExecutionTarget) Valid() bool {
 	return t.AccountID > 0 && t.AccountPersonaID > 0 && t.PersonaGeneration > 0 &&
 		t.SessionEpoch > 0 && t.CredentialChainID != "" && t.ProfileID != "" &&
 		t.ProfileVersion != "" && t.InstallationID != "" && t.UpstreamSessionID != ""
+}
+
+// OpenAIExecutionTargetFromPersonaSession 构造贯穿 HTTP/WS/compact 的不可变执行目标。
+func OpenAIExecutionTargetFromPersonaSession(persona OpenAIAccountPersona, session OpenAIAccountPersonaSession) (OpenAIExecutionTarget, error) {
+	if persona.ID <= 0 || persona.AccountID <= 0 || session.AccountPersonaID != persona.ID ||
+		session.SessionEpoch <= 0 || session.PersonaGeneration <= 0 ||
+		session.CredentialChainID == "" || session.ProfileID != persona.ProfileID ||
+		session.ProfileVersion != persona.ProfileVersion || session.InstallationID == "" {
+		return OpenAIExecutionTarget{}, ErrOpenAIAccountPersonaIdentityMismatch
+	}
+	target := OpenAIExecutionTarget{
+		AccountID: persona.AccountID, AccountPersonaID: persona.ID,
+		PersonaGeneration: session.PersonaGeneration, SessionEpoch: session.SessionEpoch,
+		CredentialChainID: session.CredentialChainID, ProfileID: session.ProfileID,
+		ProfileVersion: session.ProfileVersion, InstallationID: session.InstallationID,
+		UpstreamSessionID: session.UpstreamSessionID, EffectiveProxyID: session.EffectiveProxyID,
+		ProxyRevision: session.ProxyRevision, EffectiveProxyURL: session.EffectiveProxyURL,
+	}
+	if !target.Valid() {
+		return OpenAIExecutionTarget{}, ErrOpenAIAccountPersonaIdentityMismatch
+	}
+	return target, nil
 }
 
 type openAIExecutionTargetContextKey struct{}

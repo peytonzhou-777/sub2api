@@ -163,7 +163,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	privacyClientFactory := providePrivacyClientFactory()
 	openAIPersonaCredentialRepository := repository.NewOpenAIPersonaCredentialRepository(db)
 	openAIAccountPersonaRepository := repository.NewOpenAIAccountPersonaRepository(db)
-	openAIOAuthService := service.ProvideOpenAIOAuthService(proxyRepository, openAIOAuthClient, privacyClientFactory, openAIPersonaCredentialRepository, openAIAccountPersonaRepository, secretEncryptor, geminiTokenCache)
+	openAIOAuthService := service.ProvideOpenAIOAuthService(proxyRepository, openAIOAuthClient, privacyClientFactory, openAIPersonaCredentialRepository, openAIAccountPersonaRepository, settingService, secretEncryptor, geminiTokenCache)
 	openAITokenProvider := service.ProvideOpenAITokenProvider(accountRepository, geminiTokenCache, openAIOAuthService, oAuthRefreshAPI)
 	grokOAuthClient := repository.NewGrokOAuthClient()
 	grokOAuthService := service.ProvideGrokOAuthService(proxyRepository, grokOAuthClient, configConfig, redisClient)

@@ -615,6 +615,36 @@ func (s *OpenAIGatewayService) InvalidateOpenAIPersonaTransport(accountID int64,
 	}
 }
 
+func (s *OpenAIGatewayService) InvalidateOpenAIAccountPersonaCredentialTransport(accountID, accountPersonaID int64, credentialChainID string) {
+	if s == nil || accountID <= 0 || accountPersonaID <= 0 {
+		return
+	}
+	if invalidator, ok := s.httpUpstream.(OpenAIPersonaTransportInvalidator); ok {
+		invalidator.InvalidateOpenAIAccountPersonaCredentialTransport(accountID, accountPersonaID, credentialChainID)
+	}
+	if s.openaiWSPool != nil {
+		s.openaiWSPool.ClearAccountPersonaCredential(accountID, accountPersonaID, credentialChainID)
+	}
+	if dialer, ok := s.openaiWSPassthroughDialer.(*coderOpenAIWSClientDialer); ok {
+		dialer.invalidateAccountPersonaCredentialTransport(accountPersonaID, credentialChainID)
+	}
+}
+
+func (s *OpenAIGatewayService) InvalidateOpenAIAccountPersonaSessionTransport(accountID, accountPersonaID, sessionEpoch int64) {
+	if s == nil || accountID <= 0 || accountPersonaID <= 0 || sessionEpoch <= 0 {
+		return
+	}
+	if invalidator, ok := s.httpUpstream.(OpenAIPersonaTransportInvalidator); ok {
+		invalidator.InvalidateOpenAIAccountPersonaSessionTransport(accountID, accountPersonaID, sessionEpoch)
+	}
+	if s.openaiWSPool != nil {
+		s.openaiWSPool.ClearAccountPersonaSession(accountID, accountPersonaID, sessionEpoch)
+	}
+	if dialer, ok := s.openaiWSPassthroughDialer.(*coderOpenAIWSClientDialer); ok {
+		dialer.invalidateAccountPersonaSessionTransport(accountPersonaID, sessionEpoch)
+	}
+}
+
 var _ OpenAIPersonaTransportInvalidator = (*OpenAIGatewayService)(nil)
 
 // ResolveChannelMapping 解析渠道级模型映射（代理到 ChannelService）

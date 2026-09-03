@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
@@ -64,6 +65,18 @@ func (*openAIAccountPersonaRepoStub) CompareAndSwapAccountPersonaToken(context.C
 
 func (*openAIAccountPersonaRepoStub) MarkAccountPersonaCredentialInvalid(context.Context, int64, string, int64, string) error {
 	return nil
+}
+
+func (*openAIAccountPersonaRepoStub) PrepareAccountPersonaSession(context.Context, OpenAIAccountPersonaSessionPrepareInput) (*OpenAIAccountPersonaSessionPrepareResult, error) {
+	return nil, ErrOpenAIAccountPersonaSessionNotFound
+}
+
+func (*openAIAccountPersonaRepoStub) GetAccountPersonaSession(context.Context, int64, int64, int64, time.Time) (*OpenAIAccountPersonaSession, error) {
+	return nil, ErrOpenAIAccountPersonaSessionNotFound
+}
+
+func (*openAIAccountPersonaRepoStub) TouchAccountPersonaSession(context.Context, int64, int64, time.Time) error {
+	return ErrOpenAIAccountPersonaSessionNotFound
 }
 
 func TestAccountPersonaOAuthRejectsDefaultPersonaAuthorization(t *testing.T) {

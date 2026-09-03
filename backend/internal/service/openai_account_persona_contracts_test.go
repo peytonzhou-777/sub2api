@@ -35,3 +35,20 @@ func TestOpenAIExecutionTargetContextRequiresCompleteIdentity(t *testing.T) {
 	_, ok = OpenAIExecutionTargetFromContext(ContextWithOpenAIExecutionTarget(context.Background(), invalid))
 	require.False(t, ok)
 }
+
+func TestOpenAIExecutionTargetUsesHistoricalSessionIdentity(t *testing.T) {
+	persona := OpenAIAccountPersona{
+		ID: 2, AccountID: 1, ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: "1.18.23", PersonaGeneration: 9, InstallationID: "current-installation",
+	}
+	session := OpenAIAccountPersonaSession{
+		AccountPersonaID: 2, SessionEpoch: 4, PersonaGeneration: 3,
+		CredentialChainID: "historical-chain", ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: "1.18.23", InstallationID: "historical-installation",
+		UpstreamSessionID: "historical-session", ProxySnapshotSet: true,
+	}
+	target, err := OpenAIExecutionTargetFromPersonaSession(persona, session)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), target.PersonaGeneration)
+	require.Equal(t, "historical-installation", target.InstallationID)
+}

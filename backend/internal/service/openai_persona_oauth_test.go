@@ -247,6 +247,13 @@ func (s *openAIPersonaTransportInvalidatorStub) InvalidateOpenAIPersonaTransport
 	s.chains = append(s.chains, credentialChainID)
 }
 
+func (s *openAIPersonaTransportInvalidatorStub) InvalidateOpenAIAccountPersonaCredentialTransport(_, _ int64, credentialChainID string) {
+	s.chains = append(s.chains, credentialChainID)
+}
+
+func (*openAIPersonaTransportInvalidatorStub) InvalidateOpenAIAccountPersonaSessionTransport(_, _, _ int64) {
+}
+
 func TestOpenAIPersonaOAuth_RevokeDestroysAllLocalSlotChains(t *testing.T) {
 	account := &Account{
 		ID: 45, Platform: PlatformOpenAI, Type: AccountTypeOAuth,

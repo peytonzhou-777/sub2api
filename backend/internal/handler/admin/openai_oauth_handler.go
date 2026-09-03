@@ -380,6 +380,35 @@ func (h *OpenAIOAuthHandler) RefreshAccountPersonaAuthorization(c *gin.Context) 
 	response.NotFound(c, "AccountPersona not found")
 }
 
+// RotateAccountPersonaSession 推进单个 Persona 的 Session epoch，不返回原始出站 Session ID。
+func (h *OpenAIOAuthHandler) RotateAccountPersonaSession(c *gin.Context) {
+	accountID, personaID, ok := parseOpenAIAccountPersonaTarget(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		RowVersion   int64  `json:"row_version" binding:"required"`
+		Force        bool   `json:"force"`
+		Confirmation string `json:"confirmation"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if req.Force && req.Confirmation != "FORCE_ROTATE_PERSONA_SESSION" {
+		response.BadRequest(c, "force rotation requires explicit confirmation")
+		return
+	}
+	result, err := h.openaiOAuthService.RotateAccountPersonaSession(
+		c.Request.Context(), accountID, personaID, req.RowVersion, req.Force,
+	)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, openAIAccountPersonaFromService(result.Persona))
+}
+
 func (h *OpenAIOAuthHandler) ListAccountPersonaProfiles(c *gin.Context) {
 	profiles := service.NewDefaultSessionPersonaRegistry().List()
 	type profileDTO struct {

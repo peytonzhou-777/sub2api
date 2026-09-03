@@ -204,3 +204,37 @@ func TestOpenAICPATransportInvalidationOnlyRemovesMatchingCredential(t *testing.
 		}
 	}
 }
+
+func TestOpenAICPATransportDynamicPersonaSessionInvalidation(t *testing.T) {
+	cfg := &config.Config{Gateway: config.GatewayConfig{
+		OpenAIHTTP2: config.GatewayOpenAIHTTP2Config{Enabled: true}, MaxUpstreamClients: 10,
+	}}
+	svc := &httpUpstreamService{cfg: cfg, clients: make(map[string]*upstreamClientEntry)}
+	manager := svc.ensureOpenAICPAManager()
+	poolKey := "dynamic-test|profile:" + tlsfingerprint.CPAChromeProfileVersion
+	target := service.OpenAITransportScope{
+		AccountID: 42, AccountPersonaID: 1001, ProfileID: service.SessionPersonaOpenCode,
+		ProfileVersion: "1.18.23", PersonaGeneration: 2, SessionEpoch: 5,
+		CredentialChainID: "chain", InstallationID: "install", ProxyRevision: 3,
+	}
+	otherEpoch := target
+	otherEpoch.SessionEpoch++
+	otherPersona := target
+	otherPersona.AccountPersonaID++
+	for _, scope := range []service.OpenAITransportScope{target, otherEpoch, otherPersona} {
+		fingerprint := openAITransportScopeFingerprint(scope, directProxyKey, poolKey)
+		_, err := svc.acquireOpenAICPAClient(manager, fingerprint, directProxyKey, nil, poolKey, poolSettings{}, 42, 1, scope)
+		if err != nil {
+			t.Fatalf("acquire dynamic CPA transport: %v", err)
+		}
+	}
+	svc.InvalidateOpenAIAccountPersonaSessionTransport(target.AccountID, target.AccountPersonaID, target.SessionEpoch)
+	if len(manager.clients) != 2 {
+		t.Fatalf("expected only one dynamic epoch to be removed, got %d entries", len(manager.clients))
+	}
+	for _, entry := range manager.clients {
+		if entry.openAITransportScope.MatchesAccountPersonaSession(target.AccountPersonaID, target.SessionEpoch) {
+			t.Fatal("invalidated dynamic Persona epoch remained registered")
+		}
+	}
+}

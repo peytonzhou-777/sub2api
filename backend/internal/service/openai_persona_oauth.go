@@ -143,6 +143,11 @@ func (s *OpenAIOAuthService) UpdateAccountPersona(ctx context.Context, input Ope
 	if input.ProxyConfigured || (input.Enabled != nil && *input.Enabled) ||
 		(input.State != nil && *input.State == OpenAIAccountPersonaStateActive) {
 		input.NewUpstreamSessionID, _ = openai.GenerateSessionID()
+		policy := defaultCodexFingerprintEpochPolicy()
+		if s.settingService != nil {
+			policy = s.settingService.GetCodexFingerprintEpochPolicy(ctx)
+		}
+		input.OldSessionExpiresAt = time.Now().Add(time.Duration(policy.OldEpochGraceHours) * time.Hour)
 	}
 	persona, err := s.accountPersonaRepo.UpdateAccountPersona(ctx, input)
 	return persona, openAIAccountPersonaAPIError(err)
@@ -270,12 +275,17 @@ func (s *OpenAIOAuthService) PersistAccountPersonaAuthorization(ctx context.Cont
 	if err != nil {
 		return nil, err
 	}
+	policy := defaultCodexFingerprintEpochPolicy()
+	if s.settingService != nil {
+		policy = s.settingService.GetCodexFingerprintEpochPolicy(ctx)
+	}
 	return s.accountPersonaRepo.AuthorizeAccountPersona(ctx, OpenAIAccountPersonaAuthorization{
 		AccountID: account.ID, AccountPersonaID: result.AccountPersonaID,
 		ExpectedRowVersion: result.PersonaRowVersion, PersonaGeneration: result.PersonaGeneration,
 		CredentialChainID: result.CredentialChainID, EncryptedPayload: payload,
 		ChatGPTAccountID: actualAccountID, OAuthClientID: result.TokenInfo.ClientID,
 		InstallationID: result.InstallationID, UpstreamSessionID: upstreamSessionID,
+		OldSessionExpiresAt: time.Now().Add(time.Duration(policy.OldEpochGraceHours) * time.Hour),
 	})
 }
 
@@ -283,8 +293,19 @@ func (s *OpenAIOAuthService) RevokeAccountPersonaAuthorization(ctx context.Conte
 	if s == nil || s.accountPersonaRepo == nil {
 		return ErrOpenAIPersonaCredentialStoreUnavailable
 	}
-	_, err := s.accountPersonaRepo.RevokeAccountPersonaAuthorization(ctx, accountID, accountPersonaID, expectedRowVersion)
-	return openAIAccountPersonaAPIError(err)
+	chainIDs, err := s.accountPersonaRepo.RevokeAccountPersonaAuthorization(ctx, accountID, accountPersonaID, expectedRowVersion)
+	if err != nil {
+		return openAIAccountPersonaAPIError(err)
+	}
+	for _, chainID := range chainIDs {
+		if s.personaTokenCache != nil {
+			_ = s.personaTokenCache.DeleteAccessToken(ctx, OpenAITokenCacheKeyForAccountPersona(accountPersonaID, chainID))
+		}
+		if s.personaTransportInvalidator != nil {
+			s.personaTransportInvalidator.InvalidateOpenAIAccountPersonaCredentialTransport(accountID, accountPersonaID, chainID)
+		}
+	}
+	return nil
 }
 
 // RefreshAccountPersonaCredential 是动态 Persona 的唯一刷新入口，锁和 CAS 均绑定稳定 Persona ID。

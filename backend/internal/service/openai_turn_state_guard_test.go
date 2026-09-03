@@ -123,6 +123,26 @@ func TestOpenAITurnStateScopeMismatchReasons(t *testing.T) {
 	}
 }
 
+func TestOpenAITurnStateScopeV3BindsAccountPersonaAndEpoch(t *testing.T) {
+	base := OpenAITurnStateScope{
+		Version: 3, AccountID: 42, AccountPersonaID: 81,
+		Persona: SessionPersonaCodexCLIStrict, PersonaVersion: "0.149.0",
+		PersonaGeneration: 2, SessionEpoch: 5, CredentialChainID: "chain",
+		InstallationID: "installation", ProxyRevision: 7,
+		SessionScopeHash: "scope", UpstreamSessionID: "session",
+		UpstreamThreadID: "thread", UpstreamTurnID: "turn",
+		OutboundProfile: "0.149.0", TransportScopeDigest: "transport",
+	}
+	require.True(t, base.Valid())
+	other := base
+	other.AccountPersonaID++
+	require.False(t, base.Equal(other))
+	require.Equal(t, "cross_account_persona", openAITurnStateScopeMismatchReason(base, other))
+	other = base
+	other.SessionEpoch++
+	require.Equal(t, "cross_generation", openAITurnStateScopeMismatchReason(base, other))
+}
+
 func TestOpenAITurnStateAttemptAllowsOnlyExactScope(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	groupID := int64(9)

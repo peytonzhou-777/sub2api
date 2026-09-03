@@ -552,6 +552,7 @@ func registerOpenAIOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		openai.POST("/accounts/:id/personas/:persona_id/oauth/exchange-code", h.Admin.OpenAIOAuth.ExchangeAccountPersonaCode)
 		openai.POST("/accounts/:id/personas/:persona_id/oauth/refresh", h.Admin.OpenAIOAuth.RefreshAccountPersonaAuthorization)
 		openai.DELETE("/accounts/:id/personas/:persona_id/oauth", h.Admin.OpenAIOAuth.RevokeAccountPersonaAuthorization)
+		openai.POST("/accounts/:id/personas/:persona_id/session/rotate", h.Admin.OpenAIOAuth.RotateAccountPersonaSession)
 		openai.POST("/accounts/:id/persona-slots/:slot_id/oauth/generate-auth-url", h.Admin.OpenAIOAuth.GeneratePersonaAuthURL)
 		openai.POST("/accounts/:id/persona-slots/:slot_id/oauth/exchange-code", h.Admin.OpenAIOAuth.ExchangePersonaCode)
 		openai.POST("/accounts/:id/persona-slots/:slot_id/oauth/refresh", h.Admin.OpenAIOAuth.RefreshPersonaToken)

@@ -204,12 +204,20 @@ VALUES ($1, 'codex_cli_strict', $2, NULL, $3::jsonb, $4, $5, 1, 'ready', '', NOW
 		strings.TrimSpace(primary.InstallationID), accountPersonaID, strings.TrimSpace(primary.ProfileVersion)); err != nil {
 		return err
 	}
+	primaryProxyID, primaryProxyRevision, primaryProxyURL, err := resolveAccountPersonaProxySnapshot(ctx, tx, &service.OpenAIAccountPersona{
+		ID: accountPersonaID, AccountID: account.ID, ProxyID: account.ProxyID,
+	})
+	if err != nil {
+		return err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO openai_account_persona_sessions
     (account_persona_id, session_epoch, upstream_session_id, state, persona_generation,
-     credential_chain_id, profile_id, profile_version, effective_proxy_id, proxy_revision)
-VALUES ($1, 1, $2, 'current', 1, $3, 'codex_cli_strict', $4, $5::bigint, 0)`,
+     credential_chain_id, profile_id, profile_version, effective_proxy_id, proxy_revision,
+     effective_proxy_url, installation_id, proxy_snapshot_set)
+VALUES ($1, 1, $2, 'current', 1, $3, 'codex_cli_strict', $4, $5::bigint, $6, $7, $8, TRUE)`,
 		accountPersonaID, strings.TrimSpace(primary.UpstreamSessionID),
-		strings.TrimSpace(primary.CredentialChainID), strings.TrimSpace(primary.ProfileVersion), account.ProxyID); err != nil {
+		strings.TrimSpace(primary.CredentialChainID), strings.TrimSpace(primary.ProfileVersion),
+		primaryProxyID, primaryProxyRevision, primaryProxyURL, strings.TrimSpace(primary.InstallationID)); err != nil {
 		return err
 	}
 	if err = enqueueSchedulerOutbox(ctx, tx, service.SchedulerOutboxEventAccountChanged, &account.ID, nil, buildSchedulerGroupPayload(account.GroupIDs)); err != nil {

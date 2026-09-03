@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"hash/fnv"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
@@ -58,6 +61,43 @@ func scanOpenAIAccountPersona(scanner interface{ Scan(...any) error }) (*service
 		persona.RetiredAt = &retiredAt.Time
 	}
 	return &persona, nil
+}
+
+const openAIAccountPersonaSessionSelect = `SELECT account_persona_id, session_epoch, upstream_session_id,
+       state, persona_generation, credential_chain_id, profile_id, profile_version,
+       effective_proxy_id, proxy_revision, effective_proxy_url, installation_id, proxy_snapshot_set, started_at, last_active_at,
+       draining_started_at, expires_at
+FROM openai_account_persona_sessions`
+
+func scanOpenAIAccountPersonaSession(scanner interface{ Scan(...any) error }) (*service.OpenAIAccountPersonaSession, error) {
+	var (
+		session                           service.OpenAIAccountPersonaSession
+		proxyID                           sql.NullInt64
+		lastActive, drainingAt, expiresAt sql.NullTime
+	)
+	if err := scanner.Scan(
+		&session.AccountPersonaID, &session.SessionEpoch, &session.UpstreamSessionID,
+		&session.State, &session.PersonaGeneration, &session.CredentialChainID,
+		&session.ProfileID, &session.ProfileVersion, &proxyID, &session.ProxyRevision,
+		&session.EffectiveProxyURL, &session.InstallationID, &session.ProxySnapshotSet,
+		&session.StartedAt, &lastActive, &drainingAt, &expiresAt,
+	); err != nil {
+		return nil, err
+	}
+	if proxyID.Valid {
+		value := proxyID.Int64
+		session.EffectiveProxyID = &value
+	}
+	if lastActive.Valid {
+		session.LastActiveAt = &lastActive.Time
+	}
+	if drainingAt.Valid {
+		session.DrainingStartedAt = &drainingAt.Time
+	}
+	if expiresAt.Valid {
+		session.ExpiresAt = &expiresAt.Time
+	}
+	return &session, nil
 }
 
 func (r *openAIAccountPersonaRepository) ListAccountPersonas(ctx context.Context, accountID int64) ([]service.OpenAIAccountPersona, error) {
@@ -230,20 +270,30 @@ WHERE account_id = $1 AND id = $2 AND state <> 'retired' FOR UPDATE`, input.Acco
 		if current.CurrentCredentialChainID == "" {
 			return nil, errors.New("cannot rotate an unauthorized Persona Session")
 		}
+		if input.OldSessionExpiresAt.IsZero() {
+			return nil, errors.New("old Persona Session expiry is required")
+		}
+		snapshotPersona := *current
+		snapshotPersona.ProxyID = proxyID
+		effectiveProxyID, proxyRevision, proxyURL, snapshotErr := resolveAccountPersonaProxySnapshot(ctx, tx, &snapshotPersona)
+		if snapshotErr != nil {
+			return nil, snapshotErr
+		}
 		personaGeneration++
 		sessionEpoch++
 		if _, err = tx.ExecContext(ctx, `UPDATE openai_account_persona_sessions
-SET state = 'draining', draining_started_at = NOW(), updated_at = NOW()
-WHERE account_persona_id = $1 AND state = 'current'`, current.ID); err != nil {
+SET state = 'draining', draining_started_at = NOW(), expires_at = $1::timestamptz, updated_at = NOW()
+WHERE account_persona_id = $2 AND state = 'current'`, input.OldSessionExpiresAt, current.ID); err != nil {
 			return nil, err
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO openai_account_persona_sessions
     (account_persona_id, session_epoch, upstream_session_id, state, persona_generation,
-     credential_chain_id, profile_id, profile_version, effective_proxy_id, proxy_revision)
-VALUES ($1, $2, $3, 'current', $4, $5, $6, $7, $8::bigint, $9)`,
+     credential_chain_id, profile_id, profile_version, effective_proxy_id, proxy_revision,
+     effective_proxy_url, installation_id, proxy_snapshot_set)
+VALUES ($1, $2, $3, 'current', $4, $5, $6, $7, $8::bigint, $9, $10, $11, TRUE)`,
 			current.ID, sessionEpoch, strings.TrimSpace(input.NewUpstreamSessionID), personaGeneration,
 			current.CurrentCredentialChainID, string(current.ProfileID), current.ProfileVersion,
-			proxyID, personaGeneration); err != nil {
+			effectiveProxyID, proxyRevision, proxyURL, current.InstallationID); err != nil {
 			return nil, err
 		}
 	}
@@ -375,14 +425,21 @@ WHERE account_id = $1 AND id = $2 AND state <> 'retired' FOR UPDATE`, input.Acco
 	if nextEpoch < 1 {
 		nextEpoch = 1
 	}
+	if input.OldSessionExpiresAt.IsZero() {
+		return nil, errors.New("old Persona Session expiry is required")
+	}
+	effectiveProxyID, proxyRevision, proxyURL, err := resolveAccountPersonaProxySnapshot(ctx, tx, persona)
+	if err != nil {
+		return nil, err
+	}
 	if _, err = tx.ExecContext(ctx, `UPDATE openai_account_persona_credentials
 SET state = 'draining', updated_at = NOW()
 WHERE account_persona_id = $1 AND state IN ('ready', 'refreshing')`, persona.ID); err != nil {
 		return nil, err
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE openai_account_persona_sessions
-SET state = 'draining', draining_started_at = NOW(), updated_at = NOW()
-WHERE account_persona_id = $1 AND state = 'current'`, persona.ID); err != nil {
+SET state = 'draining', draining_started_at = NOW(), expires_at = $1::timestamptz, updated_at = NOW()
+WHERE account_persona_id = $2 AND state = 'current'`, input.OldSessionExpiresAt, persona.ID); err != nil {
 		return nil, err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO openai_account_persona_credentials
@@ -397,10 +454,12 @@ VALUES ($1, $2, $3, NULL, $4::jsonb, $5, $6, 1, 'ready', '', NOW(), $7, $2, $8, 
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO openai_account_persona_sessions
     (account_persona_id, session_epoch, upstream_session_id, state, persona_generation,
-     credential_chain_id, profile_id, profile_version, effective_proxy_id, proxy_revision)
-VALUES ($1, $2, $3, 'current', $4, $5, $6, $7, $8::bigint, $9)`, persona.ID, nextEpoch,
+     credential_chain_id, profile_id, profile_version, effective_proxy_id, proxy_revision,
+     effective_proxy_url, installation_id, proxy_snapshot_set)
+VALUES ($1, $2, $3, 'current', $4, $5, $6, $7, $8::bigint, $9, $10, $11, TRUE)`, persona.ID, nextEpoch,
 		strings.TrimSpace(input.UpstreamSessionID), nextGeneration, strings.TrimSpace(input.CredentialChainID),
-		string(persona.ProfileID), persona.ProfileVersion, persona.ProxyID, nextGeneration); err != nil {
+		string(persona.ProfileID), persona.ProfileVersion, effectiveProxyID, proxyRevision,
+		proxyURL, strings.TrimSpace(input.InstallationID)); err != nil {
 		return nil, err
 	}
 	updated, err := scanOpenAIAccountPersona(tx.QueryRowContext(ctx, `UPDATE openai_account_personas
@@ -589,6 +648,256 @@ WHERE id = $1 AND current_credential_chain_id = $2`, accountPersonaID, strings.T
 		return err
 	}
 	return tx.Commit()
+}
+
+// PrepareAccountPersonaSession 在数据库锁内判断占用和轮转，避免不同实例同时创建 current epoch。
+func (r *openAIAccountPersonaRepository) PrepareAccountPersonaSession(ctx context.Context, input service.OpenAIAccountPersonaSessionPrepareInput) (*service.OpenAIAccountPersonaSessionPrepareResult, error) {
+	if r == nil || r.db == nil || input.AccountID <= 0 || input.AccountPersonaID <= 0 || input.Now.IsZero() ||
+		strings.TrimSpace(input.NewUpstreamSession) == "" {
+		return nil, errors.New("invalid OpenAI AccountPersona Session prepare")
+	}
+	if err := service.ValidateCodexFingerprintEpochPolicy(input.Policy); err != nil {
+		return nil, err
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	persona, err := scanOpenAIAccountPersona(tx.QueryRowContext(ctx, openAIAccountPersonaSelect+`
+WHERE account_id = $1 AND id = $2 AND state <> 'retired' FOR UPDATE`, input.AccountID, input.AccountPersonaID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, service.ErrOpenAIAccountPersonaNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if input.ExpectedRowVersion > 0 && persona.RowVersion != input.ExpectedRowVersion {
+		return nil, service.ErrOpenAIAccountPersonaCASConflict
+	}
+	if !persona.AcceptsNewRoot() {
+		return nil, service.ErrOpenAIAccountPersonaIdentityMismatch
+	}
+	session, err := scanOpenAIAccountPersonaSession(tx.QueryRowContext(ctx, openAIAccountPersonaSessionSelect+`
+WHERE account_persona_id = $1 AND session_epoch = $2 AND state = 'current' FOR UPDATE`,
+		persona.ID, persona.CurrentSessionEpoch))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, service.ErrOpenAIAccountPersonaSessionNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	proxyID, proxyRevision, proxyURL, err := resolveAccountPersonaProxySnapshot(ctx, tx, persona)
+	if err != nil {
+		return nil, err
+	}
+	// 253/254 阶段创建的 Session 尚无显式代理快照；首次进入新运行时前补齐。
+	if !session.ProxySnapshotSet || session.InstallationID == "" {
+		if _, err = tx.ExecContext(ctx, `UPDATE openai_account_persona_sessions
+SET effective_proxy_id = $1::bigint, proxy_revision = $2, effective_proxy_url = $3,
+    installation_id = $4, proxy_snapshot_set = TRUE, updated_at = $5::timestamptz
+WHERE account_persona_id = $6 AND session_epoch = $7 AND state = 'current'`,
+			proxyID, proxyRevision, proxyURL, persona.InstallationID, input.Now, persona.ID, session.SessionEpoch); err != nil {
+			return nil, err
+		}
+		session.EffectiveProxyID = proxyID
+		session.ProxyRevision = proxyRevision
+		session.EffectiveProxyURL = proxyURL
+		session.InstallationID = persona.InstallationID
+		session.ProxySnapshotSet = true
+	}
+
+	proxyChanged := !sameNullableInt64(session.EffectiveProxyID, proxyID) ||
+		session.ProxyRevision != proxyRevision || session.EffectiveProxyURL != proxyURL
+	shouldRotate := input.Manual || proxyChanged || shouldRotateAccountPersonaSession(*session, persona.ID, input.Policy, input.Now)
+	if !shouldRotate {
+		if err = tx.Commit(); err != nil {
+			return nil, err
+		}
+		return &service.OpenAIAccountPersonaSessionPrepareResult{Persona: *persona, Session: *session}, nil
+	}
+	occupied, err := accountPersonaSessionOccupied(ctx, tx, persona.ID, input.Now)
+	if err != nil {
+		return nil, err
+	}
+	if occupied && !input.Force {
+		if input.Manual {
+			return nil, service.ErrOpenAIAccountPersonaSessionOccupied
+		}
+		if err = tx.Commit(); err != nil {
+			return nil, err
+		}
+		return &service.OpenAIAccountPersonaSessionPrepareResult{Persona: *persona, Session: *session}, nil
+	}
+
+	oldState := service.OpenAIPersonaSessionDraining
+	expiresAt := input.Now.Add(time.Duration(input.Policy.OldEpochGraceHours) * time.Hour)
+	if input.Force {
+		oldState = service.OpenAIPersonaSessionRevoked
+		expiresAt = input.Now
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE openai_account_persona_sessions
+SET state = $1, draining_started_at = $2::timestamptz, expires_at = $3::timestamptz, updated_at = $2::timestamptz
+WHERE account_persona_id = $4 AND session_epoch = $5 AND state = 'current'`,
+		string(oldState), input.Now, expiresAt, persona.ID, session.SessionEpoch); err != nil {
+		return nil, err
+	}
+	nextEpoch := session.SessionEpoch + 1
+	nextPersonaGeneration := persona.PersonaGeneration
+	if proxyChanged {
+		nextPersonaGeneration++
+	}
+	created, err := scanOpenAIAccountPersonaSession(tx.QueryRowContext(ctx, `INSERT INTO openai_account_persona_sessions
+    (account_persona_id, session_epoch, upstream_session_id, state, persona_generation,
+     credential_chain_id, profile_id, profile_version, effective_proxy_id, proxy_revision,
+     effective_proxy_url, installation_id, proxy_snapshot_set, started_at, updated_at)
+VALUES ($1, $2, $3, 'current', $4, $5, $6, $7, $8::bigint, $9, $10, $11, TRUE, $12::timestamptz, $12::timestamptz)
+RETURNING account_persona_id, session_epoch, upstream_session_id, state, persona_generation,
+          credential_chain_id, profile_id, profile_version, effective_proxy_id, proxy_revision,
+          effective_proxy_url, installation_id, proxy_snapshot_set, started_at, last_active_at, draining_started_at, expires_at`,
+		persona.ID, nextEpoch, strings.TrimSpace(input.NewUpstreamSession), nextPersonaGeneration,
+		persona.CurrentCredentialChainID, string(persona.ProfileID), persona.ProfileVersion,
+		proxyID, proxyRevision, proxyURL, persona.InstallationID, input.Now))
+	if err != nil {
+		return nil, err
+	}
+	updated, err := scanOpenAIAccountPersona(tx.QueryRowContext(ctx, `UPDATE openai_account_personas
+SET current_session_epoch = $1, persona_generation = $2, row_version = row_version + 1, updated_at = $3::timestamptz
+WHERE id = $4 AND account_id = $5 AND row_version = $6
+RETURNING id, account_id, position, profile_id, profile_version, credential_owner, state,
+          enabled, persona_generation, COALESCE(current_credential_chain_id, ''),
+          current_session_epoch, device_seed, installation_id, proxy_id,
+          max_active_client_sessions_override, row_version, created_at, updated_at,
+          draining_started_at, disabled_at, retired_at`, nextEpoch, nextPersonaGeneration, input.Now,
+		persona.ID, persona.AccountID, persona.RowVersion))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, service.ErrOpenAIAccountPersonaCASConflict
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err = enqueueSchedulerOutbox(ctx, tx, service.SchedulerOutboxEventAccountChanged, &persona.AccountID, nil, nil); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &service.OpenAIAccountPersonaSessionPrepareResult{Persona: *updated, Session: *created, Rotated: true}, nil
+}
+
+func shouldRotateAccountPersonaSession(session service.OpenAIAccountPersonaSession, personaID int64, policy service.CodexFingerprintEpochPolicy, now time.Time) bool {
+	age := now.Sub(session.StartedAt)
+	if age < 0 {
+		return false
+	}
+	lastActive := session.StartedAt
+	if session.LastActiveAt != nil && session.LastActiveAt.After(lastActive) {
+		lastActive = *session.LastActiveAt
+	}
+	if age >= time.Duration(policy.MaxSessionAgeHours)*time.Hour {
+		return true
+	}
+	if age < time.Duration(policy.MinSessionAgeHours)*time.Hour || now.Sub(lastActive) < time.Duration(policy.IdleGateMinutes)*time.Minute {
+		return false
+	}
+	if policy.RotationJitterHours <= 0 {
+		return true
+	}
+	hash := fnv.New64a()
+	_, _ = hash.Write([]byte(strings.Join([]string{
+		strconv.FormatInt(personaID, 10), strconv.FormatInt(session.PersonaGeneration, 10), strconv.FormatInt(session.SessionEpoch, 10),
+	}, ":")))
+	jitter := time.Duration(hash.Sum64()%uint64(policy.RotationJitterHours+1)) * time.Hour
+	threshold := time.Duration(policy.MinSessionAgeHours)*time.Hour + jitter
+	if threshold > time.Duration(policy.MaxSessionAgeHours)*time.Hour {
+		threshold = time.Duration(policy.MaxSessionAgeHours) * time.Hour
+	}
+	return age >= threshold
+}
+
+func accountPersonaSessionOccupied(ctx context.Context, tx *sql.Tx, accountPersonaID int64, now time.Time) (bool, error) {
+	var occupied bool
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS (
+    SELECT 1 FROM openai_persona_client_session_leases lease
+    WHERE lease.account_persona_id = $1
+      AND lease.state IN ('provisional', 'active')
+      AND (
+        lease.active_until > $2::timestamptz OR EXISTS (
+          SELECT 1 FROM openai_persona_request_holds hold
+          WHERE hold.lease_id = lease.id AND hold.expires_at > $2::timestamptz
+        )
+      )
+)`, accountPersonaID, now).Scan(&occupied)
+	return occupied, err
+}
+
+func resolveAccountPersonaProxySnapshot(ctx context.Context, tx *sql.Tx, persona *service.OpenAIAccountPersona) (*int64, int64, string, error) {
+	proxyID := persona.ProxyID
+	if proxyID == nil {
+		var accountProxyID sql.NullInt64
+		if err := tx.QueryRowContext(ctx, `SELECT proxy_id FROM accounts WHERE id = $1 AND deleted_at IS NULL`, persona.AccountID).Scan(&accountProxyID); err != nil {
+			return nil, 0, "", err
+		}
+		if accountProxyID.Valid {
+			value := accountProxyID.Int64
+			proxyID = &value
+		}
+	}
+	if proxyID == nil {
+		return nil, 0, "", nil
+	}
+	var proxy service.Proxy
+	if err := tx.QueryRowContext(ctx, `SELECT id, name, protocol, host, port,
+       COALESCE(username, ''), COALESCE(password, ''), status, created_at, updated_at
+FROM proxies WHERE id = $1::bigint AND status = 'active' AND deleted_at IS NULL`, proxyID).Scan(
+		&proxy.ID, &proxy.Name, &proxy.Protocol, &proxy.Host, &proxy.Port,
+		&proxy.Username, &proxy.Password, &proxy.Status, &proxy.CreatedAt, &proxy.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, 0, "", errors.New("Persona proxy is unavailable")
+		}
+		return nil, 0, "", err
+	}
+	return proxyID, proxy.UpdatedAt.UnixMicro(), proxy.URL(), nil
+}
+
+func (r *openAIAccountPersonaRepository) GetAccountPersonaSession(ctx context.Context, accountID, accountPersonaID, sessionEpoch int64, now time.Time) (*service.OpenAIAccountPersonaSession, error) {
+	if r == nil || r.db == nil || accountID <= 0 || accountPersonaID <= 0 || sessionEpoch <= 0 || now.IsZero() {
+		return nil, service.ErrOpenAIAccountPersonaSessionNotFound
+	}
+	session, err := scanOpenAIAccountPersonaSession(r.db.QueryRowContext(ctx, openAIAccountPersonaSessionSelect+`
+WHERE account_persona_id = $1 AND session_epoch = $2
+  AND EXISTS (SELECT 1 FROM openai_account_personas p WHERE p.id = $1 AND p.account_id = $3)
+  AND state IN ('current', 'draining')
+  AND (expires_at IS NULL OR expires_at > $4::timestamptz)`, accountPersonaID, sessionEpoch, accountID, now))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, service.ErrOpenAIAccountPersonaSessionExpired
+	}
+	return session, err
+}
+
+func (r *openAIAccountPersonaRepository) TouchAccountPersonaSession(ctx context.Context, accountPersonaID, sessionEpoch int64, now time.Time) error {
+	if r == nil || r.db == nil || accountPersonaID <= 0 || sessionEpoch <= 0 || now.IsZero() {
+		return service.ErrOpenAIAccountPersonaSessionNotFound
+	}
+	result, err := r.db.ExecContext(ctx, `UPDATE openai_account_persona_sessions
+SET last_active_at = $1::timestamptz, updated_at = $1::timestamptz
+WHERE account_persona_id = $2 AND session_epoch = $3
+  AND state IN ('current', 'draining') AND (expires_at IS NULL OR expires_at > $1::timestamptz)`,
+		now, accountPersonaID, sessionEpoch)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != 1 {
+		return service.ErrOpenAIAccountPersonaSessionExpired
+	}
+	return nil
 }
 
 var _ service.OpenAIAccountPersonaRepository = (*openAIAccountPersonaRepository)(nil)

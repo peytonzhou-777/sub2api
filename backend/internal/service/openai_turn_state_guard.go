@@ -78,6 +78,7 @@ func (l *openAITurnStateLifecycle) Commit(turnID, candidate string) (string, boo
 type OpenAITurnStateScope struct {
 	Version              int              `json:"version"`
 	AccountID            int64            `json:"account_id"`
+	AccountPersonaID     int64            `json:"account_persona_id,omitempty"`
 	Persona              SessionPersonaID `json:"persona"`
 	PersonaVersion       string           `json:"persona_version,omitempty"`
 	MappingVersion       int              `json:"mapping_version"`
@@ -85,6 +86,8 @@ type OpenAITurnStateScope struct {
 	SessionEpoch         int64            `json:"session_epoch"`
 	SlotGeneration       int64            `json:"slot_generation"`
 	SlotSetGeneration    int64            `json:"slot_set_generation"`
+	PersonaGeneration    int64            `json:"persona_generation,omitempty"`
+	ProxyRevision        int64            `json:"proxy_revision,omitempty"`
 	CredentialChainID    string           `json:"credential_chain_id,omitempty"`
 	InstallationID       string           `json:"installation_id"`
 	SessionScopeHash     string           `json:"session_scope_hash"`
@@ -113,10 +116,16 @@ func (s OpenAITurnStateScope) Normalize() OpenAITurnStateScope {
 // Valid 判断 scope 是否具备安全复用 turn-state 所需的全部身份字段。
 func (s OpenAITurnStateScope) Valid() bool {
 	s = s.Normalize()
-	if s.Version != 2 || s.AccountID <= 0 || s.Persona != SessionPersonaCodexCLIStrict ||
-		s.SlotID < 0 || s.SessionEpoch <= 0 || s.InstallationID == "" ||
+	if s.AccountID <= 0 || s.Persona != SessionPersonaCodexCLIStrict ||
+		s.SessionEpoch <= 0 || s.InstallationID == "" ||
 		s.SessionScopeHash == "" || s.UpstreamSessionID == "" || s.UpstreamThreadID == "" ||
 		s.UpstreamTurnID == "" || s.OutboundProfile == "" || s.TransportScopeDigest == "" {
+		return false
+	}
+	if s.Version == 3 {
+		return s.AccountPersonaID > 0 && s.PersonaGeneration > 0 && s.CredentialChainID != "" && s.ProxyRevision >= 0
+	}
+	if s.Version != 2 || s.SlotID < 0 {
 		return false
 	}
 	if s.MappingVersion >= SessionPersonaScopeVersionV3 {
@@ -266,6 +275,27 @@ func openAITurnStateScopeForAttempt(ctx context.Context, c *gin.Context, account
 	if account == nil || ids == nil {
 		return OpenAITurnStateScope{}, false
 	}
+	if target, ok := openAIExecutionTargetFromContextOrGin(ctx, c); ok {
+		if target.AccountID != account.ID || target.ProfileID != SessionPersonaCodexCLIStrict ||
+			target.SessionEpoch != ids.sessionEpoch || target.InstallationID != ids.installationID {
+			return OpenAITurnStateScope{}, false
+		}
+		transportScope := openAITransportScopeFromExecutionTarget(target)
+		if !transportScope.ReadyForCPA(account.ID) {
+			return OpenAITurnStateScope{}, false
+		}
+		scope := OpenAITurnStateScope{
+			Version: 3, AccountID: account.ID, AccountPersonaID: target.AccountPersonaID,
+			Persona: target.ProfileID, PersonaVersion: target.ProfileVersion,
+			PersonaGeneration: target.PersonaGeneration, SessionEpoch: target.SessionEpoch,
+			CredentialChainID: target.CredentialChainID, InstallationID: target.InstallationID,
+			ProxyRevision: target.ProxyRevision, SessionScopeHash: ids.sessionScopeHash,
+			UpstreamSessionID: target.UpstreamSessionID, UpstreamThreadID: ids.threadID,
+			UpstreamTurnID: ids.turnID, OutboundProfile: target.ProfileVersion,
+			TransportScopeDigest: transportScope.OpenAICPAScopeFingerprint(target.EffectiveProxyURL),
+		}.Normalize()
+		return scope, scope.Valid()
+	}
 	persona := SessionPersonaCodexCLIStrict
 	personaVersion := ResolveCodexOutboundProfile(account)
 	mappingVersion := ids.sessionScopeVersion
@@ -328,12 +358,25 @@ func openAITurnStateScopeForAttempt(ctx context.Context, c *gin.Context, account
 	return scope, scope.Valid()
 }
 
+func openAIExecutionTargetFromContextOrGin(ctx context.Context, c *gin.Context) (OpenAIExecutionTarget, bool) {
+	if target, ok := OpenAIExecutionTargetFromContext(ctx); ok {
+		return target, true
+	}
+	if c != nil && c.Request != nil {
+		return OpenAIExecutionTargetFromContext(c.Request.Context())
+	}
+	return OpenAIExecutionTarget{}, false
+}
+
 func openAITurnStateScopeMismatchReason(source, current OpenAITurnStateScope) string {
 	if source.AccountID != current.AccountID {
 		return "cross_account"
 	}
 	if source.Persona != current.Persona {
 		return "cross_persona"
+	}
+	if source.AccountPersonaID != current.AccountPersonaID {
+		return "cross_account_persona"
 	}
 	if source.SlotID != current.SlotID {
 		return "cross_slot"
@@ -342,6 +385,9 @@ func openAITurnStateScopeMismatchReason(source, current OpenAITurnStateScope) st
 		return "cross_turn"
 	}
 	if source.SessionEpoch != current.SessionEpoch || source.SlotGeneration != current.SlotGeneration || source.SlotSetGeneration != current.SlotSetGeneration {
+		return "cross_generation"
+	}
+	if source.PersonaGeneration != current.PersonaGeneration || source.ProxyRevision != current.ProxyRevision {
 		return "cross_generation"
 	}
 	if source.CredentialChainID != current.CredentialChainID {

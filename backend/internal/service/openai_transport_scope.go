@@ -12,23 +12,33 @@ type openAITransportScopeContextKey struct{}
 
 // OpenAITransportScope 是 OpenAI OAuth 专用 Transport 的不可变作用域快照。
 //
-// 该快照只从已经完成的 Persona/slot 绑定派生，不包含 token 内容。Transport
-// 层必须把它视为 Account × Persona × Slot × Session Epoch × Credential Chain
-// 的最小隔离边界，不能退化为账号级或代理级复用。
+// 动态路径只从 OpenAIExecutionTarget 派生，不包含 token 内容。Transport 层必须
+// 把 AccountPersona、代次、Session epoch、credential、Profile 和代理快照作为
+// 最小隔离边界，不能退化为账号级或 Profile 级复用。
 type OpenAITransportScope struct {
 	AccountID         int64
+	AccountPersonaID  int64
+	ProfileID         SessionPersonaID
+	ProfileVersion    string
+	PersonaGeneration int64
+	SessionEpoch      int64
+	CredentialChainID string
+	InstallationID    string
+	EffectiveProxyID  *int64
+	ProxyRevision     int64
+
+	// 以下字段只供 P8 删除前的固定双槽请求兼容，不参与动态 Persona scope。
 	Persona           SessionPersonaID
 	PersonaVersion    string
 	SlotID            int
-	SessionEpoch      int64
 	SlotGeneration    int64
 	SlotSetGeneration int64
-	CredentialChainID string
-	InstallationID    string
 }
 
 type OpenAIPersonaTransportInvalidator interface {
 	InvalidateOpenAIPersonaTransport(accountID int64, persona SessionPersonaID, slotID int, credentialChainID string)
+	InvalidateOpenAIAccountPersonaCredentialTransport(accountID, accountPersonaID int64, credentialChainID string)
+	InvalidateOpenAIAccountPersonaSessionTransport(accountID, accountPersonaID, sessionEpoch int64)
 }
 
 func (s OpenAITransportScope) MatchesCredential(accountID int64, persona SessionPersonaID, slotID int, credentialChainID string) bool {
@@ -36,21 +46,36 @@ func (s OpenAITransportScope) MatchesCredential(accountID int64, persona Session
 		strings.TrimSpace(s.CredentialChainID) == strings.TrimSpace(credentialChainID)
 }
 
+func (s OpenAITransportScope) MatchesAccountPersonaCredential(accountPersonaID int64, credentialChainID string) bool {
+	return s.AccountPersonaID > 0 && s.AccountPersonaID == accountPersonaID &&
+		strings.TrimSpace(s.CredentialChainID) == strings.TrimSpace(credentialChainID)
+}
+
+func (s OpenAITransportScope) MatchesAccountPersonaSession(accountPersonaID, sessionEpoch int64) bool {
+	return s.AccountPersonaID > 0 && s.AccountPersonaID == accountPersonaID && s.SessionEpoch == sessionEpoch
+}
+
 // Fingerprint 返回不包含凭据内容的作用域摘要，用于 WS 连接池的严格复用判定。
 // 摘要把代际字段纳入键，确保 Session/slot/credential 链轮换后不会命中旧连接。
 func (s OpenAITransportScope) Fingerprint(profileVersion, proxyURL string) string {
-	raw := fmt.Sprintf("%d|%s|%s|%d|%d|%d|%d|%s|%s|%s",
-		s.AccountID,
-		strings.TrimSpace(string(s.Persona)),
-		strings.TrimSpace(s.PersonaVersion),
-		s.SlotID,
-		s.SessionEpoch,
-		s.SlotGeneration,
-		s.SlotSetGeneration,
-		strings.TrimSpace(s.CredentialChainID),
-		strings.TrimSpace(s.InstallationID),
-		strings.TrimSpace(profileVersion)+"|"+strings.TrimSpace(proxyURL),
-	)
+	raw := ""
+	if s.AccountPersonaID > 0 {
+		proxyID := int64(0)
+		if s.EffectiveProxyID != nil {
+			proxyID = *s.EffectiveProxyID
+		}
+		raw = fmt.Sprintf("dynamic|%d|%d|%s|%s|%d|%d|%s|%s|%d|%d|%s|%s",
+			s.AccountID, s.AccountPersonaID, strings.TrimSpace(string(s.ProfileID)),
+			strings.TrimSpace(s.ProfileVersion), s.PersonaGeneration, s.SessionEpoch,
+			strings.TrimSpace(s.CredentialChainID), strings.TrimSpace(s.InstallationID),
+			proxyID, s.ProxyRevision, strings.TrimSpace(profileVersion), strings.TrimSpace(proxyURL))
+	} else {
+		raw = fmt.Sprintf("legacy|%d|%s|%s|%d|%d|%d|%d|%s|%s|%s",
+			s.AccountID, strings.TrimSpace(string(s.Persona)), strings.TrimSpace(s.PersonaVersion),
+			s.SlotID, s.SessionEpoch, s.SlotGeneration, s.SlotSetGeneration,
+			strings.TrimSpace(s.CredentialChainID), strings.TrimSpace(s.InstallationID),
+			strings.TrimSpace(profileVersion)+"|"+strings.TrimSpace(proxyURL))
+	}
 	digest := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(digest[:])
 }
@@ -80,6 +105,12 @@ func openAITransportScopeFromContextAny(ctx context.Context) (OpenAITransportSco
 			return scope, true
 		}
 	}
+	if target, ok := OpenAIExecutionTargetFromContext(ctx); ok {
+		scope := openAITransportScopeFromExecutionTarget(target)
+		if scope.ReadyForCPA(target.AccountID) {
+			return scope, true
+		}
+	}
 	binding, ok := SessionPersonaBindingFromContext(ctx)
 	if !ok || binding.EffectiveMappingVersion() < SessionPersonaScopeVersionV3 {
 		return OpenAITransportScope{}, false
@@ -89,6 +120,17 @@ func openAITransportScopeFromContextAny(ctx context.Context) (OpenAITransportSco
 		return OpenAITransportScope{}, false
 	}
 	return scope, true
+}
+
+func openAITransportScopeFromExecutionTarget(target OpenAIExecutionTarget) OpenAITransportScope {
+	return OpenAITransportScope{
+		AccountID: target.AccountID, AccountPersonaID: target.AccountPersonaID,
+		ProfileID: target.ProfileID, ProfileVersion: strings.TrimSpace(target.ProfileVersion),
+		PersonaGeneration: target.PersonaGeneration, SessionEpoch: target.SessionEpoch,
+		CredentialChainID: strings.TrimSpace(target.CredentialChainID),
+		InstallationID:    strings.TrimSpace(target.InstallationID),
+		EffectiveProxyID:  target.EffectiveProxyID, ProxyRevision: target.ProxyRevision,
+	}
 }
 
 func openAITransportScopeFromBinding(binding SessionPersonaSlotBinding) OpenAITransportScope {
@@ -108,13 +150,21 @@ func openAITransportScopeFromBinding(binding SessionPersonaSlotBinding) OpenAITr
 // ReadyForCPA 表示当前请求具备进入 CPA Transport 的完整身份快照。
 // 缺少任一关键代际字段时返回 false，由调用方保留旧兼容 Transport。
 func (s OpenAITransportScope) ReadyForCPA(accountID int64) bool {
-	return s.AccountID > 0 && s.AccountID == accountID &&
-		strings.TrimSpace(string(s.Persona)) != "" &&
+	if s.AccountID <= 0 || s.AccountID != accountID || s.SessionEpoch <= 0 ||
+		strings.TrimSpace(s.CredentialChainID) == "" || strings.TrimSpace(s.InstallationID) == "" {
+		return false
+	}
+	if s.AccountPersonaID > 0 {
+		if strings.TrimSpace(string(s.ProfileID)) == "" || strings.TrimSpace(s.ProfileVersion) == "" ||
+			s.PersonaGeneration <= 0 || s.ProxyRevision < 0 {
+			return false
+		}
+		return s.EffectiveProxyID == nil || s.ProxyRevision > 0
+	}
+	return strings.TrimSpace(string(s.Persona)) != "" &&
 		s.SlotID >= 0 &&
-		s.SessionEpoch > 0 &&
 		s.SlotGeneration > 0 &&
-		s.SlotSetGeneration > 0 &&
-		strings.TrimSpace(s.CredentialChainID) != ""
+		s.SlotSetGeneration > 0
 }
 
 // OpenAITransportScopeFromContext 从请求上下文读取 Persona/slot 绑定。

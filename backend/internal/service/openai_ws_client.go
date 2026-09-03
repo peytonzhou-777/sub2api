@@ -238,13 +238,31 @@ func (d *coderOpenAIWSClientDialer) cpaHTTPClient(scope OpenAITransportScope, pr
 }
 
 func (d *coderOpenAIWSClientDialer) invalidatePersonaTransport(accountID int64, persona SessionPersonaID, slotID int, credentialChainID string) {
+	d.invalidateTransportScopes(func(scope OpenAITransportScope) bool {
+		return scope.MatchesCredential(accountID, persona, slotID, credentialChainID)
+	})
+}
+
+func (d *coderOpenAIWSClientDialer) invalidateAccountPersonaCredentialTransport(accountPersonaID int64, credentialChainID string) {
+	d.invalidateTransportScopes(func(scope OpenAITransportScope) bool {
+		return scope.MatchesAccountPersonaCredential(accountPersonaID, credentialChainID)
+	})
+}
+
+func (d *coderOpenAIWSClientDialer) invalidateAccountPersonaSessionTransport(accountPersonaID, sessionEpoch int64) {
+	d.invalidateTransportScopes(func(scope OpenAITransportScope) bool {
+		return scope.MatchesAccountPersonaSession(accountPersonaID, sessionEpoch)
+	})
+}
+
+func (d *coderOpenAIWSClientDialer) invalidateTransportScopes(matches func(OpenAITransportScope) bool) {
 	if d == nil {
 		return
 	}
 	d.cpaMu.Lock()
 	defer d.cpaMu.Unlock()
 	for key, entry := range d.cpaClients {
-		if entry == nil || !entry.transportScope.MatchesCredential(accountID, persona, slotID, credentialChainID) {
+		if entry == nil || matches == nil || !matches(entry.transportScope) {
 			continue
 		}
 		closeOpenAIWSProxyClient(entry.client)
