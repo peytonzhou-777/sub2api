@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -88,6 +89,76 @@ type OpenAIAccountPersonaSession struct {
 	LastActiveAt      *time.Time
 	DrainingStartedAt *time.Time
 	ExpiresAt         *time.Time
+}
+
+type OpenAIAccountPersonaCreate struct {
+	AccountID                       int64
+	ProfileID                       SessionPersonaID
+	ProfileVersion                  string
+	ProxyID                         *int64
+	MaxActiveClientSessionsOverride *int
+	DeviceSeed                      []byte
+	InstallationID                  string
+}
+
+type OpenAIAccountPersonaUpdate struct {
+	AccountID                       int64
+	AccountPersonaID                int64
+	ExpectedRowVersion              int64
+	Enabled                         *bool
+	State                           *OpenAIAccountPersonaState
+	ProxyConfigured                 bool
+	ProxyID                         *int64
+	MaxActiveSessionsConfigured     bool
+	MaxActiveClientSessionsOverride *int
+	NewUpstreamSessionID            string
+}
+
+type OpenAIAccountPersonaAuthorization struct {
+	AccountID          int64
+	AccountPersonaID   int64
+	ExpectedRowVersion int64
+	PersonaGeneration  int64
+	CredentialChainID  string
+	EncryptedPayload   json.RawMessage
+	ChatGPTAccountID   string
+	OAuthClientID      string
+	InstallationID     string
+	UpstreamSessionID  string
+}
+
+type OpenAIAccountPersonaCredentialUpdate struct {
+	AccountPersonaID  int64
+	CredentialChainID string
+	EncryptedPayload  json.RawMessage
+	ChatGPTAccountID  string
+	InstallationID    string
+}
+
+// OpenAIPrimaryPersonaCreate 由账号首次 Codex OAuth 回调生成，并与账号同事务落库。
+type OpenAIPrimaryPersonaCreate struct {
+	ProfileVersion    string
+	CredentialChainID string
+	EncryptedPayload  json.RawMessage
+	ChatGPTAccountID  string
+	OAuthClientID     string
+	DeviceSeed        []byte
+	InstallationID    string
+	UpstreamSessionID string
+}
+
+type OpenAIAccountPersonaRepository interface {
+	ListAccountPersonas(ctx context.Context, accountID int64) ([]OpenAIAccountPersona, error)
+	GetAccountPersona(ctx context.Context, accountID, accountPersonaID int64) (*OpenAIAccountPersona, error)
+	CreateAccountPersona(ctx context.Context, input OpenAIAccountPersonaCreate) (*OpenAIAccountPersona, error)
+	UpdateAccountPersona(ctx context.Context, input OpenAIAccountPersonaUpdate) (*OpenAIAccountPersona, error)
+	RetireAccountPersona(ctx context.Context, accountID, accountPersonaID, expectedRowVersion int64) error
+	AuthorizeAccountPersona(ctx context.Context, input OpenAIAccountPersonaAuthorization) (*OpenAIAccountPersona, error)
+	RevokeAccountPersonaAuthorization(ctx context.Context, accountID, accountPersonaID, expectedRowVersion int64) ([]string, error)
+	GetAccountPersonaCredential(ctx context.Context, accountPersonaID int64, credentialChainID string) (*OpenAIPersonaCredentialRecord, error)
+	ClaimAccountPersonaCredentialRefresh(ctx context.Context, accountPersonaID int64, credentialChainID string, expectedVersion int64) (bool, error)
+	CompareAndSwapAccountPersonaToken(ctx context.Context, input OpenAIAccountPersonaCredentialUpdate, expectedVersion int64) (bool, error)
+	MarkAccountPersonaCredentialInvalid(ctx context.Context, accountPersonaID int64, credentialChainID string, expectedVersion int64, reason string) error
 }
 
 // OpenAIExecutionTarget 是选定账号后贯穿 HTTP、WS、compact 与 OAuth 的完整身份边界。

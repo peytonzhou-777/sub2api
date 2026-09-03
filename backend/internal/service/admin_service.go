@@ -395,6 +395,8 @@ type CreateAccountInput struct {
 	// SkipMixedChannelCheck skips the mixed channel risk check when binding groups.
 	// This should only be set when the caller has explicitly confirmed the risk.
 	SkipMixedChannelCheck bool
+	// PrimaryOpenAIPersona 只用于首次 OpenAI OAuth 建号，账号、分组和 position 0 同事务提交。
+	PrimaryOpenAIPersona *OpenAIPrimaryPersonaCreate
 }
 
 // ShadowOptions is the input for CreateShadow.
@@ -665,6 +667,7 @@ type adminServiceImpl struct {
 	groupRepo                   GroupRepository
 	groupDuplicateRepo          GroupDuplicateRepository
 	accountRepo                 AccountRepository
+	primaryPersonaAccountRepo   OpenAIPrimaryPersonaAccountRepository
 	accountDuplicateRepo        AccountDuplicateRepository
 	accountBillingRepo          AccountBillingSettingsRepository
 	proxyRepo                   ProxyRepository
@@ -731,11 +734,13 @@ func NewAdminService(
 	compositeResolver *CompositeRouteResolver,
 	channelCacheInvalidator ChannelCacheInvalidator,
 ) AdminService {
+	primaryPersonaAccountRepo, _ := accountRepo.(OpenAIPrimaryPersonaAccountRepository)
 	return &adminServiceImpl{
 		userRepo:                    userRepo,
 		groupRepo:                   groupRepo,
 		groupDuplicateRepo:          groupRepo,
 		accountRepo:                 accountRepo,
+		primaryPersonaAccountRepo:   primaryPersonaAccountRepo,
 		accountDuplicateRepo:        accountRepo,
 		accountBillingRepo:          accountRepo,
 		proxyRepo:                   proxyRepo,

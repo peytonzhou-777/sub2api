@@ -153,6 +153,10 @@ type AdminAccountRepository interface {
 	AccountBillingSettingsRepository
 }
 
+type OpenAIPrimaryPersonaAccountRepository interface {
+	CreateWithPrimaryOpenAIPersona(ctx context.Context, account *Account, groupIDs []int64, primary OpenAIPrimaryPersonaCreate) error
+}
+
 // AccountBulkUpdate describes the fields that can be updated in a bulk operation.
 // Nil pointers mean "do not change".
 type AccountBulkUpdate struct {

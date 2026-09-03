@@ -19,9 +19,16 @@ type OpenAIOAuthService struct {
 	oauthClient                 OpenAIOAuthClient
 	privacyClientFactory        PrivacyClientFactory // 用于调用 chatgpt.com/backend-api（ImpersonateChrome）
 	personaCredentialRepo       OpenAIPersonaCredentialRepository
+	accountPersonaRepo          OpenAIAccountPersonaRepository
 	personaCredentialEncryptor  SecretEncryptor
 	personaTokenCache           OpenAITokenCache
 	personaTransportInvalidator OpenAIPersonaTransportInvalidator
+}
+
+func (s *OpenAIOAuthService) configureAccountPersonaStore(repo OpenAIAccountPersonaRepository) {
+	if s != nil {
+		s.accountPersonaRepo = repo
+	}
 }
 
 // SetPersonaTransportInvalidator connects credential revocation to the live
@@ -448,6 +455,17 @@ func (s *OpenAIOAuthService) BuildAccountCredentials(tokenInfo *OpenAITokenInfo)
 	}
 
 	return NormalizeOpenAIPersonalAccessTokenCredentials(nil, tokenInfo, creds)
+}
+
+// BuildAccountIdentityCredentials 保留账号级能力边界元数据，不复制 Persona Token。
+func (s *OpenAIOAuthService) BuildAccountIdentityCredentials(tokenInfo *OpenAITokenInfo) map[string]any {
+	credentials := s.BuildAccountCredentials(tokenInfo)
+	delete(credentials, "access_token")
+	delete(credentials, "refresh_token")
+	delete(credentials, "id_token")
+	delete(credentials, "expires_at")
+	delete(credentials, "client_id")
+	return credentials
 }
 
 // Stop stops the session store cleanup goroutine

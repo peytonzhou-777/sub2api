@@ -509,14 +509,25 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	if err != nil {
 		return nil, err
 	}
-	if err := s.accountRepo.Create(ctx, account); err != nil {
-		return nil, err
-	}
-
-	// 绑定分组
-	if len(groupIDs) > 0 {
-		if err := s.accountRepo.BindGroups(ctx, account.ID, groupIDs); err != nil {
+	if input.PrimaryOpenAIPersona != nil {
+		if input.Platform != PlatformOpenAI || input.Type != AccountTypeOAuth {
+			return nil, infraerrors.BadRequest("OPENAI_PRIMARY_PERSONA_INVALID", "primary Persona is only valid for OpenAI OAuth accounts")
+		}
+		if s.primaryPersonaAccountRepo == nil {
+			return nil, infraerrors.InternalServer("OPENAI_PRIMARY_PERSONA_STORE_UNAVAILABLE", "OpenAI primary Persona transaction is unavailable")
+		}
+		if err := s.primaryPersonaAccountRepo.CreateWithPrimaryOpenAIPersona(ctx, account, groupIDs, *input.PrimaryOpenAIPersona); err != nil {
 			return nil, err
+		}
+	} else {
+		if err := s.accountRepo.Create(ctx, account); err != nil {
+			return nil, err
+		}
+		// 兼容非 OpenAI OAuth 的既有建号流程。
+		if len(groupIDs) > 0 {
+			if err := s.accountRepo.BindGroups(ctx, account.ID, groupIDs); err != nil {
+				return nil, err
+			}
 		}
 	}
 

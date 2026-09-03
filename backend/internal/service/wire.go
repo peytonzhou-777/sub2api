@@ -115,12 +115,14 @@ func ProvideOpenAIOAuthService(
 	oauthClient OpenAIOAuthClient,
 	privacyClientFactory PrivacyClientFactory,
 	personaCredentialRepo OpenAIPersonaCredentialRepository,
+	accountPersonaRepo OpenAIAccountPersonaRepository,
 	encryptor SecretEncryptor,
 	tokenCache GeminiTokenCache,
 ) *OpenAIOAuthService {
 	svc := NewOpenAIOAuthService(proxyRepo, oauthClient)
 	svc.SetPrivacyClientFactory(privacyClientFactory)
 	svc.configurePersonaCredentialStore(personaCredentialRepo, encryptor, tokenCache)
+	svc.configureAccountPersonaStore(accountPersonaRepo)
 	return svc
 }
 

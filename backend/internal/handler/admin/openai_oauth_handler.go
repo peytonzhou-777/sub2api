@@ -143,6 +143,262 @@ type openAIPersonaExchangeCodeRequest struct {
 	State     string `json:"state" binding:"required"`
 }
 
+type openAIAccountPersonaDTO struct {
+	ID                              int64                             `json:"id"`
+	AccountID                       int64                             `json:"account_id"`
+	Position                        int                               `json:"position"`
+	ProfileID                       service.SessionPersonaID          `json:"profile_id"`
+	ProfileVersion                  string                            `json:"profile_version"`
+	CredentialOwner                 service.OpenAICredentialOwner     `json:"credential_owner"`
+	State                           service.OpenAIAccountPersonaState `json:"state"`
+	Enabled                         bool                              `json:"enabled"`
+	Authorized                      bool                              `json:"authorized"`
+	PersonaGeneration               int64                             `json:"persona_generation"`
+	CurrentSessionEpoch             int64                             `json:"current_session_epoch"`
+	ProxyID                         *int64                            `json:"proxy_id,omitempty"`
+	MaxActiveClientSessionsOverride *int                              `json:"max_active_client_sessions_override,omitempty"`
+	RowVersion                      int64                             `json:"row_version"`
+	DefaultProtected                bool                              `json:"default_protected"`
+	CreatedAt                       time.Time                         `json:"created_at"`
+	UpdatedAt                       time.Time                         `json:"updated_at"`
+}
+
+func openAIAccountPersonaFromService(persona service.OpenAIAccountPersona) openAIAccountPersonaDTO {
+	return openAIAccountPersonaDTO{
+		ID: persona.ID, AccountID: persona.AccountID, Position: persona.Position,
+		ProfileID: persona.ProfileID, ProfileVersion: persona.ProfileVersion,
+		CredentialOwner: persona.CredentialOwner, State: persona.State, Enabled: persona.Enabled,
+		Authorized:        persona.CurrentCredentialChainID != "" && persona.CurrentSessionEpoch > 0,
+		PersonaGeneration: persona.PersonaGeneration, CurrentSessionEpoch: persona.CurrentSessionEpoch,
+		ProxyID: persona.ProxyID, MaxActiveClientSessionsOverride: persona.MaxActiveClientSessionsOverride,
+		RowVersion: persona.RowVersion, DefaultProtected: persona.IsDefaultProtected(),
+		CreatedAt: persona.CreatedAt, UpdatedAt: persona.UpdatedAt,
+	}
+}
+
+func parseOpenAIAccountPersonaTarget(c *gin.Context) (int64, int64, bool) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || accountID <= 0 {
+		response.BadRequest(c, "Invalid account ID")
+		return 0, 0, false
+	}
+	personaID, err := strconv.ParseInt(c.Param("persona_id"), 10, 64)
+	if err != nil || personaID <= 0 {
+		response.BadRequest(c, "Invalid AccountPersona ID")
+		return 0, 0, false
+	}
+	return accountID, personaID, true
+}
+
+// ListAccountPersonas 返回动态 Persona 的脱敏管理视图。
+func (h *OpenAIOAuthHandler) ListAccountPersonas(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || accountID <= 0 {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	personas, err := h.openaiOAuthService.ListAccountPersonas(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	result := make([]openAIAccountPersonaDTO, 0, len(personas))
+	for _, persona := range personas {
+		result = append(result, openAIAccountPersonaFromService(persona))
+	}
+	response.Success(c, result)
+}
+
+func (h *OpenAIOAuthHandler) CreateAccountPersona(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || accountID <= 0 {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	var req struct {
+		ProfileID                       service.SessionPersonaID `json:"profile_id" binding:"required"`
+		ProxyID                         *int64                   `json:"proxy_id"`
+		MaxActiveClientSessionsOverride *int                     `json:"max_active_client_sessions_override"`
+	}
+	if err = c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	persona, err := h.openaiOAuthService.CreateAccountPersona(c.Request.Context(), account, req.ProfileID, req.ProxyID, req.MaxActiveClientSessionsOverride)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Created(c, openAIAccountPersonaFromService(*persona))
+}
+
+func (h *OpenAIOAuthHandler) UpdateAccountPersona(c *gin.Context) {
+	accountID, personaID, ok := parseOpenAIAccountPersonaTarget(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		RowVersion                      int64                              `json:"row_version" binding:"required"`
+		Enabled                         *bool                              `json:"enabled"`
+		State                           *service.OpenAIAccountPersonaState `json:"state"`
+		ProxyConfigured                 bool                               `json:"proxy_configured"`
+		ProxyID                         *int64                             `json:"proxy_id"`
+		MaxActiveSessionsConfigured     bool                               `json:"max_active_client_sessions_configured"`
+		MaxActiveClientSessionsOverride *int                               `json:"max_active_client_sessions_override"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	persona, err := h.openaiOAuthService.UpdateAccountPersona(c.Request.Context(), service.OpenAIAccountPersonaUpdate{
+		AccountID: accountID, AccountPersonaID: personaID, ExpectedRowVersion: req.RowVersion,
+		Enabled: req.Enabled, State: req.State, ProxyConfigured: req.ProxyConfigured, ProxyID: req.ProxyID,
+		MaxActiveSessionsConfigured:     req.MaxActiveSessionsConfigured,
+		MaxActiveClientSessionsOverride: req.MaxActiveClientSessionsOverride,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, openAIAccountPersonaFromService(*persona))
+}
+
+func (h *OpenAIOAuthHandler) DeleteAccountPersona(c *gin.Context) {
+	accountID, personaID, ok := parseOpenAIAccountPersonaTarget(c)
+	if !ok {
+		return
+	}
+	rowVersion, err := strconv.ParseInt(c.Query("row_version"), 10, 64)
+	if err != nil || rowVersion <= 0 {
+		response.BadRequest(c, "row_version is required")
+		return
+	}
+	if err = h.openaiOAuthService.RetireAccountPersona(c.Request.Context(), accountID, personaID, rowVersion); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"retired": true})
+}
+
+func (h *OpenAIOAuthHandler) GenerateAccountPersonaAuthURL(c *gin.Context) {
+	accountID, personaID, ok := parseOpenAIAccountPersonaTarget(c)
+	if !ok {
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	result, err := h.openaiOAuthService.GenerateAccountPersonaAuthURL(c.Request.Context(), account, personaID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *OpenAIOAuthHandler) ExchangeAccountPersonaCode(c *gin.Context) {
+	accountID, personaID, ok := parseOpenAIAccountPersonaTarget(c)
+	if !ok {
+		return
+	}
+	var req openAIPersonaExchangeCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	result, err := h.openaiOAuthService.ExchangeAccountPersonaCode(c.Request.Context(), accountID, personaID, &service.OpenAIExchangeCodeInput{
+		SessionID: req.SessionID, Code: req.Code, State: req.State,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	persona, err := h.openaiOAuthService.PersistAccountPersonaAuthorization(c.Request.Context(), account, result)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, openAIAccountPersonaFromService(*persona))
+}
+
+func (h *OpenAIOAuthHandler) RevokeAccountPersonaAuthorization(c *gin.Context) {
+	accountID, personaID, ok := parseOpenAIAccountPersonaTarget(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		RowVersion int64 `json:"row_version" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := h.openaiOAuthService.RevokeAccountPersonaAuthorization(c.Request.Context(), accountID, personaID, req.RowVersion); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"revoked": true})
+}
+
+func (h *OpenAIOAuthHandler) RefreshAccountPersonaAuthorization(c *gin.Context) {
+	accountID, personaID, ok := parseOpenAIAccountPersonaTarget(c)
+	if !ok {
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if _, err = h.openaiOAuthService.RefreshAccountPersonaCredential(c.Request.Context(), account, personaID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	personas, err := h.openaiOAuthService.ListAccountPersonas(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	for _, persona := range personas {
+		if persona.ID == personaID {
+			response.Success(c, openAIAccountPersonaFromService(persona))
+			return
+		}
+	}
+	response.NotFound(c, "AccountPersona not found")
+}
+
+func (h *OpenAIOAuthHandler) ListAccountPersonaProfiles(c *gin.Context) {
+	profiles := service.NewDefaultSessionPersonaRegistry().List()
+	type profileDTO struct {
+		ID                  service.SessionPersonaID          `json:"id"`
+		Version             string                            `json:"version"`
+		SupportedTransports []service.SessionPersonaTransport `json:"supported_transports"`
+		Compression         service.SessionPersonaCompression `json:"compression"`
+	}
+	result := make([]profileDTO, 0, len(profiles))
+	for _, profile := range profiles {
+		result = append(result, profileDTO{
+			ID: profile.ID, Version: profile.EffectiveVersion(),
+			SupportedTransports: append([]service.SessionPersonaTransport(nil), profile.SupportedTransports...),
+			Compression:         profile.Compression,
+		})
+	}
+	response.Success(c, result)
+}
+
 // ExchangeCode exchanges OpenAI authorization code for tokens
 // POST /api/v1/admin/openai/exchange-code
 func (h *OpenAIOAuthHandler) ExchangeCode(c *gin.Context) {
@@ -506,8 +762,13 @@ func (h *OpenAIOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 		return
 	}
 
-	// Build credentials from token info
-	credentials := h.openaiOAuthService.BuildAccountCredentials(tokenInfo)
+	primaryPersona, err := h.openaiOAuthService.BuildPrimaryOpenAIPersona(tokenInfo)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	// 账号只保存非机密身份元数据，Token 的唯一权威副本属于 position 0。
+	credentials := h.openaiOAuthService.BuildAccountIdentityCredentials(tokenInfo)
 
 	platform := oauthPlatformFromPath(c)
 
@@ -522,15 +783,16 @@ func (h *OpenAIOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 
 	// Create account
 	account, err := h.adminService.CreateAccount(c.Request.Context(), &service.CreateAccountInput{
-		Name:        name,
-		Platform:    platform,
-		Type:        "oauth",
-		Credentials: credentials,
-		Extra:       nil,
-		ProxyID:     req.ProxyID,
-		Concurrency: req.Concurrency,
-		Priority:    req.Priority,
-		GroupIDs:    req.GroupIDs,
+		Name:                 name,
+		Platform:             platform,
+		Type:                 "oauth",
+		Credentials:          credentials,
+		Extra:                nil,
+		ProxyID:              req.ProxyID,
+		Concurrency:          req.Concurrency,
+		Priority:             req.Priority,
+		GroupIDs:             req.GroupIDs,
+		PrimaryOpenAIPersona: primaryPersona,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

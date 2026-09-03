@@ -46,8 +46,11 @@ type OpenAIPersonaSlotRecord struct {
 
 // OpenAIPersonaCredentialRecord 只携带加密封装和非敏感元数据。
 type OpenAIPersonaCredentialRecord struct {
+	AccountPersonaID  int64
 	AccountID         int64
 	PersonaID         SessionPersonaID
+	ProfileVersion    string
+	PersonaGeneration int64
 	CredentialChainID string
 	SlotID            int
 	EncryptedPayload  json.RawMessage

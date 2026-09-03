@@ -48,7 +48,11 @@ type OAuthSession struct {
 	RedirectURI              string    `json:"redirect_uri"`
 	CreatedAt                time.Time `json:"created_at"`
 	AccountID                int64     `json:"account_id,omitempty"`
+	AccountPersonaID         int64     `json:"account_persona_id,omitempty"`
 	PersonaID                string    `json:"persona_id,omitempty"`
+	ProfileVersion           string    `json:"profile_version,omitempty"`
+	PersonaGeneration        int64     `json:"persona_generation,omitempty"`
+	PersonaRowVersion        int64     `json:"persona_row_version,omitempty"`
 	SlotID                   int       `json:"slot_id,omitempty"`
 	CredentialChainID        string    `json:"credential_chain_id,omitempty"`
 	InstallationID           string    `json:"installation_id,omitempty"`

@@ -15,6 +15,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +45,7 @@ import (
 type accountRepository struct {
 	client *dbent.Client // Ent ORM 客户端
 	sql    sqlExecutor   // 原生 SQL 执行接口
+	db     *sql.DB       // OpenAI 首次 OAuth 原子建号需要显式事务。
 	// schedulerCache 用于在账号状态变更时主动同步快照到缓存，
 	// 确保粘性会话能及时感知账号不可用状态。
 	// Used to proactively sync account snapshot to cache when status changes,
@@ -103,7 +105,9 @@ func NewAdminAccountRepository(client *dbent.Client, sqlDB *sql.DB, schedulerCac
 // newAccountRepositoryWithSQL 是内部构造函数，支持依赖注入 SQL 执行器。
 // 这种设计便于单元测试时注入 mock 对象。
 func newAccountRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor, schedulerCache service.SchedulerCache) *accountRepository {
-	return &accountRepository{client: client, sql: sqlq, schedulerCache: schedulerCache}
+	repo := &accountRepository{client: client, sql: sqlq, schedulerCache: schedulerCache}
+	repo.db, _ = sqlq.(*sql.DB)
+	return repo
 }
 
 func (r *accountRepository) Create(ctx context.Context, account *service.Account) error {
@@ -114,6 +118,104 @@ func (r *accountRepository) Create(ctx context.Context, account *service.Account
 		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue account create failed: account=%d err=%v", account.ID, err)
 	}
 	return nil
+}
+
+// CreateWithPrimaryOpenAIPersona 原子写入 OpenAI OAuth 账号、分组、受保护 position 0、
+// 主授权链和初始 Session，避免首次建号成功但默认 Persona 缺失。
+func (r *accountRepository) CreateWithPrimaryOpenAIPersona(
+	ctx context.Context,
+	account *service.Account,
+	groupIDs []int64,
+	primary service.OpenAIPrimaryPersonaCreate,
+) error {
+	if account == nil {
+		return service.ErrAccountNilInput
+	}
+	if r == nil || r.db == nil {
+		return errors.New("OpenAI primary Persona transaction is unavailable")
+	}
+	if account.Platform != service.PlatformOpenAI || account.Type != service.AccountTypeOAuth ||
+		strings.TrimSpace(primary.ProfileVersion) == "" || strings.TrimSpace(primary.CredentialChainID) == "" ||
+		len(primary.EncryptedPayload) == 0 || strings.TrimSpace(primary.ChatGPTAccountID) == "" ||
+		len(primary.DeviceSeed) < 16 || strings.TrimSpace(primary.InstallationID) == "" || strings.TrimSpace(primary.UpstreamSessionID) == "" {
+		return errors.New("invalid OpenAI primary Persona create")
+	}
+	credentialsJSON, err := json.Marshal(normalizeJSONMap(account.Credentials))
+	if err != nil {
+		return fmt.Errorf("marshal OpenAI account credentials: %w", err)
+	}
+	extraJSON, err := json.Marshal(normalizeJSONMap(account.Extra))
+	if err != nil {
+		return fmt.Errorf("marshal OpenAI account extra: %w", err)
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err = tx.QueryRowContext(ctx, `INSERT INTO accounts
+    (name, notes, platform, type, credentials, extra, proxy_id, concurrency, priority,
+     status, schedulable, auto_pause_on_expired, quota_dimension)
+VALUES ($1, $2::text, 'openai', 'oauth', $3::jsonb, $4::jsonb, $5::bigint, $6, $7,
+        $8, $9, $10, $11)
+RETURNING id, created_at, updated_at`, account.Name, account.Notes, credentialsJSON, extraJSON,
+		account.ProxyID, account.Concurrency, account.Priority, account.Status, account.Schedulable,
+		account.AutoPauseOnExpired, account.QuotaDimensionOrDefault()).Scan(&account.ID, &account.CreatedAt, &account.UpdatedAt); err != nil {
+		return translatePersistenceError(err, service.ErrAccountNotFound, nil)
+	}
+
+	seenGroups := make(map[int64]struct{}, len(groupIDs))
+	account.GroupIDs = account.GroupIDs[:0]
+	for _, groupID := range groupIDs {
+		if groupID <= 0 {
+			return fmt.Errorf("invalid account group id %d", groupID)
+		}
+		if _, exists := seenGroups[groupID]; exists {
+			continue
+		}
+		seenGroups[groupID] = struct{}{}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO account_groups (account_id, group_id, priority)
+VALUES ($1, $2, 50)`, account.ID, groupID); err != nil {
+			return err
+		}
+		account.GroupIDs = append(account.GroupIDs, groupID)
+	}
+
+	var accountPersonaID int64
+	if err = tx.QueryRowContext(ctx, `INSERT INTO openai_account_personas
+    (account_id, position, profile_id, profile_version, credential_owner, state, enabled,
+     persona_generation, current_credential_chain_id, current_session_epoch, device_seed,
+     installation_id, proxy_id, row_version)
+VALUES ($1, 0, 'codex_cli_strict', $2, 'account_primary', 'active', TRUE,
+        1, $3, 1, $4, $5, $6::bigint, 1)
+RETURNING id`, account.ID, strings.TrimSpace(primary.ProfileVersion),
+		strings.TrimSpace(primary.CredentialChainID), primary.DeviceSeed,
+		strings.TrimSpace(primary.InstallationID), account.ProxyID).Scan(&accountPersonaID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO openai_account_persona_credentials
+    (account_id, persona, credential_chain_id, slot_id, credentials, chatgpt_account_id,
+     installation_id, token_version, state, last_error, last_refreshed_at,
+     account_persona_id, profile_id, profile_version, persona_generation)
+VALUES ($1, 'codex_cli_strict', $2, NULL, $3::jsonb, $4, $5, 1, 'ready', '', NOW(),
+        $6, 'codex_cli_strict', $7, 1)`, account.ID, strings.TrimSpace(primary.CredentialChainID),
+		[]byte(primary.EncryptedPayload), strings.TrimSpace(primary.ChatGPTAccountID),
+		strings.TrimSpace(primary.InstallationID), accountPersonaID, strings.TrimSpace(primary.ProfileVersion)); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO openai_account_persona_sessions
+    (account_persona_id, session_epoch, upstream_session_id, state, persona_generation,
+     credential_chain_id, profile_id, profile_version, effective_proxy_id, proxy_revision)
+VALUES ($1, 1, $2, 'current', 1, $3, 'codex_cli_strict', $4, $5::bigint, 0)`,
+		accountPersonaID, strings.TrimSpace(primary.UpstreamSessionID),
+		strings.TrimSpace(primary.CredentialChainID), strings.TrimSpace(primary.ProfileVersion), account.ProxyID); err != nil {
+		return err
+	}
+	if err = enqueueSchedulerOutbox(ctx, tx, service.SchedulerOutboxEventAccountChanged, &account.ID, nil, buildSchedulerGroupPayload(account.GroupIDs)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func createAccountRecord(ctx context.Context, client *dbent.Client, account *service.Account) error {
