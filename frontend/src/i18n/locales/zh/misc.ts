@@ -507,11 +507,6 @@ export default {
 	  restore: '验证并继续',
 	  totpCode: '动态验证码（已启用时必填）',
 	  totpPlaceholder: '6 位动态验证码',
-	  donateTrigger: '我不退了，打赏站长！',
-	  donateConfirmTitle: '确认放弃全部退款？',
-	  donateConfirmMessage: '确认后账户将停止使用并清空全部余额；可退款金额 {amount} 不会原路返还，而会计入打赏站长名单。此操作不可撤销。',
-	  donateConfirm: '确认放弃并打赏',
-	  donationList: '打赏站长名单',
 	  states: {
 		estimate: '待开始', draining: '核算中', ready_to_confirm: '待最终确认', submitting: '提交中', pending: '退款处理中',
 		succeeded: '清退完成', failed: '处理失败', partial_external_success: '部分通道已成功', canceled: '已取消', manual_review: '人工核验', donated: '已打赏'
@@ -625,8 +620,6 @@ export default {
 	  REFUND_BILLING_FENCE_UNAVAILABLE: '暂时无法建立退款计费隔离，请稍后重试',
 	  REFUND_SESSION_EXPIRED: '退款会话已过期',
 	  REFUND_CANNOT_CANCEL_AFTER_SUBMISSION: '支付通道已开始处理，不能取消',
-	  REFUND_DONATION_UNAVAILABLE: '当前账户金额无法安全核算，暂不能放弃退款',
-	  REFUND_NOT_READY_TO_DONATE: '在途计费尚未完成，暂不能计入打赏名单',
     },
     airwallexPay: 'Airwallex 支付',
     stripePay: '立即支付',

@@ -474,11 +474,6 @@ export default {
 	  restore: 'Verify and Continue',
 	  totpCode: 'Authenticator code (required when enabled)',
 	  totpPlaceholder: '6-digit authenticator code',
-	  donateTrigger: 'Skip my refund and tip the operator!',
-	  donateConfirmTitle: 'Waive the entire refund?',
-	  donateConfirmMessage: 'Your account will be disabled and all credits cleared. The refundable amount {amount} will not be returned and will be added to the operator donation list. This cannot be undone.',
-	  donateConfirm: 'Waive Refund and Donate',
-	  donationList: 'Operator Donation List',
 	  states: {
 		estimate: 'Ready to Start', draining: 'Finalizing', ready_to_confirm: 'Final Confirmation', submitting: 'Submitting', pending: 'Refund Pending',
 		succeeded: 'Completed', failed: 'Failed', partial_external_success: 'Some Routes Succeeded', canceled: 'Canceled', manual_review: 'Manual Review', donated: 'Donated'
@@ -592,8 +587,6 @@ export default {
 	  REFUND_BILLING_FENCE_UNAVAILABLE: 'Refund billing isolation is temporarily unavailable.',
 	  REFUND_SESSION_EXPIRED: 'The refund session has expired.',
 	  REFUND_CANNOT_CANCEL_AFTER_SUBMISSION: 'The refund cannot be canceled after gateway submission.',
-	  REFUND_DONATION_UNAVAILABLE: 'The account amount cannot be reconciled safely for donation.',
-	  REFUND_NOT_READY_TO_DONATE: 'In-flight billing has not settled, so the donation cannot be finalized.',
     },
     airwallexPay: 'Airwallex Payment',
     stripePay: 'Pay Now',

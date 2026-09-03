@@ -184,9 +184,6 @@ export interface AccountRefundQuote {
   admin_execution_mode: 'automatic' | 'manual_external' | 'blocked'
   review_reason_code?: string
   block_reason?: string
-  donation_eligible: boolean
-  donation_block_reason?: string
-  donation_amount: number
   total_confidence: 'reconciled' | 'manual_review'
   allocation_confidence: 'exact' | 'inferred' | 'deterministic'
   permanent_balance: number
@@ -209,8 +206,6 @@ export interface AccountRefundRecord {
   updated_at: string
   message?: string
   session_token?: string
-  donation_requested?: boolean
-  donation?: AccountRefundDonation
   state_revision: number
   review_reason_code?: string
   failure_stage?: 'pre_gateway' | 'gateway' | 'post_gateway'
@@ -234,13 +229,6 @@ export interface AccountRefundReconciliation {
   evidence: string
   note: string
   actor?: AccountRefundActor
-}
-
-export interface AccountRefundDonation {
-  username: string
-  masked_email: string
-  amount: number
-  donated_at: string
 }
 
 // ==================== Plans & Channels ====================

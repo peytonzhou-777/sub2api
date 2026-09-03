@@ -5,8 +5,6 @@ import UserRefundsView from '../UserRefundsView.vue'
 const routerPush = vi.hoisted(() => vi.fn())
 const fetchPublicSettings = vi.hoisted(() => vi.fn().mockResolvedValue(null))
 const getAccountRefundOverview = vi.hoisted(() => vi.fn())
-const getAccountRefundDonations = vi.hoisted(() => vi.fn())
-const donateAccountRefund = vi.hoisted(() => vi.fn())
 const appState = vi.hoisted(() => ({
   contactInfo: '',
   showError: vi.fn(),
@@ -41,8 +39,6 @@ vi.mock('@/stores/auth', () => ({
 vi.mock('@/api/payment', () => ({
   paymentAPI: {
     getAccountRefundOverview,
-    getAccountRefundDonations,
-    donateAccountRefund,
   },
 }))
 
@@ -54,8 +50,6 @@ function refundOverviewFixture() {
       updated_at: '2026-08-14T00:00:00Z',
       quote: {
         eligible: true,
-        donation_eligible: true,
-        donation_amount: 100,
         total_confidence: 'reconciled',
         allocation_confidence: 'inferred',
         permanent_balance: 100,
@@ -76,11 +70,6 @@ function mountView() {
     global: {
       stubs: {
         AppLayout: { template: '<main><slot /></main>' },
-        ConfirmDialog: {
-          props: ['show'],
-          emits: ['confirm', 'cancel'],
-          template: '<button v-if="show" data-test="confirm-donation" @click="$emit(\'confirm\')">confirm</button>',
-        },
         Icon: true,
       },
     },
@@ -94,14 +83,6 @@ describe('UserRefundsView', () => {
     routerPush.mockReset()
     fetchPublicSettings.mockReset().mockResolvedValue(null)
     getAccountRefundOverview.mockReset().mockResolvedValue(refundOverviewFixture())
-    getAccountRefundDonations.mockReset().mockResolvedValue({ data: [] })
-    donateAccountRefund.mockReset().mockResolvedValue({
-      data: {
-        ...refundOverviewFixture().data,
-        refund_id: 'refund-donation-1',
-        state: 'donated',
-      },
-    })
   })
 
   it('loads public settings and displays the configured customer service contact', async () => {
@@ -121,51 +102,12 @@ describe('UserRefundsView', () => {
     expect(wrapper.find('[data-test="refund-contact-info"]').exists()).toBe(false)
   })
 
-  it('requires confirmation before donating and refreshes the donation list after success', async () => {
-    getAccountRefundDonations
-      .mockResolvedValueOnce({ data: [] })
-      .mockResolvedValueOnce({
-        data: [{
-          username: 'alice',
-          masked_email: 'a***@example.com',
-          amount: 100,
-          donated_at: '2026-08-14T01:00:00Z',
-        }],
-      })
-
+  it('does not render the removed donation action or donation list', async () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(donateAccountRefund).not.toHaveBeenCalled()
-    await wrapper.get('[data-test="refund-donate-trigger"]').trigger('click')
-    expect(donateAccountRefund).not.toHaveBeenCalled()
-
-    await wrapper.get('[data-test="confirm-donation"]').trigger('click')
-    await flushPromises()
-
-    expect(donateAccountRefund).toHaveBeenCalledWith('quote-hash')
-    expect(getAccountRefundDonations).toHaveBeenCalledTimes(2)
-    expect(wrapper.get('[data-test="refund-donation-list"]').text()).toContain('alice')
-    expect(wrapper.get('[data-test="refund-donation-list"]').text()).toContain('a***@example.com')
-    expect(wrapper.get('[data-test="refund-donation-list"]').text()).toContain('$100.00')
-  })
-
-  it('shows an existing donation list below the donation action', async () => {
-    getAccountRefundDonations.mockResolvedValue({
-      data: [{
-        username: 'bob',
-        masked_email: 'b***@example.com',
-        amount: 50,
-        donated_at: '2026-08-13T01:00:00Z',
-      }],
-    })
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const trigger = wrapper.get('[data-test="refund-donate-trigger"]')
-    const list = wrapper.get('[data-test="refund-donation-list"]')
-    expect(trigger.element.compareDocumentPosition(list.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(wrapper.find('[data-test="refund-donate-trigger"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="refund-donation-list"]').exists()).toBe(false)
   })
 
   it('shows a continue action after a confirmed gateway failure', async () => {

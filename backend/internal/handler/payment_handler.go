@@ -462,35 +462,6 @@ func (h *PaymentHandler) LockAccountRefund(c *gin.Context) {
 	response.Success(c, record)
 }
 
-// DonateAccountRefund 二次确认后锁定账户并在排空完成时放弃退款。
-func (h *PaymentHandler) DonateAccountRefund(c *gin.Context) {
-	subject, ok := requireAuth(c)
-	if !ok {
-		return
-	}
-	var req accountRefundLockRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_INPUT", "quote_hash is required"))
-		return
-	}
-	record, err := h.paymentService.DonateAccountRefund(c.Request.Context(), subject.UserID, req.QuoteHash)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, record)
-}
-
-// ListAccountRefundDonations 返回公开打赏名单。
-func (h *PaymentHandler) ListAccountRefundDonations(c *gin.Context) {
-	donations, err := h.paymentService.ListAccountRefundDonations(c.Request.Context())
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, donations)
-}
-
 // RestoreAccountRefundSession 强身份验证后只补发当前清退的专用会话。
 func (h *PaymentHandler) RestoreAccountRefundSession(c *gin.Context) {
 	var req accountRefundSessionRestoreRequest
@@ -532,25 +503,6 @@ func (h *PaymentHandler) ConfirmAccountRefund(c *gin.Context) {
 		return
 	}
 	record, err := h.paymentService.ConfirmAccountRefund(c.Request.Context(), claims.RefundID, claims.UserID, req.QuoteHash)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, record)
-}
-
-// DonateLockedAccountRefund 通过退款专用会话确认放弃退款。
-func (h *PaymentHandler) DonateLockedAccountRefund(c *gin.Context) {
-	claims, ok := h.requireAccountRefundSession(c)
-	if !ok {
-		return
-	}
-	var req accountRefundConfirmRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_INPUT", "quote_hash is required"))
-		return
-	}
-	record, err := h.paymentService.DonateLockedAccountRefund(c.Request.Context(), claims.RefundID, claims.UserID, req.QuoteHash)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

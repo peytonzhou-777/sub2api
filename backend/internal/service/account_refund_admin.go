@@ -116,7 +116,7 @@ func (s *PaymentService) AdminStartAccountRefund(ctx context.Context, userID int
 		return nil, infraerrors.BadRequest("INVALID_INPUT", "user_id, quote_hash and Idempotency-Key are required")
 	}
 	actor.Type = "admin"
-	return s.lockAccountRefundWithOptions(ctx, userID, input.QuoteHash, false, accountRefundLockOptions{
+	return s.lockAccountRefundWithOptions(ctx, userID, input.QuoteHash, accountRefundLockOptions{
 		AdminInitiated: true, AllowDisabled: true, ExpectedStateRevision: input.ExpectedStateRevision, IdempotencyKey: idempotencyKey, Actor: &actor,
 	})
 }

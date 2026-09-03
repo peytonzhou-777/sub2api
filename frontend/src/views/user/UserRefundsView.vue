@@ -191,44 +191,7 @@
         </section>
       </template>
 
-      <section v-if="canDonate || donations.length > 0" class="ml-auto w-full max-w-xl text-right">
-        <button
-          v-if="canDonate"
-          data-test="refund-donate-trigger"
-          type="button"
-          class="text-xs text-gray-500 underline decoration-gray-400 underline-offset-4 transition-colors hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
-          :disabled="submitting"
-          @click="donationDialogOpen = true"
-        >
-          {{ t('payment.refunds.donateTrigger') }}
-        </button>
-
-        <div v-if="donations.length > 0" data-test="refund-donation-list" class="mt-4 border-t border-gray-200 pt-4 dark:border-dark-700">
-          <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('payment.refunds.donationList') }}</h2>
-          <div class="mt-2 divide-y divide-gray-100 dark:divide-dark-700">
-            <div
-              v-for="donation in donations"
-              :key="`${donation.masked_email}-${donation.donated_at}`"
-              class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 py-2 text-xs"
-            >
-              <span class="font-medium text-gray-800 dark:text-gray-200">{{ donation.username }}</span>
-              <span class="break-all text-gray-500 dark:text-gray-400">{{ donation.masked_email }}</span>
-              <span class="font-semibold text-gray-900 dark:text-white">{{ formatMoney(donation.amount) }}</span>
-            </div>
-          </div>
-        </div>
-      </section>
     </div>
-
-    <ConfirmDialog
-      :show="donationDialogOpen"
-      :title="t('payment.refunds.donateConfirmTitle')"
-      :message="t('payment.refunds.donateConfirmMessage', { amount: formatMoney(quote?.donation_amount || 0) })"
-      :confirm-text="t('payment.refunds.donateConfirm')"
-      danger
-      @confirm="confirmDonation"
-      @cancel="donationDialogOpen = false"
-    />
   </AppLayout>
 </template>
 
@@ -241,9 +204,8 @@ import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import { extractApiErrorCode, extractI18nErrorMessage } from '@/utils/apiError'
 import { formatDateTime } from '@/utils/format'
-import type { AccountRefundDonation, AccountRefundRecord } from '@/types/payment'
+import type { AccountRefundRecord } from '@/types/payment'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const refundSessionKey = 'account_refund_session'
@@ -259,8 +221,6 @@ const recovery = ref({ email: '', password: '', totpCode: '' })
 const acknowledged = ref(false)
 const finalAcknowledged = ref(false)
 const record = ref<AccountRefundRecord | null>(null)
-const donations = ref<AccountRefundDonation[]>([])
-const donationDialogOpen = ref(false)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 
 const quote = computed(() => record.value?.quote || null)
@@ -275,10 +235,6 @@ const canCancelRecovery = computed(() =>
   ['failed', 'manual_review'].includes(record.value?.state || '') && !hasSubmittedRoute.value,
 )
 const canRecover = computed(() => canContinue.value || canCancelRecovery.value || record.value?.state === 'manual_review')
-const canDonate = computed(() => {
-  if (!quote.value?.donation_eligible || Number(quote.value.donation_amount) <= 0) return false
-  return ['estimate', 'draining', 'ready_to_confirm', 'manual_review'].includes(record.value?.state || '')
-})
 const stateLabel = computed(() => t(`payment.refunds.states.${record.value?.state || 'estimate'}`))
 const stateText = computed(() => record.value?.message || (quote.value?.eligible ? t('payment.refunds.estimateReady') : t('payment.refunds.estimateBlocked')))
 const stateBadgeClass = computed(() => {
@@ -315,9 +271,6 @@ async function loadRefund() {
       : await paymentAPI.getAccountRefundOverview()
     recoveryRequired.value = false
     record.value = response.data
-    if (response.data.state === 'donated') {
-      await loadDonations()
-    }
     if (['canceled', 'succeeded', 'donated'].includes(response.data.state)) {
       sessionStorage.removeItem(refundIdKey)
       sessionStorage.removeItem(refundSessionKey)
@@ -334,14 +287,6 @@ async function loadRefund() {
   } finally {
     loading.value = false
     schedulePoll()
-  }
-}
-
-async function loadDonations() {
-  try {
-    donations.value = (await paymentAPI.getAccountRefundDonations()).data
-  } catch {
-    donations.value = []
   }
 }
 
@@ -393,35 +338,6 @@ async function confirmRefund() {
   } finally { submitting.value = false }
 }
 
-async function confirmDonation() {
-  if (!quote.value) return
-  donationDialogOpen.value = false
-  submitting.value = true
-  try {
-    const refundId = record.value?.refund_id
-    const sessionToken = sessionStorage.getItem(refundSessionKey)
-    const response = refundId && sessionToken
-      ? await paymentAPI.donateLockedAccountRefund(refundId, quote.value.quote_hash, sessionToken)
-      : await paymentAPI.donateAccountRefund(quote.value.quote_hash)
-    record.value = response.data
-    if (response.data.refund_id && response.data.session_token) {
-      sessionStorage.setItem(refundIdKey, response.data.refund_id)
-      sessionStorage.setItem(refundSessionKey, response.data.session_token)
-    }
-    if (response.data.state === 'donated') {
-      sessionStorage.removeItem(refundIdKey)
-      sessionStorage.removeItem(refundSessionKey)
-      await loadDonations()
-    } else {
-      schedulePoll()
-    }
-  } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
-  } finally {
-    submitting.value = false
-  }
-}
-
 async function cancelRefund() {
   const refundId = record.value?.refund_id
   const sessionToken = sessionStorage.getItem(refundSessionKey)
@@ -440,7 +356,6 @@ async function cancelRefund() {
 onMounted(() => {
   // 清退锁定会使普通登录失效，因此客服信息始终通过公开设置加载。
   void appStore.fetchPublicSettings()
-  void loadDonations()
   void loadRefund()
 })
 onBeforeUnmount(() => { if (pollTimer) clearTimeout(pollTimer) })

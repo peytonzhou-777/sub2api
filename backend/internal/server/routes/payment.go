@@ -40,7 +40,6 @@ func RegisterPaymentRoutes(
 		authenticated.GET("/limits", paymentHandler.GetLimits)
 		authenticated.GET("/refunds/overview", paymentHandler.GetAccountRefundOverview)
 		authenticated.POST("/refunds/lock", paymentHandler.LockAccountRefund)
-		authenticated.POST("/refunds/donate", paymentHandler.DonateAccountRefund)
 
 		orders := authenticated.Group("/orders")
 		{
@@ -61,7 +60,6 @@ func RegisterPaymentRoutes(
 	{
 		public.POST("/orders/verify", paymentHandler.VerifyOrderPublic)
 		public.POST("/orders/resolve", paymentHandler.ResolveOrderPublicByResumeToken)
-		public.GET("/refund-donations", paymentHandler.ListAccountRefundDonations)
 	}
 
 	// 账户被锁定后普通 JWT 会失效，退款专用会话只能访问当前清退流程。
@@ -75,7 +73,6 @@ func RegisterPaymentRoutes(
 		}), gin.HandlerFunc(auditLog), paymentHandler.RestoreAccountRefundSession)
 		refundSession.GET("/:refund_id", paymentHandler.GetAccountRefund)
 		refundSession.POST("/:refund_id/confirm", paymentHandler.ConfirmAccountRefund)
-		refundSession.POST("/:refund_id/donate", paymentHandler.DonateLockedAccountRefund)
 		refundSession.POST("/:refund_id/cancel", paymentHandler.CancelAccountRefund)
 	}
 

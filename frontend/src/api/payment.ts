@@ -12,7 +12,6 @@ import type {
   CreateOrderRequest,
   CreateOrderResult,
   PaymentOrder,
-  AccountRefundDonation,
   AccountRefundRecord,
 } from '@/types/payment'
 import type { BasePaginationResponse } from '@/types'
@@ -96,18 +95,6 @@ export const paymentAPI = {
     return apiClient.post<AccountRefundRecord>('/payment/refunds/lock', { quote_hash: quoteHash })
   },
 
-  /** Waive the refund, clear all credits, and add the user to the donation list. */
-  donateAccountRefund(quoteHash: string) {
-    return apiClient.post<AccountRefundRecord>('/payment/refunds/donate', { quote_hash: quoteHash })
-  },
-
-  /** Read the public account-refund donation list. */
-  getAccountRefundDonations() {
-    return apiClient.get<AccountRefundDonation[]>('/payment/public/refund-donations', {
-      headers: { 'X-Skip-Auth': '1' },
-    })
-  },
-
   /** Restore only the dedicated session for an already locked account refund. */
   restoreAccountRefundSession(email: string, password: string, totpCode: string) {
     return apiClient.post<AccountRefundRecord>('/payment/refunds/session/restore', {
@@ -127,13 +114,6 @@ export const paymentAPI = {
   /** Confirm the immutable final quote. */
   confirmAccountRefund(refundId: string, quoteHash: string, sessionToken: string) {
     return apiClient.post<AccountRefundRecord>(`/payment/refunds/${refundId}/confirm`, { quote_hash: quoteHash }, {
-      headers: refundSessionHeaders(sessionToken),
-    })
-  },
-
-  /** Waive a locked refund without calling the payment gateway. */
-  donateLockedAccountRefund(refundId: string, quoteHash: string, sessionToken: string) {
-    return apiClient.post<AccountRefundRecord>(`/payment/refunds/${refundId}/donate`, { quote_hash: quoteHash }, {
       headers: refundSessionHeaders(sessionToken),
     })
   },

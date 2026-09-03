@@ -283,8 +283,6 @@ func TestBuildAccountRefundQuoteUsesTotalRechargedOnlyAsHistoricalCounter(t *tes
 	require.True(t, quote.Eligible)
 	require.Equal(t, "reconciled", quote.TotalConfidence)
 	require.Empty(t, quote.BlockReason)
-	require.True(t, quote.DonationEligible)
-	require.InDelta(t, 99, quote.DonationAmount, 1e-8)
 }
 
 func TestBuildAccountRefundQuoteUsesAccountPoolBonusRatio(t *testing.T) {
@@ -345,8 +343,6 @@ func TestBuildAccountRefundQuoteBlocksMissingOriginalTradeNumber(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, quote.Eligible)
 	require.Contains(t, quote.BlockReason, "trade number")
-	require.True(t, quote.DonationEligible)
-	require.InDelta(t, 100, quote.DonationAmount, 1e-8)
 }
 
 func TestBuildAccountRefundQuoteBlocksInFlightRecharge(t *testing.T) {
@@ -582,6 +578,34 @@ func TestGetAccountRefundRepairsLegacySucceededLock(t *testing.T) {
 	repaired, err := svc.GetAccountRefund(ctx, record.RefundID, userRow.ID)
 	require.NoError(t, err)
 	require.Equal(t, AccountRefundStateSucceeded, repaired.State)
+	require.Equal(t, 1, fence.releaseCalls)
+	updatedUser, err := client.User.Get(ctx, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, StatusActive, updatedUser.Status)
+}
+
+func TestGetAccountRefundKeepsLegacyDonatedStateTerminal(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	userRow, err := client.User.Create().
+		SetEmail("legacy-donated-refund@example.com").
+		SetPasswordHash("hash").
+		SetUsername("legacy-donated").
+		SetStatus(StatusRefundLocked).
+		Save(ctx)
+	require.NoError(t, err)
+	record := &AccountRefundRecord{
+		RefundID: "legacy-donated-refund", UserID: userRow.ID, State: AccountRefundStateDonated,
+		PreviousUserStatus: StatusDisabled, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	require.NoError(t, writeAccountRefundAudit(ctx, client, record))
+	fence := &accountRefundFenceStub{}
+	svc := &PaymentService{entClient: client, authCacheInvalidator: fence}
+
+	loaded, err := svc.GetAccountRefund(ctx, record.RefundID, userRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, AccountRefundStateDonated, loaded.State)
+	require.Zero(t, fence.acquireCalls)
 	require.Equal(t, 1, fence.releaseCalls)
 	updatedUser, err := client.User.Get(ctx, userRow.ID)
 	require.NoError(t, err)
@@ -835,92 +859,6 @@ func TestUpdateStatusProtectsActiveRefundLock(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, "REFUND_LOCKED_STATUS_PROTECTED", infraerrors.Reason(err))
 	require.Empty(t, repo.updateFields)
-}
-
-func TestDonateLockedAccountRefundClearsCreditsWithoutGatewayRefund(t *testing.T) {
-	ctx := context.Background()
-	client := newPaymentConfigServiceTestClient(t)
-	userRow, err := client.User.Create().
-		SetEmail("alice.donor@example.com").
-		SetPasswordHash("hash").
-		SetUsername("alice").
-		SetBalance(100).
-		SetTotalRecharged(100).
-		SetStatus(StatusRefundLocked).
-		Save(ctx)
-	require.NoError(t, err)
-	provider, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeAlipay).SetName("donation-provider").SetConfig("{}").SetSupportedTypes("alipay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
-	require.NoError(t, err)
-	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 0, paymentorder.RechargeBonusStatusNone)
-	grant, err := client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceResetRebate).SetInitialAmount(15).SetUsedAmount(0).SetFrozenAmount(0).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
-	require.NoError(t, err)
-	adminGrantLots := createAccountRefundAdminGrantSecurityDeposit(t, ctx, client, userRow.ID, 2500)
-
-	fence := &accountRefundFenceStub{}
-	svc := &PaymentService{entClient: client, authCacheInvalidator: fence}
-	quote, err := svc.buildAccountRefundQuoteWithClient(ctx, client, &User{ID: userRow.ID, Balance: 100, TotalRecharged: 100, Status: StatusRefundLocked})
-	require.NoError(t, err)
-	require.True(t, quote.Eligible)
-	record := &AccountRefundRecord{
-		RefundID: "donation-refund-1", UserID: userRow.ID, State: AccountRefundStateManualReview,
-		PreviousUserStatus: StatusActive, Quote: quote, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
-	}
-	require.NoError(t, writeAccountRefundAudit(ctx, client, record))
-
-	donated, err := svc.DonateLockedAccountRefund(ctx, record.RefundID, userRow.ID, quote.QuoteHash)
-	require.NoError(t, err)
-	require.Equal(t, AccountRefundStateDonated, donated.State)
-	require.Equal(t, 1, fence.releaseCalls)
-	require.NotNil(t, donated.Donation)
-	require.Equal(t, "alice", donated.Donation.Username)
-	require.Equal(t, "a***@example.com", donated.Donation.MaskedEmail)
-	require.InDelta(t, 100, donated.Donation.Amount, 1e-8)
-
-	updatedUser, err := client.User.Get(ctx, userRow.ID)
-	require.NoError(t, err)
-	require.Zero(t, updatedUser.Balance)
-	require.Equal(t, StatusActive, updatedUser.Status)
-	updatedGrant, err := client.UserLimitedCreditGrant.Get(ctx, grant.ID)
-	require.NoError(t, err)
-	require.Equal(t, LimitedCreditStatusDepleted, updatedGrant.Status)
-	require.InDelta(t, 15, updatedGrant.UsedAmount, 1e-8)
-	adminGrantAccount, err := client.SecurityDepositAccount.Query().Where(
-		securitydepositaccount.UserIDEQ(userRow.ID),
-		securitydepositaccount.BucketTypeEQ(securitydepositaccount.BucketTypeAdminGrant),
-	).Only(ctx)
-	require.NoError(t, err)
-	require.Zero(t, adminGrantAccount.BalanceCents)
-	updatedAdminGrantLot, err := client.SecurityDepositLot.Get(ctx, adminGrantLots[0].ID)
-	require.NoError(t, err)
-	require.Zero(t, updatedAdminGrantLot.RemainingCents)
-	require.Equal(t, int64(2500), updatedAdminGrantLot.RevokedCents)
-	updatedOrder, err := client.PaymentOrder.Get(ctx, orderID)
-	require.NoError(t, err)
-	require.Equal(t, OrderStatusCompleted, updatedOrder.Status)
-
-	acquireCallsAfterDonation := fence.acquireCalls
-	loadedDonation, err := svc.GetAccountRefund(ctx, record.RefundID, userRow.ID)
-	require.NoError(t, err)
-	require.Equal(t, AccountRefundStateDonated, loadedDonation.State)
-	require.Equal(t, acquireCallsAfterDonation, fence.acquireCalls, "打赏终态查询不得重新获取退款计费锁")
-
-	donations, err := svc.ListAccountRefundDonations(ctx)
-	require.NoError(t, err)
-	require.Len(t, donations, 1)
-	require.Equal(t, *donated.Donation, donations[0])
-
-	_, err = svc.DonateLockedAccountRefund(ctx, record.RefundID, userRow.ID, quote.QuoteHash)
-	require.Error(t, err)
-	donations, err = svc.ListAccountRefundDonations(ctx)
-	require.NoError(t, err)
-	require.Len(t, donations, 1)
-}
-
-func TestMaskAccountRefundDonationEmail(t *testing.T) {
-	require.Equal(t, "a***@example.com", maskAccountRefundDonationEmail("alice@example.com"))
-	require.Equal(t, "x***@example.com", maskAccountRefundDonationEmail("x@example.com"))
-	require.Equal(t, "***", maskAccountRefundDonationEmail("invalid"))
-	require.Equal(t, "匿名用户", accountRefundDonationUsername(" "))
 }
 
 func createAccountRefundAdminGrantSecurityDeposit(t *testing.T, ctx context.Context, client *dbent.Client, userID int64, amounts ...int64) []*dbent.SecurityDepositLot {

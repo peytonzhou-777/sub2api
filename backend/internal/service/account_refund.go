@@ -39,12 +39,12 @@ const (
 	AccountRefundStatePartialExternalSuccess = "partial_external_success"
 	AccountRefundStateCanceled               = "canceled"
 	AccountRefundStateManualReview           = "manual_review"
-	AccountRefundStateDonated                = "donated"
+	// AccountRefundStateDonated 仅用于兼容历史终态记录，不再提供新增入口。
+	AccountRefundStateDonated = "donated"
 
 	accountRefundAuditPrefix    = "account_refund:"
 	accountRefundReason         = "account full clearance"
 	accountRefundTolerance      = 0.00000001
-	accountRefundDonationAction = "ACCOUNT_REFUND_DONATED"
 	accountRefundGatewayUnknown = "unknown"
 
 	AdminAccountRefundOutcomeSucceeded = "succeeded"
@@ -112,9 +112,6 @@ type AccountRefundQuote struct {
 	AdminExecutionMode   string               `json:"admin_execution_mode"`
 	ReviewReasonCode     string               `json:"review_reason_code,omitempty"`
 	BlockReason          string               `json:"block_reason,omitempty"`
-	DonationEligible     bool                 `json:"donation_eligible"`
-	DonationBlockReason  string               `json:"donation_block_reason,omitempty"`
-	DonationAmount       float64              `json:"donation_amount"`
 	TotalConfidence      string               `json:"total_confidence"`
 	AllocationConfidence string               `json:"allocation_confidence"`
 	PermanentBalance     float64              `json:"permanent_balance"`
@@ -138,8 +135,6 @@ type AccountRefundRecord struct {
 	UpdatedAt           time.Time                     `json:"updated_at"`
 	Message             string                        `json:"message,omitempty"`
 	SessionToken        string                        `json:"session_token,omitempty"`
-	DonationRequested   bool                          `json:"donation_requested,omitempty"`
-	Donation            *AccountRefundDonation        `json:"donation,omitempty"`
 	StateRevision       int64                         `json:"state_revision"`
 	ReviewReasonCode    string                        `json:"review_reason_code,omitempty"`
 	FailureStage        string                        `json:"failure_stage,omitempty"`
@@ -166,14 +161,6 @@ type AccountRefundReconciliation struct {
 	Evidence         string              `json:"evidence"`
 	Note             string              `json:"note"`
 	Actor            *AccountRefundActor `json:"actor,omitempty"`
-}
-
-// AccountRefundDonation 是打赏名单中公开展示的不可变快照。
-type AccountRefundDonation struct {
-	Username    string    `json:"username"`
-	MaskedEmail string    `json:"masked_email"`
-	Amount      float64   `json:"amount"`
-	DonatedAt   time.Time `json:"donated_at"`
 }
 
 // AdminAccountRefundReconcileInput 是管理员核验一条未知网关退款的结果。
@@ -281,16 +268,11 @@ func (s *PaymentService) GetAccountRefundOverview(ctx context.Context, userID in
 
 // LockAccountRefund 原子锁定用户，并为二次确认签发退款专用会话。
 func (s *PaymentService) LockAccountRefund(ctx context.Context, userID int64, quoteHash string) (*AccountRefundRecord, error) {
-	return s.lockAccountRefund(ctx, userID, quoteHash, false)
+	return s.lockAccountRefund(ctx, userID, quoteHash)
 }
 
-// DonateAccountRefund 经用户二次确认后锁定账户，排空完成即放弃退款并计入打赏名单。
-func (s *PaymentService) DonateAccountRefund(ctx context.Context, userID int64, quoteHash string) (*AccountRefundRecord, error) {
-	return s.lockAccountRefund(ctx, userID, quoteHash, true)
-}
-
-func (s *PaymentService) lockAccountRefund(ctx context.Context, userID int64, quoteHash string, donationRequested bool) (*AccountRefundRecord, error) {
-	return s.lockAccountRefundWithOptions(ctx, userID, quoteHash, donationRequested, accountRefundLockOptions{IssueSession: true, Actor: &AccountRefundActor{Type: "user", ID: userID, Label: "user:" + strconv.FormatInt(userID, 10)}})
+func (s *PaymentService) lockAccountRefund(ctx context.Context, userID int64, quoteHash string) (*AccountRefundRecord, error) {
+	return s.lockAccountRefundWithOptions(ctx, userID, quoteHash, accountRefundLockOptions{IssueSession: true, Actor: &AccountRefundActor{Type: "user", ID: userID, Label: "user:" + strconv.FormatInt(userID, 10)}})
 }
 
 type accountRefundLockOptions struct {
@@ -302,16 +284,13 @@ type accountRefundLockOptions struct {
 	Actor                 *AccountRefundActor
 }
 
-func (s *PaymentService) lockAccountRefundWithOptions(ctx context.Context, userID int64, quoteHash string, donationRequested bool, options accountRefundLockOptions) (*AccountRefundRecord, error) {
+func (s *PaymentService) lockAccountRefundWithOptions(ctx context.Context, userID int64, quoteHash string, options accountRefundLockOptions) (*AccountRefundRecord, error) {
 	quote, err := s.buildAccountRefundQuote(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	if donationRequested && !quote.DonationEligible {
-		return nil, infraerrors.Conflict("REFUND_DONATION_UNAVAILABLE", quote.DonationBlockReason)
-	}
 	adminQuoteExecutable := options.AdminInitiated && quote.CalculationStatus == AccountRefundCalculationVerified && quote.AdminExecutionMode != AccountRefundAdminBlocked
-	if !donationRequested && !quote.Eligible && !adminQuoteExecutable {
+	if !quote.Eligible && !adminQuoteExecutable {
 		return nil, infraerrors.Conflict("REFUND_MANUAL_REVIEW", quote.BlockReason)
 	}
 	if strings.TrimSpace(quoteHash) == "" || quoteHash != quote.QuoteHash {
@@ -358,7 +337,7 @@ func (s *PaymentService) lockAccountRefundWithOptions(ctx context.Context, userI
 		}
 	}()
 	now := time.Now().UTC()
-	record := &AccountRefundRecord{RefundID: refundID, UserID: userID, State: AccountRefundStateDraining, Quote: quote, CreatedAt: now, UpdatedAt: now, DonationRequested: donationRequested, AdminInitiated: options.AdminInitiated, StartIdempotencyKey: options.IdempotencyKey, Actor: options.Actor}
+	record := &AccountRefundRecord{RefundID: refundID, UserID: userID, State: AccountRefundStateDraining, Quote: quote, CreatedAt: now, UpdatedAt: now, AdminInitiated: options.AdminInitiated, StartIdempotencyKey: options.IdempotencyKey, Actor: options.Actor}
 	tx, err := s.entClient.Tx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin account refund lock: %w", err)
@@ -451,7 +430,7 @@ func (s *PaymentService) GetAccountRefund(ctx context.Context, refundID string, 
 	if record == nil {
 		return nil, infraerrors.NotFound("REFUND_NOT_FOUND", "account refund not found")
 	}
-	// 已终结流程只读历史快照，避免打赏或取消后的用户被重新加上计费锁。
+	// 已终结流程只读历史快照，避免完成或取消后的用户被重新加上计费锁。
 	if accountRefundTerminal(record.State) {
 		if err := s.restoreTerminalAccountRefundAccess(ctx, record); err != nil {
 			return nil, err
@@ -497,30 +476,6 @@ func (s *PaymentService) ConfirmAccountRefund(ctx context.Context, refundID stri
 		return nil, err
 	}
 	return s.executeAccountRefundRoutes(ctx, record)
-}
-
-// DonateLockedAccountRefund 将已排空的退款会话改为打赏终态，不调用任何支付网关。
-func (s *PaymentService) DonateLockedAccountRefund(ctx context.Context, refundID string, userID int64, quoteHash string) (*AccountRefundRecord, error) {
-	record, err := s.GetAccountRefund(ctx, refundID, userID)
-	if err != nil {
-		return nil, err
-	}
-	if record.State != AccountRefundStateDraining && record.State != AccountRefundStateReadyToConfirm && record.State != AccountRefundStateManualReview {
-		return nil, infraerrors.Conflict("REFUND_NOT_READY_TO_DONATE", "refund billing is not fully drained")
-	}
-	if record.Quote == nil || strings.TrimSpace(quoteHash) == "" || quoteHash != record.Quote.QuoteHash {
-		return nil, infraerrors.Conflict("REFUND_QUOTE_CHANGED", "refund quote changed; review it again")
-	}
-	if record.State == AccountRefundStateDraining {
-		record.DonationRequested = true
-		record.Message = "waiting for billing to drain before donation"
-		record.UpdatedAt = time.Now().UTC()
-		if err := s.writeAccountRefundAudit(ctx, record); err != nil {
-			return nil, err
-		}
-		return record, nil
-	}
-	return s.finalizeAccountRefundDonation(ctx, record)
 }
 
 // claimAccountRefundSubmission 在同一事务锁定资金输入与最新状态，只有一个确认请求能进入网关阶段。
@@ -1112,13 +1067,11 @@ func calculateAccountRefundQuote(inputs accountRefundQuoteInputs) *AccountRefund
 	calculationBlockReason := ""
 	selfServiceBlockReason := ""
 	adminAutomatic := true
-	donationBlockReason := ""
-	setBlockReason := func(reason string, blocksDonation bool) {
+	setBlockReason := func(reason string) {
 		if quote.BlockReason == "" {
 			quote.BlockReason = reason
 		}
-		if blocksDonation && donationBlockReason == "" {
-			donationBlockReason = reason
+		if calculationBlockReason == "" {
 			calculationBlockReason = reason
 		}
 	}
@@ -1131,7 +1084,7 @@ func calculateAccountRefundQuote(inputs accountRefundQuoteInputs) *AccountRefund
 		}
 	}
 	if inFlight > 0 {
-		setBlockReason("a balance recharge order is still pending, being fulfilled, or being refunded", true)
+		setBlockReason("a balance recharge order is still pending, being fulfilled, or being refunded")
 	}
 	orderByID := make(map[int64]*dbent.PaymentOrder, len(orders))
 	for _, order := range orders {
@@ -1148,7 +1101,7 @@ func calculateAccountRefundQuote(inputs accountRefundQuoteInputs) *AccountRefund
 		if grant.SourceType == LimitedCreditSourceRechargeBonus {
 			if grant.SourceID == nil {
 				quote.OtherLimitedToClear += activeRemaining.InexactFloat64()
-				setBlockReason("a recharge bonus grant has no source order", true)
+				setBlockReason("a recharge bonus grant has no source order")
 				continue
 			}
 			aggregate := bonusByOrder[*grant.SourceID]
@@ -1158,28 +1111,25 @@ func calculateAccountRefundQuote(inputs accountRefundQuoteInputs) *AccountRefund
 			bonusByOrder[*grant.SourceID] = aggregate
 			if _, exists := orderByID[*grant.SourceID]; !exists {
 				quote.OtherLimitedToClear += activeRemaining.InexactFloat64()
-				setBlockReason("a recharge bonus cannot be matched to a historical recharge order", true)
+				setBlockReason("a recharge bonus cannot be matched to a historical recharge order")
 			}
 		} else {
 			quote.OtherLimitedToClear += activeRemaining.InexactFloat64()
 		}
 		if grant.FrozenAmount > accountRefundTolerance {
-			setBlockReason("limited credits are still frozen", true)
+			setBlockReason("limited credits are still frozen")
 		}
 	}
 	if account.FrozenBalance > accountRefundTolerance {
-		setBlockReason("permanent balance is still frozen", true)
+		setBlockReason("permanent balance is still frozen")
 	}
 	if len(orders) == 0 && quote.BlockReason == "" {
-		setBlockReason("no historical balance recharge order is refundable", true)
-	}
-	if len(orders) == 0 {
-		donationBlockReason = "no historical balance recharge order can support the donation amount"
+		setBlockReason("no historical balance recharge order is refundable")
 	}
 
 	positiveBalance := decimal.NewFromFloat(math.Max(account.Balance, 0))
 	if account.Balance < -accountRefundTolerance {
-		setBlockReason("permanent balance is negative and requires manual reconciliation", true)
+		setBlockReason("permanent balance is negative and requires manual reconciliation")
 	}
 	fullPriceCapacity := decimal.Zero
 	campaignCapacity := decimal.Zero
@@ -1195,12 +1145,12 @@ func calculateAccountRefundQuote(inputs accountRefundQuoteInputs) *AccountRefund
 			var valid bool
 			bonusRate, valid = rechargeBonusPercentToFraction(order.RechargeBonusRate)
 			if !valid {
-				setBlockReason("a recharge bonus order has no valid percentage snapshot", true)
+				setBlockReason("a recharge bonus order has no valid percentage snapshot")
 			} else {
 				refundFactor = rechargeBonusRefundFactor(bonusRate)
 			}
 			if decimal.NewFromFloat(order.RechargeBonusAmount).Sub(bonus.initial).Abs().GreaterThan(decimal.NewFromFloat(accountRefundTolerance)) {
-				setBlockReason("recharge bonus grant cannot be reconciled to its order snapshot", true)
+				setBlockReason("recharge bonus grant cannot be reconciled to its order snapshot")
 			}
 			campaignBonusRemaining = campaignBonusRemaining.Add(bonus.remaining)
 			quote.RechargeBonusBalance += bonus.remaining.InexactFloat64()
@@ -1208,22 +1158,22 @@ func calculateAccountRefundQuote(inputs accountRefundQuoteInputs) *AccountRefund
 			// 活动快照缺失的异常赠额不参与退款，仍会在清退终态被清空。
 			quote.OtherLimitedToClear += bonus.remaining.InexactFloat64()
 		} else if hasCampaignSnapshot && order.RechargeBonusStatus == paymentorder.RechargeBonusStatusGranted {
-			setBlockReason("a granted campaign order has no recharge bonus grant", true)
+			setBlockReason("a granted campaign order has no recharge bonus grant")
 		}
 
 		principalCapacity := decimal.NewFromFloat(order.Amount).Sub(decimal.NewFromFloat(order.RefundAmount))
 		if principalCapacity.IsNegative() {
-			setBlockReason("a historical order refund exceeds its original credited amount", true)
+			setBlockReason("a historical order refund exceeds its original credited amount")
 			principalCapacity = decimal.Zero
 		}
 		if order.Status == OrderStatusRefunded && principalCapacity.GreaterThan(decimal.NewFromFloat(accountRefundTolerance)) {
-			setBlockReason("a refunded historical order has inconsistent remaining principal", true)
+			setBlockReason("a refunded historical order has inconsistent remaining principal")
 		}
 		currency := PaymentOrderCurrency(order)
 		gatewayRefunded := calculateGatewayRefundAmount(order.Amount, order.PayAmount, math.Min(math.Max(order.RefundAmount, 0), order.Amount), currency)
 		gatewayCapacity := decimal.NewFromFloat(order.PayAmount).Sub(decimal.NewFromFloat(gatewayRefunded))
 		if gatewayCapacity.IsNegative() {
-			setBlockReason("a historical order exceeds its original gateway refund capacity", true)
+			setBlockReason("a historical order exceeds its original gateway refund capacity")
 			gatewayCapacity = decimal.Zero
 		}
 		if principalCapacity.GreaterThan(decimal.NewFromFloat(accountRefundTolerance)) || (isCampaign && bonus.remaining.GreaterThan(decimal.Zero)) {
@@ -1258,12 +1208,12 @@ func calculateAccountRefundQuote(inputs accountRefundQuoteInputs) *AccountRefund
 	}
 	totalPrincipalCapacity := fullPriceCapacity.Add(campaignCapacity)
 	if positiveBalance.GreaterThan(totalPrincipalCapacity.Add(decimal.NewFromFloat(accountRefundTolerance))) {
-		setBlockReason("permanent balance exceeds historical remaining principal capacity", true)
+		setBlockReason("permanent balance exceeds historical remaining principal capacity")
 	}
 	fullPriceRemaining := decimal.Min(positiveBalance, fullPriceCapacity)
 	campaignPermanentRemaining := positiveBalance.Sub(fullPriceRemaining)
 	if campaignPermanentRemaining.GreaterThan(campaignCapacity.Add(decimal.NewFromFloat(accountRefundTolerance))) {
-		setBlockReason("campaign permanent balance exceeds campaign order capacity", true)
+		setBlockReason("campaign permanent balance exceeds campaign order capacity")
 	}
 
 	fullPriceWeights := make([]decimal.Decimal, len(pools))
@@ -1309,7 +1259,7 @@ func calculateAccountRefundQuote(inputs accountRefundQuoteInputs) *AccountRefund
 	refundTotal := rawRefundTotal.Round(2)
 	refundUnits, allocationClosed := allocateRefundUnitsWithCapacities(refundTotal, rawRefundWeights, creditCapacities, 2)
 	if !allocationClosed {
-		setBlockReason("refund total exceeds historical order remaining capacity", true)
+		setBlockReason("refund total exceeds historical order remaining capacity")
 	}
 	allocatedRefundTotal := decimal.Zero
 	for i := range quote.Orders {
@@ -1319,7 +1269,7 @@ func calculateAccountRefundQuote(inputs accountRefundQuoteInputs) *AccountRefund
 		order := pools[i].order
 		gateway := decimal.NewFromFloat(calculateGatewayRefundAmount(order.Amount, order.PayAmount, refundCredit.InexactFloat64(), PaymentOrderCurrency(order)))
 		if gateway.GreaterThan(pools[i].gatewayCapacity.Add(decimal.NewFromFloat(accountRefundTolerance))) {
-			setBlockReason("an order route exceeds its remaining gateway refund capacity", true)
+			setBlockReason("an order route exceeds its remaining gateway refund capacity")
 		}
 		quote.Orders[i].GatewayRefund = gateway.InexactFloat64()
 		quote.GatewayTotals[PaymentOrderCurrency(order)] += gateway.InexactFloat64()
@@ -1327,7 +1277,7 @@ func calculateAccountRefundQuote(inputs accountRefundQuoteInputs) *AccountRefund
 	quote.EligibleCreditTotal = normalizeRefundFloat(positiveBalance.Add(campaignBonusRemaining).InexactFloat64())
 	quote.RefundCreditTotal = normalizeRefundFloat(allocatedRefundTotal.InexactFloat64())
 	if allocatedRefundTotal.Sub(refundTotal).Abs().GreaterThan(decimal.NewFromFloat(accountRefundTolerance)) {
-		setBlockReason("order route allocation does not conserve the user refund total", true)
+		setBlockReason("order route allocation does not conserve the user refund total")
 	}
 	for currency, amount := range quote.GatewayTotals {
 		quote.GatewayTotals[currency] = normalizeRefundFloat(amount)
@@ -1338,7 +1288,7 @@ func calculateAccountRefundQuote(inputs accountRefundQuoteInputs) *AccountRefund
 	quote.RefundCreditTotal = normalizeRefundFloat(quote.RefundCreditTotal)
 
 	if calculationBlockReason == "" && quote.RefundCreditTotal <= accountRefundTolerance {
-		setBlockReason("no refundable amount remains", true)
+		setBlockReason("no refundable amount remains")
 	}
 	if calculationBlockReason == "" {
 		quote.CalculationStatus = AccountRefundCalculationVerified
@@ -1357,15 +1307,6 @@ func calculateAccountRefundQuote(inputs accountRefundQuoteInputs) *AccountRefund
 		}
 	} else {
 		quote.ReviewReasonCode = AccountRefundReviewQuoteInconsistent
-	}
-	quote.DonationAmount = quote.RefundCreditTotal
-	if donationBlockReason == "" && quote.DonationAmount > accountRefundTolerance {
-		quote.DonationEligible = true
-	} else {
-		if donationBlockReason == "" {
-			donationBlockReason = "no refundable amount remains to donate"
-		}
-		quote.DonationBlockReason = donationBlockReason
 	}
 	quote.QuoteHash = accountRefundQuoteHash(quote)
 	return quote
@@ -1514,13 +1455,6 @@ func (s *PaymentService) refreshAccountRefundDrain(ctx context.Context, record *
 	if err != nil {
 		return nil, err
 	}
-	if record.DonationRequested && quote.DonationEligible {
-		record.State = AccountRefundStateReadyToConfirm
-		record.Quote = quote
-		record.Message = "billing drained; finalizing donation"
-		record.UpdatedAt = time.Now().UTC()
-		return s.finalizeAccountRefundDonation(ctx, record)
-	}
 	adminAutomaticReady := record.AdminInitiated && quote.CalculationStatus == AccountRefundCalculationVerified && quote.AdminExecutionMode == AccountRefundAdminAutomatic
 	if !quote.Eligible && !adminAutomaticReady {
 		if record.AdminInitiated && quote.CalculationStatus == AccountRefundCalculationVerified && quote.AdminExecutionMode == AccountRefundAdminManual {
@@ -1549,168 +1483,6 @@ func (s *PaymentService) refreshAccountRefundDrain(ctx context.Context, record *
 		return nil, err
 	}
 	return record, nil
-}
-
-// finalizeAccountRefundDonation 原子校验最终报价、清空余额并写入打赏终态。
-func (s *PaymentService) finalizeAccountRefundDonation(ctx context.Context, record *AccountRefundRecord) (*AccountRefundRecord, error) {
-	if record == nil || record.Quote == nil {
-		return nil, infraerrors.Conflict("REFUND_STATE_INVALID", "refund quote is missing")
-	}
-	tx, err := s.entClient.Tx(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin account refund donation: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	txCtx := dbent.NewTxContext(ctx, tx)
-
-	userQuery := tx.User.Query().Where(user.IDEQ(record.UserID), user.StatusEQ(StatusRefundLocked))
-	if tx.Client().Driver().Dialect() == dialect.Postgres {
-		userQuery = userQuery.ForUpdate()
-	}
-	lockedUser, err := userQuery.Only(txCtx)
-	if err != nil {
-		return nil, infraerrors.Conflict("REFUND_LOCK_LOST", "refund no longer owns the account lock")
-	}
-	if lockedUser.FrozenBalance > accountRefundTolerance {
-		return nil, infraerrors.Conflict("REFUND_BILLING_DRAINING", "permanent balance is still frozen")
-	}
-
-	auditQuery := tx.PaymentAuditLog.Query().Where(
-		paymentauditlog.OrderIDEQ(accountRefundAuditKey(record.UserID, record.RefundID)),
-	).Order(dbent.Desc(paymentauditlog.FieldCreatedAt), dbent.Desc(paymentauditlog.FieldID))
-	if tx.Client().Driver().Dialect() == dialect.Postgres {
-		auditQuery = auditQuery.ForUpdate()
-	}
-	latestRow, err := auditQuery.First(txCtx)
-	if err != nil {
-		return nil, fmt.Errorf("lock account refund donation state: %w", err)
-	}
-	latest, err := parseAccountRefundRecord(latestRow)
-	if err != nil {
-		return nil, err
-	}
-	if latest.State != AccountRefundStateReadyToConfirm && latest.State != AccountRefundStateDraining && latest.State != AccountRefundStateManualReview {
-		return nil, infraerrors.Conflict("REFUND_NOT_READY_TO_DONATE", "refund donation was already completed or is not ready")
-	}
-
-	inFlightQuery := tx.PaymentOrder.Query().Where(
-		paymentorder.UserIDEQ(record.UserID),
-		paymentorder.OrderTypeEQ(payment.OrderTypeBalance),
-		accountRefundInFlightOrderPredicate(),
-	)
-	if tx.Client().Driver().Dialect() == dialect.Postgres {
-		inFlightQuery = inFlightQuery.ForUpdate()
-	}
-	inFlightOrders, err := inFlightQuery.All(txCtx)
-	if err != nil {
-		return nil, fmt.Errorf("check donation in-flight recharge orders: %w", err)
-	}
-	if len(inFlightOrders) > 0 {
-		return nil, infraerrors.Conflict("REFUND_RECHARGE_IN_FLIGHT", "a balance recharge is still being processed")
-	}
-	historicalOrderQuery := tx.PaymentOrder.Query().Where(
-		paymentorder.UserIDEQ(record.UserID),
-		paymentorder.OrderTypeEQ(payment.OrderTypeBalance),
-		accountRefundHistoricalOrderPredicate(),
-	)
-	if tx.Client().Driver().Dialect() == dialect.Postgres {
-		historicalOrderQuery = historicalOrderQuery.ForUpdate()
-	}
-	if _, err := historicalOrderQuery.All(txCtx); err != nil {
-		return nil, fmt.Errorf("lock donation recharge orders: %w", err)
-	}
-
-	grantQuery := tx.UserLimitedCreditGrant.Query().Where(creditgrant.UserIDEQ(record.UserID), creditgrant.StatusEQ(LimitedCreditStatusActive))
-	if tx.Client().Driver().Dialect() == dialect.Postgres {
-		grantQuery = grantQuery.ForUpdate()
-	}
-	grants, err := grantQuery.All(txCtx)
-	if err != nil {
-		return nil, err
-	}
-	for _, grant := range grants {
-		if grant.FrozenAmount > accountRefundTolerance {
-			return nil, infraerrors.Conflict("REFUND_BILLING_DRAINING", "limited credit is still frozen")
-		}
-	}
-	account := &User{ID: lockedUser.ID, Balance: lockedUser.Balance, FrozenBalance: lockedUser.FrozenBalance, TotalRecharged: lockedUser.TotalRecharged, Status: lockedUser.Status}
-	currentQuote, err := s.buildAccountRefundQuoteWithClient(txCtx, tx.Client(), account)
-	if err != nil {
-		return nil, err
-	}
-	if !currentQuote.DonationEligible || currentQuote.QuoteHash != record.Quote.QuoteHash {
-		return nil, infraerrors.Conflict("REFUND_QUOTE_CHANGED", "balance changed after confirmation; review it again")
-	}
-
-	for _, grant := range grants {
-		remaining := math.Max(0, grant.InitialAmount-grant.UsedAmount)
-		if _, err := tx.UserLimitedCreditGrant.UpdateOne(grant).SetUsedAmount(grant.InitialAmount).SetFrozenAmount(0).SetStatus(LimitedCreditStatusDepleted).Save(txCtx); err != nil {
-			return nil, err
-		}
-		if remaining > accountRefundTolerance {
-			if _, err := tx.UserLimitedCreditLedger.Create().SetUserID(record.UserID).SetGrantID(grant.ID).SetEventType("refund_donation_clear").SetAmount(remaining).SetNotes("放弃退款并打赏站长清空").Save(txCtx); err != nil {
-				return nil, err
-			}
-		}
-	}
-	if err := clearAccountRefundAdminGrantSecurityDeposit(txCtx, tx.Client(), record.UserID, record.RefundID, time.Now().UTC()); err != nil {
-		return nil, err
-	}
-	if _, err := tx.User.UpdateOne(lockedUser).SetBalance(0).SetStatus(StatusActive).Save(txCtx); err != nil {
-		return nil, err
-	}
-
-	now := time.Now().UTC()
-	latest.State = AccountRefundStateDonated
-	latest.Quote = currentQuote
-	latest.DonationRequested = true
-	latest.Donation = &AccountRefundDonation{
-		Username:    accountRefundDonationUsername(lockedUser.Username),
-		MaskedEmail: maskAccountRefundDonationEmail(lockedUser.Email),
-		Amount:      normalizeRefundFloat(currentQuote.DonationAmount),
-		DonatedAt:   now,
-	}
-	latest.Message = "refund waived and donated"
-	latest.UpdatedAt = now
-	if err := writeAccountRefundDonationAudit(txCtx, tx.Client(), latest); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit account refund donation: %w", err)
-	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, record.UserID)
-	}
-	if fence, ok := s.authCacheInvalidator.(RefundBillingFence); ok {
-		if err := fence.ReleaseRefundBillingLock(ctx, record.UserID, record.RefundID); err != nil {
-			latest.ReviewReasonCode = AccountRefundReviewAccessRestoreFailed
-			latest.FailureStage = AccountRefundFailurePostGateway
-			latest.Message = "donation completed but billing fence release failed"
-			latest.UpdatedAt = time.Now().UTC()
-			_ = s.writeAccountRefundAudit(ctx, latest)
-			return nil, infraerrors.ServiceUnavailable("REFUND_BILLING_FENCE_UNAVAILABLE", "account restored but refund billing fence could not be released")
-		}
-	}
-	return latest, nil
-}
-
-// ListAccountRefundDonations 返回公开打赏名单，数据来自不可变终态快照。
-func (s *PaymentService) ListAccountRefundDonations(ctx context.Context) ([]AccountRefundDonation, error) {
-	rows, err := s.entClient.PaymentAuditLog.Query().Where(
-		paymentauditlog.ActionEQ(accountRefundDonationAction),
-	).Order(dbent.Desc(paymentauditlog.FieldCreatedAt), dbent.Desc(paymentauditlog.FieldID)).All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	donations := make([]AccountRefundDonation, 0, len(rows))
-	for _, row := range rows {
-		record, parseErr := parseAccountRefundRecord(row)
-		if parseErr != nil || record.State != AccountRefundStateDonated || record.Donation == nil {
-			continue
-		}
-		donations = append(donations, *record.Donation)
-	}
-	return donations, nil
 }
 
 func (s *PaymentService) finalizeAccountRefundCredits(ctx context.Context, record *AccountRefundRecord) error {
@@ -2137,45 +1909,6 @@ func accountRefundActorOperator(actor *AccountRefundActor, userID int64) string 
 		return actorType + ":" + strconv.FormatInt(actor.ID, 10)
 	}
 	return actorType
-}
-
-func writeAccountRefundDonationAudit(ctx context.Context, client *dbent.Client, record *AccountRefundRecord) error {
-	if record.Actor == nil {
-		record.Actor = &AccountRefundActor{Type: "user", ID: record.UserID, Label: "user:" + strconv.FormatInt(record.UserID, 10)}
-	}
-	detail, err := json.Marshal(record)
-	if err != nil {
-		return err
-	}
-	row, err := client.PaymentAuditLog.Create().
-		SetOrderID(accountRefundAuditKey(record.UserID, record.RefundID)).
-		SetAction(accountRefundDonationAction).
-		SetDetail(string(detail)).
-		SetOperator(accountRefundActorOperator(record.Actor, record.UserID)).
-		Save(ctx)
-	if err != nil {
-		return fmt.Errorf("write account refund donation audit: %w", err)
-	}
-	record.StateRevision = row.ID
-	return nil
-}
-
-func accountRefundDonationUsername(username string) string {
-	username = strings.TrimSpace(username)
-	if username == "" {
-		return "匿名用户"
-	}
-	return username
-}
-
-func maskAccountRefundDonationEmail(email string) string {
-	email = strings.TrimSpace(email)
-	parts := strings.SplitN(email, "@", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "***"
-	}
-	local := []rune(parts[0])
-	return string(local[0]) + "***@" + parts[1]
 }
 
 func accountRefundAuditKey(userID int64, refundID string) string {
