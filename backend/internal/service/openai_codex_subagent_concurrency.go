@@ -131,9 +131,10 @@ func (s *OpenAIGatewayService) TryAcquireCodexSessionAdmissionSlots(
 	}
 
 	releasePersona := func() {}
-	if binding.EffectiveMappingVersion() >= SessionPersonaScopeVersionV3 {
+	runtimePersona, runtimeSlotID, _, dynamicTarget := openAIPersonaRuntimeConcurrencyIdentity(ctx, account, binding)
+	if dynamicTarget || binding.EffectiveMappingVersion() >= SessionPersonaScopeVersionV3 {
 		personaResult, err := s.concurrencyService.AcquireOpenAIPersonaSlot(
-			ctx, account.ID, binding.PersonaID, binding.SlotID, policy.MaxConcurrency,
+			ctx, account.ID, runtimePersona, runtimeSlotID, policy.MaxConcurrency,
 		)
 		if err != nil || personaResult == nil || !personaResult.Acquired {
 			return nil, false, err
@@ -210,6 +211,14 @@ func (s *OpenAIGatewayService) effectiveOpenAIPersonaAdmissionPolicy(ctx context
 		persona, _ := ResolveDefaultSessionPersona(0)
 		binding = SessionPersonaSlotBinding{AccountID: accountIDForSubagentScope(account, SessionPersonaSlotBinding{}), SlotID: 0, PersonaID: persona.ID, Persona: persona}
 	}
+	if target, targetOK := OpenAIExecutionTargetFromContext(ctx); targetOK &&
+		(account == nil || target.AccountID == account.ID) {
+		binding.AccountID = target.AccountID
+		binding.PersonaID = target.ProfileID
+		binding.SlotGeneration = target.PersonaGeneration
+		binding.SessionEpoch = target.SessionEpoch
+		binding.CredentialChainID = target.CredentialChainID
+	}
 	cfg := DefaultOpenAIAccountAdmissionConfig()
 	if s != nil && s.settingService != nil {
 		if current, err := s.settingService.GetOpenAIAccountAdmissionConfig(ctx); err == nil {
@@ -241,6 +250,7 @@ func (s *OpenAIGatewayService) enforceOpenAISubagentDepth(ctx context.Context, a
 		return newCodexSubagentConcurrencyStoreError()
 	}
 	threadHash := hashOpenAISubagentThread(ids.threadID)
+	runtimePersona, runtimeSlotID, runtimeEpoch, _ := openAIPersonaRuntimeConcurrencyIdentity(ctx, account, binding)
 	depth := 0
 	if ids.isSubagent {
 		parentID := strings.TrimSpace(ids.parentThreadID)
@@ -248,7 +258,7 @@ func (s *OpenAIGatewayService) enforceOpenAISubagentDepth(ctx context.Context, a
 			parentID = strings.TrimSpace(ids.forkedThreadID)
 		}
 		if parentID != "" {
-			parentDepth, found, err := s.concurrencyService.GetOpenAISubagentDepth(ctx, account.ID, binding.PersonaID, binding.SlotID, ids.sessionScopeHash, ids.sessionEpoch, hashOpenAISubagentThread(parentID))
+			parentDepth, found, err := s.concurrencyService.GetOpenAISubagentDepth(ctx, account.ID, runtimePersona, runtimeSlotID, ids.sessionScopeHash, runtimeEpoch, hashOpenAISubagentThread(parentID))
 			if err != nil {
 				return newCodexSubagentConcurrencyStoreError()
 			}
@@ -261,7 +271,7 @@ func (s *OpenAIGatewayService) enforceOpenAISubagentDepth(ctx context.Context, a
 			return newCodexSubagentDepthLimitError(maxDepth)
 		}
 	}
-	if err := s.concurrencyService.SetOpenAISubagentDepth(ctx, account.ID, binding.PersonaID, binding.SlotID, ids.sessionScopeHash, ids.sessionEpoch, threadHash, depth); err != nil {
+	if err := s.concurrencyService.SetOpenAISubagentDepth(ctx, account.ID, runtimePersona, runtimeSlotID, ids.sessionScopeHash, runtimeEpoch, threadHash, depth); err != nil {
 		return newCodexSubagentConcurrencyStoreError()
 	}
 	return nil
@@ -281,6 +291,14 @@ func codexSubagentAdmissionScopeHash(ctx context.Context, account *Account, ids 
 		return ""
 	}
 	base := strings.TrimSpace(ids.sessionScopeHash)
+	if target, ok := OpenAIExecutionTargetFromContext(ctx); ok &&
+		(account == nil || target.AccountID == account.ID) {
+		seed := fmt.Sprintf("account-persona-subagent:v1|%d|%d|%d|%d|%s|%s",
+			target.AccountID, target.AccountPersonaID, target.PersonaGeneration,
+			target.SessionEpoch, target.CredentialChainID, base)
+		digest := sha256.Sum256([]byte(seed))
+		return hex.EncodeToString(digest[:])
+	}
 	if binding, ok := SessionPersonaBindingFromContext(ctx); ok &&
 		(binding.AccountID == 0 || account == nil || binding.AccountID == account.ID) &&
 		strings.TrimSpace(string(binding.PersonaID)) != "" {
@@ -291,6 +309,35 @@ func codexSubagentAdmissionScopeHash(ctx context.Context, account *Account, ids 
 		return hex.EncodeToString(digest[:])
 	}
 	return base
+}
+
+// openAIPersonaRuntimeConcurrencyIdentity 将 Profile 策略和 Persona 实例计数分离。
+func openAIPersonaRuntimeConcurrencyIdentity(
+	ctx context.Context,
+	account *Account,
+	binding SessionPersonaSlotBinding,
+) (SessionPersonaID, int, int64, bool) {
+	accountID := accountIDForSubagentScope(account, binding)
+	if persona, slotID, epoch, ok := OpenAIPersonaRuntimeConcurrencyScope(ctx, accountID, binding.PersonaID, binding.SlotID, binding.SessionEpoch); ok {
+		return persona, slotID, epoch, true
+	}
+	epoch := binding.SessionEpoch
+	return binding.PersonaID, binding.SlotID, epoch, false
+}
+
+// OpenAIPersonaRuntimeConcurrencyScope 返回具体 AccountPersona 的 Redis 计数命名空间。
+func OpenAIPersonaRuntimeConcurrencyScope(
+	ctx context.Context,
+	accountID int64,
+	fallbackPersona SessionPersonaID,
+	fallbackSlotID int,
+	fallbackEpoch int64,
+) (SessionPersonaID, int, int64, bool) {
+	if target, ok := OpenAIExecutionTargetFromContext(ctx); ok && target.AccountID == accountID {
+		return SessionPersonaID(fmt.Sprintf("account_persona_%d_generation_%d_epoch_%d",
+			target.AccountPersonaID, target.PersonaGeneration, target.SessionEpoch)), 0, target.SessionEpoch, true
+	}
+	return fallbackPersona, fallbackSlotID, fallbackEpoch, false
 }
 
 func accountIDForSubagentScope(account *Account, binding SessionPersonaSlotBinding) int64 {

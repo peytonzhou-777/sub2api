@@ -399,7 +399,9 @@ func (r *accountRepository) GetOpenAIUserConversationBinding(ctx context.Context
 	return r.getOpenAIUserConversationBinding(ctx, `
 		SELECT id, user_id, api_key_id, scope_key, conversation_hash, resident_slot_id,
 		       account_id, slot_generation, status, context_rebuildable,
-		       first_output_committed, active_until, expires_at, last_success_at, provisional_token
+		       first_output_committed, active_until, expires_at, last_success_at, provisional_token,
+		       account_persona_id, persona_session_epoch, credential_chain_id,
+		       root_client_session_hash, user_group_client_session_lease_id, profile_id, profile_version
 		FROM openai_user_conversation_bindings
 		WHERE user_id = $1 AND api_key_id = $2 AND scope_key = $3 AND conversation_hash = $4
 		  AND status IN ('provisional', 'active', 'draining') AND expires_at > NOW()`,
@@ -411,7 +413,9 @@ func (r *accountRepository) GetOpenAIUserConversationBindingByAlias(ctx context.
 	return r.getOpenAIUserConversationBinding(ctx, `
 		SELECT b.id, b.user_id, b.api_key_id, b.scope_key, b.conversation_hash, b.resident_slot_id,
 		       b.account_id, b.slot_generation, b.status, b.context_rebuildable,
-		       b.first_output_committed, b.active_until, b.expires_at, b.last_success_at, b.provisional_token
+		       b.first_output_committed, b.active_until, b.expires_at, b.last_success_at, b.provisional_token,
+		       b.account_persona_id, b.persona_session_epoch, b.credential_chain_id,
+		       b.root_client_session_hash, b.user_group_client_session_lease_id, b.profile_id, b.profile_version
 		FROM openai_user_conversation_aliases a
 		JOIN openai_user_conversation_bindings b ON b.id = a.binding_id
 		WHERE a.user_id = $1 AND a.api_key_id = $2 AND a.scope_key = $3
@@ -461,16 +465,58 @@ func (r *accountRepository) getOpenAIUserConversationBinding(ctx context.Context
 	return scanOpenAIUserConversationBindingRow(ctx, r.sql, query, args)
 }
 
+// BindOpenAIUserConversationExecutionTarget 在 Persona 席位预留后把完整身份固化到 provisional binding。
+func (r *accountRepository) BindOpenAIUserConversationExecutionTarget(
+	ctx context.Context,
+	transition service.OpenAIUserConversationTransition,
+	target service.OpenAIExecutionTarget,
+) error {
+	if r == nil || r.sql == nil || transition.BindingID <= 0 || transition.AccountID <= 0 ||
+		strings.TrimSpace(transition.ProvisionalToken) == "" || !target.Valid() ||
+		target.AccountID != transition.AccountID || len(strings.TrimSpace(transition.RootClientSessionHash)) != 64 ||
+		target.UserGroupLeaseID <= 0 {
+		return errors.New("invalid openai conversation execution target binding")
+	}
+	result, err := r.sql.ExecContext(ctx, `
+		UPDATE openai_user_conversation_bindings SET
+			account_persona_id = $1, persona_session_epoch = $2, credential_chain_id = $3,
+			root_client_session_hash = $4::char(64), user_group_client_session_lease_id = $5,
+			profile_id = $6, profile_version = $7, updated_at = $8
+		WHERE id = $9 AND account_id = $10 AND status = 'provisional'
+		  AND first_output_committed = FALSE AND provisional_token = $11
+		  AND (account_persona_id IS NULL OR (
+			account_persona_id = $1 AND persona_session_epoch = $2 AND credential_chain_id = $3 AND
+			root_client_session_hash = $4::char(64) AND user_group_client_session_lease_id = $5 AND
+			profile_id = $6 AND profile_version = $7))`,
+		target.AccountPersonaID, target.SessionEpoch, target.CredentialChainID,
+		strings.ToLower(strings.TrimSpace(transition.RootClientSessionHash)), target.UserGroupLeaseID,
+		string(target.ProfileID), target.ProfileVersion, time.Now().UTC(), transition.BindingID,
+		transition.AccountID, transition.ProvisionalToken)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != 1 {
+		return service.ErrOpenAIUserAffinityReservationConflict
+	}
+	return nil
+}
+
 func scanOpenAIUserConversationBindingRow(ctx context.Context, exec sqlQueryer, query string, args []any) (*service.OpenAIUserConversationBinding, error) {
 	var binding service.OpenAIUserConversationBinding
 	var activeUntil, lastSuccess sql.NullTime
-	var provisionalToken sql.NullString
+	var provisionalToken, credentialChainID, rootClientSessionHash, profileID, profileVersion sql.NullString
+	var accountPersonaID, personaSessionEpoch, userGroupLeaseID sql.NullInt64
 	err := scanSingleRow(ctx, exec, query, args,
 		&binding.ID, &binding.UserID, &binding.APIKeyID, &binding.ScopeKey,
 		&binding.ConversationHash, &binding.ResidentSlotID, &binding.AccountID,
 		&binding.SlotGeneration, &binding.Status, &binding.ContextRebuildable,
 		&binding.FirstOutputCommitted, &activeUntil, &binding.ExpiresAt, &lastSuccess,
-		&provisionalToken,
+		&provisionalToken, &accountPersonaID, &personaSessionEpoch, &credentialChainID,
+		&rootClientSessionHash, &userGroupLeaseID, &profileID, &profileVersion,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -488,6 +534,27 @@ func scanOpenAIUserConversationBindingRow(ctx context.Context, exec sqlQueryer, 
 	}
 	if provisionalToken.Valid {
 		binding.ProvisionalToken = provisionalToken.String
+	}
+	if accountPersonaID.Valid {
+		binding.AccountPersonaID = accountPersonaID.Int64
+	}
+	if personaSessionEpoch.Valid {
+		binding.PersonaSessionEpoch = personaSessionEpoch.Int64
+	}
+	if credentialChainID.Valid {
+		binding.CredentialChainID = credentialChainID.String
+	}
+	if rootClientSessionHash.Valid {
+		binding.RootClientSessionHash = rootClientSessionHash.String
+	}
+	if userGroupLeaseID.Valid {
+		binding.UserGroupLeaseID = userGroupLeaseID.Int64
+	}
+	if profileID.Valid {
+		binding.ProfileID = service.SessionPersonaID(profileID.String)
+	}
+	if profileVersion.Valid {
+		binding.ProfileVersion = profileVersion.String
 	}
 	return &binding, nil
 }
@@ -576,7 +643,9 @@ func getOpenAIUserConversationBindingByAliasesForUpdate(
 		candidate, err := scanOpenAIUserConversationBindingRow(ctx, exec, `
 			SELECT b.id, b.user_id, b.api_key_id, b.scope_key, b.conversation_hash, b.resident_slot_id,
 			       b.account_id, b.slot_generation, b.status, b.context_rebuildable,
-			       b.first_output_committed, b.active_until, b.expires_at, b.last_success_at, b.provisional_token
+			       b.first_output_committed, b.active_until, b.expires_at, b.last_success_at, b.provisional_token,
+			       b.account_persona_id, b.persona_session_epoch, b.credential_chain_id,
+			       b.root_client_session_hash, b.user_group_client_session_lease_id, b.profile_id, b.profile_version
 			FROM openai_user_conversation_aliases a
 			JOIN openai_user_conversation_bindings b ON b.id = a.binding_id
 			WHERE a.user_id = $1 AND a.api_key_id = $2 AND a.scope_key = $3
@@ -692,7 +761,9 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 		existing, err = scanOpenAIUserConversationBindingRow(ctx, exec, `
 			SELECT id, user_id, api_key_id, scope_key, conversation_hash, resident_slot_id,
 			       account_id, slot_generation, status, context_rebuildable,
-			       first_output_committed, active_until, expires_at, last_success_at, provisional_token
+			       first_output_committed, active_until, expires_at, last_success_at, provisional_token,
+			       account_persona_id, persona_session_epoch, credential_chain_id,
+			       root_client_session_hash, user_group_client_session_lease_id, profile_id, profile_version
 			FROM openai_user_conversation_bindings
 			WHERE user_id = $1 AND api_key_id = $2 AND scope_key = $3 AND conversation_hash = $4
 			FOR UPDATE`, []any{reservation.UserID, reservation.APIKeyID, reservation.ScopeKey, reservation.ConversationHash})
@@ -920,11 +991,16 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 			UPDATE openai_user_conversation_bindings SET resident_slot_id = $2, account_id = $3,
 				slot_generation = $4, status = 'provisional', context_rebuildable = $5,
 				first_output_committed = FALSE, active_until = $6, expires_at = $7,
-				last_success_at = NULL, provisional_token = $8, updated_at = $9
+				last_success_at = NULL, provisional_token = $8,
+				account_persona_id = NULL, persona_session_epoch = NULL, credential_chain_id = NULL,
+				root_client_session_hash = NULL, user_group_client_session_lease_id = NULL,
+				profile_id = NULL, profile_version = NULL, updated_at = $9
 			WHERE id = $1
 			RETURNING id, user_id, api_key_id, scope_key, conversation_hash, resident_slot_id,
 				account_id, slot_generation, status, context_rebuildable,
-				first_output_committed, active_until, expires_at, last_success_at, provisional_token`,
+				first_output_committed, active_until, expires_at, last_success_at, provisional_token,
+				account_persona_id, persona_session_epoch, credential_chain_id,
+				root_client_session_hash, user_group_client_session_lease_id, profile_id, profile_version`,
 			[]any{existing.ID, slotID, reservation.AccountID, slotGeneration, reservation.ContextRebuildable,
 				activeUntil, bindingExpiresAt, reservation.ProvisionalToken, now})
 	} else {
@@ -936,7 +1012,9 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 			VALUES ($1, $2, $3, $4, $5, $6, $7, 'provisional', $8, FALSE, $9, $10, $11, $12, $12)
 			RETURNING id, user_id, api_key_id, scope_key, conversation_hash, resident_slot_id,
 				account_id, slot_generation, status, context_rebuildable,
-				first_output_committed, active_until, expires_at, last_success_at, provisional_token`,
+				first_output_committed, active_until, expires_at, last_success_at, provisional_token,
+				account_persona_id, persona_session_epoch, credential_chain_id,
+				root_client_session_hash, user_group_client_session_lease_id, profile_id, profile_version`,
 			[]any{reservation.UserID, reservation.APIKeyID, reservation.ScopeKey, reservation.ConversationHash,
 				slotID, reservation.AccountID, slotGeneration, reservation.ContextRebuildable,
 				activeUntil, bindingExpiresAt, reservation.ProvisionalToken, now})

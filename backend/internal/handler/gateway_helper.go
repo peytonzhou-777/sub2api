@@ -252,7 +252,8 @@ func (h *ConcurrencyHelper) AcquireOpenAIPersonaWSLease(ctx context.Context, acc
 	if h == nil || h.concurrencyService == nil {
 		return nil, false, fmt.Errorf("concurrency service is unavailable")
 	}
-	return h.concurrencyService.AcquireOpenAIPersonaWSLease(ctx, accountID, persona, slotID, maxConnections)
+	runtimePersona, runtimeSlotID, _, _ := service.OpenAIPersonaRuntimeConcurrencyScope(ctx, accountID, persona, slotID, 0)
+	return h.concurrencyService.AcquireOpenAIPersonaWSLease(ctx, accountID, runtimePersona, runtimeSlotID, maxConnections)
 }
 
 // TryAcquireAccountSlot 尝试立即获取账号并发槽位。

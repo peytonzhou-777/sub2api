@@ -81,6 +81,33 @@ func TestOpenAIAccountAdmissionKeysIsolatePersonaSlotGenerations(t *testing.T) {
 	}
 }
 
+func TestOpenAIAccountAdmissionKeysUseStableAccountPersonaRateScope(t *testing.T) {
+	base := service.OpenAIAccountAdmissionTicket{
+		AccountID: 17, AccountPersonaID: 101, PersonaGeneration: 4,
+		CredentialChainID: "chain-a", SessionEpoch: 7,
+		SessionScopeHash: strings.Repeat("b", 64),
+	}
+	keys := openAIAccountAdmissionKeys(base)
+	if got, want := keys[10], "openai:admission:{17}:account_persona:101:rate_state"; got != want {
+		t.Fatalf("dynamic Persona rate key = %q, want %q", got, want)
+	}
+	if !strings.Contains(keys[0], "account_persona:101:generation:4:epoch:7:chain:chain-a:session:") {
+		t.Fatalf("dynamic Persona queue key missing scope: %q", keys[0])
+	}
+	otherGeneration := base
+	otherGeneration.PersonaGeneration++
+	otherKeys := openAIAccountAdmissionKeys(otherGeneration)
+	if otherKeys[0] == keys[0] || otherKeys[10] != keys[10] {
+		t.Fatalf("generation must split queue but retain rate debt: queue=%q rate=%q", otherKeys[0], otherKeys[10])
+	}
+	otherPersona := base
+	otherPersona.AccountPersonaID++
+	otherPersonaKeys := openAIAccountAdmissionKeys(otherPersona)
+	if otherPersonaKeys[0] == keys[0] || otherPersonaKeys[10] == keys[10] {
+		t.Fatalf("AccountPersona must isolate queue and rate debt: queue=%q rate=%q", otherPersonaKeys[0], otherPersonaKeys[10])
+	}
+}
+
 func TestOpenAIAccountAdmissionQueuePrioritizesInteractiveAndAgesBackground(t *testing.T) {
 	ctx := context.Background()
 	queue := newOpenAIAdmissionTestCache(t)

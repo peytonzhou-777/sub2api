@@ -152,7 +152,14 @@ func openAIAccountAdmissionKeys(ticket service.OpenAIAccountAdmissionTicket) []s
 	tag := fmt.Sprintf("{%d}", ticket.AccountID)
 	queueScope := "account"
 	rateScope := "account"
-	if persona := normalizeOpenAIAdmissionPersona(ticket.Persona); persona != "" {
+	if ticket.AccountPersonaID > 0 {
+		// RPM/TPM debt belongs to the stable Persona instance. Queue ordering is
+		// additionally isolated by identity generation, epoch and credential chain.
+		rateScope = fmt.Sprintf("account_persona:%d", ticket.AccountPersonaID)
+		queueScope = fmt.Sprintf("%s:generation:%d:epoch:%d:chain:%s",
+			rateScope, ticket.PersonaGeneration, ticket.SessionEpoch,
+			normalizeOpenAIAdmissionPersona(ticket.CredentialChainID))
+	} else if persona := normalizeOpenAIAdmissionPersona(ticket.Persona); persona != "" {
 		// Keep the account hash-tag so all keys for one account remain in the
 		// same Redis Cluster slot. Queues include slot generations so stale roots
 		// can be drained independently, while the RPM/TPM rate bucket stays on

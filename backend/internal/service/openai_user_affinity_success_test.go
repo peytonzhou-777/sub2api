@@ -70,6 +70,10 @@ func (r *openAIUserAffinitySuccessTouchRepo) RollbackOpenAIUserConversationBindi
 	return true, nil
 }
 
+func (r *openAIUserAffinitySuccessTouchRepo) BindOpenAIUserConversationExecutionTarget(context.Context, OpenAIUserConversationTransition, OpenAIExecutionTarget) error {
+	return nil
+}
+
 func (r *openAIUserAffinitySuccessTouchRepo) ConfirmOpenAIUserAffinitySuccess(context.Context, OpenAIUserAffinityIncidentIdentity) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

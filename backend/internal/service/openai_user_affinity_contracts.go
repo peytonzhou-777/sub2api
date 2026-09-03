@@ -60,6 +60,7 @@ type OpenAIUserAffinityConversationStore interface {
 	ReserveOpenAIUserConversationBinding(ctx context.Context, reservation OpenAIUserConversationReservation) (*OpenAIUserConversationBinding, bool, error)
 	CommitOpenAIUserConversationBinding(ctx context.Context, transition OpenAIUserConversationTransition) (bool, error)
 	RollbackOpenAIUserConversationBinding(ctx context.Context, transition OpenAIUserConversationTransition) (bool, error)
+	BindOpenAIUserConversationExecutionTarget(ctx context.Context, transition OpenAIUserConversationTransition, target OpenAIExecutionTarget) error
 }
 
 // OpenAIUserAffinityActiveRoutingStore 提供新会话活动路由与账号软驻留快照。
@@ -259,23 +260,30 @@ type OpenAIAccountSoftOccupancy struct {
 
 // OpenAIUserConversationBinding 将一个逻辑会话固定到其首次成功使用的账号。
 type OpenAIUserConversationBinding struct {
-	ID                   int64      `json:"id"`
-	UserID               int64      `json:"user_id"`
-	APIKeyID             int64      `json:"api_key_id"`
-	ScopeKey             string     `json:"scope_key"`
-	ConversationHash     string     `json:"conversation_hash"`
-	ResidentSlotID       int64      `json:"resident_slot_id"`
-	AccountID            int64      `json:"account_id"`
-	SlotGeneration       int64      `json:"slot_generation"`
-	Status               string     `json:"status"`
-	ContextRebuildable   bool       `json:"context_rebuildable"`
-	FirstOutputCommitted bool       `json:"first_output_committed"`
-	ActiveUntil          *time.Time `json:"active_until"`
-	ExpiresAt            time.Time  `json:"expires_at"`
-	LastSuccessAt        *time.Time `json:"last_success_at"`
-	ProvisionalToken     string     `json:"-"`
-	ManageActiveRoute    bool       `json:"-"`
-	ActiveRoutePending   bool       `json:"-"`
+	ID                    int64            `json:"id"`
+	UserID                int64            `json:"user_id"`
+	APIKeyID              int64            `json:"api_key_id"`
+	ScopeKey              string           `json:"scope_key"`
+	ConversationHash      string           `json:"conversation_hash"`
+	ResidentSlotID        int64            `json:"resident_slot_id"`
+	AccountID             int64            `json:"account_id"`
+	SlotGeneration        int64            `json:"slot_generation"`
+	AccountPersonaID      int64            `json:"account_persona_id"`
+	PersonaSessionEpoch   int64            `json:"persona_session_epoch"`
+	CredentialChainID     string           `json:"credential_chain_id"`
+	RootClientSessionHash string           `json:"root_client_session_hash"`
+	UserGroupLeaseID      int64            `json:"user_group_client_session_lease_id"`
+	ProfileID             SessionPersonaID `json:"profile_id"`
+	ProfileVersion        string           `json:"profile_version"`
+	Status                string           `json:"status"`
+	ContextRebuildable    bool             `json:"context_rebuildable"`
+	FirstOutputCommitted  bool             `json:"first_output_committed"`
+	ActiveUntil           *time.Time       `json:"active_until"`
+	ExpiresAt             time.Time        `json:"expires_at"`
+	LastSuccessAt         *time.Time       `json:"last_success_at"`
+	ProvisionalToken      string           `json:"-"`
+	ManageActiveRoute     bool             `json:"-"`
+	ActiveRoutePending    bool             `json:"-"`
 }
 
 // OpenAIUserConversationAlias 是会话绑定的作用域化派生索引，不保存客户端原始标识。
@@ -307,27 +315,34 @@ type OpenAIUserConversationReservation struct {
 
 // OpenAIUserConversationTransition 以 binding、账号和 token 限定提交或回滚目标。
 type OpenAIUserConversationTransition struct {
-	BindingID          int64
-	UserID             int64
-	APIKeyID           int64
-	ScopeKey           string
-	ConversationHash   string
-	ResidentSlotID     int64
-	AccountID          int64
-	SlotGeneration     int64
-	ProvisionalToken   string
-	Failover           bool
-	SourceAccountID    int64
-	SourceSlotID       int64
-	SourceGeneration   int64
-	Replacement        bool
-	ReplacementSlotID  int64
-	DetachSource       bool
-	ResponseAliasHash  string
-	ManageActiveRoute  bool
-	ActiveRoutePending bool
-	Aliases            []OpenAIUserConversationAlias
-	Config             OpenAIUserAffinityConfig
+	BindingID             int64
+	UserID                int64
+	APIKeyID              int64
+	ScopeKey              string
+	ConversationHash      string
+	ResidentSlotID        int64
+	AccountID             int64
+	SlotGeneration        int64
+	AccountPersonaID      int64
+	PersonaSessionEpoch   int64
+	CredentialChainID     string
+	RootClientSessionHash string
+	UserGroupLeaseID      int64
+	ProfileID             SessionPersonaID
+	ProfileVersion        string
+	ProvisionalToken      string
+	Failover              bool
+	SourceAccountID       int64
+	SourceSlotID          int64
+	SourceGeneration      int64
+	Replacement           bool
+	ReplacementSlotID     int64
+	DetachSource          bool
+	ResponseAliasHash     string
+	ManageActiveRoute     bool
+	ActiveRoutePending    bool
+	Aliases               []OpenAIUserConversationAlias
+	Config                OpenAIUserAffinityConfig
 }
 
 // OpenAIUserConversationFailoverReservation 描述一个不破坏原绑定的槽位内重放预留。

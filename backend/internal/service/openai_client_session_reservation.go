@@ -84,6 +84,61 @@ type OpenAIClientSessionReservationRepository interface {
 
 type openAIClientSessionReservationContextKey struct{}
 type openAIInboundPersonaPreferenceContextKey struct{}
+type openAIAttemptExclusionsContextKey struct{}
+
+// OpenAIAttemptExclusions 区分账号级与具体 Persona 实例级重试排除。
+type OpenAIAttemptExclusions struct {
+	AccountIDs        map[int64]struct{}
+	AccountPersonaIDs map[int64]struct{}
+}
+
+func OpenAIAttemptExclusionsFromContext(ctx context.Context) OpenAIAttemptExclusions {
+	if ctx == nil {
+		return OpenAIAttemptExclusions{}
+	}
+	value, _ := ctx.Value(openAIAttemptExclusionsContextKey{}).(OpenAIAttemptExclusions)
+	return value
+}
+
+// ContextWithOpenAIExcludedAccountPersona 返回不可变的 Persona 排除快照。
+func ContextWithOpenAIExcludedAccountPersona(ctx context.Context, accountPersonaID int64) context.Context {
+	if ctx == nil || accountPersonaID <= 0 {
+		return ctx
+	}
+	current := OpenAIAttemptExclusionsFromContext(ctx)
+	next := OpenAIAttemptExclusions{
+		AccountIDs:        cloneOpenAIExclusionIDs(current.AccountIDs),
+		AccountPersonaIDs: cloneOpenAIExclusionIDs(current.AccountPersonaIDs),
+	}
+	if next.AccountPersonaIDs == nil {
+		next.AccountPersonaIDs = make(map[int64]struct{})
+	}
+	next.AccountPersonaIDs[accountPersonaID] = struct{}{}
+	return context.WithValue(ctx, openAIAttemptExclusionsContextKey{}, next)
+}
+
+func cloneOpenAIExclusionIDs(source map[int64]struct{}) map[int64]struct{} {
+	if len(source) == 0 {
+		return nil
+	}
+	result := make(map[int64]struct{}, len(source))
+	for id := range source {
+		result[id] = struct{}{}
+	}
+	return result
+}
+
+// ScopeOpenAIFailoverToPersona 将独立 OAuth credential 故障限定到当前 Persona。
+func ScopeOpenAIFailoverToPersona(ctx context.Context, err *UpstreamFailoverError) (context.Context, bool) {
+	if err == nil || !err.IsCredentialFailure() || err.Scope == GatewayFailureScopeProvider || err.LocalRequestFailure {
+		return ctx, false
+	}
+	target, ok := OpenAIExecutionTargetFromContext(ctx)
+	if !ok {
+		return ctx, false
+	}
+	return ContextWithOpenAIExcludedAccountPersona(ctx, target.AccountPersonaID), true
+}
 
 // ContextWithOpenAIInboundPersonaPreference 记录入站客户端族，只影响未绑定新根的候选排序。
 func ContextWithOpenAIInboundPersonaPreference(ctx context.Context, profile SessionPersonaID) context.Context {
@@ -103,14 +158,15 @@ func ContextWithOpenAIInboundPersonaPreferenceFromHeaders(ctx context.Context, u
 }
 
 type openAIClientSessionReservationState struct {
-	mu             sync.Mutex
-	repo           OpenAIClientSessionReservationRepository
-	token          string
-	userLeaseID    int64
-	personaLeaseID int64
-	activeTTL      time.Duration
-	committed      bool
-	rolledBack     bool
+	mu                sync.Mutex
+	repo              OpenAIClientSessionReservationRepository
+	token             string
+	userLeaseID       int64
+	personaLeaseID    int64
+	clientSessionHash string
+	activeTTL         time.Duration
+	committed         bool
+	rolledBack        bool
 }
 
 func openAIUserGroupClientSessionHash(ctx context.Context, sessionHash string) (string, error) {
@@ -176,6 +232,10 @@ func (s *OpenAIGatewayService) attachOpenAIPersonaReservation(ctx context.Contex
 	if err != nil {
 		return err
 	}
+	state.clientSessionHash = clientHash
+	if selection.ExecutionTarget != nil && selection.ExecutionTarget.Valid() {
+		return s.attachBoundOpenAIPersonaReservation(ctx, selection, state, clientHash)
+	}
 	candidates, err := state.repo.ListOpenAIPersonaCapacityCandidates(ctx, []int64{selection.Account.ID}, userID, apiKeyID, clientHash, time.Now().UTC())
 	if err != nil {
 		return err
@@ -200,6 +260,9 @@ func (s *OpenAIGatewayService) attachOpenAIPersonaReservation(ctx context.Contex
 		return err
 	}
 	for _, candidate := range candidates {
+		if _, excluded := OpenAIAttemptExclusionsFromContext(ctx).AccountPersonaIDs[candidate.Persona.ID]; excluded {
+			continue
+		}
 		maxSessions := cfg.ForPersona(candidate.Persona.ProfileID).MaxActiveClientSessions
 		if candidate.Persona.MaxActiveClientSessionsOverride != nil {
 			maxSessions = *candidate.Persona.MaxActiveClientSessionsOverride
@@ -227,6 +290,10 @@ func (s *OpenAIGatewayService) attachOpenAIPersonaReservation(ctx context.Contex
 		state.personaLeaseID = reserved.LeaseID
 		selection.ExecutionTarget = &target
 		selection.clientSessionReservation = state
+		if bindErr := s.bindOpenAIUserAffinityConversationExecutionTarget(ctx, selection.Account.ID, target, clientHash); bindErr != nil {
+			state.rollback()
+			return bindErr
+		}
 		originalRelease := selection.ReleaseFunc
 		selection.ReleaseFunc = func() {
 			if originalRelease != nil {
@@ -237,6 +304,61 @@ func (s *OpenAIGatewayService) attachOpenAIPersonaReservation(ctx context.Contex
 		return nil
 	}
 	return ErrOpenAIPersonaSessionCapacity
+}
+
+// attachBoundOpenAIPersonaReservation 只为 continuation 已固化的 Persona 建立客户端占用，不重新选择身份。
+func (s *OpenAIGatewayService) attachBoundOpenAIPersonaReservation(
+	ctx context.Context,
+	selection *AccountSelectionResult,
+	state *openAIClientSessionReservationState,
+	clientHash string,
+) error {
+	target := *selection.ExecutionTarget
+	if target.AccountID != selection.Account.ID {
+		return ErrOpenAIPreviousResponseAccountUnavailable
+	}
+	repo, ok := s.accountRepo.(OpenAIAccountPersonaRepository)
+	if !ok {
+		return ErrOpenAIPreviousResponseAccountUnavailable
+	}
+	persona, err := repo.GetAccountPersona(ctx, target.AccountID, target.AccountPersonaID)
+	if err != nil || persona == nil || persona.ProfileID != target.ProfileID || persona.ProfileVersion != target.ProfileVersion {
+		return ErrOpenAIPreviousResponseAccountUnavailable
+	}
+	cfg, err := s.settingService.GetOpenAIAccountAdmissionConfig(ctx)
+	if err != nil {
+		return err
+	}
+	maxSessions := cfg.ForPersona(persona.ProfileID).MaxActiveClientSessions
+	if persona.MaxActiveClientSessionsOverride != nil {
+		maxSessions = *persona.MaxActiveClientSessionsOverride
+	}
+	userID, _ := ctx.Value(ctxkey.UserID).(int64)
+	apiKeyID, _ := ctx.Value(ctxkey.APIKeyID).(int64)
+	now := time.Now().UTC()
+	holdUntil := now.Add(time.Duration(cfg.MaxWaitSeconds+60) * time.Second)
+	reserved, err := state.repo.ReservePersonaSession(ctx, OpenAIPersonaSessionReserveInput{
+		ReservationToken: state.token, AccountID: target.AccountID, AccountPersonaID: target.AccountPersonaID,
+		UserID: userID, APIKeyID: apiKeyID, ClientSessionHash: clientHash, MaxSessions: maxSessions,
+		Now: now, HoldUntil: holdUntil,
+	})
+	if err != nil {
+		return err
+	}
+	target.UserGroupLeaseID = state.userLeaseID
+	target.PersonaLeaseID = reserved.LeaseID
+	target.ReservationToken = state.token
+	state.personaLeaseID = reserved.LeaseID
+	selection.ExecutionTarget = &target
+	selection.clientSessionReservation = state
+	originalRelease := selection.ReleaseFunc
+	selection.ReleaseFunc = func() {
+		if originalRelease != nil {
+			originalRelease()
+		}
+		state.rollback()
+	}
+	return nil
 }
 
 // openAIAccountsWithPersonaCapacity 在常驻/BestFit 写状态前构造数据库权威的账号可用集合。
@@ -267,6 +389,9 @@ func (s *OpenAIGatewayService) openAIAccountsWithPersonaCapacity(ctx context.Con
 	}
 	available := make(map[int64]struct{})
 	for _, candidate := range candidates {
+		if _, excluded := OpenAIAttemptExclusionsFromContext(ctx).AccountPersonaIDs[candidate.Persona.ID]; excluded {
+			continue
+		}
 		limit := cfg.ForPersona(candidate.Persona.ProfileID).MaxActiveClientSessions
 		if candidate.Persona.MaxActiveClientSessionsOverride != nil {
 			limit = *candidate.Persona.MaxActiveClientSessionsOverride

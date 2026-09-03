@@ -268,6 +268,20 @@ func (r *schedulerConversationAffinityRepo) CommitOpenAIUserConversationBinding(
 	return true, nil
 }
 
+func (r *schedulerConversationAffinityRepo) BindOpenAIUserConversationExecutionTarget(_ context.Context, transition OpenAIUserConversationTransition, target OpenAIExecutionTarget) error {
+	if r.binding == nil || r.binding.ID != transition.BindingID {
+		return ErrOpenAIUserAffinityReservationConflict
+	}
+	r.binding.AccountPersonaID = target.AccountPersonaID
+	r.binding.PersonaSessionEpoch = target.SessionEpoch
+	r.binding.CredentialChainID = target.CredentialChainID
+	r.binding.RootClientSessionHash = transition.RootClientSessionHash
+	r.binding.UserGroupLeaseID = target.UserGroupLeaseID
+	r.binding.ProfileID = target.ProfileID
+	r.binding.ProfileVersion = target.ProfileVersion
+	return nil
+}
+
 func (r *schedulerConversationAffinityRepo) RollbackOpenAIUserConversationBinding(_ context.Context, transition OpenAIUserConversationTransition) (bool, error) {
 	r.rollbackTransitions = append(r.rollbackTransitions, transition)
 	if r.binding == nil || r.binding.ID != transition.BindingID ||
@@ -495,7 +509,7 @@ func TestOpenAIGatewayService_MultiSlotFillsBestFitWhenAllResidentsBusy(t *testi
 	require.Equal(t, 2, repo.reservations[0].MaxResidentSlots)
 }
 
-func TestOpenAIGatewayService_MultiSlotFreshResidentPrefersUnownedAccount(t *testing.T) {
+func TestOpenAIGatewayService_MultiSlotFreshResidentIgnoresLegacySoftOwnership(t *testing.T) {
 	now := time.Now().UTC()
 	accounts := []Account{
 		{ID: 36241, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Extra: openAIUserAffinityTestQuotaExtra(now, 5)},
@@ -513,11 +527,11 @@ func TestOpenAIGatewayService_MultiSlotFreshResidentPrefersUnownedAccount(t *tes
 	)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, int64(36242), selection.Account.ID)
-	require.Equal(t, int64(36242), *repo.placement.AccountID)
+	require.Equal(t, int64(36241), selection.Account.ID)
+	require.Equal(t, int64(36241), *repo.placement.AccountID)
 }
 
-func TestOpenAIGatewayService_MultiSlotFreshResidentSoftSharesLeastOccupiedAccount(t *testing.T) {
+func TestOpenAIGatewayService_MultiSlotFreshResidentIgnoresLegacyOccupancyCounts(t *testing.T) {
 	now := time.Now().UTC()
 	accounts := []Account{
 		{ID: 36243, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Extra: openAIUserAffinityTestQuotaExtra(now, 5)},
@@ -536,8 +550,8 @@ func TestOpenAIGatewayService_MultiSlotFreshResidentSoftSharesLeastOccupiedAccou
 	)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, int64(36244), selection.Account.ID)
-	require.Equal(t, int64(36244), *repo.placement.AccountID)
+	require.Equal(t, int64(36243), selection.Account.ID)
+	require.Equal(t, int64(36243), *repo.placement.AccountID)
 }
 
 func TestOpenAIGatewayService_MultiSlotUnknownQuotaFallsBackForSnapshotHealing(t *testing.T) {
@@ -1066,13 +1080,10 @@ func TestOpenAIGatewayService_UnderfilledHardUnavailableBindingStartsReplacement
 	req.SessionHash = "underfilled-hard-unavailable"
 
 	selection, found, err := svc.selectOpenAIUserAffinityConversation(ctx, req)
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrOpenAIPreviousResponseAccountUnavailable)
 	require.True(t, found)
-	require.NotNil(t, selection)
-	require.Equal(t, int64(36254), selection.Account.ID)
-	require.Len(t, repo.replacements, 1)
-	require.Equal(t, int64(53), repo.replacements[0].VictimSlotID)
-	require.Equal(t, uint64(1), svc.SnapshotOpenAIUserAffinityMetrics().ResidentSlotUnderfilledReplace)
+	require.Nil(t, selection)
+	require.Empty(t, repo.replacements)
 	require.Equal(t, uint64(1), svc.SnapshotOpenAIUserAffinityMetrics().StaleBindingAccountUnavailable)
 }
 
@@ -1255,7 +1266,7 @@ func TestOpenAIGatewayService_HardUnavailableBindingWithoutCandidateDoesNotPollu
 	req.SessionHash = "no-healthy-candidate"
 
 	selection, found, err := svc.selectOpenAIUserAffinityConversation(ctx, req)
-	require.ErrorIs(t, err, ErrNoAvailableAccounts)
+	require.ErrorIs(t, err, ErrOpenAIPreviousResponseAccountUnavailable)
 	require.True(t, found)
 	require.Nil(t, selection)
 	require.Empty(t, repo.replacements)
@@ -1263,7 +1274,6 @@ func TestOpenAIGatewayService_HardUnavailableBindingWithoutCandidateDoesNotPollu
 	require.Empty(t, repo.reservations)
 	require.Equal(t, account.ID, repo.binding.AccountID)
 	require.Equal(t, "active", repo.binding.Status)
-	require.Equal(t, uint64(1), svc.SnapshotOpenAIUserAffinityMetrics().NoHealthyCandidate)
 }
 
 func TestOpenAIGatewayService_NonRebuildableConversationFailsClosed(t *testing.T) {

@@ -41,6 +41,8 @@ type OpenAIAccountAdmissionTicket struct {
 	CredentialChainID string
 	SessionScopeHash  string
 	SessionEpoch      int64
+	AccountPersonaID  int64
+	PersonaGeneration int64
 	Class             OpenAIAdmissionClass
 	EnqueuedAt        time.Time
 	Deadline          time.Time
@@ -77,6 +79,8 @@ type OpenAIAccountAdmissionRequest struct {
 	CredentialChainID string
 	SessionScopeHash  string
 	SessionEpoch      int64
+	AccountPersonaID  int64
+	PersonaGeneration int64
 	Class             OpenAIAdmissionClass
 	EstimatedTokens   int64
 	MaxConcurrency    int
@@ -177,6 +181,7 @@ func (s *OpenAIAccountAdmissionService) Acquire(ctx context.Context, req OpenAIA
 		SlotGeneration:    req.SlotGeneration,
 		SlotSetGeneration: req.SlotSetGeneration, CredentialChainID: req.CredentialChainID,
 		SessionScopeHash: strings.ToLower(strings.TrimSpace(req.SessionScopeHash)), SessionEpoch: req.SessionEpoch,
+		AccountPersonaID: req.AccountPersonaID, PersonaGeneration: req.PersonaGeneration,
 		Class:      req.Class,
 		EnqueuedAt: started, Deadline: deadline, EstimatedTokens: openAIAdmissionMaxInt64(req.EstimatedTokens, 1),
 	}

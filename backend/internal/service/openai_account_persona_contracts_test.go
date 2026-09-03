@@ -52,3 +52,37 @@ func TestOpenAIExecutionTargetUsesHistoricalSessionIdentity(t *testing.T) {
 	require.Equal(t, int64(3), target.PersonaGeneration)
 	require.Equal(t, "historical-installation", target.InstallationID)
 }
+
+func TestOpenAIPersonaRuntimeConcurrencyScopeUsesInstanceIdentity(t *testing.T) {
+	target := OpenAIExecutionTarget{
+		AccountID: 42, AccountPersonaID: 108, PersonaGeneration: 5, SessionEpoch: 9,
+		CredentialChainID: "chain", ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: "release", InstallationID: "install", UpstreamSessionID: "session",
+	}
+	ctx := ContextWithOpenAIExecutionTarget(context.Background(), target)
+	persona, slotID, epoch, dynamic := OpenAIPersonaRuntimeConcurrencyScope(ctx, 42, SessionPersonaCodexCLIStrict, 1, 2)
+	if !dynamic || persona != "account_persona_108_generation_5_epoch_9" || slotID != 0 || epoch != 9 {
+		t.Fatalf("unexpected dynamic concurrency scope: %q/%d/%d dynamic=%t", persona, slotID, epoch, dynamic)
+	}
+}
+
+func TestScopeOpenAIFailoverToPersonaOnlyForCredentialFailure(t *testing.T) {
+	target := OpenAIExecutionTarget{
+		AccountID: 42, AccountPersonaID: 108, PersonaGeneration: 5, SessionEpoch: 9,
+		CredentialChainID: "chain", ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: "release", InstallationID: "install", UpstreamSessionID: "session",
+	}
+	ctx := ContextWithOpenAIExecutionTarget(context.Background(), target)
+	next, scoped := ScopeOpenAIFailoverToPersona(ctx, &UpstreamFailoverError{
+		Stage: GatewayFailureStageAccountAuth, Scope: GatewayFailureScopeAccount,
+	})
+	if !scoped {
+		t.Fatal("credential failure was not scoped to AccountPersona")
+	}
+	if _, ok := OpenAIAttemptExclusionsFromContext(next).AccountPersonaIDs[108]; !ok {
+		t.Fatal("AccountPersona exclusion missing")
+	}
+	if _, scoped = ScopeOpenAIFailoverToPersona(ctx, &UpstreamFailoverError{Stage: GatewayFailureStageInference}); scoped {
+		t.Fatal("inference failure must remain account-scoped")
+	}
+}

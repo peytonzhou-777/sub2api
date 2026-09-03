@@ -103,7 +103,7 @@ func TestResolveOpenAIPersonaAdmissionBindingRejectsNonOAuthAccount(t *testing.T
 func TestPopulateOpenAIPersonaAdmissionRequest(t *testing.T) {
 	binding := openAIPersonaAdmissionTestBinding()
 	req := service.OpenAIAccountAdmissionRequest{AccountID: 42, SlotID: 99}
-	populateOpenAIPersonaAdmissionRequest(&req, binding, true)
+	populateOpenAIPersonaAdmissionRequest(context.Background(), &req, binding, true)
 	if req.Persona != string(service.SessionPersonaOpenCode) || req.SlotID != 1 {
 		t.Fatalf("unexpected Persona placement: %+v", req)
 	}
@@ -112,9 +112,24 @@ func TestPopulateOpenAIPersonaAdmissionRequest(t *testing.T) {
 	}
 
 	legacy := service.OpenAIAccountAdmissionRequest{AccountID: 42, SlotID: 99}
-	populateOpenAIPersonaAdmissionRequest(&legacy, binding, false)
+	populateOpenAIPersonaAdmissionRequest(context.Background(), &legacy, binding, false)
 	if legacy.Persona != "" || legacy.SlotID != 99 || legacy.SlotGeneration != 0 || legacy.CredentialChainID != "" {
 		t.Fatalf("legacy request was modified: %+v", legacy)
+	}
+}
+
+func TestPopulateOpenAIPersonaAdmissionRequestPrefersExecutionTarget(t *testing.T) {
+	target := service.OpenAIExecutionTarget{
+		AccountID: 42, AccountPersonaID: 108, PersonaGeneration: 5, SessionEpoch: 9,
+		CredentialChainID: "dynamic-chain", ProfileID: service.SessionPersonaCodexCLIStrict,
+		ProfileVersion: "0.149.0", InstallationID: "install", UpstreamSessionID: "session",
+	}
+	ctx := service.ContextWithOpenAIExecutionTarget(context.Background(), target)
+	req := service.OpenAIAccountAdmissionRequest{AccountID: 42}
+	populateOpenAIPersonaAdmissionRequest(ctx, &req, openAIPersonaAdmissionTestBinding(), true)
+	if req.AccountPersonaID != 108 || req.PersonaGeneration != 5 || req.SessionEpoch != 9 ||
+		req.CredentialChainID != "dynamic-chain" || req.Persona != string(service.SessionPersonaCodexCLIStrict) {
+		t.Fatalf("execution target was not authoritative: %+v", req)
 	}
 }
 
@@ -133,7 +148,7 @@ func TestApplyOpenAIPersonaAdmissionPolicy(t *testing.T) {
 	}
 
 	account := &service.Account{Concurrency: 12}
-	got, accountConcurrency, personaConcurrency := applyOpenAIPersonaAdmissionPolicy(cfg, account, openAIPersonaAdmissionTestBinding(), 12)
+	got, accountConcurrency, personaConcurrency := applyOpenAIPersonaAdmissionPolicy(context.Background(), cfg, account, openAIPersonaAdmissionTestBinding(), 12)
 	if accountConcurrency != 12 || personaConcurrency != 3 {
 		t.Fatalf("effective concurrency = account %d persona %d, want 12/3", accountConcurrency, personaConcurrency)
 	}

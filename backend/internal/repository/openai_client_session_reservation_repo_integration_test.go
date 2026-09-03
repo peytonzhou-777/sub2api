@@ -129,6 +129,68 @@ func TestOpenAIClientSessionReservationRepository_SameSessionSharesSeatAndHolds(
 	require.Equal(t, 2, holds)
 }
 
+func TestOpenAIConversationBindingPersistsExecutionTarget(t *testing.T) {
+	fixture := newOpenAIReservationFixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	token := uuid.NewString()
+	rootHash := strings.Repeat("d", 64)
+	reservationRepo := NewOpenAIClientSessionReservationRepository(integrationDB)
+	userLease, err := reservationRepo.ReserveUserGroupSession(ctx, service.OpenAIUserGroupSessionReserveInput{
+		ReservationToken: token, UserID: fixture.userID, EffectiveGroupID: fixture.groupID,
+		ClientSessionHash: rootHash, MaxSessions: 3, Now: now, HoldUntil: now.Add(time.Minute),
+	})
+	require.NoError(t, err)
+	candidates, err := reservationRepo.ListOpenAIPersonaCapacityCandidates(ctx, []int64{fixture.account.ID}, fixture.userID, fixture.apiKeyID, rootHash, now)
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	target, err := service.OpenAIExecutionTargetFromPersonaSession(candidates[0].Persona, candidates[0].Session)
+	require.NoError(t, err)
+	target.UserGroupLeaseID = userLease.LeaseID
+
+	var residentSlotID int64
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+		INSERT INTO openai_user_resident_slots
+			(user_id, scope_key, slot_index, account_id, generation, status, admitted_at, expires_at,
+			 score_updated_at, provisional_token, created_at, updated_at)
+		VALUES ($1, 'openai', 1, $2, 1, 'provisional', $3::timestamptz, $4::timestamptz,
+		        $3::timestamptz, $5, $3::timestamptz, $3::timestamptz)
+		RETURNING id`, fixture.userID, fixture.account.ID, now, now.Add(time.Hour), token).Scan(&residentSlotID))
+	conversationHash := strings.Repeat("e", 64)
+	var bindingID int64
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+		INSERT INTO openai_user_conversation_bindings
+			(user_id, api_key_id, scope_key, conversation_hash, resident_slot_id, account_id,
+			 slot_generation, status, context_rebuildable, first_output_committed,
+			 active_until, expires_at, provisional_token, created_at, updated_at)
+		VALUES ($1, $2, 'openai', $3::char(64), $4, $5, 1, 'provisional', TRUE, FALSE,
+		        $6::timestamptz, $7::timestamptz, $8, $9::timestamptz, $9::timestamptz)
+		RETURNING id`, fixture.userID, fixture.apiKeyID, conversationHash, residentSlotID,
+		fixture.account.ID, now.Add(time.Minute), now.Add(time.Hour), token, now).Scan(&bindingID))
+	t.Cleanup(func() {
+		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM openai_user_conversation_bindings WHERE id = $1`, bindingID)
+		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM openai_user_resident_slots WHERE id = $1`, residentSlotID)
+		_ = reservationRepo.RollbackClientSessionReservation(context.Background(), token, time.Now().UTC())
+	})
+
+	repo := newAccountRepositoryWithSQL(integrationEntClient, integrationDB, nil)
+	transition := service.OpenAIUserConversationTransition{
+		BindingID: bindingID, AccountID: fixture.account.ID, ProvisionalToken: token,
+		RootClientSessionHash: rootHash,
+	}
+	require.NoError(t, repo.BindOpenAIUserConversationExecutionTarget(ctx, transition, target))
+	binding, err := repo.GetOpenAIUserConversationBinding(ctx, fixture.userID, fixture.apiKeyID, "openai", conversationHash)
+	require.NoError(t, err)
+	require.NotNil(t, binding)
+	require.Equal(t, target.AccountPersonaID, binding.AccountPersonaID)
+	require.Equal(t, target.SessionEpoch, binding.PersonaSessionEpoch)
+	require.Equal(t, target.CredentialChainID, binding.CredentialChainID)
+	require.Equal(t, rootHash, binding.RootClientSessionHash)
+	require.Equal(t, userLease.LeaseID, binding.UserGroupLeaseID)
+	require.Equal(t, target.ProfileID, binding.ProfileID)
+	require.Equal(t, target.ProfileVersion, binding.ProfileVersion)
+}
+
 func TestOpenAIClientSessionReservationRepository_PersonaSeatClaimAndCommit(t *testing.T) {
 	fixture := newOpenAIReservationFixture(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)

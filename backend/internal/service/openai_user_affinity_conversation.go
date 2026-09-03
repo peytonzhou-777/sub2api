@@ -160,6 +160,11 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		}
 		return nil, false, nil
 	}
+	if binding.AccountPersonaID > 0 {
+		if _, excluded := OpenAIAttemptExclusionsFromContext(ctx).AccountPersonaIDs[binding.AccountPersonaID]; excluded {
+			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
+		}
+	}
 	validBinding, validateErr := store.ValidateOpenAIUserConversationBinding(ctx, *binding)
 	if validateErr != nil {
 		return nil, true, validateErr
@@ -241,6 +246,15 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 			"binding_id", binding.ID, "account_id", binding.AccountID, "binding_source", bindingSource)
 		return nil, true, ErrNoAvailableAccounts
 	}
+	var executionTarget OpenAIExecutionTarget
+	if account.IsOpenAIOAuth() {
+		var targetErr error
+		executionTarget, targetErr = s.restoreOpenAIUserConversationExecutionTarget(ctx, binding)
+		if targetErr != nil {
+			// OAuth 续链缺少 Persona/epoch 身份时禁止重新选号，避免 Thread 跨出站设备。
+			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
+		}
+	}
 	if excluded || admission != openAIUserAffinityResidentAllowed {
 		if bindingSource == "codex_parent" {
 			// 父线程命中后属于硬锁；父账号不可用时不得把派生请求投递到其他账号。
@@ -249,7 +263,14 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		if !binding.ContextRebuildable || !identity.contextRebuildable {
 			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
 		}
-		return s.selectOpenAIUserAffinityConversationFailover(ctx, req, config, identity, binding, admission)
+		if binding.AccountPersonaID <= 0 {
+			return s.selectOpenAIUserAffinityConversationFailover(ctx, req, config, identity, binding, admission)
+		}
+		if excluded || isOpenAIUserAffinityResidentHardUnavailable(admission) {
+			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
+		}
+		// 动态 Persona binding 已锁定完整 lineage；临时容量只在原目标排队，
+		// 不得沿用旧账号级 failover 把 continuation 搬到另一个 Persona。
 	}
 	s.rememberOpenAIUserAffinityConversationAttempt(ctx, binding, config, "")
 	if bindingSource == "codex_parent" {
@@ -278,13 +299,49 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 	acquired, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
 	if acquireErr == nil && acquired != nil && acquired.Acquired {
 		selection, selectionErr := s.newAcquiredSelectionResult(ctx, account, acquired.ReleaseFunc)
+		if selection != nil && executionTarget.Valid() {
+			selection.ExecutionTarget = &executionTarget
+		}
 		return selection, true, selectionErr
 	}
 	selection, selectionErr := s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
 		AccountID: account.ID, MaxConcurrency: account.Concurrency,
 		Timeout: s.schedulingConfig().StickySessionWaitTimeout, MaxWaiting: s.schedulingConfig().StickySessionMaxWaiting,
 	})
+	if selection != nil && executionTarget.Valid() {
+		selection.ExecutionTarget = &executionTarget
+	}
 	return selection, true, selectionErr
+}
+
+func (s *OpenAIGatewayService) restoreOpenAIUserConversationExecutionTarget(
+	ctx context.Context,
+	binding *OpenAIUserConversationBinding,
+) (OpenAIExecutionTarget, error) {
+	if binding == nil || binding.AccountPersonaID <= 0 || binding.PersonaSessionEpoch <= 0 ||
+		binding.CredentialChainID == "" || binding.ProfileID == "" || binding.ProfileVersion == "" ||
+		len(strings.TrimSpace(binding.RootClientSessionHash)) != 64 || binding.UserGroupLeaseID <= 0 {
+		return OpenAIExecutionTarget{}, ErrOpenAIPreviousResponseAccountUnavailable
+	}
+	repo, ok := s.accountRepo.(OpenAIAccountPersonaRepository)
+	if !ok {
+		return OpenAIExecutionTarget{}, ErrOpenAIPreviousResponseAccountUnavailable
+	}
+	persona, err := repo.GetAccountPersona(ctx, binding.AccountID, binding.AccountPersonaID)
+	if err != nil || persona == nil {
+		return OpenAIExecutionTarget{}, ErrOpenAIPreviousResponseAccountUnavailable
+	}
+	session, err := repo.GetAccountPersonaSession(ctx, binding.AccountID, binding.AccountPersonaID, binding.PersonaSessionEpoch, time.Now().UTC())
+	if err != nil || session == nil {
+		return OpenAIExecutionTarget{}, ErrOpenAIPreviousResponseAccountUnavailable
+	}
+	target, err := OpenAIExecutionTargetFromPersonaSession(*persona, *session)
+	if err != nil || target.CredentialChainID != binding.CredentialChainID ||
+		target.ProfileID != binding.ProfileID || target.ProfileVersion != binding.ProfileVersion {
+		return OpenAIExecutionTarget{}, ErrOpenAIPreviousResponseAccountUnavailable
+	}
+	target.UserGroupLeaseID = binding.UserGroupLeaseID
+	return target, nil
 }
 
 func (s *OpenAIGatewayService) rememberOpenAIUserAffinityConversationTransition(ctx context.Context, transition *OpenAIUserConversationTransition) {
@@ -414,11 +471,43 @@ func (s *OpenAIGatewayService) rememberOpenAIUserAffinityConversationAttempt(ctx
 		ScopeKey: binding.ScopeKey, ConversationHash: binding.ConversationHash,
 		ResidentSlotID: binding.ResidentSlotID, AccountID: binding.AccountID,
 		SlotGeneration: binding.SlotGeneration, ProvisionalToken: token, Config: config,
+		AccountPersonaID: binding.AccountPersonaID, PersonaSessionEpoch: binding.PersonaSessionEpoch,
+		CredentialChainID: binding.CredentialChainID, RootClientSessionHash: binding.RootClientSessionHash,
+		UserGroupLeaseID: binding.UserGroupLeaseID, ProfileID: binding.ProfileID, ProfileVersion: binding.ProfileVersion,
 		ManageActiveRoute: binding.ManageActiveRoute, ActiveRoutePending: binding.ActiveRoutePending,
 	}
 	if binding.FirstOutputCommitted {
 		state.conversationCommitted.Store(true)
 	}
+}
+
+func (s *OpenAIGatewayService) bindOpenAIUserAffinityConversationExecutionTarget(
+	ctx context.Context,
+	accountID int64,
+	target OpenAIExecutionTarget,
+	rootClientSessionHash string,
+) error {
+	attempt, found := s.openAIUserAffinityAttempt(ctx, accountID)
+	if !found || attempt.conversation == nil || strings.TrimSpace(attempt.conversation.ProvisionalToken) == "" {
+		return nil
+	}
+	store, ok := s.accountRepo.(OpenAIUserAffinityConversationStore)
+	if !ok {
+		return errors.New("openai conversation binding store unavailable")
+	}
+	transition := *attempt.conversation
+	transition.RootClientSessionHash = strings.ToLower(strings.TrimSpace(rootClientSessionHash))
+	if err := store.BindOpenAIUserConversationExecutionTarget(ctx, transition, target); err != nil {
+		return err
+	}
+	attempt.conversation.AccountPersonaID = target.AccountPersonaID
+	attempt.conversation.PersonaSessionEpoch = target.SessionEpoch
+	attempt.conversation.CredentialChainID = target.CredentialChainID
+	attempt.conversation.RootClientSessionHash = transition.RootClientSessionHash
+	attempt.conversation.UserGroupLeaseID = target.UserGroupLeaseID
+	attempt.conversation.ProfileID = target.ProfileID
+	attempt.conversation.ProfileVersion = target.ProfileVersion
+	return nil
 }
 
 func (s *OpenAIGatewayService) commitOpenAIUserAffinityConversation(ctx context.Context, accountID int64) bool {
