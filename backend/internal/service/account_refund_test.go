@@ -13,6 +13,9 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositaccount"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositledger"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositlot"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/shopspring/decimal"
@@ -755,6 +758,13 @@ func TestAdminReconcileAccountRefundSuccessCompletesAndUnlocks(t *testing.T) {
 	require.NoError(t, err)
 	providerRow, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeEasyPay).SetName("admin-success-provider").SetConfig("{}").SetSupportedTypes("easypay").SetEnabled(true).SetRefundEnabled(true).SetAllowUserRefund(true).Save(ctx)
 	require.NoError(t, err)
+	adminGrantLots := createAccountRefundAdminGrantSecurityDeposit(t, ctx, client, userRow.ID, 1200, 1800)
+	paidDeposit, err := client.SecurityDepositAccount.Create().
+		SetUserID(userRow.ID).
+		SetBucketType(securitydepositaccount.BucketTypePaid).
+		SetBalanceCents(4000).
+		Save(ctx)
+	require.NoError(t, err)
 	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, providerRow.ID, 100, 100, 0, paymentorder.RechargeBonusStatusNone)
 	_, err = client.PaymentOrder.UpdateOneID(orderID).SetStatus(OrderStatusRefundPending).SetRefundAmount(100).Save(ctx)
 	require.NoError(t, err)
@@ -780,6 +790,29 @@ func TestAdminReconcileAccountRefundSuccessCompletesAndUnlocks(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, OrderStatusRefunded, updatedOrder.Status)
 	require.InDelta(t, 100, updatedOrder.RefundAmount, 1e-8)
+	adminGrantAccount, err := client.SecurityDepositAccount.Query().Where(
+		securitydepositaccount.UserIDEQ(userRow.ID),
+		securitydepositaccount.BucketTypeEQ(securitydepositaccount.BucketTypeAdminGrant),
+	).Only(ctx)
+	require.NoError(t, err)
+	require.Zero(t, adminGrantAccount.BalanceCents)
+	require.Equal(t, int64(2), adminGrantAccount.Version)
+	for _, lot := range adminGrantLots {
+		updatedLot, getErr := client.SecurityDepositLot.Get(ctx, lot.ID)
+		require.NoError(t, getErr)
+		require.Zero(t, updatedLot.RemainingCents)
+		require.Equal(t, updatedLot.OriginalCents, updatedLot.RevokedCents)
+		require.Equal(t, "exhausted", updatedLot.Status)
+	}
+	ledgerRows, err := client.SecurityDepositLedger.Query().Where(
+		securitydepositledger.UserIDEQ(userRow.ID),
+		securitydepositledger.EntryTypeEQ(securitydepositledger.EntryTypeAdminRevoke),
+	).All(ctx)
+	require.NoError(t, err)
+	require.Len(t, ledgerRows, 2)
+	unchangedPaidDeposit, err := client.SecurityDepositAccount.Get(ctx, paidDeposit.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(4000), unchangedPaidDeposit.BalanceCents)
 	detail, err := svc.GetAdminAccountRefundDetail(ctx, userRow.ID)
 	require.NoError(t, err)
 	require.Len(t, detail.Record.Reconciliations, 1)
@@ -821,6 +854,7 @@ func TestDonateLockedAccountRefundClearsCreditsWithoutGatewayRefund(t *testing.T
 	orderID := createAccountRefundTestOrder(t, ctx, client, userRow.ID, userRow.Email, provider.ID, 100, 100, 0, paymentorder.RechargeBonusStatusNone)
 	grant, err := client.UserLimitedCreditGrant.Create().SetUserID(userRow.ID).SetSourceType(LimitedCreditSourceResetRebate).SetInitialAmount(15).SetUsedAmount(0).SetFrozenAmount(0).SetExpiresAt(time.Now().Add(24 * time.Hour)).SetStatus(LimitedCreditStatusActive).Save(ctx)
 	require.NoError(t, err)
+	adminGrantLots := createAccountRefundAdminGrantSecurityDeposit(t, ctx, client, userRow.ID, 2500)
 
 	fence := &accountRefundFenceStub{}
 	svc := &PaymentService{entClient: client, authCacheInvalidator: fence}
@@ -850,6 +884,16 @@ func TestDonateLockedAccountRefundClearsCreditsWithoutGatewayRefund(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, LimitedCreditStatusDepleted, updatedGrant.Status)
 	require.InDelta(t, 15, updatedGrant.UsedAmount, 1e-8)
+	adminGrantAccount, err := client.SecurityDepositAccount.Query().Where(
+		securitydepositaccount.UserIDEQ(userRow.ID),
+		securitydepositaccount.BucketTypeEQ(securitydepositaccount.BucketTypeAdminGrant),
+	).Only(ctx)
+	require.NoError(t, err)
+	require.Zero(t, adminGrantAccount.BalanceCents)
+	updatedAdminGrantLot, err := client.SecurityDepositLot.Get(ctx, adminGrantLots[0].ID)
+	require.NoError(t, err)
+	require.Zero(t, updatedAdminGrantLot.RemainingCents)
+	require.Equal(t, int64(2500), updatedAdminGrantLot.RevokedCents)
 	updatedOrder, err := client.PaymentOrder.Get(ctx, orderID)
 	require.NoError(t, err)
 	require.Equal(t, OrderStatusCompleted, updatedOrder.Status)
@@ -877,6 +921,35 @@ func TestMaskAccountRefundDonationEmail(t *testing.T) {
 	require.Equal(t, "x***@example.com", maskAccountRefundDonationEmail("x@example.com"))
 	require.Equal(t, "***", maskAccountRefundDonationEmail("invalid"))
 	require.Equal(t, "匿名用户", accountRefundDonationUsername(" "))
+}
+
+func createAccountRefundAdminGrantSecurityDeposit(t *testing.T, ctx context.Context, client *dbent.Client, userID int64, amounts ...int64) []*dbent.SecurityDepositLot {
+	t.Helper()
+	var balance int64
+	for _, amount := range amounts {
+		balance += amount
+	}
+	_, err := client.SecurityDepositAccount.Create().
+		SetUserID(userID).
+		SetBucketType(securitydepositaccount.BucketTypeAdminGrant).
+		SetBalanceCents(balance).
+		Save(ctx)
+	require.NoError(t, err)
+
+	lots := make([]*dbent.SecurityDepositLot, 0, len(amounts))
+	for _, amount := range amounts {
+		lot, createErr := client.SecurityDepositLot.Create().
+			SetUserID(userID).
+			SetBucketType(securitydepositlot.BucketTypeAdminGrant).
+			SetSourceType(securitydepositlot.SourceTypeAdmin).
+			SetOriginalCents(amount).
+			SetRemainingCents(amount).
+			SetRefundPolicy(securitydepositlot.RefundPolicyNever).
+			Save(ctx)
+		require.NoError(t, createErr)
+		lots = append(lots, lot)
+	}
+	return lots
 }
 
 func createAccountRefundTestOrder(t *testing.T, ctx context.Context, client *dbent.Client, userID int64, email string, providerID int64, amount, paid, bonusRate float64, bonusStatus paymentorder.RechargeBonusStatus) int64 {

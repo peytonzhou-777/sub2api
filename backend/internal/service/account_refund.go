@@ -19,6 +19,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
 	"github.com/Wei-Shaw/sub2api/ent/paymentproviderinstance"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositaccount"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositledger"
+	"github.com/Wei-Shaw/sub2api/ent/securitydepositlot"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	creditgrant "github.com/Wei-Shaw/sub2api/ent/userlimitedcreditgrant"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
@@ -1650,6 +1653,9 @@ func (s *PaymentService) finalizeAccountRefundDonation(ctx context.Context, reco
 			}
 		}
 	}
+	if err := clearAccountRefundAdminGrantSecurityDeposit(txCtx, tx.Client(), record.UserID, record.RefundID, time.Now().UTC()); err != nil {
+		return nil, err
+	}
 	if _, err := tx.User.UpdateOne(lockedUser).SetBalance(0).SetStatus(StatusActive).Save(txCtx); err != nil {
 		return nil, err
 	}
@@ -1766,6 +1772,9 @@ func (s *PaymentService) finalizeAccountRefundCredits(ctx context.Context, recor
 			}
 		}
 	}
+	if err := clearAccountRefundAdminGrantSecurityDeposit(txCtx, tx.Client(), record.UserID, record.RefundID, time.Now().UTC()); err != nil {
+		return err
+	}
 	if _, err := tx.User.UpdateOne(lockedUser).SetBalance(0).SetStatus(accountRefundRestoreStatus(record)).Save(txCtx); err != nil {
 		return err
 	}
@@ -1776,6 +1785,83 @@ func (s *PaymentService) finalizeAccountRefundCredits(ctx context.Context, recor
 		return err
 	}
 	return tx.Commit()
+}
+
+// clearAccountRefundAdminGrantSecurityDeposit 在账户清退事务内核销管理员发放保证金，实付保证金保持不变。
+func clearAccountRefundAdminGrantSecurityDeposit(ctx context.Context, client *dbent.Client, userID int64, refundID string, now time.Time) error {
+	accountQuery := client.SecurityDepositAccount.Query().Where(
+		securitydepositaccount.UserIDEQ(userID),
+		securitydepositaccount.BucketTypeEQ(securitydepositaccount.BucketTypeAdminGrant),
+	)
+	if client.Driver().Dialect() == dialect.Postgres {
+		accountQuery = accountQuery.ForUpdate()
+	}
+	account, err := accountQuery.Only(ctx)
+	if dbent.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("lock account refund admin-grant security deposit: %w", err)
+	}
+	if account.RefundReservedCents != 0 {
+		return fmt.Errorf("account refund admin-grant security deposit has reserved balance")
+	}
+
+	lotQuery := client.SecurityDepositLot.Query().Where(
+		securitydepositlot.UserIDEQ(userID),
+		securitydepositlot.BucketTypeEQ(securitydepositlot.BucketTypeAdminGrant),
+		securitydepositlot.RemainingCentsGT(0),
+	).Order(dbent.Asc(securitydepositlot.FieldCreatedAt), dbent.Asc(securitydepositlot.FieldID))
+	if client.Driver().Dialect() == dialect.Postgres {
+		lotQuery = lotQuery.ForUpdate()
+	}
+	lots, err := lotQuery.All(ctx)
+	if err != nil {
+		return fmt.Errorf("lock account refund admin-grant security deposit lots: %w", err)
+	}
+	remainingBalance := account.BalanceCents
+	for _, lot := range lots {
+		remainingBalance -= lot.RemainingCents
+		if remainingBalance < 0 {
+			return fmt.Errorf("account refund admin-grant security deposit account is inconsistent with lots")
+		}
+		if _, err := client.SecurityDepositLot.UpdateOne(lot).
+			SetRemainingCents(0).
+			AddRevokedCents(lot.RemainingCents).
+			SetStatus("exhausted").
+			SetUpdatedAt(now).
+			Save(ctx); err != nil {
+			return fmt.Errorf("clear account refund admin-grant security deposit lot %d: %w", lot.ID, err)
+		}
+		if _, err := client.SecurityDepositLedger.Create().
+			SetUserID(userID).
+			SetLotID(lot.ID).
+			SetBucketType(securitydepositledger.BucketTypeAdminGrant).
+			SetEntryType(securitydepositledger.EntryTypeAdminRevoke).
+			SetDeltaCents(-lot.RemainingCents).
+			SetBucketBalanceAfterCents(remainingBalance).
+			SetBucketReservedAfterCents(0).
+			SetReason("账户余额清退清空管理员发放保证金").
+			SetIdempotencyKey(fmt.Sprintf("account_refund:%s:admin_grant:lot:%d", refundID, lot.ID)).
+			SetCreatedAt(now).
+			Save(ctx); err != nil {
+			return fmt.Errorf("write account refund admin-grant security deposit ledger: %w", err)
+		}
+	}
+	if remainingBalance != 0 {
+		return fmt.Errorf("account refund admin-grant security deposit lots are inconsistent with account balance")
+	}
+	if account.BalanceCents == 0 {
+		return nil
+	}
+	if _, err := client.SecurityDepositAccount.UpdateOne(account).
+		SetBalanceCents(0).
+		AddVersion(1).
+		SetUpdatedAt(now).
+		Save(ctx); err != nil {
+		return fmt.Errorf("clear account refund admin-grant security deposit account: %w", err)
+	}
+	return nil
 }
 
 // restoreTerminalAccountRefundAccess 幂等恢复终态用户并释放可能遗留的计费栅栏。
