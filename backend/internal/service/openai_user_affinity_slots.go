@@ -320,80 +320,37 @@ func (s *OpenAIGatewayService) fillOpenAIUserAffinityResidentSlot(ctx context.Co
 			break
 		}
 	}
-	occupancies := make(map[int64]OpenAIAccountSoftOccupancy)
-	if routingStore, ok := s.accountRepo.(OpenAIUserAffinityActiveRoutingStore); ok {
-		accountIDs := make([]int64, 0, len(candidates))
-		for _, candidate := range candidates {
-			accountIDs = append(accountIDs, candidate.AccountID)
+	for len(candidates) > 0 {
+		candidate, found := selectOpenAIUserAffinityCandidate(config, candidates, demand.Demand5H, demand.Demand7D, now, preferExistingAffinity)
+		if !found {
+			break
 		}
-		occupancies, err = routingStore.ListOpenAIAccountSoftOccupancies(ctx, accountIDs)
-		if err != nil {
-			return nil, true, err
-		}
-	}
-	for _, tierCandidates := range openAIUserAffinitySoftOccupancyCandidateTiers(
-		candidates, occupancies, identity.userID, len(activeSlots) == 0,
-	) {
-		for len(tierCandidates) > 0 {
-			candidate, found := selectOpenAIUserAffinityCandidate(config, tierCandidates, demand.Demand5H, demand.Demand7D, now, preferExistingAffinity)
-			if !found {
-				break
+		account := accounts[candidate.AccountID]
+		acquired, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
+		if acquireErr == nil && acquired != nil && acquired.Acquired {
+			placement := &OpenAIUserPlacement{
+				UserID: identity.userID, ScopeKey: identity.scopeKey, AccountID: &account.ID,
+				Generation: maxGeneration + 1, Status: "active", AssignedAt: now,
+				ExpiresAt: now.Add(config.ResidentTTL()), AssignmentReason: "resident_slot_fill",
 			}
-			account := accounts[candidate.AccountID]
-			acquired, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
-			if acquireErr == nil && acquired != nil && acquired.Acquired {
-				placement := &OpenAIUserPlacement{
-					UserID: identity.userID, ScopeKey: identity.scopeKey, AccountID: &account.ID,
-					Generation: maxGeneration + 1, Status: "active", AssignedAt: now,
-					ExpiresAt: now.Add(config.ResidentTTL()), AssignmentReason: "resident_slot_fill",
+			s.rememberOpenAIUserAffinityAttempt(ctx, placement)
+			if err := s.reserveOpenAIUserAffinityConversation(ctx, req, account.ID); err != nil {
+				if acquired.ReleaseFunc != nil {
+					acquired.ReleaseFunc()
 				}
-				s.rememberOpenAIUserAffinityAttempt(ctx, placement)
-				if err := s.reserveOpenAIUserAffinityConversation(ctx, req, account.ID); err != nil {
-					if acquired.ReleaseFunc != nil {
-						acquired.ReleaseFunc()
-					}
-					return nil, true, err
-				}
-				selection, selectionErr := s.newAcquiredSelectionResult(ctx, account, acquired.ReleaseFunc)
-				s.openaiAffinity.metrics.residentSlotFillAttempts.Add(1)
-				return selection, true, selectionErr
+				return nil, true, err
 			}
-			tierCandidates = removeOpenAIUserAffinityCandidate(tierCandidates, candidate.AccountID)
+			selection, selectionErr := s.newAcquiredSelectionResult(ctx, account, acquired.ReleaseFunc)
+			s.openaiAffinity.metrics.residentSlotFillAttempts.Add(1)
+			return selection, true, selectionErr
 		}
+		candidates = removeOpenAIUserAffinityCandidate(candidates, candidate.AccountID)
 	}
 	if unknownQuota {
 		// 未知快照交给普通调度发起一次真实请求自愈，不把未知容量误判为不可用。
 		return nil, false, nil
 	}
 	return nil, true, ErrNoAvailableAccounts
-}
-
-// openAIUserAffinitySoftOccupancyCandidateTiers 先复用本人软主账号，再选无人账号，最后才软共享最少活动用户的账号。
-func openAIUserAffinitySoftOccupancyCandidateTiers(candidates []OpenAIUserAffinityCandidate, occupancies map[int64]OpenAIAccountSoftOccupancy, userID int64, allowShared bool) [][]OpenAIUserAffinityCandidate {
-	tiers := make([][]OpenAIUserAffinityCandidate, 2)
-	minimumSharedUsers := -1
-	var shared []OpenAIUserAffinityCandidate
-	for _, candidate := range candidates {
-		occupancy := occupancies[candidate.AccountID]
-		switch {
-		case occupancy.OwnerUserID == userID && userID > 0:
-			tiers[0] = append(tiers[0], candidate)
-		case occupancy.OwnerUserID == 0:
-			tiers[1] = append(tiers[1], candidate)
-		case allowShared:
-			if minimumSharedUsers < 0 || occupancy.ActiveUserCount < minimumSharedUsers {
-				minimumSharedUsers = occupancy.ActiveUserCount
-				shared = shared[:0]
-			}
-			if occupancy.ActiveUserCount == minimumSharedUsers {
-				shared = append(shared, candidate)
-			}
-		}
-	}
-	if allowShared {
-		tiers = append(tiers, shared)
-	}
-	return tiers
 }
 
 // sortOpenAIUserResidentSlots 按实时衰减热度及稳定兜底字段确定首选顺序。

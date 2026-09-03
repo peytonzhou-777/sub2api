@@ -106,6 +106,18 @@ func TestSortOpenAIUserResidentSlotsUsesDecayedScore(t *testing.T) {
 	require.Equal(t, int64(2), slots[0].AccountID, "旧高分应按半衰期衰减后再参与排序")
 }
 
+func TestOldestOpenAIUserResidentSlotUsesLastSuccessThenAdmission(t *testing.T) {
+	now := time.Now().UTC()
+	recent := now.Add(-time.Hour)
+	old := now.Add(-48 * time.Hour)
+	victim := oldestOpenAIUserResidentSlot([]OpenAIUserResidentSlot{
+		{ID: 3, AccountID: 30, LastSuccessAt: &recent, AdmittedAt: now.Add(-72 * time.Hour)},
+		{ID: 2, AccountID: 20, LastSuccessAt: &old, AdmittedAt: now.Add(-24 * time.Hour)},
+		{ID: 1, AccountID: 10, AdmittedAt: now.Add(-36 * time.Hour)},
+	})
+	require.Equal(t, int64(20), victim.AccountID, "应按 COALESCE(last_success_at, admitted_at) 选择最旧槽位")
+}
+
 func TestClassifyOpenAIUserAffinityResidentAdmission(t *testing.T) {
 	now := time.Now().UTC()
 	baseExtra := map[string]any{

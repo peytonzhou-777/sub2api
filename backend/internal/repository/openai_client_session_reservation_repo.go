@@ -399,7 +399,7 @@ func (r *openAIClientSessionReservationRepository) RollbackClientSessionReservat
 	return tx.Commit()
 }
 
-func (r *openAIClientSessionReservationRepository) ListOpenAIPersonaCapacityCandidates(ctx context.Context, accountIDs []int64, userID int64, now time.Time) ([]service.OpenAIPersonaCapacityCandidate, error) {
+func (r *openAIClientSessionReservationRepository) ListOpenAIPersonaCapacityCandidates(ctx context.Context, accountIDs []int64, userID, apiKeyID int64, clientSessionHash string, now time.Time) ([]service.OpenAIPersonaCapacityCandidate, error) {
 	if r == nil || r.db == nil {
 		return nil, errors.New("OpenAI Persona capacity repository unavailable")
 	}
@@ -420,7 +420,12 @@ func (r *openAIClientSessionReservationRepository) ListOpenAIPersonaCapacityCand
               (SELECT 1 FROM openai_persona_request_holds hold WHERE hold.lease_id = lease.id AND hold.expires_at > $3::timestamptz))) AS active_clients,
        (SELECT MIN(lease.active_until) FROM openai_persona_client_session_leases lease WHERE lease.account_persona_id = persona.id
           AND lease.state = 'active' AND lease.active_until > $3::timestamptz) AS earliest_release,
-       (claim.account_persona_id = persona.id) AS claimed_by_user
+		(claim.account_persona_id = persona.id) AS claimed_by_user,
+		EXISTS (SELECT 1 FROM openai_persona_client_session_leases lease
+		        WHERE lease.account_persona_id = persona.id AND lease.user_id = $4 AND lease.api_key_id = $5
+		          AND lease.client_session_hash = $6
+		          AND ((lease.state = 'active' AND lease.active_until > $3::timestamptz) OR EXISTS
+		              (SELECT 1 FROM openai_persona_request_holds hold WHERE hold.lease_id = lease.id AND hold.expires_at > $3::timestamptz))) AS current_client_lease
 FROM openai_account_personas persona
 JOIN openai_account_persona_sessions session ON session.account_persona_id = persona.id
     AND session.session_epoch = persona.current_session_epoch AND session.state = 'current'
@@ -433,7 +438,7 @@ WHERE persona.account_id = ANY($1::bigint[]) AND persona.state = 'active' AND pe
   AND session.proxy_snapshot_set = TRUE
   AND (session.effective_proxy_id IS NULL OR (proxy.status = 'active' AND proxy.deleted_at IS NULL))
   AND (claim.account_persona_id IS NULL OR claim.account_persona_id = persona.id)
-ORDER BY persona.account_id, persona.position, persona.id`, pq.Array(accountIDs), userID, now)
+ORDER BY persona.account_id, persona.position, persona.id`, pq.Array(accountIDs), userID, now, userID, apiKeyID, strings.ToLower(clientSessionHash))
 	if err != nil {
 		return nil, err
 	}
@@ -452,7 +457,7 @@ ORDER BY persona.account_id, persona.position, persona.id`, pq.Array(accountIDs)
 			&c.Session.PersonaGeneration, &c.Session.CredentialChainID, &c.Session.ProfileID, &c.Session.ProfileVersion,
 			&sessionProxy, &c.Session.ProxyRevision, &c.Session.EffectiveProxyURL, &c.Session.InstallationID,
 			&c.Session.ProxySnapshotSet, &c.Session.StartedAt, &sessionLast, &sessionDrain, &sessionExpires,
-			&c.ActiveClientSessions, &earliest, &c.ClaimedByUser); err != nil {
+			&c.ActiveClientSessions, &earliest, &c.ClaimedByUser, &c.CurrentClientLease); err != nil {
 			return nil, err
 		}
 		if personaProxy.Valid {
@@ -515,8 +520,8 @@ func (r *accountRepository) RollbackClientSessionReservation(ctx context.Context
 	return r.openAIClientSessionReservationRepository().RollbackClientSessionReservation(ctx, token, now)
 }
 
-func (r *accountRepository) ListOpenAIPersonaCapacityCandidates(ctx context.Context, accountIDs []int64, userID int64, now time.Time) ([]service.OpenAIPersonaCapacityCandidate, error) {
-	return r.openAIClientSessionReservationRepository().ListOpenAIPersonaCapacityCandidates(ctx, accountIDs, userID, now)
+func (r *accountRepository) ListOpenAIPersonaCapacityCandidates(ctx context.Context, accountIDs []int64, userID, apiKeyID int64, clientSessionHash string, now time.Time) ([]service.OpenAIPersonaCapacityCandidate, error) {
+	return r.openAIClientSessionReservationRepository().ListOpenAIPersonaCapacityCandidates(ctx, accountIDs, userID, apiKeyID, clientSessionHash, now)
 }
 
 var _ service.OpenAIClientSessionReservationRepository = (*accountRepository)(nil)

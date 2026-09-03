@@ -2207,6 +2207,11 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	if effectiveExcluded == nil {
 		effectiveExcluded = make(map[int64]struct{})
 	}
+	effectiveExcluded, err = s.openAIAccountsWithPersonaCapacity(ctx, groupID, effectiveExcluded, sessionHash)
+	if err != nil {
+		rollback()
+		return nil, OpenAIAccountScheduleDecision{}, err
+	}
 	for {
 		selection, decision, selectErr := selectOnce(ctx, effectiveExcluded)
 		if selectErr != nil || selection == nil || selection.Account == nil {

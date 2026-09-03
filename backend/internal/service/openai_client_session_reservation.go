@@ -21,6 +21,7 @@ var (
 	// ErrOpenAIUserGroupSessionCapacity 表示用户在有效分组内已占满客户端 Session 总席位。
 	ErrOpenAIUserGroupSessionCapacity = errors.New("拒绝下游分发")
 	ErrOpenAIPersonaSessionCapacity   = errors.New("OpenAI AccountPersona client Session capacity exhausted")
+	ErrOpenAIPersonaCapacityExhausted = errors.New("OPENAI_PERSONA_CAPACITY_EXHAUSTED")
 	ErrOpenAIAccountPersonaClaim      = errors.New("OpenAI account is already claimed by another Persona for this user")
 	ErrOpenAIClientSessionReservation = errors.New("OpenAI client Session reservation is missing or expired")
 )
@@ -69,6 +70,7 @@ type OpenAIPersonaCapacityCandidate struct {
 	ActiveClientSessions int
 	EarliestReleaseAt    *time.Time
 	ClaimedByUser        bool
+	CurrentClientLease   bool
 }
 
 // OpenAIClientSessionReservationRepository 管理串联总门与 Persona 的两段短事务。
@@ -77,7 +79,7 @@ type OpenAIClientSessionReservationRepository interface {
 	ReservePersonaSession(context.Context, OpenAIPersonaSessionReserveInput) (*OpenAIClientSessionLeaseReservation, error)
 	CommitClientSessionReservation(context.Context, OpenAIClientSessionReservationCommit) (OpenAIExecutionTarget, error)
 	RollbackClientSessionReservation(context.Context, string, time.Time) error
-	ListOpenAIPersonaCapacityCandidates(context.Context, []int64, int64, time.Time) ([]OpenAIPersonaCapacityCandidate, error)
+	ListOpenAIPersonaCapacityCandidates(context.Context, []int64, int64, int64, string, time.Time) ([]OpenAIPersonaCapacityCandidate, error)
 }
 
 type openAIClientSessionReservationContextKey struct{}
@@ -174,7 +176,7 @@ func (s *OpenAIGatewayService) attachOpenAIPersonaReservation(ctx context.Contex
 	if err != nil {
 		return err
 	}
-	candidates, err := state.repo.ListOpenAIPersonaCapacityCandidates(ctx, []int64{selection.Account.ID}, userID, time.Now().UTC())
+	candidates, err := state.repo.ListOpenAIPersonaCapacityCandidates(ctx, []int64{selection.Account.ID}, userID, apiKeyID, clientHash, time.Now().UTC())
 	if err != nil {
 		return err
 	}
@@ -235,6 +237,57 @@ func (s *OpenAIGatewayService) attachOpenAIPersonaReservation(ctx context.Contex
 		return nil
 	}
 	return ErrOpenAIPersonaSessionCapacity
+}
+
+// openAIAccountsWithPersonaCapacity 在常驻/BestFit 写状态前构造数据库权威的账号可用集合。
+func (s *OpenAIGatewayService) openAIAccountsWithPersonaCapacity(ctx context.Context, groupID *int64, excluded map[int64]struct{}, sessionHash string) (map[int64]struct{}, error) {
+	accounts, err := s.listSchedulableAccounts(ctx, groupID, PlatformOpenAI)
+	if err != nil {
+		return nil, err
+	}
+	accountIDs := make([]int64, 0, len(accounts))
+	for _, account := range accounts {
+		if _, skip := excluded[account.ID]; !skip {
+			accountIDs = append(accountIDs, account.ID)
+		}
+	}
+	userID, _ := ctx.Value(ctxkey.UserID).(int64)
+	apiKeyID, _ := ctx.Value(ctxkey.APIKeyID).(int64)
+	clientHash, err := OpenAIPersonaClientSessionHash(ctx, sessionHash)
+	if err != nil {
+		return nil, err
+	}
+	candidates, err := s.clientSessionReservationRepo.ListOpenAIPersonaCapacityCandidates(ctx, accountIDs, userID, apiKeyID, clientHash, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := s.settingService.GetOpenAIAccountAdmissionConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	available := make(map[int64]struct{})
+	for _, candidate := range candidates {
+		limit := cfg.ForPersona(candidate.Persona.ProfileID).MaxActiveClientSessions
+		if candidate.Persona.MaxActiveClientSessionsOverride != nil {
+			limit = *candidate.Persona.MaxActiveClientSessionsOverride
+		}
+		if candidate.CurrentClientLease || candidate.ActiveClientSessions < limit {
+			available[candidate.Persona.AccountID] = struct{}{}
+		}
+	}
+	result := cloneExcludedAccountIDs(excluded)
+	if result == nil {
+		result = make(map[int64]struct{})
+	}
+	for _, accountID := range accountIDs {
+		if _, ok := available[accountID]; !ok {
+			result[accountID] = struct{}{}
+		}
+	}
+	if len(available) == 0 {
+		return result, ErrOpenAIPersonaCapacityExhausted
+	}
+	return result, nil
 }
 
 func (s *openAIClientSessionReservationState) commit() {

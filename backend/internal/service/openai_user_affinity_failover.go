@@ -189,7 +189,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinitySlotReplacement(
 	if !ok || len(activeSlots) == 0 {
 		return nil, true, ErrNoAvailableAccounts
 	}
-	victim := activeSlots[len(activeSlots)-1]
+	victim := oldestOpenAIUserResidentSlot(activeSlots)
 	if isOpenAIUserAffinityResidentHardUnavailable(sourceAdmission) {
 		for _, slot := range activeSlots {
 			if slot.ID == binding.ResidentSlotID {
@@ -267,6 +267,24 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinitySlotReplacement(
 		"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
 		"binding_id", binding.ID, "source_account_id", binding.AccountID)
 	return nil, true, ErrNoAvailableAccounts
+}
+
+// oldestOpenAIUserResidentSlot 按最近成功时间选择最长时间未使用的常驻账号。
+func oldestOpenAIUserResidentSlot(slots []OpenAIUserResidentSlot) OpenAIUserResidentSlot {
+	victim := slots[0]
+	lastUsed := func(slot OpenAIUserResidentSlot) time.Time {
+		if slot.LastSuccessAt != nil {
+			return *slot.LastSuccessAt
+		}
+		return slot.AdmittedAt
+	}
+	for _, slot := range slots[1:] {
+		left, right := lastUsed(slot), lastUsed(victim)
+		if left.Before(right) || (left.Equal(right) && slot.ID < victim.ID) {
+			victim = slot
+		}
+	}
+	return victim
 }
 
 func openAIUserAffinitySlotsAfterSource(slots []OpenAIUserResidentSlot, sourceSlotID int64) []OpenAIUserResidentSlot {
