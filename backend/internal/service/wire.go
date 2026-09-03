@@ -271,6 +271,7 @@ func ProvideAccountTestService(
 	openAITokenProvider *OpenAITokenProvider,
 	settingService *SettingService,
 	pluginManager *PluginManager,
+	leaderLock LeaderLockCache,
 ) *AccountTestService {
 	service := NewAccountTestService(
 		accountRepo,
@@ -283,9 +284,11 @@ func ProvideAccountTestService(
 		tlsFPProfileService,
 	)
 	service.agentIdentityWS = openAIGatewayService
+	service.SetOpenAIGatewayService(openAIGatewayService)
 	service.SetOpenAITokenProvider(openAITokenProvider)
 	service.SetSettingService(settingService)
 	service.SetPluginManager(pluginManager)
+	service.SetCodexRouteDetectionLockCache(leaderLock)
 	return service
 }
 

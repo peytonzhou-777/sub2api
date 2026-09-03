@@ -26,7 +26,8 @@ import type {
   UpstreamBillingProbeSettings,
   UpstreamBillingRatesResponse,
   OllamaCloudUsageSettings,
-  OllamaCloudUsageState
+  OllamaCloudUsageState,
+  CodexRouteDetectionResult
 } from '@/types'
 
 export * from './openaiUserAffinityAccounts'
@@ -287,6 +288,16 @@ export async function testAccount(id: number): Promise<{
     message: string
     latency_ms?: number
   }>(`/admin/accounts/${id}/test`)
+  return data
+}
+
+/** Run the fixed Codex strict route probe for an OpenAI OAuth account. */
+export async function detectCodexRoute(id: number, signal?: AbortSignal): Promise<CodexRouteDetectionResult> {
+  const { data } = await apiClient.post<CodexRouteDetectionResult>(
+    `/admin/accounts/${id}/route-detection`,
+    undefined,
+    { signal }
+  )
   return data
 }
 
@@ -1181,6 +1192,7 @@ export const accountsAPI = {
   delete: deleteAccount,
   toggleStatus,
   testAccount,
+  detectCodexRoute,
   refreshCredentials,
   applyOAuthCredentials,
   getStats,

@@ -1162,6 +1162,22 @@ export interface OllamaCloudUsageSettings {
   debounce_minutes: number
 }
 
+export type CodexRouteDetectionStatus = 'sol' | 'luna' | 'inconclusive' | 'error'
+
+export interface CodexRouteDetectionSnapshot {
+  status: CodexRouteDetectionStatus
+  checked_at: string
+  reason_code: string
+  requested_model: string
+  reported_model?: string
+  credential_account_id: number
+  response_headers: Record<string, string>
+}
+
+export interface CodexRouteDetectionResult extends CodexRouteDetectionSnapshot {
+  account_id: number
+}
+
 export interface Account {
   id: number
   name: string
@@ -1197,6 +1213,7 @@ export interface Account {
       last_result_at?: string
       error_code?: string
     }
+    codex_route_detection?: CodexRouteDetectionSnapshot
   } & Record<string, unknown>)
   proxy_id: number | null
   proxy_fallback_origin_id?: number | null

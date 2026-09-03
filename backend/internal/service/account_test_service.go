@@ -160,9 +160,29 @@ type AccountTestService struct {
 	pluginManager             *PluginManager
 	agentIdentityTaskMu       sync.Mutex
 	agentIdentityWS           agentIdentityWSConnectionInvalidator
+	openAIGatewayService      *OpenAIGatewayService
+	codexRouteDetectionOnce   sync.Once
+	codexRouteDetectionSlots  chan struct{}
+	codexRouteDetectionActive sync.Map
+	codexRouteDetectionLock   LeaderLockCache
+	codexRouteWSDialer        openAIWSClientDialer
 	// grokWSDialer is optional; realtime account tests use the default OpenAI-style
 	// WS dialer when nil (supports proxy + coder/websocket handshake).
 	grokWSDialer openAIWSClientDialer
+}
+
+// SetOpenAIGatewayService 注入 Codex strict 出站和 WS 构造能力。
+func (s *AccountTestService) SetOpenAIGatewayService(gateway *OpenAIGatewayService) {
+	if s != nil {
+		s.openAIGatewayService = gateway
+	}
+}
+
+// SetCodexRouteDetectionLockCache 注入跨实例同凭据检测锁。
+func (s *AccountTestService) SetCodexRouteDetectionLockCache(lockCache LeaderLockCache) {
+	if s != nil {
+		s.codexRouteDetectionLock = lockCache
+	}
 }
 
 func (s *AccountTestService) SetSettingService(settingService *SettingService) {

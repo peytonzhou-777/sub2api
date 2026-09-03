@@ -292,25 +292,23 @@
             </div>
           </template>
           <template #cell-intelligence_test_status="{ row }">
-            <span
+            <button
               v-if="row.platform === 'openai' && row.type === 'oauth'"
               :class="[
-                'inline-flex items-center rounded px-2 py-1 text-xs font-medium',
-                row.intelligence_test_status === 'passed'
+                'inline-flex items-center rounded px-2 py-1 text-xs font-medium transition-colors hover:opacity-80',
+                getRouteDetection(row)?.status === 'sol'
                   ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300'
-                  : row.intelligence_test_status === 'failed'
+                  : getRouteDetection(row)?.status === 'luna' || getRouteDetection(row)?.status === 'error'
                     ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300'
                     : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
               ]"
+              type="button"
+              @click="handleRouteDetection(row)"
             >
               {{
-                row.intelligence_test_status === 'passed'
-                  ? t('admin.accounts.intelligenceTestStatusPassed')
-                  : row.intelligence_test_status === 'failed'
-                    ? t('admin.accounts.intelligenceTestStatusFailed')
-                    : t('admin.accounts.intelligenceTestStatusUnmarked')
+                getRouteDetectionLabel(row)
               }}
-            </span>
+            </button>
             <span v-else class="text-sm text-gray-400 dark:text-dark-500">-</span>
           </template>
           <template #cell-schedulable="{ row }">
@@ -480,10 +478,11 @@
     <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" @authorize-persona="handlePersonaReAuth" />
     <OpenAIUserAffinityResidentsModal :show="userAffinityAccount !== null" :account="userAffinityAccount" @close="userAffinityAccount = null" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" :account-persona="personaReAuthTarget" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
-    <AccountTestModal :show="showTest" :account="testingAcc" :variant="testVariant" @close="closeTestModal" @account-updated="handleAccountUpdated" />
+    <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" @account-updated="handleAccountUpdated" />
+    <AccountRouteDetectionModal :show="showRouteDetection" :account="routeDetectionAcc" @close="closeRouteDetectionModal" @account-updated="handleAccountUpdated" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
-    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @intelligence-test="handleIntelligenceTest" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
+    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @route-detection="handleRouteDetection" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
     <BulkEditAccountModal
@@ -541,6 +540,7 @@ import OpenAIUserAffinityResidentsModal from '@/components/admin/account/OpenAIU
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
 import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vue'
 import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
+import AccountRouteDetectionModal from '@/components/admin/account/AccountRouteDetectionModal.vue'
 import AccountStatsModal from '@/components/admin/account/AccountStatsModal.vue'
 import ScheduledTestsPanel from '@/components/admin/account/ScheduledTestsPanel.vue'
 import type { SelectOption } from '@/components/common/Select.vue'
@@ -562,7 +562,7 @@ import { extractApiErrorMessage } from '@/utils/apiError'
 import { sanitizeUrl } from '@/utils/url'
 import { getFloatingPanelPosition } from '@/utils/floatingPanel'
 import { formatMultiplier } from '@/utils/formatters'
-import type { Account, AccountPlatform, AccountSchedulerGroupScore, AccountType, AccountUsageInfo, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel, UpstreamBillingProbeSnapshot } from '@/types'
+import type { Account, AccountPlatform, AccountSchedulerGroupScore, AccountType, AccountUsageInfo, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel, UpstreamBillingProbeSnapshot, CodexRouteDetectionSnapshot } from '@/types'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -629,6 +629,7 @@ const showDeleteDialog = ref(false)
 const showCreateShadowDialog = ref(false)
 const showReAuth = ref(false)
 const showTest = ref(false)
+const showRouteDetection = ref(false)
 const showStats = ref(false)
 const showErrorPassthrough = ref(false)
 const showTLSFingerprintProfiles = ref(false)
@@ -639,7 +640,7 @@ const creatingShadowAcc = ref<Account | null>(null)
 const reAuthAcc = ref<Account | null>(null)
 const personaReAuthTarget = ref<OpenAIAccountPersona | null>(null)
 const testingAcc = ref<Account | null>(null)
-const testVariant = ref<'connection' | 'intelligence'>('connection')
+const routeDetectionAcc = ref<Account | null>(null)
 const statsAcc = ref<Account | null>(null)
 const showSchedulePanel = ref(false)
 const scheduleAcc = ref<Account | null>(null)
@@ -1828,7 +1829,7 @@ const allColumns = computed(() => {
     { key: 'platform_type', label: t('admin.accounts.columns.platformType'), sortable: false },
     { key: 'capacity', label: t('admin.accounts.columns.capacity'), sortable: false },
     { key: 'status', label: t('admin.accounts.columns.status'), sortable: true },
-    { key: 'intelligence_test_status', label: t('admin.accounts.columns.intelligenceTest'), sortable: false },
+    { key: 'intelligence_test_status', label: t('admin.accounts.columns.routeDetection'), sortable: false },
     { key: 'schedulable', label: t('admin.accounts.columns.schedulable'), sortable: true },
     { key: 'today_stats', label: t('admin.accounts.columns.todayStats'), sortable: false }
   ]
@@ -2374,19 +2375,27 @@ const accountExportStepUp = useStepUp()
 const closeTestModal = () => {
   showTest.value = false
   testingAcc.value = null
-  testVariant.value = 'connection'
 }
+const closeRouteDetectionModal = () => { showRouteDetection.value = false; routeDetectionAcc.value = null }
 const closeStatsModal = () => { showStats.value = false; statsAcc.value = null }
 const closeReAuthModal = () => { showReAuth.value = false; reAuthAcc.value = null; personaReAuthTarget.value = null }
 const handleTest = (a: Account) => {
   testingAcc.value = a
-  testVariant.value = 'connection'
   showTest.value = true
 }
-const handleIntelligenceTest = (a: Account) => {
-  testingAcc.value = a
-  testVariant.value = 'intelligence'
-  showTest.value = true
+const handleRouteDetection = (a: Account) => {
+  routeDetectionAcc.value = a
+  showRouteDetection.value = true
+}
+const getRouteDetection = (account: Account): CodexRouteDetectionSnapshot | undefined => account.extra?.codex_route_detection
+const getRouteDetectionLabel = (account: Account) => {
+  switch (getRouteDetection(account)?.status) {
+    case 'sol': return t('admin.accounts.routeDetectionStatusSol')
+    case 'luna': return t('admin.accounts.routeDetectionStatusLuna')
+    case 'inconclusive': return t('admin.accounts.routeDetectionStatusInconclusive')
+    case 'error': return t('admin.accounts.routeDetectionStatusError')
+    default: return t('admin.accounts.routeDetectionStatusNotChecked')
+  }
 }
 const handleViewStats = (a: Account) => { statsAcc.value = a; showStats.value = true }
 const handleSchedule = async (a: Account) => {
