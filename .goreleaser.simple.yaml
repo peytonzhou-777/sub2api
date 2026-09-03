@@ -26,6 +26,19 @@ builds:
       - -X main.Date={{.Date}}
       - -X main.BuildType=release
 
+  - id: openai-persona-migrate
+    dir: backend
+    main: ./cmd/openai-persona-migrate
+    binary: openai-persona-migrate
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+
 # 跳过 archives
 archives: []
 
@@ -39,6 +52,9 @@ changelog:
 # 仅 GHCR x86_64 镜像
 dockers:
   - id: ghcr-amd64
+    ids:
+      - sub2api
+      - openai-persona-migrate
     goos: linux
     goarch: amd64
     image_templates:

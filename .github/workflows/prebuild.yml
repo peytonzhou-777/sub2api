@@ -135,6 +135,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push GHCR test image
+        id: image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -152,6 +153,14 @@ jobs:
             org.opencontainers.image.version=${{ steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify published runtime image
+        shell: bash
+        run: >-
+          deploy/verify-runtime-image.sh
+          '${{ env.GHCR_IMAGE }}@${{ steps.image.outputs.digest }}'
+          linux/amd64
+          '${{ steps.meta.outputs.commit_sha }}'
 
       - name: Write build summary
         shell: bash
