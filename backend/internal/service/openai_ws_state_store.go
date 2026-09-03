@@ -74,15 +74,19 @@ type openAIWSConnectionTarget struct {
 }
 
 func newOpenAIWSConnectionTarget(account *Account, transport OpenAIUpstreamTransport, wsURL string, headers http.Header, topologyScopes ...string) openAIWSConnectionTarget {
+	return newOpenAIWSConnectionTargetWithProxy(account, transport, wsURL, headers, resolveAccountProxyURL(account), topologyScopes...)
+}
+
+// newOpenAIWSConnectionTargetWithProxy 使用请求选定的代理快照构造连接目标。
+// 动态 Persona 必须调用此入口，避免状态绑定回退到账户级代理。
+func newOpenAIWSConnectionTargetWithProxy(account *Account, transport OpenAIUpstreamTransport, wsURL string, headers http.Header, proxyURL string, topologyScopes ...string) openAIWSConnectionTarget {
 	target := openAIWSConnectionTarget{transport: transport, wsURL: strings.TrimSpace(wsURL)}
 	if account == nil {
 		return target
 	}
 	target.accountID = account.ID
 	target.handshakeCompatibility = normalizeOpenAIWSHandshakeCompatibility(headers, topologyScopes...)
-	if account.ProxyID != nil && account.Proxy != nil {
-		target.proxyURL = strings.TrimSpace(account.Proxy.URL())
-	}
+	target.proxyURL = strings.TrimSpace(proxyURL)
 	return target
 }
 
@@ -199,8 +203,8 @@ type defaultOpenAIWSStateStore struct {
 	responseOwners       map[string]openAIHTTPResponseOwnerBinding
 	responseToConnMu     sync.RWMutex
 	responseToConn       map[string]openAIWSConnBinding
-	turnStateToScopeMu sync.RWMutex
-	turnStateToScope   map[string]openAIWSTurnStateBinding
+	turnStateToScopeMu   sync.RWMutex
+	turnStateToScope     map[string]openAIWSTurnStateBinding
 	sessionToTurnStateMu sync.RWMutex
 	sessionToTurnState   map[string]openAIWSSessionTurnStateBinding
 	sessionToConnMu      sync.RWMutex
@@ -217,7 +221,7 @@ func NewOpenAIWSStateStore(cache GatewayCache) OpenAIWSStateStore {
 		responseToAccount:  make(map[string]openAIWSAccountBinding, 256),
 		responseOwners:     make(map[string]openAIHTTPResponseOwnerBinding, 256),
 		responseToConn:     make(map[string]openAIWSConnBinding, 256),
-		turnStateToScope: make(map[string]openAIWSTurnStateBinding, 256),
+		turnStateToScope:   make(map[string]openAIWSTurnStateBinding, 256),
 		sessionToTurnState: make(map[string]openAIWSSessionTurnStateBinding, 256),
 		sessionToConn:      make(map[string]openAIWSSessionConnBinding, 256),
 	}

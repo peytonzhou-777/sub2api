@@ -34,6 +34,31 @@ func TestOpenAITransportScopeFromExecutionTargetUsesDynamicPersonaIdentity(t *te
 	}
 }
 
+func TestResolveOpenAIUpstreamProxyURLUsesExecutionTargetSnapshot(t *testing.T) {
+	accountProxyID := int64(1)
+	targetProxyID := int64(2)
+	account := &Account{ID: 42, ProxyID: &accountProxyID, Proxy: &Proxy{ID: accountProxyID, Host: "account-proxy", Port: 8080}}
+	target := OpenAIExecutionTarget{
+		AccountID: account.ID, AccountPersonaID: 81, PersonaGeneration: 3, SessionEpoch: 7,
+		CredentialChainID: "chain-dynamic", ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: "1.18.23", InstallationID: "install-dynamic",
+		UpstreamSessionID: "session-dynamic", EffectiveProxyID: &targetProxyID,
+		ProxyRevision: 11, EffectiveProxyURL: "http://persona-proxy:9000",
+	}
+	ctx := ContextWithOpenAIExecutionTarget(context.Background(), target)
+
+	if got := resolveOpenAIUpstreamProxyURL(ctx, account); got != target.EffectiveProxyURL {
+		t.Fatalf("proxy = %q, want Persona snapshot %q", got, target.EffectiveProxyURL)
+	}
+	target.EffectiveProxyID = nil
+	target.ProxyRevision = 0
+	target.EffectiveProxyURL = ""
+	ctx = ContextWithOpenAIExecutionTarget(context.Background(), target)
+	if got := resolveOpenAIUpstreamProxyURL(ctx, account); got != "" {
+		t.Fatalf("direct Persona snapshot fell back to account proxy: %q", got)
+	}
+}
+
 func TestOpenAITransportScopeFromContextRequiresV3AndFullGenerations(t *testing.T) {
 	binding := SessionPersonaSlotBinding{
 		AccountID:         42,

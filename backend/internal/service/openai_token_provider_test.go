@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1246,4 +1247,138 @@ func TestOpenAITokenProvider_GetAccessTokenForBinding_StrictCodexUsesExplicitPer
 	require.Equal(t, "strict-persona-token", token)
 	require.Equal(t, "strict-persona-token", cache.tokens[OpenAITokenCacheKeyForBinding(account, binding)])
 	require.Equal(t, "strict-legacy-cache-token", cache.tokens[OpenAITokenCacheKey(account)])
+}
+
+type openAIExecutionTargetPersonaRepoStub struct {
+	*openAIAccountPersonaRepoStub
+	credential OpenAIPersonaCredentialRecord
+	claimCalls int
+	casCalls   int
+}
+
+func (r *openAIExecutionTargetPersonaRepoStub) GetAccountPersonaCredential(_ context.Context, personaID int64, chainID string) (*OpenAIPersonaCredentialRecord, error) {
+	if r.credential.AccountPersonaID != personaID || r.credential.CredentialChainID != chainID {
+		return nil, ErrOpenAIPersonaCredentialChainNotReady
+	}
+	record := r.credential
+	record.EncryptedPayload = append([]byte(nil), record.EncryptedPayload...)
+	return &record, nil
+}
+
+func (r *openAIExecutionTargetPersonaRepoStub) ClaimAccountPersonaCredentialRefresh(_ context.Context, personaID int64, chainID string, version int64) (bool, error) {
+	r.claimCalls++
+	if r.credential.AccountPersonaID != personaID || r.credential.CredentialChainID != chainID ||
+		r.credential.TokenVersion != version || r.credential.State != "ready" {
+		return false, nil
+	}
+	r.credential.State = "refreshing"
+	return true, nil
+}
+
+func (r *openAIExecutionTargetPersonaRepoStub) CompareAndSwapAccountPersonaToken(_ context.Context, input OpenAIAccountPersonaCredentialUpdate, version int64) (bool, error) {
+	r.casCalls++
+	if r.credential.AccountPersonaID != input.AccountPersonaID || r.credential.CredentialChainID != input.CredentialChainID ||
+		r.credential.TokenVersion != version || r.credential.State != "refreshing" {
+		return false, nil
+	}
+	r.credential.EncryptedPayload = append([]byte(nil), input.EncryptedPayload...)
+	r.credential.TokenVersion++
+	r.credential.State = "ready"
+	return true, nil
+}
+
+func (r *openAIExecutionTargetPersonaRepoStub) MarkAccountPersonaCredentialInvalid(context.Context, int64, string, int64, string) error {
+	return nil
+}
+
+func newOpenAIExecutionTargetTokenFixture(t *testing.T, expiresAt time.Time) (*Account, OpenAIExecutionTarget, *OpenAIOAuthService, *openAIExecutionTargetPersonaRepoStub, *openAITokenCacheStub) {
+	t.Helper()
+	account := &Account{
+		ID: 301, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "legacy-account-token", "refresh_token": "legacy-account-refresh",
+			"chatgpt_account_id": "acct-shared",
+		},
+	}
+	persona := OpenAIAccountPersona{
+		ID: 901, AccountID: account.ID, Position: 1, ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: SessionPersonaOpenCodeVersion, CredentialOwner: OpenAICredentialOwnerPersonaIndependent,
+		State: OpenAIAccountPersonaStateActive, Enabled: true, PersonaGeneration: 4,
+		CurrentCredentialChainID: "chain-current", CurrentSessionEpoch: 7,
+		InstallationID: "install-901", RowVersion: 1,
+	}
+	baseRepo := &openAIAccountPersonaRepoStub{persona: persona}
+	repo := &openAIExecutionTargetPersonaRepoStub{openAIAccountPersonaRepoStub: baseRepo}
+	cache := newOpenAITokenCacheStub()
+	oauthService := NewOpenAIOAuthService(nil, nil)
+	oauthService.configureAccountPersonaStore(repo)
+	oauthService.configurePersonaCredentialStore(nil, openAIPersonaTestEncryptor{}, cache)
+	payload, err := oauthService.encryptPersonaCredential(&OpenAITokenInfo{
+		AccessToken: "target-token", RefreshToken: "target-refresh", ExpiresAt: expiresAt.Unix(),
+		ClientID: SessionPersonaOpenCodeOAuthClientID, ChatGPTAccountID: "acct-shared",
+	})
+	require.NoError(t, err)
+	repo.credential = OpenAIPersonaCredentialRecord{
+		AccountPersonaID: persona.ID, AccountID: account.ID, PersonaID: persona.ProfileID,
+		ProfileVersion: persona.ProfileVersion, PersonaGeneration: persona.PersonaGeneration,
+		CredentialChainID: persona.CurrentCredentialChainID, EncryptedPayload: payload,
+		ChatGPTAccountID: "acct-shared", InstallationID: persona.InstallationID,
+		TokenVersion: 1, State: "ready",
+	}
+	target := OpenAIExecutionTarget{
+		AccountID: account.ID, AccountPersonaID: persona.ID, PersonaGeneration: persona.PersonaGeneration,
+		SessionEpoch: persona.CurrentSessionEpoch, CredentialChainID: persona.CurrentCredentialChainID,
+		ProfileID: persona.ProfileID, ProfileVersion: persona.ProfileVersion,
+		InstallationID: persona.InstallationID, UpstreamSessionID: "session-901-7",
+	}
+	return account, target, oauthService, repo, cache
+}
+
+func TestOpenAITokenProviderExecutionTargetUsesOnlyBoundCredential(t *testing.T) {
+	account, target, oauthService, _, cache := newOpenAIExecutionTargetTokenFixture(t, time.Now().Add(time.Hour))
+	defer oauthService.Stop()
+	cache.tokens[OpenAITokenCacheKey(account)] = "legacy-cache-token"
+	provider := NewOpenAITokenProvider(nil, cache, oauthService)
+
+	token, err := provider.GetAccessTokenForExecutionTarget(context.Background(), account, target)
+	require.NoError(t, err)
+	require.Equal(t, "target-token", token)
+	require.Equal(t, "legacy-cache-token", cache.tokens[OpenAITokenCacheKey(account)])
+	require.Equal(t, "target-token", cache.tokens[OpenAITokenCacheKeyForAccountPersona(target.AccountPersonaID, target.CredentialChainID)])
+}
+
+func TestOpenAITokenProviderExecutionTargetRejectsIdentityMismatch(t *testing.T) {
+	account, target, oauthService, _, _ := newOpenAIExecutionTargetTokenFixture(t, time.Now().Add(time.Hour))
+	defer oauthService.Stop()
+	provider := NewOpenAITokenProvider(nil, newOpenAITokenCacheStub(), oauthService)
+	target.InstallationID = "other-installation"
+
+	_, err := provider.GetAccessTokenForExecutionTarget(context.Background(), account, target)
+	require.ErrorIs(t, err, ErrOpenAIPersonaCredentialChainMismatch)
+}
+
+func TestOpenAITokenProviderExecutionTargetDoesNotRefreshHistoricalChain(t *testing.T) {
+	account, target, oauthService, repo, _ := newOpenAIExecutionTargetTokenFixture(t, time.Now().Add(-time.Minute))
+	defer oauthService.Stop()
+	repo.persona.CurrentCredentialChainID = "new-current-chain"
+	provider := NewOpenAITokenProvider(nil, newOpenAITokenCacheStub(), oauthService)
+
+	_, err := provider.GetAccessTokenForExecutionTarget(context.Background(), account, target)
+	require.ErrorIs(t, err, ErrOpenAIPersonaCredentialChainExpired)
+	require.Zero(t, repo.claimCalls)
+}
+
+func TestOpenAITokenProviderExecutionTargetRefreshesCurrentChain(t *testing.T) {
+	account, target, oauthService, repo, cache := newOpenAIExecutionTargetTokenFixture(t, time.Now().Add(-time.Minute))
+	defer oauthService.Stop()
+	oauthService.oauthClient = &openAIPersonaOAuthClientStub{refreshResponse: &openai.TokenResponse{
+		AccessToken: "refreshed-target-token", RefreshToken: "refreshed-target-refresh", ExpiresIn: 3600,
+	}}
+	provider := NewOpenAITokenProvider(nil, cache, oauthService)
+
+	token, err := provider.GetAccessTokenForExecutionTarget(context.Background(), account, target)
+	require.NoError(t, err)
+	require.Equal(t, "refreshed-target-token", token)
+	require.Equal(t, 1, repo.claimCalls)
+	require.Equal(t, 1, repo.casCalls)
 }

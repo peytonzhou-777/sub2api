@@ -60,6 +60,58 @@ func TestPrepareOpenAIWSHTTPBridgeBodyStripsNoneReasoningForCompatibleEndpoint(t
 	require.Equal(t, "none", gjson.GetBytes(officialBody, "reasoning.effort").String())
 }
 
+func TestProxyOpenAIWSHTTPBridgeTurnUsesOpenCodeExecutionTarget(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	sse := "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_opencode_upstream\",\"model\":\"gpt-5\",\"status\":\"completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n"
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader(sse)),
+	}}
+	store := &inMemoryOpenAIPersonaIDMappingStore{}
+	svc := &OpenAIGatewayService{
+		cfg:          &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}},
+		httpUpstream: upstream, personaIDMappingStore: store,
+	}
+	account := &Account{
+		ID: 5890, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
+		Credentials: map[string]any{"chatgpt_account_id": "acct-shared"},
+	}
+	target := OpenAIExecutionTarget{
+		AccountID: account.ID, AccountPersonaID: 990, PersonaGeneration: 2, SessionEpoch: 3,
+		CredentialChainID: "chain-opencode", ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: SessionPersonaOpenCodeVersion, InstallationID: "install-opencode",
+		UpstreamSessionID: "oc_session_990", ProxyRevision: 5,
+		EffectiveProxyURL: "http://persona-proxy:9000",
+	}
+	ctx := ContextWithOpenAIExecutionTarget(context.Background(), target)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil).WithContext(ctx)
+	SetOpenAIHTTPResponseOwner(c, 9, 10)
+	payload := []byte(`{"type":"response.create","model":"gpt-5","stream":true,"input":"hi","x-codex-turn-state":"must-not-leak"}`)
+	var events [][]byte
+
+	result, err := svc.proxyOpenAIWSHTTPBridgeTurn(
+		ctx, c, account, "target-token", payload, len(payload),
+		"gpt-5", "", "", "", "", 1,
+		func(message []byte) error {
+			events = append(events, append([]byte(nil), message...))
+			return nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, target.EffectiveProxyURL, upstream.lastProxyURL)
+	require.Equal(t, "opencode", upstream.lastReq.Header.Get("originator"))
+	require.Contains(t, upstream.lastReq.Header.Get("user-agent"), "opencode/")
+	require.False(t, gjson.GetBytes(upstream.lastBody, "x-codex-turn-state").Exists())
+	require.NotEmpty(t, events)
+	require.NotEqual(t, "resp_opencode_upstream", gjson.GetBytes(events[len(events)-1], "response.id").String())
+	require.GreaterOrEqual(t, len(store.rows), 2, "thread and response mappings must be persisted")
+}
+
 func TestProxyOpenAIWSHTTPBridgeTurn_KeepsOutboundAndObservedServiceTiersSeparate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

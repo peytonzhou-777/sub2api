@@ -44,10 +44,13 @@ type OpenAIPersonaIDMappingScope struct {
 	UserID            int64
 	APIKeyID          int64
 	AccountID         int64
+	AccountPersonaID  int64
 	ScopeKey          string
 	Persona           SessionPersonaID
+	ProfileVersion    string
 	SlotID            int
 	SessionEpoch      int64
+	PersonaGeneration int64
 	SlotGeneration    int64
 	SlotSetGeneration int64
 	CredentialChainID string
@@ -124,10 +127,13 @@ func OpenAIPersonaIDMappingScopeForBinding(c *gin.Context, binding SessionPerson
 		UserID:            userID,
 		APIKeyID:          apiKeyID,
 		AccountID:         binding.AccountID,
+		AccountPersonaID:  binding.AccountPersonaID,
 		ScopeKey:          SessionPersonaMappingScopeKey(binding),
 		Persona:           binding.PersonaID,
+		ProfileVersion:    binding.PersonaVersion,
 		SlotID:            binding.SlotID,
 		SessionEpoch:      binding.SessionEpoch,
+		PersonaGeneration: binding.SlotGeneration,
 		SlotGeneration:    binding.SlotGeneration,
 		SlotSetGeneration: binding.SlotSetGeneration,
 		CredentialChainID: strings.TrimSpace(binding.CredentialChainID),

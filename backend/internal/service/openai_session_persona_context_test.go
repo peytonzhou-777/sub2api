@@ -58,3 +58,23 @@ func TestClearSessionPersonaBindingFromGinHandlesNilInputs(t *testing.T) {
 		t.Fatal("nil context was not preserved")
 	}
 }
+
+func TestSessionPersonaBindingPrefersDynamicExecutionTarget(t *testing.T) {
+	legacy, err := ResolveDefaultSessionPersonaSlot(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := ContextWithSessionPersonaBinding(context.Background(), legacy)
+	target := OpenAIExecutionTarget{
+		AccountID: 42, AccountPersonaID: 81, PersonaGeneration: 3, SessionEpoch: 7,
+		CredentialChainID: "chain-opencode", ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: SessionPersonaOpenCodeVersion, InstallationID: "install-opencode",
+		UpstreamSessionID: "session-opencode",
+	}
+	ctx = ContextWithOpenAIExecutionTarget(ctx, target)
+
+	binding, ok := SessionPersonaBindingFromContext(ctx)
+	if !ok || binding.AccountPersonaID != target.AccountPersonaID || binding.PersonaID != target.ProfileID {
+		t.Fatalf("dynamic target did not override legacy binding: %#v", binding)
+	}
+}

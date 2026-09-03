@@ -337,15 +337,12 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	}
 
 	// Get access token
-	token, _, err := s.GetAccessToken(ctx, account)
+	token, _, err := s.GetAccessTokenForRequest(ctx, c, account)
 	if err != nil {
 		return nil, err
 	}
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
+	proxyURL := resolveOpenAIUpstreamProxyURL(ctx, account)
 
 	if c != nil {
 		c.Set("openai_passthrough", true)

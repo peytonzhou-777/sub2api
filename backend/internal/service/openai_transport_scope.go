@@ -176,3 +176,17 @@ func OpenAITransportScopeFromContext(ctx context.Context, accountID int64) (Open
 	}
 	return scope, true
 }
+
+// resolveOpenAIUpstreamProxyURL freezes Persona proxy selection at the same
+// execution target used by credentials, Session and Transport. A dynamic
+// target with no proxy intentionally resolves to direct access and must not
+// fall back to a later account-level proxy value.
+func resolveOpenAIUpstreamProxyURL(ctx context.Context, account *Account) string {
+	if target, ok := OpenAIExecutionTargetFromContext(ctx); ok {
+		if account == nil || target.AccountID != account.ID {
+			return ""
+		}
+		return strings.TrimSpace(target.EffectiveProxyURL)
+	}
+	return resolveAccountProxyURL(account)
+}

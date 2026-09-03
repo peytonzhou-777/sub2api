@@ -364,10 +364,7 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	}
 
 	// 7. Send request
-	proxyURL := ""
-	if account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
+	proxyURL := resolveOpenAIUpstreamProxyURL(ctx, account)
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
@@ -735,6 +732,12 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 
 	processDataLine := func(payload string) bool {
 		payload = string(restoreCodexToolNamesFromContext(c, []byte(payload)))
+		projected, projectErr := s.projectOpenAICompatPersonaPayload(c, []byte(payload))
+		if projectErr != nil {
+			streamNonFailoverErr = fmt.Errorf("project OpenCode Chat Completions response identity: %w", projectErr)
+			return true
+		}
+		payload = string(projected)
 		if firstChunk {
 			firstChunk = false
 			ms := int(time.Since(startTime).Milliseconds())

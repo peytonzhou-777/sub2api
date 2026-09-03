@@ -372,6 +372,72 @@ func (p *OpenAITokenProvider) GetAccessTokenForBinding(
 	return p.getPersonaAccessTokenForBinding(ctx, account, binding)
 }
 
+// GetAccessTokenForExecutionTarget 只读取动态 AccountPersona 绑定的 credential chain。
+func (p *OpenAITokenProvider) GetAccessTokenForExecutionTarget(
+	ctx context.Context,
+	account *Account,
+	target OpenAIExecutionTarget,
+) (string, error) {
+	if p == nil || p.openAIOAuthService == nil || p.openAIOAuthService.accountPersonaRepo == nil {
+		return "", ErrOpenAIPersonaCredentialStoreUnavailable
+	}
+	if account == nil || !account.IsOpenAIOAuth() || !target.Valid() || target.AccountID != account.ID {
+		return "", ErrOpenAITokenBindingInvalid
+	}
+	repo := p.openAIOAuthService.accountPersonaRepo
+	persona, err := repo.GetAccountPersona(ctx, account.ID, target.AccountPersonaID)
+	if err != nil || persona == nil || persona.ProfileID != target.ProfileID {
+		return "", ErrOpenAIPersonaCredentialChainMismatch
+	}
+	record, err := repo.GetAccountPersonaCredential(ctx, target.AccountPersonaID, target.CredentialChainID)
+	if err != nil {
+		return "", err
+	}
+	if record == nil || record.AccountPersonaID != target.AccountPersonaID || record.AccountID != account.ID ||
+		record.CredentialChainID != target.CredentialChainID || record.PersonaID != target.ProfileID ||
+		record.ProfileVersion != target.ProfileVersion || record.PersonaGeneration != target.PersonaGeneration ||
+		record.InstallationID != target.InstallationID {
+		return "", ErrOpenAIPersonaCredentialChainMismatch
+	}
+	if expectedAccountID := strings.TrimSpace(account.GetChatGPTAccountID()); expectedAccountID != "" &&
+		!strings.EqualFold(expectedAccountID, strings.TrimSpace(record.ChatGPTAccountID)) {
+		return "", ErrOpenAIPersonaCredentialChainMismatch
+	}
+	info, err := p.openAIOAuthService.decryptPersonaCredential(record)
+	if err != nil {
+		return "", err
+	}
+	cacheKey := OpenAITokenCacheKeyForAccountPersona(target.AccountPersonaID, target.CredentialChainID)
+	expiresAt := time.Unix(info.ExpiresAt, 0)
+	needsRefresh := info.ExpiresAt <= 0 || time.Until(expiresAt) <= openAITokenRefreshSkew
+	if !needsRefresh && p.tokenCache != nil {
+		if token, cacheErr := p.tokenCache.GetAccessToken(ctx, cacheKey); cacheErr == nil && strings.TrimSpace(token) != "" {
+			return token, nil
+		}
+	}
+	if needsRefresh {
+		// 历史 Thread 可以继续使用历史 chain 的未过期 token，但禁止把历史
+		// chain 重新解释为 Persona 当前授权链后刷新。
+		if persona.CurrentCredentialChainID != target.CredentialChainID {
+			return "", ErrOpenAIPersonaCredentialChainExpired
+		}
+		refreshed, refreshErr := p.openAIOAuthService.RefreshAccountPersonaCredential(ctx, account, target.AccountPersonaID)
+		if refreshErr != nil {
+			return "", refreshErr
+		}
+		if refreshed == nil || strings.TrimSpace(refreshed.AccessToken) == "" {
+			return "", ErrOpenAIPersonaAccessTokenMissing
+		}
+		return strings.TrimSpace(refreshed.AccessToken), nil
+	}
+	accessToken := strings.TrimSpace(info.AccessToken)
+	if accessToken == "" {
+		return "", ErrOpenAIPersonaAccessTokenMissing
+	}
+	cachePersonaToken(ctx, p.tokenCache, cacheKey, info)
+	return accessToken, nil
+}
+
 // getPersonaAccessTokenForBinding 只访问绑定的 Persona 链。临近过期时通过
 // 链级分布式锁、数据库刷新抢占和 token_version CAS 刷新同一条 chain；不会
 // 调用旧的账号级 RefreshIfNeeded，也不会借用其他 Persona 的 refresh_token。

@@ -66,6 +66,21 @@ func (a *Account) IsOpenAIPersonaMappingEnabled() bool {
 // newly authorized chain.
 func SessionPersonaMappingScopeKey(binding SessionPersonaSlotBinding) string {
 	binding = binding.NormalizeLifecycle()
+	if binding.AccountPersonaID > 0 {
+		seed := strings.Join([]string{
+			"openai-account-persona-map:v1",
+			formatInt64(binding.AccountID),
+			formatInt64(binding.AccountPersonaID),
+			string(binding.PersonaID),
+			formatInt64(binding.SessionEpoch),
+			formatInt64(binding.SlotGeneration),
+			strings.TrimSpace(binding.PersonaVersion),
+			strings.TrimSpace(binding.CredentialChainID),
+			strings.TrimSpace(binding.ClientThreadID),
+		}, "|")
+		digest := sha256.Sum256([]byte(seed))
+		return "pm_" + hex.EncodeToString(digest[:16])
+	}
 	seed := strings.Join([]string{
 		"openai-persona-map:v3",
 		formatInt64(binding.AccountID),

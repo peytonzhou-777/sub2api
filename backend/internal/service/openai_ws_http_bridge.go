@@ -493,6 +493,9 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		var buildErr error
 		if account.Platform == PlatformGrok {
 			upstreamReq, buildErr = buildGrokResponsesRequest(upstreamCtx, c, account, requestBody, token, grokCacheIdentity, s.cfg, s.settingService)
+		} else if binding, ok := SessionPersonaBindingFromContextOrGin(ctx, c); ok && IsOpenCodePersona(binding) {
+			promptCacheKey := strings.TrimSpace(gjson.GetBytes(requestBody, "prompt_cache_key").String())
+			upstreamReq, buildErr = s.buildUpstreamRequest(upstreamCtx, c, account, requestBody, token, true, promptCacheKey, false)
 		} else {
 			upstreamReq, buildErr = s.buildUpstreamRequestOpenAIPassthrough(upstreamCtx, c, account, requestBody, token)
 		}
@@ -526,10 +529,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	}
 	SetOpsUpstreamModel(c, actualModel)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
+	proxyURL := resolveOpenAIUpstreamProxyURL(ctx, account)
 	if c != nil {
 		c.Set("openai_passthrough", true)
 		c.Set("openai_ws_http_bridge", true)
@@ -753,6 +753,13 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		upstreamMessage := []byte(openAICompatPayloadWithEventType(trimmedData, pendingSSEEventType))
 		if normalized, changed := normalizeCompletedImageGenerationStatus(upstreamMessage); changed {
 			upstreamMessage = normalized
+		}
+		if binding, ok := SessionPersonaBindingFromContextOrGin(ctx, c); ok && IsOpenCodePersona(binding) {
+			projected, _, projectErr := s.ProjectOpenCodeResponseJSON(ctx, c, binding, upstreamMessage)
+			if projectErr != nil {
+				return nil, fmt.Errorf("project OpenCode HTTP bridge response identity: %w", projectErr)
+			}
+			upstreamMessage = projected
 		}
 		eventType, eventResponseID, _ := parseOpenAIWSEventEnvelope(upstreamMessage)
 		responseModelObserver.ObserveOpenAI(upstreamMessage, eventType)

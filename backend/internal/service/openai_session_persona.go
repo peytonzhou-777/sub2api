@@ -282,9 +282,10 @@ func ParseSessionPersonaID(raw string) (SessionPersonaID, bool) {
 // CompatibilityFallback is true only for v3 scopes carrying historical slots
 // beyond the fixed slot 0/1 Persona mapping.
 type SessionPersonaSlotBinding struct {
-	AccountID int64 `json:"account_id"`
-	SlotID    int   `json:"slot_id"`
-	SlotCount int   `json:"slot_count"`
+	AccountID        int64 `json:"account_id"`
+	AccountPersonaID int64 `json:"account_persona_id,omitempty"`
+	SlotID           int   `json:"slot_id"`
+	SlotCount        int   `json:"slot_count"`
 	// ScopeVersion is retained as a compatibility alias for the Persona
 	// mapping version. It must not be confused with the underlying Codex
 	// fingerprint storage scope version, which remains the legacy v1/v2 axis.
@@ -407,11 +408,40 @@ func SessionPersonaBindingFromContext(ctx context.Context) (SessionPersonaSlotBi
 	if ctx == nil {
 		return SessionPersonaSlotBinding{}, false
 	}
+	if target, ok := OpenAIExecutionTargetFromContext(ctx); ok {
+		return SessionPersonaBindingFromExecutionTarget(target)
+	}
 	binding, ok := ctx.Value(sessionPersonaBindingContextKey{}).(SessionPersonaSlotBinding)
-	if !ok || !binding.Valid() {
+	if ok && binding.Valid() {
+		return binding.Clone().NormalizeLifecycle(), true
+	}
+	return SessionPersonaSlotBinding{}, false
+}
+
+// SessionPersonaBindingFromExecutionTarget 为现有协议适配器生成只读投影；
+// 运行时身份、Token 与 Transport 仍只以 OpenAIExecutionTarget 为权威。
+func SessionPersonaBindingFromExecutionTarget(target OpenAIExecutionTarget) (SessionPersonaSlotBinding, bool) {
+	if !target.Valid() {
 		return SessionPersonaSlotBinding{}, false
 	}
-	return binding.Clone().NormalizeLifecycle(), true
+	persona, ok := NewDefaultSessionPersonaRegistry().Get(string(target.ProfileID))
+	if !ok {
+		return SessionPersonaSlotBinding{}, false
+	}
+	persona.PersonaVersion = target.ProfileVersion
+	persona.Version = target.ProfileVersion
+	binding := SessionPersonaSlotBinding{
+		AccountID: target.AccountID, AccountPersonaID: target.AccountPersonaID, SlotID: 0, SlotCount: 1,
+		ScopeVersion: SessionPersonaScopeVersionV3, MappingVersion: SessionPersonaScopeVersionV3,
+		PersonaID: target.ProfileID, PersonaVersion: target.ProfileVersion,
+		CredentialChainID: target.CredentialChainID, InstallationID: target.InstallationID,
+		State: SessionPersonaSlotStateActive, Enabled: true, EnabledConfigured: true, Authorized: true,
+		SessionEpoch: target.SessionEpoch, SlotGeneration: target.PersonaGeneration,
+		SlotSetGeneration: target.PersonaGeneration, UpstreamSessionID: target.UpstreamSessionID,
+		MappingKey: fmt.Sprintf("account_persona:%d", target.AccountPersonaID),
+		Mapping:    SessionPersonaMappingPersonaV3, Persona: persona,
+	}
+	return binding, binding.Valid()
 }
 
 // SessionPersonaSlotResolveRequest avoids relying on positional argument order

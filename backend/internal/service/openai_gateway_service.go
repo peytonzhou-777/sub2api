@@ -1421,6 +1421,16 @@ func (s *OpenAIGatewayService) GetAccessTokenForRequest(ctx context.Context, c *
 	if account == nil {
 		return "", "", errors.New("account is nil")
 	}
+	if target, ok := openAIExecutionTargetFromContextOrGin(ctx, c); ok && account.Type == AccountTypeOAuth {
+		if target.AccountID != account.ID || s == nil || s.openAITokenProvider == nil {
+			return "", "", ErrOpenAITokenBindingInvalid
+		}
+		token, err := s.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, account, target)
+		if err != nil {
+			return "", "", err
+		}
+		return token, "oauth", nil
+	}
 	binding, hasBinding := SessionPersonaBindingFromContextOrGin(ctx, c)
 	if hasBinding &&
 		(binding.AccountID == 0 || binding.AccountID == account.ID) &&

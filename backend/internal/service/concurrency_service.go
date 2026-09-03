@@ -393,6 +393,10 @@ func (s *ConcurrencyService) AcquireOpenAIPersonaWSLease(
 	slotID int,
 	maxConnections int,
 ) (*OpenAIPersonaWSLease, bool, error) {
+	if runtimePersona, runtimeSlotID, _, dynamic := OpenAIPersonaRuntimeConcurrencyScope(ctx, accountID, persona, slotID, 0); dynamic {
+		persona = runtimePersona
+		slotID = runtimeSlotID
+	}
 	if maxConnections <= 0 {
 		return nil, true, nil
 	}
@@ -434,6 +438,10 @@ func (s *ConcurrencyService) AcquireOpenAIPersonaSlot(
 	slotID int,
 	maxConcurrency int,
 ) (*AcquireResult, error) {
+	if runtimePersona, runtimeSlotID, _, dynamic := OpenAIPersonaRuntimeConcurrencyScope(ctx, accountID, persona, slotID, 0); dynamic {
+		persona = runtimePersona
+		slotID = runtimeSlotID
+	}
 	if maxConcurrency <= 0 {
 		return &AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
 	}

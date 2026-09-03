@@ -406,10 +406,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	}
 
 	// 7. Send request
-	proxyURL := ""
-	if account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
+	proxyURL := resolveOpenAIUpstreamProxyURL(ctx, account)
 	// Grok may reject encrypted reasoning replayed under a different OAuth
 	// account/cache identity. Match forwardGrokResponses: one strip+retry before
 	// treating the 400 as a hard failure / failover trigger.
@@ -757,6 +754,20 @@ type openAICompatBufferedReadError struct {
 func (e *openAICompatBufferedReadError) Error() string { return e.cause.Error() }
 func (e *openAICompatBufferedReadError) Unwrap() error { return e.cause }
 
+// projectOpenAICompatPersonaPayload persists and rewrites OpenCode response
+// identity before Messages/Chat protocol conversion consumes the Responses event.
+func (s *OpenAIGatewayService) projectOpenAICompatPersonaPayload(c *gin.Context, payload []byte) ([]byte, error) {
+	if c == nil || c.Request == nil {
+		return payload, nil
+	}
+	binding, ok := SessionPersonaBindingFromGin(c)
+	if !ok || !IsOpenCodePersona(binding) {
+		return payload, nil
+	}
+	projected, _, err := s.ProjectOpenCodeResponseJSON(c.Request.Context(), c, binding, payload)
+	return projected, err
+}
+
 func openAICompatTerminalResponse(event *apicompat.ResponsesStreamEvent, payload []byte) *apicompat.ResponsesResponse {
 	if event == nil {
 		return nil
@@ -862,6 +873,11 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 				if frame, ok := parser.Finish(); ok {
 					payload := openAICompatPayloadWithEventType(frame.Data, frame.EventType)
 					payload = string(restoreCodexToolNamesFromContext(c, []byte(payload)))
+					projected, projectErr := s.projectOpenAICompatPersonaPayload(c, []byte(payload))
+					if projectErr != nil {
+						return nil, usage, acc, projectErr
+					}
+					payload = string(projected)
 					var event apicompat.ResponsesStreamEvent
 					if err := json.Unmarshal([]byte(payload), &event); err == nil {
 						s.parseSSEUsageBytesWithType([]byte(payload), event.Type, &usage)
@@ -902,6 +918,11 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 			}
 			payload := openAICompatPayloadWithEventType(frame.Data, frame.EventType)
 			payload = string(restoreCodexToolNamesFromContext(c, []byte(payload)))
+			projected, projectErr := s.projectOpenAICompatPersonaPayload(c, []byte(payload))
+			if projectErr != nil {
+				return nil, usage, acc, projectErr
+			}
+			payload = string(projected)
 
 			var event apicompat.ResponsesStreamEvent
 			if err := json.Unmarshal([]byte(payload), &event); err != nil {
@@ -1017,6 +1038,12 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	// processDataLine handles a single "data: ..." SSE line from upstream.
 	processDataLine := func(payload string) bool {
 		payload = string(restoreCodexToolNamesFromContext(c, []byte(payload)))
+		projected, projectErr := s.projectOpenAICompatPersonaPayload(c, []byte(payload))
+		if projectErr != nil {
+			streamNonFailoverErr = fmt.Errorf("project OpenCode Messages response identity: %w", projectErr)
+			return true
+		}
+		payload = string(projected)
 		if firstChunk {
 			firstChunk = false
 			ms := int(time.Since(startTime).Milliseconds())

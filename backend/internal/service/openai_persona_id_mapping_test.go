@@ -111,6 +111,21 @@ func TestSessionPersonaMappingScopeIncludesCredentialChain(t *testing.T) {
 	require.NotEqual(t, SessionPersonaMappingScopeKey(first), SessionPersonaMappingScopeKey(second))
 }
 
+func TestSessionPersonaMappingScopeSeparatesDynamicAccountPersonas(t *testing.T) {
+	first := testOpenCodeBinding()
+	first.AccountPersonaID = 101
+	first.SlotID = 0
+	first.SlotCount = 1
+	second := first
+	second.AccountPersonaID = 102
+	require.NotEqual(t, SessionPersonaMappingScopeKey(first), SessionPersonaMappingScopeKey(second))
+
+	scope := OpenAIPersonaIDMappingScopeForBinding(nil, first)
+	require.Equal(t, first.AccountPersonaID, scope.AccountPersonaID)
+	require.Equal(t, first.SlotGeneration, scope.PersonaGeneration)
+	require.Equal(t, first.PersonaVersion, scope.ProfileVersion)
+}
+
 func TestOpenAIPersonaIDMappingRoundTrip(t *testing.T) {
 	store := &inMemoryOpenAIPersonaIDMappingStore{}
 	svc := &OpenAIGatewayService{personaIDMappingStore: store}
@@ -138,6 +153,25 @@ func TestOpenAIPersonaIDMappingRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "resp_upstream", gjsonGetString(projectedBody, "previous_response_id"))
 	require.Equal(t, true, gjson.GetBytes(projectedBody, "stream").Bool())
+}
+
+func TestProjectOpenAICompatPersonaPayloadUsesDynamicTargetScope(t *testing.T) {
+	store := &inMemoryOpenAIPersonaIDMappingStore{}
+	svc := &OpenAIGatewayService{personaIDMappingStore: store}
+	c := testOpenCodeGinContext()
+	target := OpenAIExecutionTarget{
+		AccountID: 42, AccountPersonaID: 77, PersonaGeneration: 2, SessionEpoch: 5,
+		CredentialChainID: "chain-dynamic", ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: SessionPersonaOpenCodeVersion, InstallationID: "install-dynamic",
+		UpstreamSessionID: "session-dynamic",
+	}
+	c.Request = c.Request.WithContext(ContextWithOpenAIExecutionTarget(c.Request.Context(), target))
+
+	projected, err := svc.projectOpenAICompatPersonaPayload(c, []byte(`{"type":"response.completed","response":{"id":"resp_native"}}`))
+	require.NoError(t, err)
+	require.NotEqual(t, "resp_native", gjson.GetBytes(projected, "response.id").String())
+	require.Len(t, store.rows, 1)
+	require.Equal(t, target.AccountPersonaID, store.rows[0].Scope.AccountPersonaID)
 }
 
 func TestOpenAIPersonaBindingResolvesFromClientResponse(t *testing.T) {

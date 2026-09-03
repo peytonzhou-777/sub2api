@@ -752,6 +752,33 @@ func TestAcquireOpenAIPersonaSlotAndWSLeaseUseIndependentScopes(t *testing.T) {
 	require.Equal(t, 1, cache.releaseWSCalls)
 }
 
+func TestAcquireOpenAIPersonaSlotAndWSLeaseUseDynamicInstanceScope(t *testing.T) {
+	cache := &openAIPersonaConcurrencyCacheForTest{acquired: true}
+	svc := NewConcurrencyService(cache)
+	target := OpenAIExecutionTarget{
+		AccountID: 42, AccountPersonaID: 88, PersonaGeneration: 4, SessionEpoch: 6,
+		CredentialChainID: "chain", ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: SessionPersonaOpenCodeVersion, InstallationID: "install",
+		UpstreamSessionID: "session",
+	}
+	ctx := ContextWithOpenAIExecutionTarget(context.Background(), target)
+	wantPersona, wantSlot, _, ok := OpenAIPersonaRuntimeConcurrencyScope(ctx, 42, SessionPersonaOpenCode, 0, 0)
+	require.True(t, ok)
+
+	result, err := svc.AcquireOpenAIPersonaSlot(ctx, 42, SessionPersonaOpenCode, 0, 3)
+	require.NoError(t, err)
+	require.Equal(t, string(wantPersona), cache.persona)
+	require.Equal(t, wantSlot, cache.slotID)
+	result.ReleaseFunc()
+
+	lease, acquired, err := svc.AcquireOpenAIPersonaWSLease(ctx, 42, SessionPersonaOpenCode, 0, 2)
+	require.NoError(t, err)
+	require.True(t, acquired)
+	require.Equal(t, string(wantPersona), cache.persona)
+	require.Equal(t, wantSlot, cache.slotID)
+	lease.Release()
+}
+
 func TestEnforceOpenAISubagentDepthPersistsLineage(t *testing.T) {
 	cache := &openAIPersonaConcurrencyCacheForTest{acquired: true, lineageDepthByKey: make(map[string]int)}
 	svc := &OpenAIGatewayService{concurrencyService: NewConcurrencyService(cache)}

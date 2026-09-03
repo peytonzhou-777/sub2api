@@ -91,15 +91,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	if account == nil {
 		return errors.New("account is nil")
 	}
-	if binding, ok := SessionPersonaBindingFromContextOrGin(ctx, c); ok &&
-		IsOpenCodePersona(binding) &&
-		!OpenCodePersonaTransportReady(SessionPersonaTransportWS) {
-		return NewOpenAIWSClientCloseError(
-			coderws.StatusPolicyViolation,
-			"OpenCode Persona WebSocket adapter is not enabled; retry over HTTP",
-			ErrOpenCodePersonaWebSocketUnavailable,
-		)
-	}
+	personaBinding, hasPersonaBinding := SessionPersonaBindingFromContextOrGin(ctx, c)
+	isOpenCodePersona := hasPersonaBinding && IsOpenCodePersona(personaBinding)
 	// A handler may reuse the same gin context across account failover attempts.
 	// Never let an OAuth attempt's response aliases leak into the next account.
 	setCodexToolNameReverse(c, nil)
@@ -138,7 +131,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 
 	wsDecision := s.getOpenAIWSProtocolResolver().Resolve(account)
-	forceHTTPBridge := account.Platform == PlatformGrok ||
+	forceHTTPBridge := isOpenCodePersona || account.Platform == PlatformGrok ||
 		(s.pluginManager != nil && s.pluginManager.ShouldRouteOpenAIOAuth(account))
 	modeRouterV2Enabled := s != nil && s.cfg != nil && s.cfg.Gateway.OpenAIWS.ModeRouterV2Enabled
 	ingressMode := OpenAIWSIngressModeCtxPool
@@ -812,13 +805,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		return fmt.Errorf("build ws headers: %w", buildHdrErr)
 	}
 	topologyScope := stagedCodexOutboundTopologyScope(c, account)
-	connectionTarget = newOpenAIWSConnectionTarget(account, wsDecision.Transport, wsURL, wsHeaders, topologyScope)
+	proxyURL := resolveOpenAIUpstreamProxyURL(ctx, account)
+	connectionTarget = newOpenAIWSConnectionTargetWithProxy(account, wsDecision.Transport, wsURL, wsHeaders, proxyURL, topologyScope)
 	// 首次解析 payload 时握手头尚未构造；现在按实际 fingerprint scope 重新解析首选连接。
 	refreshIngressRouteState(firstPayload)
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	transportScope, _ := OpenAITransportScopeFromContext(ctx, account.ID)
 	transportScopeFingerprint := ""
 	if transportScope.ReadyForCPA(account.ID) {

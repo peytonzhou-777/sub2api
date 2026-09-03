@@ -18,7 +18,9 @@ SELECT id, user_id, api_key_id, account_id, scope_key, persona, slot_id,
        session_epoch, slot_generation, slot_set_generation, credential_chain_id,
        thread_id, mapping_type, client_id, opencode_id, status,
        parent_mapping_id, root_mapping_id, created_at, updated_at,
-       last_seen_at, expires_at
+       last_seen_at, expires_at,
+       COALESCE(account_persona_id, 0), COALESCE(persona_generation, 0),
+       COALESCE(persona_session_epoch, 0), COALESCE(profile_id, ''), COALESCE(profile_version, '')
 FROM openai_persona_id_mappings`
 
 func validateOpenAIPersonaIDMappingLookup(scope service.OpenAIPersonaIDMappingScope, mappingType service.OpenAIPersonaIDMappingType, value string) error {
@@ -34,6 +36,8 @@ func validateOpenAIPersonaIDMappingLookup(scope service.OpenAIPersonaIDMappingSc
 func scanOpenAIPersonaIDMapping(rows *sql.Rows) (*service.OpenAIPersonaIDMapping, error) {
 	var row service.OpenAIPersonaIDMapping
 	var parentID, rootID sql.NullInt64
+	var personaSessionEpoch int64
+	var profileID string
 	if err := rows.Scan(
 		&row.ID,
 		&row.Scope.UserID,
@@ -57,6 +61,11 @@ func scanOpenAIPersonaIDMapping(rows *sql.Rows) (*service.OpenAIPersonaIDMapping
 		&row.UpdatedAt,
 		&row.LastSeenAt,
 		&row.ExpiresAt,
+		&row.Scope.AccountPersonaID,
+		&row.Scope.PersonaGeneration,
+		&personaSessionEpoch,
+		&profileID,
+		&row.Scope.ProfileVersion,
 	); err != nil {
 		return nil, err
 	}
@@ -68,7 +77,22 @@ func scanOpenAIPersonaIDMapping(rows *sql.Rows) (*service.OpenAIPersonaIDMapping
 		value := rootID.Int64
 		row.RootMappingID = &value
 	}
+	if row.Scope.AccountPersonaID > 0 {
+		if personaSessionEpoch > 0 {
+			row.Scope.SessionEpoch = personaSessionEpoch
+		}
+		if profileID = strings.TrimSpace(profileID); profileID != "" {
+			row.Scope.Persona = service.SessionPersonaID(profileID)
+		}
+	}
 	return &row, nil
+}
+
+func nullablePositiveOpenAIMappingInt64(value int64) any {
+	if value <= 0 {
+		return nil
+	}
+	return value
 }
 
 func (r *accountRepository) GetOpenAIPersonaIDMappingByClient(ctx context.Context, scope service.OpenAIPersonaIDMappingScope, mappingType service.OpenAIPersonaIDMappingType, clientID string) (*service.OpenAIPersonaIDMapping, error) {
@@ -164,8 +188,9 @@ func (r *accountRepository) UpsertOpenAIPersonaIDMapping(ctx context.Context, ma
     (user_id, api_key_id, account_id, scope_key, persona, slot_id,
      session_epoch, slot_generation, slot_set_generation, credential_chain_id,
      thread_id, mapping_type, client_id, opencode_id, status,
-     parent_mapping_id, root_mapping_id, created_at, updated_at, last_seen_at, expires_at)
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$18,$18,$19)
+     parent_mapping_id, root_mapping_id, created_at, updated_at, last_seen_at, expires_at,
+     account_persona_id, persona_generation, persona_session_epoch, profile_id, profile_version)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$18,$18,$19,$20,$21,$22,$23,$24)
   ON CONFLICT (scope_key, mapping_type, client_id) DO UPDATE SET
     last_seen_at = EXCLUDED.last_seen_at,
     updated_at = EXCLUDED.updated_at,
@@ -196,6 +221,11 @@ LIMIT 1`
 		mapping.RootMappingID,
 		now,
 		mapping.ExpiresAt,
+		nullablePositiveOpenAIMappingInt64(mapping.Scope.AccountPersonaID),
+		nullablePositiveOpenAIMappingInt64(mapping.Scope.PersonaGeneration),
+		nullablePositiveOpenAIMappingInt64(mapping.Scope.SessionEpoch),
+		nullableString(string(mapping.Scope.Persona)),
+		nullableString(mapping.Scope.ProfileVersion),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("upsert OpenAI Persona ID mapping: %w", err)

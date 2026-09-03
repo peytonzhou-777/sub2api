@@ -60,10 +60,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		wsHost,
 		wsPath,
 	)
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
+	proxyURL := resolveOpenAIUpstreamProxyURL(ctx, account)
 	transportScope, _ := OpenAITransportScopeFromContext(ctx, account.ID)
 	transportScopeFingerprint := ""
 	if transportScope.ReadyForCPA(account.ID) {
@@ -149,7 +146,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		return nil, fmt.Errorf("build ws headers: %w", buildHdrErr)
 	}
 	topologyScope := stagedCodexOutboundTopologyScope(c, account)
-	connectionTarget := newOpenAIWSConnectionTarget(account, decision.Transport, wsURL, wsHeaders, topologyScope)
+	connectionTarget := newOpenAIWSConnectionTargetWithProxy(account, decision.Transport, wsURL, wsHeaders, proxyURL, topologyScope)
 	preferredConnID := ""
 	if stateStore != nil && previousResponseID != "" {
 		if connID, ok := getOpenAIWSResponseConn(stateStore, previousResponseID, connectionTarget); ok {
