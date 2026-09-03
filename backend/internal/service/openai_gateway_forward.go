@@ -19,6 +19,9 @@ import (
 
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
+	if s != nil && s.testOpenAIExecutionTargetBinder != nil {
+		ctx = s.testOpenAIExecutionTargetBinder(ctx, c, account)
+	}
 	beginUpstreamResponseModelObservation(c)
 	sanitizedBody, restoreAttemptRequest, isolateErr := s.isolateOpenAITurnStateAttempt(ctx, c, account, body)
 	defer restoreAttemptRequest()

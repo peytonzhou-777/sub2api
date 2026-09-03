@@ -1303,8 +1303,10 @@ func TestOpenAIWSConnPool_ClearPersonaCredentialOnlyTouchesMatchingScope(t *test
 	pool := &openAIWSConnPool{}
 	accountID := int64(323)
 	targetScope := OpenAITransportScope{
-		AccountID: accountID, Persona: SessionPersonaOpenCode, SlotID: 1,
+		AccountID: accountID, AccountPersonaID: 3231, ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: "1.18.23", PersonaGeneration: 1, SessionEpoch: 1,
 		CredentialChainID: "chain-target",
+		InstallationID:    "install-target",
 	}
 	otherScope := targetScope
 	otherScope.CredentialChainID = "chain-other"
@@ -1318,7 +1320,7 @@ func TestOpenAIWSConnPool_ClearPersonaCredentialOnlyTouchesMatchingScope(t *test
 	}
 	pool.accounts.Store(accountID, ap)
 
-	pool.ClearPersonaCredential(accountID, targetScope.Persona, targetScope.SlotID, targetScope.CredentialChainID)
+	pool.ClearAccountPersonaCredential(accountID, targetScope.AccountPersonaID, targetScope.CredentialChainID)
 
 	ap.mu.Lock()
 	_, targetExists := ap.conns[target.id]

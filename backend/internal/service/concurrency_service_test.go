@@ -757,6 +757,7 @@ func TestAcquireOpenAIPersonaSlotAndWSLeaseUseDynamicInstanceScope(t *testing.T)
 	svc := NewConcurrencyService(cache)
 	target := OpenAIExecutionTarget{
 		AccountID: 42, AccountPersonaID: 88, PersonaGeneration: 4, SessionEpoch: 6,
+		SessionStartedAt: time.Unix(1_700_000_000, 0), DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
 		CredentialChainID: "chain", ProfileID: SessionPersonaOpenCode,
 		ProfileVersion: SessionPersonaOpenCodeVersion, InstallationID: "install",
 		UpstreamSessionID: "session",

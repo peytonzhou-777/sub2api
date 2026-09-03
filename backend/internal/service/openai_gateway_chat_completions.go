@@ -71,6 +71,9 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	defaultMappedModel string,
 	compatPromptCacheTenantIsolated bool,
 ) (*OpenAIForwardResult, error) {
+	if s != nil && s.testOpenAIExecutionTargetBinder != nil {
+		ctx = s.testOpenAIExecutionTargetBinder(ctx, c, account)
+	}
 	personaBinding, hasPersonaBinding := SessionPersonaBindingFromContextOrGin(ctx, c)
 	isOpenCodePersona := hasPersonaBinding && IsOpenCodePersona(personaBinding)
 	beginUpstreamResponseModelObservation(c)

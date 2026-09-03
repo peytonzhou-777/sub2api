@@ -2,23 +2,11 @@ package handler
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
-	"github.com/gin-gonic/gin"
 )
-
-type openAIPersonaAdmissionTestContextKey struct{}
-
-func newOpenAIPersonaAdmissionTestContext(t *testing.T) *gin.Context {
-	t.Helper()
-	gin.SetMode(gin.TestMode)
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
-	return c
-}
 
 func openAIPersonaAdmissionTestBinding() service.SessionPersonaSlotBinding {
 	return service.SessionPersonaSlotBinding{
@@ -37,66 +25,6 @@ func openAIPersonaAdmissionTestBinding() service.SessionPersonaSlotBinding {
 		SlotGeneration:    4,
 		SlotSetGeneration: 9,
 		Mapping:           service.SessionPersonaMappingPersonaV3,
-	}
-}
-
-func TestResolveOpenAIPersonaAdmissionBindingKeepsContinuationBinding(t *testing.T) {
-	c := newOpenAIPersonaAdmissionTestContext(t)
-	account := &service.Account{ID: 42, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth}
-	base := context.WithValue(context.Background(), openAIPersonaAdmissionTestContextKey{}, "preserved")
-	binding := openAIPersonaAdmissionTestBinding()
-	bound := service.ContextWithSessionPersonaBinding(base, binding)
-	c.Request = c.Request.WithContext(bound)
-
-	gotCtx, gotBinding, ok := resolveOpenAIPersonaAdmissionBinding(bound, c, account)
-	if !ok {
-		t.Fatal("expected the existing continuation binding to be reused")
-	}
-	if gotBinding.State != service.SessionPersonaSlotStateDraining {
-		t.Fatalf("continuation state = %q, want draining", gotBinding.State)
-	}
-	if gotBinding.PersonaID != service.SessionPersonaOpenCode || gotBinding.SlotID != 1 {
-		t.Fatalf("unexpected continuation binding: %+v", gotBinding)
-	}
-	if gotBinding.CredentialChainID != "opencode-chain-1" || gotBinding.SlotGeneration != 4 || gotBinding.SlotSetGeneration != 9 {
-		t.Fatalf("continuation metadata was not preserved: %+v", gotBinding)
-	}
-	if got := gotCtx.Value(openAIPersonaAdmissionTestContextKey{}); got != "preserved" {
-		t.Fatalf("derived context lost existing value: %v", got)
-	}
-	attached, attachedOK := service.SessionPersonaBindingFromGin(c)
-	if !attachedOK || attached.PersonaID != service.SessionPersonaOpenCode || attached.SlotID != 1 {
-		t.Fatalf("Gin request did not retain binding: %+v, ok=%t", attached, attachedOK)
-	}
-}
-
-func TestResolveOpenAIPersonaAdmissionBindingLeavesLegacyPathUnchanged(t *testing.T) {
-	c := newOpenAIPersonaAdmissionTestContext(t)
-	account := &service.Account{ID: 42, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth}
-	base := context.WithValue(context.Background(), openAIPersonaAdmissionTestContextKey{}, "legacy")
-
-	gotCtx, gotBinding, ok := resolveOpenAIPersonaAdmissionBinding(base, c, account)
-	if ok {
-		t.Fatalf("unexpected binding without prepared v3 mapping: %+v", gotBinding)
-	}
-	if gotCtx != base {
-		t.Fatal("legacy path should return the original context")
-	}
-	if _, attached := service.SessionPersonaBindingFromGin(c); attached {
-		t.Fatal("legacy path unexpectedly attached a Persona binding")
-	}
-}
-
-func TestResolveOpenAIPersonaAdmissionBindingRejectsNonOAuthAccount(t *testing.T) {
-	c := newOpenAIPersonaAdmissionTestContext(t)
-	base := context.Background()
-	gotCtx, _, ok := resolveOpenAIPersonaAdmissionBinding(base, c, &service.Account{
-		ID:       42,
-		Platform: service.PlatformOpenAI,
-		Type:     service.AccountTypeAPIKey,
-	})
-	if ok || gotCtx != base {
-		t.Fatalf("non-OAuth account changed binding path: ok=%t ctx_changed=%t", ok, gotCtx != base)
 	}
 }
 
@@ -121,6 +49,7 @@ func TestPopulateOpenAIPersonaAdmissionRequest(t *testing.T) {
 func TestPopulateOpenAIPersonaAdmissionRequestPrefersExecutionTarget(t *testing.T) {
 	target := service.OpenAIExecutionTarget{
 		AccountID: 42, AccountPersonaID: 108, PersonaGeneration: 5, SessionEpoch: 9,
+		SessionStartedAt: time.Unix(1_700_000_000, 0), DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
 		CredentialChainID: "dynamic-chain", ProfileID: service.SessionPersonaCodexCLIStrict,
 		ProfileVersion: "0.149.0", InstallationID: "install", UpstreamSessionID: "session",
 	}

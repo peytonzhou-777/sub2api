@@ -97,6 +97,31 @@ type OpenAIAccountPersonaSession struct {
 	ExpiresAt         *time.Time
 }
 
+// OpenAIAccountPersonaLeaseStats 是管理端可展示的脱敏占用摘要。
+type OpenAIAccountPersonaLeaseStats struct {
+	ActiveClientSessions int
+	EarliestReleaseAt    *time.Time
+}
+
+// OpenAIAccountPersonaAdminView 聚合 Persona、OAuth、Session 与准入容量，
+// 不包含 Token、原始 Session ID、device seed 或客户端 Session 标识。
+type OpenAIAccountPersonaAdminView struct {
+	Persona                        OpenAIAccountPersona
+	CredentialState                string
+	CredentialUpdatedAt            *time.Time
+	CredentialExpiresAt            *time.Time
+	SessionState                   OpenAIPersonaSessionState
+	SessionStartedAt               *time.Time
+	SessionLastActiveAt            *time.Time
+	EffectiveProxyID               *int64
+	ProxyInherited                 bool
+	ActiveClientSessions           int
+	EarliestClientSessionReleaseAt *time.Time
+	EffectiveMaxClientSessions     int
+	EffectiveMaxConcurrency        int
+	EffectiveMaxWebSockets         int
+}
+
 type OpenAIAccountPersonaCreate struct {
 	AccountID                       int64
 	ProfileID                       SessionPersonaID
@@ -190,15 +215,27 @@ type OpenAIAccountPersonaRepository interface {
 	TouchAccountPersonaSession(ctx context.Context, accountPersonaID, sessionEpoch int64, now time.Time) error
 }
 
+// OpenAIAccountPersonaBatchReader 为管理列表和号池快照提供批量读取，避免逐账号查询。
+type OpenAIAccountPersonaBatchReader interface {
+	ListAccountPersonasByAccountIDs(ctx context.Context, accountIDs []int64) (map[int64][]OpenAIAccountPersona, error)
+}
+
+// OpenAIAccountPersonaLeaseStatsReader 为管理端和容量聚合提供数据库权威占用摘要。
+type OpenAIAccountPersonaLeaseStatsReader interface {
+	ListAccountPersonaLeaseStats(ctx context.Context, accountID int64, now time.Time) (map[int64]OpenAIAccountPersonaLeaseStats, error)
+}
+
 // OpenAIExecutionTarget 是选定账号后贯穿 HTTP、WS、compact 与 OAuth 的完整身份边界。
 type OpenAIExecutionTarget struct {
 	AccountID         int64
 	AccountPersonaID  int64
 	PersonaGeneration int64
 	SessionEpoch      int64
+	SessionStartedAt  time.Time
 	CredentialChainID string
 	ProfileID         SessionPersonaID
 	ProfileVersion    string
+	DeviceSeed        []byte `json:"-"`
 	InstallationID    string
 	UpstreamSessionID string
 	EffectiveProxyID  *int64
@@ -211,7 +248,8 @@ type OpenAIExecutionTarget struct {
 
 func (t OpenAIExecutionTarget) Valid() bool {
 	return t.AccountID > 0 && t.AccountPersonaID > 0 && t.PersonaGeneration > 0 &&
-		t.SessionEpoch > 0 && t.CredentialChainID != "" && t.ProfileID != "" &&
+		t.SessionEpoch > 0 && !t.SessionStartedAt.IsZero() && len(t.DeviceSeed) >= 16 &&
+		t.CredentialChainID != "" && t.ProfileID != "" &&
 		t.ProfileVersion != "" && t.InstallationID != "" && t.UpstreamSessionID != ""
 }
 
@@ -226,6 +264,7 @@ func OpenAIExecutionTargetFromPersonaSession(persona OpenAIAccountPersona, sessi
 	target := OpenAIExecutionTarget{
 		AccountID: persona.AccountID, AccountPersonaID: persona.ID,
 		PersonaGeneration: session.PersonaGeneration, SessionEpoch: session.SessionEpoch,
+		SessionStartedAt: session.StartedAt, DeviceSeed: append([]byte(nil), persona.DeviceSeed...),
 		CredentialChainID: session.CredentialChainID, ProfileID: session.ProfileID,
 		ProfileVersion: session.ProfileVersion, InstallationID: session.InstallationID,
 		UpstreamSessionID: session.UpstreamSessionID, EffectiveProxyID: session.EffectiveProxyID,

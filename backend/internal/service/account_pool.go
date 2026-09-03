@@ -264,6 +264,7 @@ type AccountPoolService struct {
 	userAccessReader    AccountPoolUserAccessReader
 	residentStatsReader AccountPoolResidentStatsReader
 	settingService      *SettingService
+	accountPersonaRepo  OpenAIAccountPersonaRepository
 	personalUsageMu     sync.Mutex
 	personalUsageCache  map[string]accountPoolPersonalUsageCacheEntry
 	personalUsageSF     singleflight.Group
@@ -310,6 +311,13 @@ func (s *AccountPoolService) SetSettingService(settings *SettingService) {
 		return
 	}
 	s.settingService = settings
+}
+
+// SetAccountPersonaRepository 注入号池容量所需的动态 Persona 权威读取器。
+func (s *AccountPoolService) SetAccountPersonaRepository(repo OpenAIAccountPersonaRepository) {
+	if s != nil {
+		s.accountPersonaRepo = repo
+	}
 }
 
 // Reconcile 构建完整新代次；只有缓存全部写入成功后才由缓存实现切换当前指针。
@@ -364,11 +372,12 @@ func (s *AccountPoolService) Reconcile(ctx context.Context, generation, enabledE
 		if residentErr != nil {
 			return fmt.Errorf("read account pool resident stats: %w", residentErr)
 		}
+		personaCapacities := s.openAIAccountPersonaCapacities(buildCtx, records, admissionCfg)
 		for _, record := range records {
-			item := s.mapPublicAccount(record, counts, now, admissionCfg)
+			item := s.mapPublicAccountWithCapacities(record, counts, now, personaCapacities, admissionCfg)
 			applyAccountPoolResidentStats(&item, record, residentStats)
 			if previous, ok := previousCapacities[record.ID]; ok {
-				previous.MaxConcurrency = effectiveAccountPoolRecordConcurrency(record, admissionCfg)
+				previous.MaxConcurrency = item.Capacity.MaxConcurrency
 				item.Capacity = previous
 			}
 			items = append(items, item)
@@ -430,7 +439,7 @@ func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context
 		if residentErr != nil {
 			return nil, fmt.Errorf("read account pool resident stats: %w", residentErr)
 		}
-		items := s.mapAccountPoolFallbackRecords(records, residentStats, now, admissionCfg)
+		items := s.mapAccountPoolFallbackRecords(ctx, records, residentStats, now, admissionCfg)
 		if query.Status != "" {
 			items = filterAccountPoolItemsByStatus(items, query.Status)
 			total = int64(len(items))
@@ -452,7 +461,7 @@ func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context
 		if residentErr != nil {
 			return nil, fmt.Errorf("read account pool resident stats: %w", residentErr)
 		}
-		items = append(items, s.mapAccountPoolFallbackRecords(records, residentStats, now, admissionCfg)...)
+		items = append(items, s.mapAccountPoolFallbackRecords(ctx, records, residentStats, now, admissionCfg)...)
 		afterID = records[len(records)-1].ID
 		if !hasMore {
 			break
@@ -472,10 +481,11 @@ func (s *AccountPoolService) listAccountPoolDatabaseFallback(ctx context.Context
 	return newAccountPoolPage(items[start:end], total, page, pageSize), nil
 }
 
-func (s *AccountPoolService) mapAccountPoolFallbackRecords(records []AccountPoolSourceRecord, residentStats map[int64]AccountPoolResidentStats, now time.Time, admissionCfg OpenAIAccountAdmissionConfig) []PublicAccountPoolAccount {
+func (s *AccountPoolService) mapAccountPoolFallbackRecords(ctx context.Context, records []AccountPoolSourceRecord, residentStats map[int64]AccountPoolResidentStats, now time.Time, admissionCfg OpenAIAccountAdmissionConfig) []PublicAccountPoolAccount {
 	items := make([]PublicAccountPoolAccount, 0, len(records))
+	personaCapacities := s.openAIAccountPersonaCapacities(ctx, records, admissionCfg)
 	for _, record := range records {
-		item := s.mapPublicAccount(record, nil, now, admissionCfg)
+		item := s.mapPublicAccountWithCapacities(record, nil, now, personaCapacities, admissionCfg)
 		applyAccountPoolResidentStats(&item, record, residentStats)
 		// 数据库降级只展示基础字段，不能把持久化观测冒充当前动态状态。
 		item.UsageWindows = []PublicAccountPoolUsageWindow{}
@@ -748,11 +758,21 @@ func readAccountPoolRenewalError(result <-chan error) error {
 }
 
 func (s *AccountPoolService) mapPublicAccount(record AccountPoolSourceRecord, counts map[int64]int, now time.Time, admissionConfigs ...OpenAIAccountAdmissionConfig) PublicAccountPoolAccount {
+	return s.mapPublicAccountWithCapacities(record, counts, now, nil, admissionConfigs...)
+}
+
+func (s *AccountPoolService) mapPublicAccountWithCapacities(record AccountPoolSourceRecord, counts map[int64]int, now time.Time, personaCapacities map[int64]int, admissionConfigs ...OpenAIAccountAdmissionConfig) PublicAccountPoolAccount {
 	admissionCfg := DefaultOpenAIAccountAdmissionConfig()
 	if len(admissionConfigs) > 0 {
 		admissionCfg = admissionConfigs[0]
 	}
-	capacity := PublicAccountPoolCapacity{MaxConcurrency: effectiveAccountPoolRecordConcurrency(record, admissionCfg), State: AccountPoolFreshnessUnavailable}
+	maxConcurrency := effectiveAccountPoolRecordConcurrency(record, admissionCfg)
+	if record.Platform == PlatformOpenAI && record.Type == AccountTypeOAuth {
+		if personaCapacities != nil {
+			maxConcurrency = personaCapacities[record.ID]
+		}
+	}
+	capacity := PublicAccountPoolCapacity{MaxConcurrency: maxConcurrency, State: AccountPoolFreshnessUnavailable}
 	if current, ok := counts[record.ID]; ok {
 		capacity.CurrentConcurrency = &current
 		capacity.ObservedAt = accountPoolTimePtr(now)
@@ -780,6 +800,34 @@ func (s *AccountPoolService) mapPublicAccount(record AccountPoolSourceRecord, co
 		UsageWindows:    s.mapUsageWindows(record, now), ResetCount: resetCount, ResetCountState: resetState,
 		Status: mapAccountPoolStatus(record, now),
 	}
+}
+
+func (s *AccountPoolService) openAIAccountPersonaCapacities(ctx context.Context, records []AccountPoolSourceRecord, cfg OpenAIAccountAdmissionConfig) map[int64]int {
+	accountIDs := make([]int64, 0, len(records))
+	accounts := make(map[int64]*Account, len(records))
+	for _, record := range records {
+		if record.Platform != PlatformOpenAI || record.Type != AccountTypeOAuth {
+			continue
+		}
+		accountIDs = append(accountIDs, record.ID)
+		accounts[record.ID] = &Account{ID: record.ID, Platform: record.Platform, Type: record.Type, Concurrency: record.Concurrency, Credentials: record.Credentials, Extra: record.Extra}
+	}
+	if len(accountIDs) == 0 {
+		return nil
+	}
+	capacities := make(map[int64]int, len(accountIDs))
+	reader, ok := s.accountPersonaRepo.(OpenAIAccountPersonaBatchReader)
+	if !ok {
+		return capacities
+	}
+	personasByAccount, err := reader.ListAccountPersonasByAccountIDs(ctx, accountIDs)
+	if err != nil {
+		return capacities
+	}
+	for accountID, account := range accounts {
+		capacities[accountID] = EffectiveOpenAIAccountPersonaCapacity(account, personasByAccount[accountID], cfg)
+	}
+	return capacities
 }
 
 func (s *AccountPoolService) openAIAdmissionConfig(ctx context.Context) OpenAIAccountAdmissionConfig {

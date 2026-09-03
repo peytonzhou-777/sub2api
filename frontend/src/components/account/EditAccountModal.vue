@@ -2138,139 +2138,14 @@
             <Select v-model="codexFingerprintMode" data-testid="edit-codex-fingerprint-mode-select" :options="codexFingerprintModeOptions" />
           </div>
         </div>
-        <div v-if="codexFingerprintMode === 'session' || codexFingerprintMode === 'full'" class="mt-4">
-          <label class="input-label">{{ t('admin.accounts.openai.codexSessionSlotCount') }}</label>
-          <input
-            v-model.number="codexSessionSlotCount"
-            data-testid="edit-codex-session-slot-count-input"
-            type="number"
-            min="1"
-            max="4"
-            step="1"
-            class="input"
-          />
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {{ t('admin.accounts.openai.codexSessionSlotCountDesc') }}
-          </p>
-        </div>
-        <div v-if="codexFingerprintMode === 'session' || codexFingerprintMode === 'full'" class="mt-4">
-          <label class="input-label">{{ t('admin.accounts.openai.codexSubagentConcurrency') }}</label>
-          <input
-            v-model.number="codexSubagentMaxInflight"
-            data-testid="edit-codex-subagent-concurrency-input"
-            type="number"
-            min="0"
-            max="64"
-            step="1"
-            class="input"
-          />
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {{ t('admin.accounts.openai.codexSubagentConcurrencyDesc') }}
-          </p>
-        </div>
       </div>
 
-      <!-- OpenAI Persona 映射（仅 OAuth） -->
-      <div
+      <OpenAIAccountPersonas
         v-if="account?.platform === 'openai' && account?.type === 'oauth'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
-        data-testid="openai-persona-mapping"
-      >
-        <div class="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-          <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              <label class="input-label mb-0">{{ t('admin.accounts.openai.personaMapping.title') }}</label>
-              <p class="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">
-                {{ t('admin.accounts.openai.personaMapping.desc') }}
-              </p>
-            </div>
-            <span
-              data-testid="openai-persona-mapping-mode"
-              class="shrink-0 rounded-full px-2 py-1 text-xs font-medium"
-              :class="openAIPersonaMappingEnabled
-                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                : 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-300'"
-            >
-              {{ t(`admin.accounts.openai.personaMapping.mode.${openAIPersonaMappingMode}`) }}
-            </span>
-          </div>
-
-          <div class="mt-4 grid gap-3 sm:grid-cols-2">
-            <div
-              v-for="slot in openAIPersonaSlots"
-              :key="slot.slotId"
-              :data-testid="`openai-persona-slot-${slot.slotId}`"
-              class="rounded-md border border-emerald-100 bg-white/80 p-3 dark:border-emerald-900/50 dark:bg-dark-800/70"
-            >
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {{ t('admin.accounts.openai.personaMapping.slot', { slot: slot.slotId }) }}
-                </span>
-                <span class="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                  {{ t(`admin.accounts.openai.personaMapping.persona.${slot.personaKey}`) }}
-                </span>
-              </div>
-              <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span class="text-gray-500 dark:text-gray-400">{{ t('admin.accounts.openai.personaMapping.state') }}</span>
-                  <p class="mt-0.5 font-medium text-gray-800 dark:text-gray-200">
-                    {{ t(`admin.accounts.openai.personaMapping.states.${slot.state}`) }}
-                  </p>
-                </div>
-                <div>
-                  <span class="text-gray-500 dark:text-gray-400">{{ t('admin.accounts.openai.personaMapping.authorization') }}</span>
-                  <p
-                    class="mt-0.5 font-medium"
-                    :class="slot.authorization === 'authorized'
-                      ? 'text-emerald-700 dark:text-emerald-300'
-                      : 'text-amber-700 dark:text-amber-300'"
-                  >
-                    {{ t(`admin.accounts.openai.personaMapping.authorizationStates.${slot.authorization}`) }}
-                  </p>
-                </div>
-              </div>
-              <div class="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  class="btn btn-secondary min-w-0 flex-1 text-xs"
-                  :data-testid="`openai-persona-slot-${slot.slotId}-oauth`"
-                  @click="emit('authorizePersona', slot.slotId)"
-                >
-                  {{ slot.authorization === 'authorized'
-                    ? t('admin.accounts.openai.personaMapping.oauth.reauthorize')
-                    : t('admin.accounts.openai.personaMapping.oauth.authorize') }}
-                </button>
-                <button
-                  v-if="slot.authorization === 'authorized'"
-                  type="button"
-                  class="btn btn-danger min-w-0 flex-1 text-xs"
-                  :disabled="revokingPersonaSlot === slot.slotId"
-                  :data-testid="`openai-persona-slot-${slot.slotId}-revoke`"
-                  @click="requestPersonaAuthorizationRevoke(slot.slotId)"
-                >
-                  {{ revokingPersonaSlot === slot.slotId
-                    ? t('admin.accounts.openai.personaMapping.oauth.revoking')
-                    : t('admin.accounts.openai.personaMapping.oauth.revoke') }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-4 flex items-center justify-between gap-3 border-t border-emerald-100 pt-3 dark:border-emerald-900/50">
-            <div class="min-w-0">
-              <label class="input-label mb-0">{{ t('admin.accounts.openai.personaMapping.enable') }}</label>
-              <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                {{ t('admin.accounts.openai.personaMapping.enableDesc') }}
-              </p>
-            </div>
-            <Toggle
-              v-model="openAIPersonaMappingEnabled"
-              data-testid="openai-persona-mapping-toggle"
-              :aria-label="t('admin.accounts.openai.personaMapping.enable')"
-            />
-          </div>
-        </div>
-      </div>
+        :account="account"
+        :proxies="proxies"
+        @authorize="emit('authorizePersona', $event)"
+      />
 
       <!-- OpenAI 订阅档位手动覆盖（Plus/Pro/Free），仅 OAuth 非影子账号 -->
       <div
@@ -3020,16 +2895,6 @@
     @confirm="handleMixedChannelConfirm"
     @cancel="handleMixedChannelCancel"
   />
-  <ConfirmDialog
-    :show="personaRevokeSlot !== null"
-    :title="t('admin.accounts.openai.personaMapping.oauth.revokeTitle')"
-    :message="t('admin.accounts.openai.personaMapping.oauth.revokeConfirm')"
-    :confirm-text="t('admin.accounts.openai.personaMapping.oauth.revoke')"
-    :cancel-text="t('common.cancel')"
-    :danger="true"
-    @confirm="confirmPersonaAuthorizationRevoke"
-    @cancel="personaRevokeSlot = null"
-  />
 </template>
 
 <script setup lang="ts">
@@ -3064,6 +2929,8 @@ import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
 import CnBaseUrlPresets from '@/components/account/CnBaseUrlPresets.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import OllamaCloudUsageSettings from '@/components/account/OllamaCloudUsageSettings.vue'
+import OpenAIAccountPersonas from '@/components/account/OpenAIAccountPersonas.vue'
+import type { OpenAIAccountPersona } from '@/api/admin/accounts'
 import {
   applyAntigravityProjectID,
   applyHeaderOverride,
@@ -3123,7 +2990,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
   updated: [account: Account]
-  authorizePersona: [slotId: 0 | 1]
+  authorizePersona: [persona: OpenAIAccountPersona]
 }>()
 
 const { t } = useI18n()
@@ -3446,72 +3313,6 @@ type CodexOutboundProfileOverride = '' | 'legacy' | 'codex_cli_0_149_0'
 const codexOutboundProfileOverride = ref<CodexOutboundProfileOverride>('')
 // 线上 OAuth 账号固定以设备+Session 为默认收敛模式；off 仅用于显式回滚。
 const codexFingerprintMode = ref<CodexFingerprintMode>('session')
-const codexSessionSlotCount = ref(1)
-const codexSubagentMaxInflight = ref(0)
-
-type OpenAIPersonaMappingMode = 'legacy_v2' | 'persona_v3'
-type OpenAIPersonaSlotState = 'active' | 'draining' | 'disabled'
-type OpenAIPersonaAuthorizationState = 'authorized' | 'not_ready' | 'missing'
-
-interface OpenAIPersonaSlotView {
-  slotId: 0 | 1
-  personaKey: 'strictCodex' | 'openCode'
-  state: OpenAIPersonaSlotState
-  authorization: OpenAIPersonaAuthorizationState
-}
-
-const openAIPersonaMappingEnabled = ref(false)
-const personaRevokeSlot = ref<0 | 1 | null>(null)
-const revokingPersonaSlot = ref<0 | 1 | null>(null)
-const openAIPersonaSlotStates = reactive<Record<number, OpenAIPersonaSlotState>>({
-  0: 'active',
-  1: 'active'
-})
-const openAIPersonaSlotAuthorizations = reactive<Record<number, OpenAIPersonaAuthorizationState>>({
-  0: 'missing',
-  1: 'missing'
-})
-
-const openAIPersonaMappingMode = computed<OpenAIPersonaMappingMode>(() =>
-  openAIPersonaMappingEnabled.value ? 'persona_v3' : 'legacy_v2'
-)
-
-const openAIPersonaSlots = computed<OpenAIPersonaSlotView[]>(() => [
-  {
-    slotId: 0,
-    personaKey: 'strictCodex',
-    state: openAIPersonaSlotStates[0],
-    authorization: openAIPersonaSlotAuthorizations[0]
-  },
-  {
-    slotId: 1,
-    personaKey: 'openCode',
-    state: openAIPersonaSlotStates[1],
-    authorization: openAIPersonaSlotAuthorizations[1]
-  }
-])
-
-function requestPersonaAuthorizationRevoke(slotId: 0 | 1) {
-  personaRevokeSlot.value = slotId
-}
-
-async function confirmPersonaAuthorizationRevoke() {
-  const slotId = personaRevokeSlot.value
-  const currentAccount = props.account
-  if (slotId === null || !currentAccount) return
-  personaRevokeSlot.value = null
-  revokingPersonaSlot.value = slotId
-  try {
-    const updated = await adminAPI.accounts.revokeOpenAIPersonaAuthorization(currentAccount.id, slotId)
-    emit('updated', updated)
-    await loadOpenAIPersonaOAuthStatus(updated)
-    appStore.showSuccess(t('admin.accounts.openai.personaMapping.oauth.revoked'))
-  } catch (error: any) {
-    appStore.showError(error?.message || t('admin.accounts.openai.personaMapping.oauth.revokeFailed'))
-  } finally {
-    revokingPersonaSlot.value = null
-  }
-}
 
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
 const codexImageToolMode = ref<CodexImageToolMode>('inherit')
@@ -3923,92 +3724,6 @@ const applyOpenAIModelMappingCredentials = (credentials: Record<string, unknown>
   }
 }
 
-function parseOptionalBoolean(value: unknown): boolean | null {
-  if (typeof value === 'boolean') return value
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase()
-    if (normalized === 'true' || normalized === '1') return true
-    if (normalized === 'false' || normalized === '0') return false
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) return value !== 0
-  return null
-}
-
-function normalizeOpenAIPersonaSlotState(value: unknown): OpenAIPersonaSlotState | null {
-  if (typeof value !== 'string') return null
-  const normalized = value.trim().toLowerCase()
-  if (normalized === 'active' || normalized === 'draining' || normalized === 'disabled') {
-    return normalized
-  }
-  return null
-}
-
-function getOpenAIPersonaSlotValue(raw: unknown, slotId: number): unknown {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
-  const values = raw as Record<string, unknown>
-  return values[String(slotId)] ?? values[slotId]
-}
-
-function loadOpenAIPersonaMapping(newAccount: Account) {
-  openAIPersonaMappingEnabled.value = false
-  openAIPersonaSlotStates[0] = 'active'
-  openAIPersonaSlotStates[1] = 'active'
-  openAIPersonaSlotAuthorizations[0] = 'missing'
-  openAIPersonaSlotAuthorizations[1] = 'missing'
-
-  if (newAccount.platform !== 'openai' || newAccount.type !== 'oauth') return
-
-  const extra = (newAccount.extra as Record<string, unknown> | undefined) || {}
-  for (const key of ['openai_persona_mapping_enabled', 'openai_persona_mapping_active']) {
-    const explicit = parseOptionalBoolean(extra[key])
-    if (explicit !== null) {
-      openAIPersonaMappingEnabled.value = explicit
-      break
-    }
-  }
-  if (!openAIPersonaMappingEnabled.value) {
-    const version = Number(
-      extra.openai_persona_mapping_version ??
-      extra.openai_persona_scope_version ??
-      extra.persona_mapping_version
-    )
-    openAIPersonaMappingEnabled.value = Number.isInteger(version) && version >= 3
-  }
-
-  const stateMap = extra.openai_persona_slot_states
-  const enabledMap = extra.openai_persona_slot_enabled
-  for (const slotId of [0, 1]) {
-    openAIPersonaSlotStates[slotId] =
-      normalizeOpenAIPersonaSlotState(getOpenAIPersonaSlotValue(stateMap, slotId)) ||
-      (parseOptionalBoolean(getOpenAIPersonaSlotValue(enabledMap, slotId)) === false ? 'draining' : 'active')
-  }
-  // Persona authorization is encrypted server-side state; only the status API
-  // is authoritative, so account DTO credentials are never used as a fallback.
-  openAIPersonaSlotAuthorizations[0] = 'missing'
-  openAIPersonaSlotAuthorizations[1] = 'missing'
-  void loadOpenAIPersonaOAuthStatus(newAccount)
-}
-
-let openAIPersonaStatusRequest = 0
-async function loadOpenAIPersonaOAuthStatus(account: Account) {
-  const requestID = ++openAIPersonaStatusRequest
-  try {
-    const status = await adminAPI.accounts.getOpenAIPersonaOAuthStatus(account.id)
-    if (requestID !== openAIPersonaStatusRequest || props.account?.id !== account.id) return
-    openAIPersonaMappingEnabled.value = status.mapping_mode === 'persona_v3'
-    for (const slot of status.slots) {
-      openAIPersonaSlotStates[slot.slot_id] = slot.state
-      openAIPersonaSlotAuthorizations[slot.slot_id] = slot.authorized
-        ? 'authorized'
-        : slot.credential_chain_id
-          ? 'not_ready'
-          : 'missing'
-    }
-  } catch {
-    // 凭据状态只信任服务端接口；加载失败时保留未配置状态。
-  }
-}
-
 const syncFormFromAccount = (newAccount: Account | null) => {
   if (!newAccount) {
     return
@@ -4054,7 +3769,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   mixedScheduling.value = false
   allowOverages.value = false
   const extra = newAccount.extra as Record<string, unknown> | undefined
-	loadOpenAIPersonaMapping(newAccount)
 	mixedScheduling.value = extra?.mixed_scheduling === true
 	allowOverages.value = extra?.allow_overages === true
 	autoPause5hThreshold.value = typeof extra?.auto_pause_5h_threshold === 'number' ? extra.auto_pause_5h_threshold * 100 : null
@@ -4085,8 +3799,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   codexCLIOnlyAppServerEnabled.value = false
   codexOutboundProfileOverride.value = ''
   codexFingerprintMode.value = 'session'
-  codexSessionSlotCount.value = 1
-  codexSubagentMaxInflight.value = 0
   codexImageToolMode.value = 'inherit'
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
@@ -4150,14 +3862,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       codexFingerprintMode.value = (['off', 'device', 'session', 'full'].includes(fpMode || '')
         ? fpMode as CodexFingerprintMode
         : 'session')
-      const slotCount = Number(extra?.codex_session_slot_count ?? 1)
-      codexSessionSlotCount.value = Number.isInteger(slotCount) && slotCount >= 1 && slotCount <= 4
-        ? slotCount
-        : 1
-      const subagentLimit = Number(extra?.codex_subagent_max_inflight_per_session ?? 0)
-      codexSubagentMaxInflight.value = Number.isInteger(subagentLimit) && subagentLimit >= 0 && subagentLimit <= 64
-        ? subagentLimit
-        : 0
     }
     const credentials = newAccount.credentials as Record<string, unknown> | undefined
     const compactMappings = credentials?.compact_model_mapping as Record<string, string> | undefined
@@ -5620,31 +5324,14 @@ const handleSubmit = async () => {
         }
         // off 也必须显式落键才能真正回滚；删除键会被后端解释为 session 默认值。
         newExtra.codex_fingerprint_mode = codexFingerprintMode.value
-        if (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') {
-          newExtra.codex_session_slot_count = Math.max(1, Math.min(4, Math.trunc(codexSessionSlotCount.value || 1)))
-        } else {
-          delete newExtra.codex_session_slot_count
-        }
-        if (
-          (codexFingerprintMode.value === 'session' || codexFingerprintMode.value === 'full') &&
-          codexSubagentMaxInflight.value > 0
-        ) {
-          newExtra.codex_subagent_max_inflight_per_session = Math.min(64, Math.trunc(codexSubagentMaxInflight.value))
-        } else {
-          delete newExtra.codex_subagent_max_inflight_per_session
-        }
-
-        // Persona 映射仅通过显式账号开关启用；缺省保持 legacy v2，
-        // 避免现有双 Codex 槽位在管理页保存其他字段时被隐式改写。
-        newExtra.openai_persona_mapping_enabled = openAIPersonaMappingEnabled.value
+        // 动态 AccountPersona 是唯一运行时权威；账号编辑不再维护固定槽位投影。
+        delete newExtra.codex_session_slot_count
+        delete newExtra.codex_subagent_max_inflight_per_session
+        delete newExtra.openai_persona_mapping_enabled
         delete newExtra.openai_persona_mapping_active
-        if (openAIPersonaMappingEnabled.value) {
-          newExtra.openai_persona_mapping_version = 3
-        } else {
-          delete newExtra.openai_persona_mapping_version
-          delete newExtra.openai_persona_scope_version
-          delete newExtra.persona_mapping_version
-        }
+        delete newExtra.openai_persona_mapping_version
+        delete newExtra.openai_persona_scope_version
+        delete newExtra.persona_mapping_version
       }
 
       updatePayload.extra = newExtra

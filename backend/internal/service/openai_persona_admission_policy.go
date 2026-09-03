@@ -131,32 +131,29 @@ func (cfg OpenAIAccountAdmissionConfig) EffectiveOpenAIPersonaPolicyForAccount(
 	return policy
 }
 
-// EffectiveOpenAIAccountAdmissionCapacity 返回调度、账号页与号池共同使用的
-// 新根容量。v3 账号按 active 且授权就绪槽位求和；旧账号保持原并发语义。
-func EffectiveOpenAIAccountAdmissionCapacity(account *Account, cfg OpenAIAccountAdmissionConfig) int {
-	legacy := legacyOpenAIAccountConcurrency(account)
-	if account == nil || !account.IsOpenAI() || !account.IsOpenAIOAuth() || !account.IsOpenAIPersonaMappingEnabled() {
-		return legacy
+// EffectiveOpenAIAccountPersonaCapacity 汇总 active 且授权就绪的动态 Persona。
+func EffectiveOpenAIAccountPersonaCapacity(account *Account, personas []OpenAIAccountPersona, cfg OpenAIAccountAdmissionConfig) int {
+	if account == nil || !account.IsOpenAI() || !account.IsOpenAIOAuth() {
+		return legacyOpenAIAccountConcurrency(account)
 	}
-
 	capacity := 0
-	for slotID := 0; slotID < DefaultSessionPersonaSlotCount; slotID++ {
-		persona, err := ResolveDefaultSessionPersona(slotID)
-		if err != nil || account.GetOpenAIPersonaSlotState(slotID) != SessionPersonaSlotStateActive ||
-			!account.GetOpenAIPersonaSlotEnabled(slotID) {
+	for _, persona := range personas {
+		if !persona.AcceptsNewRoot() {
 			continue
 		}
-		authorized := account.HasOpenAIPersonaCredential(persona.ID, slotID)
-		if !authorized && persona.ID == SessionPersonaCodexCLIStrict && slotID == 0 {
-			authorized = strings.TrimSpace(account.GetOpenAIAccessToken()) != "" &&
-				strings.TrimSpace(account.GetOpenAIRefreshToken()) != ""
-		}
-		if !authorized {
-			continue
-		}
-		capacity += cfg.EffectiveOpenAIPersonaPolicyForAccount(account, persona.ID, 0).MaxConcurrency
+		capacity += cfg.EffectiveOpenAIPersonaPolicyForAccount(account, persona.ProfileID, 0).MaxConcurrency
 	}
 	return capacity
+}
+
+// EffectiveOpenAIAccountAdmissionCapacity 仅保留非动态调用方的兼容语义。
+// 动态 OpenAI OAuth 管理与号池展示必须调用上面的数据库 Persona 聚合器。
+func EffectiveOpenAIAccountAdmissionCapacity(account *Account, cfg OpenAIAccountAdmissionConfig) int {
+	if account != nil && account.IsOpenAI() && account.IsOpenAIOAuth() {
+		// 动态 OAuth 容量只能由数据库 Persona 聚合器提供。
+		return 0
+	}
+	return legacyOpenAIAccountConcurrency(account)
 }
 
 func legacyOpenAIAccountConcurrency(account *Account) int {

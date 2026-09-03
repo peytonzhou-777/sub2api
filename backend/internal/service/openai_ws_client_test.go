@@ -25,19 +25,18 @@ func TestCoderOpenAIWSClientDialer_ProxyHTTPClientReuse(t *testing.T) {
 	require.NotSame(t, c1, c3, "不同代理地址应分离客户端")
 }
 
-func TestCoderOpenAIWSClientDialer_CPAClientIsScopedBySlotAndCredentialChain(t *testing.T) {
+func TestCoderOpenAIWSClientDialer_CPAClientIsScopedByPersonaAndCredentialChain(t *testing.T) {
 	dialer := newDefaultOpenAIWSClientDialer()
 	impl, ok := dialer.(*coderOpenAIWSClientDialer)
 	require.True(t, ok)
 
 	base := OpenAITransportScope{
 		AccountID:         42,
-		Persona:           SessionPersonaCodexCLIStrict,
-		PersonaVersion:    "codex_cli_0_149_0",
-		SlotID:            0,
+		AccountPersonaID:  4201,
+		ProfileID:         SessionPersonaCodexCLIStrict,
+		ProfileVersion:    SessionPersonaCodexCLIStrictVersion,
+		PersonaGeneration: 2,
 		SessionEpoch:      3,
-		SlotGeneration:    2,
-		SlotSetGeneration: 4,
 		CredentialChainID: "codex-chain-1",
 		InstallationID:    "install-1",
 	}
@@ -48,11 +47,11 @@ func TestCoderOpenAIWSClientDialer_CPAClientIsScopedBySlotAndCredentialChain(t *
 	require.NoError(t, err)
 	require.Same(t, c1, c2, "同一完整作用域应复用 CPA WS HTTP 客户端")
 
-	otherSlot := base
-	otherSlot.SlotID = 1
-	c3, err := impl.cpaHTTPClient(otherSlot, "http://proxy-a.example:8080")
+	otherPersona := base
+	otherPersona.AccountPersonaID++
+	c3, err := impl.cpaHTTPClient(otherPersona, "http://proxy-a.example:8080")
 	require.NoError(t, err)
-	require.NotSame(t, c1, c3, "不同 slot 不得复用 CPA WS HTTP 客户端")
+	require.NotSame(t, c1, c3, "不同 AccountPersona 不得复用 CPA WS HTTP 客户端")
 
 	otherChain := base
 	otherChain.CredentialChainID = "codex-chain-2"
@@ -73,8 +72,8 @@ func TestCoderOpenAIWSClientDialer_InvalidationOnlyRemovesMatchingCredential(t *
 	impl, ok := dialer.(*coderOpenAIWSClientDialer)
 	require.True(t, ok)
 	target := OpenAITransportScope{
-		AccountID: 42, Persona: SessionPersonaOpenCode, PersonaVersion: "1.18.23",
-		SlotID: 1, SessionEpoch: 3, SlotGeneration: 2, SlotSetGeneration: 4,
+		AccountID: 42, AccountPersonaID: 4202, ProfileID: SessionPersonaOpenCode, ProfileVersion: "1.18.23",
+		PersonaGeneration: 2, SessionEpoch: 3,
 		CredentialChainID: "chain-target", InstallationID: "install-target",
 	}
 	other := target
@@ -85,7 +84,7 @@ func TestCoderOpenAIWSClientDialer_InvalidationOnlyRemovesMatchingCredential(t *
 	require.NoError(t, err)
 	_, err = impl.cpaHTTPClient(other, "http://proxy-a.example:8080")
 	require.NoError(t, err)
-	impl.invalidatePersonaTransport(target.AccountID, target.Persona, target.SlotID, target.CredentialChainID)
+	impl.invalidateAccountPersonaCredentialTransport(target.AccountPersonaID, target.CredentialChainID)
 
 	impl.cpaMu.Lock()
 	require.Len(t, impl.cpaClients, 1)

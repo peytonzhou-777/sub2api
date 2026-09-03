@@ -240,19 +240,7 @@ func (s *httpUpstreamService) acquireOpenAICPAClient(
 }
 
 func effectiveOpenAITransportProfile(scope service.OpenAITransportScope) service.SessionPersonaID {
-	if scope.ProfileID != "" {
-		return scope.ProfileID
-	}
-	return scope.Persona
-}
-
-// InvalidateOpenAIPersonaTransport removes only the revoked credential scope
-// from the current CPA manager. Active responses may finish, but no new request
-// can register on or reuse the removed entry.
-func (s *httpUpstreamService) InvalidateOpenAIPersonaTransport(accountID int64, persona service.SessionPersonaID, slotID int, credentialChainID string) {
-	s.invalidateOpenAICPATransports(func(scope service.OpenAITransportScope) bool {
-		return scope.MatchesCredential(accountID, persona, slotID, credentialChainID)
-	})
+	return scope.ProfileID
 }
 
 func (s *httpUpstreamService) InvalidateOpenAIAccountPersonaCredentialTransport(_ int64, accountPersonaID int64, credentialChainID string) {

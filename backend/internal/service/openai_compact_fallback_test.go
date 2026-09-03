@@ -2,7 +2,6 @@ package service
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -94,8 +93,9 @@ func TestOpenAIGatewayForwardUsesGlobalCompactModelOnInitialLegacyRequest(t *tes
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
 		Status:      StatusActive, Schedulable: true,
 	}
+	ctx := bindOpenAICodexGatewayTestExecution(t, svc, c, account)
 
-	result, err := svc.Forward(context.Background(), c, account, body)
+	result, err := svc.Forward(ctx, c, account, body)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -208,8 +208,9 @@ func TestOpenAIGatewayForwardRetriesExplicitNativeCompactHTTPFailureOnce(t *test
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
 		Status:      StatusActive, Schedulable: true,
 	}
+	ctx := bindOpenAICodexGatewayTestExecution(t, svc, c, account)
 
-	result, err := svc.Forward(context.Background(), c, account, body)
+	result, err := svc.Forward(ctx, c, account, body)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -260,8 +261,9 @@ func TestOpenAIGatewayForwardRetriesExplicitNativeCompactSSEFailureBeforeOutput(
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
 		Status:      StatusActive, Schedulable: true,
 	}
+	ctx := bindOpenAICodexGatewayTestExecution(t, svc, c, account)
 
-	result, err := svc.Forward(context.Background(), c, account, body)
+	result, err := svc.Forward(ctx, c, account, body)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -300,8 +302,9 @@ func TestOpenAIGatewayForwardRetriesStreamingCompactFailureBeforeOutput(t *testi
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
 		Status:      StatusActive, Schedulable: true,
 	}
+	ctx := bindOpenAICodexGatewayTestExecution(t, svc, c, account)
 
-	result, err := svc.Forward(context.Background(), c, account, body)
+	result, err := svc.Forward(ctx, c, account, body)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -340,8 +343,9 @@ func TestOpenAIGatewayForwardDoesNotRecurseWhenCompactFallbackAlsoFails(t *testi
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
 		Status:      StatusActive, Schedulable: true,
 	}
+	ctx := bindOpenAICodexGatewayTestExecution(t, svc, c, account)
 
-	result, err := svc.Forward(context.Background(), c, account, body)
+	result, err := svc.Forward(ctx, c, account, body)
 
 	require.Error(t, err)
 	require.Nil(t, result)
@@ -387,9 +391,10 @@ func TestOpenAIPassthroughCompactFallbackSecondStreamFailureUsesStandardErrorPat
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
 		Status:      StatusActive, Schedulable: true,
 	}
+	ctx := bindOpenAICodexGatewayTestExecution(t, svc, c, account)
 
 	result, err := svc.forwardOpenAIPassthrough(
-		context.Background(), c, account, body, body, "gpt-5.5", false, nil, true, time.Now(),
+		ctx, c, account, body, body, "gpt-5.5", false, nil, true, time.Now(),
 	)
 
 	require.Error(t, err)

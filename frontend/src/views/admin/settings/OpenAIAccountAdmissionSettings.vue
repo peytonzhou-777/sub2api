@@ -27,6 +27,7 @@
         <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           <NumberField v-model="config.max_concurrency" :label="t('admin.settings.openAIAccountAdmission.globalMaxConcurrency')" :hint="t('admin.settings.openAIAccountAdmission.globalMaxConcurrencyHint')" :min="0" :max="100000" />
           <NumberField v-model="config.max_active_client_sessions" :label="t('admin.settings.openAIAccountAdmission.globalMaxActiveClientSessions')" :hint="t('admin.settings.openAIAccountAdmission.globalMaxActiveClientSessionsHint')" :min="1" :max="10000" />
+          <NumberField v-model="config.max_active_client_sessions_per_user_group" :label="t('admin.settings.openAIAccountAdmission.userGroupMaxActiveClientSessions')" :hint="t('admin.settings.openAIAccountAdmission.userGroupMaxActiveClientSessionsHint')" :min="1" :max="10000" />
           <NumberField v-model="config.requests_per_minute" :label="t('admin.settings.openAIAccountAdmission.rpm')" :hint="t('admin.settings.openAIAccountAdmission.rpmHint')" :min="0" :max="100000" />
           <NumberField v-model="config.tokens_per_minute" :label="t('admin.settings.openAIAccountAdmission.tpm')" :hint="t('admin.settings.openAIAccountAdmission.tpmHint')" :min="0" :max="100000000" />
           <NumberField v-model="config.max_subagents" :label="t('admin.settings.openAIAccountAdmission.globalMaxSubagents')" :hint="t('admin.settings.openAIAccountAdmission.globalMaxSubagentsHint')" :min="0" :max="100000" />
@@ -104,6 +105,7 @@ function normalizeConfig(value: OpenAIAccountAdmissionConfig): OpenAIAccountAdmi
     ...value,
     max_concurrency: value.max_concurrency || 0,
     max_active_client_sessions: value.max_active_client_sessions || 1,
+    max_active_client_sessions_per_user_group: value.max_active_client_sessions_per_user_group || 3,
     max_subagents: value.max_subagents || 0,
     subagent_depth: value.subagent_depth || 0,
     max_active_websockets: value.max_active_websockets || 0,
@@ -159,7 +161,7 @@ async function load() {
 async function save() {
   if (!config.value) return
   const personaValues = Object.values(config.value.persona_policies || {}).flatMap((policy) => Object.values(policy))
-  const inheritedGlobalValues = [config.value.max_concurrency, config.value.max_active_client_sessions, config.value.max_subagents, config.value.subagent_depth, config.value.max_active_websockets]
+  const inheritedGlobalValues = [config.value.max_concurrency, config.value.max_active_client_sessions, config.value.max_active_client_sessions_per_user_group, config.value.max_subagents, config.value.subagent_depth, config.value.max_active_websockets]
   if ([...personaValues, ...inheritedGlobalValues].some((value) => !Number.isInteger(value) || value < 0) || config.value.jitter_min_ms > config.value.jitter_max_ms) {
     appStore.showError(t('admin.settings.openAIAccountAdmission.validationError'))
     return

@@ -102,10 +102,16 @@ jobs:
               -o "${OUTPUT_DIR}/sub2api" \
               ./cmd/server
 
-            chmod +x "${OUTPUT_DIR}/sub2api"
-            (cd "${OUTPUT_DIR}" && sha256sum sub2api > sub2api.sha256)
+            CGO_ENABLED=0 GOOS=linux GOARCH="${ARCH}" go build \
+              -trimpath \
+              -ldflags="-s -w" \
+              -o "${OUTPUT_DIR}/openai-persona-migrate" \
+              ./cmd/openai-persona-migrate
+
+            chmod +x "${OUTPUT_DIR}/sub2api" "${OUTPUT_DIR}/openai-persona-migrate"
+            (cd "${OUTPUT_DIR}" && sha256sum sub2api openai-persona-migrate > sub2api.sha256)
             cp -R resources "${OUTPUT_DIR}/resources"
-            tar -C "${OUTPUT_DIR}" -czf "${GITHUB_WORKSPACE}/dist/sub2api-test-${SHORT_SHA}-linux-${ARCH}.tar.gz" sub2api sub2api.sha256 resources
+            tar -C "${OUTPUT_DIR}" -czf "${GITHUB_WORKSPACE}/dist/sub2api-test-${SHORT_SHA}-linux-${ARCH}.tar.gz" sub2api openai-persona-migrate sub2api.sha256 resources
           done
 
       - name: Upload linux amd64 artifact

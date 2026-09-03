@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/lib/pq"
 )
 
 type openAIAccountPersonaRepository struct {
@@ -121,6 +122,31 @@ WHERE account_id = $1 AND state <> 'retired' ORDER BY position, id`, accountID)
 	return result, rows.Err()
 }
 
+// ListAccountPersonasByAccountIDs 批量读取多个账号的未退休 Persona。
+func (r *openAIAccountPersonaRepository) ListAccountPersonasByAccountIDs(ctx context.Context, accountIDs []int64) (map[int64][]service.OpenAIAccountPersona, error) {
+	result := make(map[int64][]service.OpenAIAccountPersona, len(accountIDs))
+	if r == nil || r.db == nil {
+		return nil, service.ErrOpenAIAccountPersonaNotFound
+	}
+	if len(accountIDs) == 0 {
+		return result, nil
+	}
+	rows, err := r.db.QueryContext(ctx, openAIAccountPersonaSelect+`
+WHERE account_id = ANY($1::bigint[]) AND state <> 'retired' ORDER BY account_id, position, id`, pq.Array(accountIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		persona, scanErr := scanOpenAIAccountPersona(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result[persona.AccountID] = append(result[persona.AccountID], *persona)
+	}
+	return result, rows.Err()
+}
+
 func (r *openAIAccountPersonaRepository) GetAccountPersona(ctx context.Context, accountID, accountPersonaID int64) (*service.OpenAIAccountPersona, error) {
 	if r == nil || r.db == nil || accountID <= 0 || accountPersonaID <= 0 {
 		return nil, service.ErrOpenAIAccountPersonaNotFound
@@ -131,6 +157,48 @@ WHERE account_id = $1 AND id = $2 AND state <> 'retired'`, accountID, accountPer
 		return nil, service.ErrOpenAIAccountPersonaNotFound
 	}
 	return persona, err
+}
+
+// ListAccountPersonaLeaseStats 汇总仍被 lease 或 request hold 占用的客户端 Session。
+func (r *openAIAccountPersonaRepository) ListAccountPersonaLeaseStats(ctx context.Context, accountID int64, now time.Time) (map[int64]service.OpenAIAccountPersonaLeaseStats, error) {
+	if r == nil || r.db == nil || accountID <= 0 {
+		return nil, service.ErrOpenAIAccountPersonaNotFound
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT p.id,
+       COUNT(DISTINCT l.id) FILTER (WHERE l.state IN ('provisional','active') AND (
+           l.active_until > $2::timestamptz OR EXISTS (
+               SELECT 1 FROM openai_persona_request_holds h
+               WHERE h.lease_id = l.id AND h.expires_at > $2::timestamptz
+           )
+       )),
+       MIN(l.active_until) FILTER (WHERE l.state IN ('provisional','active') AND l.active_until > $2::timestamptz)
+FROM openai_account_personas p
+LEFT JOIN openai_persona_client_session_leases l ON l.account_persona_id = p.id
+WHERE p.account_id = $1::bigint AND p.state <> 'retired'
+GROUP BY p.id`, accountID, now)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	result := make(map[int64]service.OpenAIAccountPersonaLeaseStats)
+	for rows.Next() {
+		var personaID int64
+		var active int
+		var earliest sql.NullTime
+		if err = rows.Scan(&personaID, &active, &earliest); err != nil {
+			return nil, err
+		}
+		stats := service.OpenAIAccountPersonaLeaseStats{ActiveClientSessions: active}
+		if earliest.Valid {
+			value := earliest.Time
+			stats.EarliestReleaseAt = &value
+		}
+		result[personaID] = stats
+	}
+	return result, rows.Err()
 }
 
 func (r *openAIAccountPersonaRepository) CreateAccountPersona(ctx context.Context, input service.OpenAIAccountPersonaCreate) (*service.OpenAIAccountPersona, error) {
@@ -560,10 +628,11 @@ func (r *openAIAccountPersonaRepository) GetAccountPersonaCredential(ctx context
 	}
 	var record service.OpenAIPersonaCredentialRecord
 	var refreshed sql.NullTime
+	var legacySlotID int
 	err := r.db.QueryRowContext(ctx, openAIAccountPersonaCredentialSelect+`
 WHERE account_persona_id = $1 AND credential_chain_id = $2`, accountPersonaID, strings.TrimSpace(credentialChainID)).Scan(
 		&record.AccountPersonaID, &record.AccountID, &record.PersonaID, &record.ProfileVersion,
-		&record.PersonaGeneration, &record.CredentialChainID, &record.SlotID,
+		&record.PersonaGeneration, &record.CredentialChainID, &legacySlotID,
 		&record.EncryptedPayload, &record.ChatGPTAccountID, &record.InstallationID,
 		&record.TokenVersion, &record.State, &record.LastError, &record.CreatedAt,
 		&record.UpdatedAt, &refreshed,
@@ -901,3 +970,4 @@ WHERE account_persona_id = $2 AND session_epoch = $3
 }
 
 var _ service.OpenAIAccountPersonaRepository = (*openAIAccountPersonaRepository)(nil)
+var _ service.OpenAIAccountPersonaBatchReader = (*openAIAccountPersonaRepository)(nil)

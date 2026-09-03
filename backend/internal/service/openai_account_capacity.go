@@ -10,7 +10,24 @@ func (s *OpenAIGatewayService) effectiveOpenAIAccountAdmissionCapacity(ctx conte
 			cfg = current
 		}
 	}
+	if account != nil && account.IsOpenAIOAuth() {
+		repo, ok := s.accountRepo.(OpenAIAccountPersonaRepository)
+		if !ok {
+			return 0
+		}
+		personas, err := repo.ListAccountPersonas(ctx, account.ID)
+		if err != nil {
+			return 0
+		}
+		return EffectiveOpenAIAccountPersonaCapacity(account, personas, cfg)
+	}
 	return EffectiveOpenAIAccountAdmissionCapacity(account, cfg)
+}
+
+// EffectiveOpenAIAccountAdmissionCapacity exposes the same database-backed
+// capacity snapshot used by scheduling to protocol admission handlers.
+func (s *OpenAIGatewayService) EffectiveOpenAIAccountAdmissionCapacity(ctx context.Context, account *Account) int {
+	return s.effectiveOpenAIAccountAdmissionCapacity(ctx, account)
 }
 
 // effectiveOpenAIAccountLoadFactor 保留显式调度权重；未配置时以 Persona

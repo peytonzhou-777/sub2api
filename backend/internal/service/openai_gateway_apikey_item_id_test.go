@@ -92,6 +92,10 @@ func TestOpenAIGatewayService_OAuthPassthrough_SanitizesNativeToolItemIDs(t *tes
 				"chatgpt_account_id": "chatgpt-account",
 			}
 			account.Extra = map[string]any{"openai_passthrough": true}
+			ctx := context.Background()
+			if account.IsOpenAIOAuth() {
+				ctx = bindOpenAICodexGatewayTestExecution(t, svc, c, account)
+			}
 
 			body := []byte(`{
 		"model":"gpt-5.6-sol",
@@ -105,7 +109,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_SanitizesNativeToolItemIDs(t *tes
 		]
 	}`)
 
-			result, err := svc.Forward(context.Background(), c, account, body)
+			result, err := svc.Forward(ctx, c, account, body)
 			require.NoError(t, err)
 			require.NotNil(t, result)
 			require.NotNil(t, upstream.lastReq)

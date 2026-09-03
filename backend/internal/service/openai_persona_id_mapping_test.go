@@ -16,6 +16,29 @@ type inMemoryOpenAIPersonaIDMappingStore struct {
 	rows []*OpenAIPersonaIDMapping
 }
 
+type openAIPersonaMappingAccountRepo struct {
+	AccountRepository
+	OpenAIAccountPersonaRepository
+	persona OpenAIAccountPersona
+	session OpenAIAccountPersonaSession
+}
+
+func (r *openAIPersonaMappingAccountRepo) GetAccountPersona(_ context.Context, accountID, personaID int64) (*OpenAIAccountPersona, error) {
+	if r.persona.AccountID != accountID || r.persona.ID != personaID {
+		return nil, ErrOpenAIAccountPersonaNotFound
+	}
+	persona := r.persona
+	return &persona, nil
+}
+
+func (r *openAIPersonaMappingAccountRepo) GetAccountPersonaSession(_ context.Context, accountID, personaID, epoch int64, _ time.Time) (*OpenAIAccountPersonaSession, error) {
+	if r.persona.AccountID != accountID || r.session.AccountPersonaID != personaID || r.session.SessionEpoch != epoch {
+		return nil, ErrOpenAIAccountPersonaSessionNotFound
+	}
+	session := r.session
+	return &session, nil
+}
+
 func (s *inMemoryOpenAIPersonaIDMappingStore) find(scope OpenAIPersonaIDMappingScope, mappingType OpenAIPersonaIDMappingType, clientID, openCodeID string) *OpenAIPersonaIDMapping {
 	for _, row := range s.rows {
 		if row == nil || row.MappingType != mappingType || row.Scope.ScopeKey != scope.ScopeKey {
@@ -77,6 +100,7 @@ func testOpenCodeBinding() SessionPersonaSlotBinding {
 	persona, _ := NewDefaultSessionPersonaRegistry().Get(string(SessionPersonaOpenCode))
 	return SessionPersonaSlotBinding{
 		AccountID:         42,
+		AccountPersonaID:  101,
 		SlotID:            1,
 		SlotCount:         2,
 		ScopeVersion:      SessionPersonaScopeVersionV3,
@@ -161,6 +185,7 @@ func TestProjectOpenAICompatPersonaPayloadUsesDynamicTargetScope(t *testing.T) {
 	c := testOpenCodeGinContext()
 	target := OpenAIExecutionTarget{
 		AccountID: 42, AccountPersonaID: 77, PersonaGeneration: 2, SessionEpoch: 5,
+		SessionStartedAt: time.Unix(1_700_000_000, 0), DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
 		CredentialChainID: "chain-dynamic", ProfileID: SessionPersonaOpenCode,
 		ProfileVersion: SessionPersonaOpenCodeVersion, InstallationID: "install-dynamic",
 		UpstreamSessionID: "session-dynamic",
@@ -176,9 +201,34 @@ func TestProjectOpenAICompatPersonaPayloadUsesDynamicTargetScope(t *testing.T) {
 
 func TestOpenAIPersonaBindingResolvesFromClientResponse(t *testing.T) {
 	store := &inMemoryOpenAIPersonaIDMappingStore{}
-	svc := &OpenAIGatewayService{personaIDMappingStore: store}
+	target := OpenAIExecutionTarget{
+		AccountID: 42, AccountPersonaID: 77, PersonaGeneration: 2, SessionEpoch: 5,
+		SessionStartedAt: time.Unix(1_700_000_000, 0), DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
+		CredentialChainID: "chain-dynamic", ProfileID: SessionPersonaOpenCode,
+		ProfileVersion: SessionPersonaOpenCodeVersion, InstallationID: "install-dynamic",
+		UpstreamSessionID: "session-dynamic",
+	}
+	binding, bindingOK := SessionPersonaBindingFromExecutionTarget(target)
+	require.True(t, bindingOK)
+	repo := &openAIPersonaMappingAccountRepo{
+		persona: OpenAIAccountPersona{
+			ID: target.AccountPersonaID, AccountID: target.AccountID, ProfileID: target.ProfileID,
+			ProfileVersion: target.ProfileVersion, PersonaGeneration: target.PersonaGeneration,
+			CurrentCredentialChainID: target.CredentialChainID, CurrentSessionEpoch: target.SessionEpoch,
+			InstallationID: target.InstallationID, DeviceSeed: append([]byte(nil), target.DeviceSeed...),
+			State: OpenAIAccountPersonaStateActive, Enabled: true,
+		},
+		session: OpenAIAccountPersonaSession{
+			AccountPersonaID: target.AccountPersonaID, SessionEpoch: target.SessionEpoch,
+			UpstreamSessionID: target.UpstreamSessionID, State: OpenAIPersonaSessionCurrent,
+			PersonaGeneration: target.PersonaGeneration, CredentialChainID: target.CredentialChainID,
+			ProfileID: target.ProfileID, ProfileVersion: target.ProfileVersion, InstallationID: target.InstallationID,
+			StartedAt: target.SessionStartedAt,
+		},
+	}
+	repo.OpenAIAccountPersonaRepository = repo
+	svc := &OpenAIGatewayService{personaIDMappingStore: store, accountRepo: repo}
 	c := testOpenCodeGinContext()
-	binding := testOpenCodeBinding()
 	bound, err := svc.EnsureOpenCodeThreadMapping(context.Background(), c, binding, nil)
 	require.NoError(t, err)
 	_, clientID, err := svc.ProjectOpenCodeResponseJSON(context.Background(), c, bound, []byte(`{"id":"resp_upstream","object":"response"}`))
@@ -187,7 +237,9 @@ func TestOpenAIPersonaBindingResolvesFromClientResponse(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, SessionPersonaOpenCode, resolved.PersonaID)
-	require.Equal(t, "chain-opencode-a", resolved.CredentialChainID)
+	require.Equal(t, target.AccountPersonaID, resolved.AccountPersonaID)
+	require.Equal(t, target.CredentialChainID, resolved.CredentialChainID)
+	require.Equal(t, target.SessionEpoch, resolved.SessionEpoch)
 }
 
 func gjsonGetString(body []byte, path string) string {

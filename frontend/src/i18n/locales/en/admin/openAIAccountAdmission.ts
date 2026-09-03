@@ -7,6 +7,8 @@ export const openAIAccountAdmissionSettings = {
   globalMaxConcurrencyHint: 'Inherited by Personas; 0 keeps compatibility with the legacy account value.',
   globalMaxActiveClientSessions: 'Global maximum active client Sessions',
   globalMaxActiveClientSessionsHint: 'Each account Persona accepts one active client Session by default; activity uses the existing conversation occupancy window.',
+  userGroupMaxActiveClientSessions: 'Active client Sessions per user/group',
+  userGroupMaxActiveClientSessionsHint: 'Counts all API keys, accounts, and Personas for the user within one group. Lowering it does not evict active Sessions; new excess Sessions are rejected.',
   rpm: 'RPM per account',
   rpmHint: 'Request permits per minute for each OpenAI account; 0 disables this limit.',
   tpm: 'TPM per account',

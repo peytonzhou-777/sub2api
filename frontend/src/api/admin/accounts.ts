@@ -788,71 +788,122 @@ export async function refreshOpenAIToken(
   return data
 }
 
-export interface OpenAIPersonaOAuthSlotStatus {
-  slot_id: 0 | 1
-  persona: 'codex_cli_strict' | 'opencode'
-  state: 'active' | 'draining' | 'disabled'
-  enabled: boolean
-  authorized: boolean
-  credential_chain_id?: string
-  slot_generation: number
-  slot_set_generation: number
-  chatgpt_account_id?: string
-  oauth_client_id?: string
-  installation_id?: string
-  access_token_expires_at?: string
-}
-
-export interface OpenAIPersonaOAuthStatus {
-  mapping_mode: 'legacy_v2' | 'persona_v3'
-  slots: OpenAIPersonaOAuthSlotStatus[]
-}
-
 export interface OpenAIPersonaAuthURLResult {
   auth_url: string
   session_id: string
 }
 
-export async function getOpenAIPersonaOAuthStatus(id: number): Promise<OpenAIPersonaOAuthStatus> {
-  const { data } = await apiClient.get<OpenAIPersonaOAuthStatus>(`/admin/openai/accounts/${id}/persona-oauth`)
+export type OpenAIAccountPersonaState = 'draft' | 'active' | 'draining' | 'disabled' | 'retired'
+
+export interface OpenAIAccountPersona {
+  id: number
+  account_id: number
+  position: number
+  profile_id: 'codex_cli_strict' | 'opencode'
+  profile_version: string
+  credential_owner: 'account_primary' | 'persona_independent'
+  state: OpenAIAccountPersonaState
+  enabled: boolean
+  authorized: boolean
+  persona_generation: number
+  current_session_epoch: number
+  proxy_id?: number | null
+  max_active_client_sessions_override?: number | null
+  row_version: number
+  default_protected: boolean
+  credential_state: 'unconfigured' | 'pending' | 'ready' | 'refreshing' | 'invalid' | 'revoked'
+  credential_updated_at?: string
+  credential_expires_at?: string
+  installation_summary: string
+  session_state?: 'current' | 'draining' | 'expired' | 'revoked'
+  session_started_at?: string
+  session_last_active_at?: string
+  active_client_sessions: number
+  earliest_client_session_release_at?: string
+  effective_max_client_sessions: number
+  effective_max_concurrency: number
+  effective_max_websockets: number
+  effective_proxy_id?: number | null
+  proxy_inherited: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface OpenAIAccountPersonaProfile {
+  id: 'codex_cli_strict' | 'opencode'
+  version: string
+  supported_transports: Array<'http' | 'ws'>
+  compression: string
+}
+
+export async function listOpenAIAccountPersonas(id: number): Promise<OpenAIAccountPersona[]> {
+  const { data } = await apiClient.get<OpenAIAccountPersona[]>(`/admin/openai/accounts/${id}/personas`)
   return data
 }
 
-export async function generateOpenAIPersonaAuthUrl(
-  id: number,
-  slotId: 0 | 1
-): Promise<OpenAIPersonaAuthURLResult> {
-  const { data } = await apiClient.post<OpenAIPersonaAuthURLResult>(
-    `/admin/openai/accounts/${id}/persona-slots/${slotId}/oauth/generate-auth-url`,
-    {}
-  )
+export async function listOpenAIAccountPersonaProfiles(): Promise<OpenAIAccountPersonaProfile[]> {
+  const { data } = await apiClient.get<OpenAIAccountPersonaProfile[]>('/admin/openai/persona-profiles')
   return data
 }
 
-export async function exchangeOpenAIPersonaCode(
+export async function createOpenAIAccountPersona(
   id: number,
-  slotId: 0 | 1,
+  payload: { profile_id: OpenAIAccountPersona['profile_id']; proxy_id?: number | null; max_active_client_sessions_override?: number | null }
+): Promise<OpenAIAccountPersona> {
+  const { data } = await apiClient.post<OpenAIAccountPersona>(`/admin/openai/accounts/${id}/personas`, payload)
+  return data
+}
+
+export async function updateOpenAIAccountPersona(
+  id: number,
+  personaId: number,
+  payload: {
+    row_version: number
+    enabled?: boolean
+    state?: OpenAIAccountPersonaState
+    proxy_configured?: boolean
+    proxy_id?: number | null
+    max_active_client_sessions_configured?: boolean
+    max_active_client_sessions_override?: number | null
+  }
+): Promise<OpenAIAccountPersona> {
+  const { data } = await apiClient.patch<OpenAIAccountPersona>(`/admin/openai/accounts/${id}/personas/${personaId}`, payload)
+  return data
+}
+
+export async function retireOpenAIAccountPersona(id: number, persona: OpenAIAccountPersona): Promise<void> {
+  await apiClient.delete(`/admin/openai/accounts/${id}/personas/${persona.id}`, { params: { row_version: persona.row_version } })
+}
+
+export async function generateOpenAIAccountPersonaAuthUrl(id: number, personaId: number): Promise<OpenAIPersonaAuthURLResult> {
+  const { data } = await apiClient.post<OpenAIPersonaAuthURLResult>(`/admin/openai/accounts/${id}/personas/${personaId}/oauth/generate-auth-url`, {})
+  return data
+}
+
+export async function exchangeOpenAIAccountPersonaCode(
+  id: number,
+  personaId: number,
   payload: { session_id: string; code: string; state: string }
-): Promise<Account> {
-  const { data } = await apiClient.post<Account>(
-    `/admin/openai/accounts/${id}/persona-slots/${slotId}/oauth/exchange-code`,
-    payload
-  )
+): Promise<OpenAIAccountPersona> {
+  const { data } = await apiClient.post<OpenAIAccountPersona>(`/admin/openai/accounts/${id}/personas/${personaId}/oauth/exchange-code`, payload)
   return data
 }
 
-export async function refreshOpenAIPersonaToken(id: number, slotId: 0 | 1): Promise<Account> {
-  const { data } = await apiClient.post<Account>(
-    `/admin/openai/accounts/${id}/persona-slots/${slotId}/oauth/refresh`,
-    {}
-  )
+export async function refreshOpenAIAccountPersona(id: number, personaId: number): Promise<OpenAIAccountPersona> {
+  const { data } = await apiClient.post<OpenAIAccountPersona>(`/admin/openai/accounts/${id}/personas/${personaId}/oauth/refresh`, {})
   return data
 }
 
-export async function revokeOpenAIPersonaAuthorization(id: number, slotId: 0 | 1): Promise<Account> {
-  const { data } = await apiClient.delete<Account>(
-    `/admin/openai/accounts/${id}/persona-slots/${slotId}/oauth`
-  )
+export async function revokeOpenAIAccountPersona(id: number, persona: OpenAIAccountPersona): Promise<void> {
+  await apiClient.delete(`/admin/openai/accounts/${id}/personas/${persona.id}/oauth`, { data: { row_version: persona.row_version } })
+}
+
+export async function rotateOpenAIAccountPersonaSession(id: number, persona: OpenAIAccountPersona, force = false): Promise<OpenAIAccountPersona> {
+  const { data } = await apiClient.post<OpenAIAccountPersona>(`/admin/openai/accounts/${id}/personas/${persona.id}/session/rotate`, {
+    row_version: persona.row_version,
+    force,
+    ...(force ? { confirmation: 'FORCE_ROTATE_PERSONA_SESSION' } : {})
+  })
   return data
 }
 
@@ -1150,11 +1201,16 @@ export const accountsAPI = {
   generateAuthUrl,
   exchangeCode,
   refreshOpenAIToken,
-  getOpenAIPersonaOAuthStatus,
-  generateOpenAIPersonaAuthUrl,
-  exchangeOpenAIPersonaCode,
-  refreshOpenAIPersonaToken,
-  revokeOpenAIPersonaAuthorization,
+  listOpenAIAccountPersonas,
+  listOpenAIAccountPersonaProfiles,
+  createOpenAIAccountPersona,
+  updateOpenAIAccountPersona,
+  retireOpenAIAccountPersona,
+  generateOpenAIAccountPersonaAuthUrl,
+  exchangeOpenAIAccountPersonaCode,
+  refreshOpenAIAccountPersona,
+  revokeOpenAIAccountPersona,
+  rotateOpenAIAccountPersonaSession,
   batchCreate,
   batchUpdateCredentials,
   bulkUpdate,

@@ -479,7 +479,7 @@
     <CreateAccountModal :show="showCreate" :proxies="proxies" :groups="groups" @close="showCreate = false" @created="reload" />
     <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" @authorize-persona="handlePersonaReAuth" />
     <OpenAIUserAffinityResidentsModal :show="userAffinityAccount !== null" :account="userAffinityAccount" @close="userAffinityAccount = null" />
-    <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" :persona-slot="personaReAuthSlot" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
+    <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" :account-persona="personaReAuthTarget" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" :variant="testVariant" @close="closeTestModal" @account-updated="handleAccountUpdated" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
@@ -520,6 +520,7 @@ import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { adminAPI } from '@/api/admin'
+import type { OpenAIAccountPersona } from '@/api/admin/accounts'
 import { useTableLoader } from '@/composables/useTableLoader'
 import { useSwipeSelect, type SwipeSelectVirtualContext } from '@/composables/useSwipeSelect'
 import { useTableSelection } from '@/composables/useTableSelection'
@@ -636,7 +637,7 @@ const tempUnschedAcc = ref<Account | null>(null)
 const deletingAcc = ref<Account | null>(null)
 const creatingShadowAcc = ref<Account | null>(null)
 const reAuthAcc = ref<Account | null>(null)
-const personaReAuthSlot = ref<0 | 1 | null>(null)
+const personaReAuthTarget = ref<OpenAIAccountPersona | null>(null)
 const testingAcc = ref<Account | null>(null)
 const testVariant = ref<'connection' | 'intelligence'>('connection')
 const statsAcc = ref<Account | null>(null)
@@ -2376,7 +2377,7 @@ const closeTestModal = () => {
   testVariant.value = 'connection'
 }
 const closeStatsModal = () => { showStats.value = false; statsAcc.value = null }
-const closeReAuthModal = () => { showReAuth.value = false; reAuthAcc.value = null; personaReAuthSlot.value = null }
+const closeReAuthModal = () => { showReAuth.value = false; reAuthAcc.value = null; personaReAuthTarget.value = null }
 const handleTest = (a: Account) => {
   testingAcc.value = a
   testVariant.value = 'connection'
@@ -2400,11 +2401,11 @@ const handleSchedule = async (a: Account) => {
   }
 }
 const closeSchedulePanel = () => { showSchedulePanel.value = false; scheduleAcc.value = null; scheduleModelOptions.value = [] }
-const handleReAuth = (a: Account) => { personaReAuthSlot.value = null; reAuthAcc.value = a; showReAuth.value = true }
-const handlePersonaReAuth = (slotId: 0 | 1) => {
+const handleReAuth = (a: Account) => { personaReAuthTarget.value = null; reAuthAcc.value = a; showReAuth.value = true }
+const handlePersonaReAuth = (persona: OpenAIAccountPersona) => {
   if (!edAcc.value) return
   reAuthAcc.value = edAcc.value
-  personaReAuthSlot.value = slotId
+  personaReAuthTarget.value = persona
   showEdit.value = false
   showReAuth.value = true
 }

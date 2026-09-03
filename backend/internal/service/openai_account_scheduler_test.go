@@ -22,7 +22,30 @@ type openAISnapshotCacheStub struct {
 
 type schedulerTestOpenAIAccountRepo struct {
 	AccountRepository
+	OpenAIAccountPersonaRepository
 	accounts []Account
+}
+
+func (r schedulerTestOpenAIAccountRepo) ListAccountPersonas(_ context.Context, accountID int64) ([]OpenAIAccountPersona, error) {
+	for i := range r.accounts {
+		if r.accounts[i].ID != accountID || !r.accounts[i].IsOpenAIOAuth() {
+			continue
+		}
+		return []OpenAIAccountPersona{{
+			ID:                       accountID*10 + 1,
+			AccountID:                accountID,
+			Position:                 0,
+			ProfileID:                SessionPersonaCodexCLIStrict,
+			ProfileVersion:           CodexOutboundProfileCLI0149,
+			CredentialOwner:          OpenAICredentialOwnerAccountPrimary,
+			State:                    OpenAIAccountPersonaStateActive,
+			Enabled:                  true,
+			PersonaGeneration:        1,
+			CurrentCredentialChainID: "scheduler-test-chain",
+			CurrentSessionEpoch:      1,
+		}}, nil
+	}
+	return nil, nil
 }
 
 func (r schedulerTestOpenAIAccountRepo) GetByID(ctx context.Context, id int64) (*Account, error) {

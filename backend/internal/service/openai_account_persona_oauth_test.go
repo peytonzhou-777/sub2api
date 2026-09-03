@@ -4,6 +4,8 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -11,6 +13,36 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/stretchr/testify/require"
 )
+
+type openAIPersonaOAuthClientStub struct {
+	exchangeResponse *openai.TokenResponse
+	refreshResponse  *openai.TokenResponse
+	refreshErr       error
+	exchangeProfile  OpenAIOAuthClientProfile
+	refreshProfile   OpenAIOAuthClientProfile
+}
+
+func (s *openAIPersonaOAuthClientStub) ExchangeCode(context.Context, string, string, string, string, string) (*openai.TokenResponse, error) {
+	return s.exchangeResponse, nil
+}
+
+func (s *openAIPersonaOAuthClientStub) RefreshToken(context.Context, string, string) (*openai.TokenResponse, error) {
+	return s.refreshResponse, s.refreshErr
+}
+
+func (s *openAIPersonaOAuthClientStub) RefreshTokenWithClientID(context.Context, string, string, string) (*openai.TokenResponse, error) {
+	return s.refreshResponse, s.refreshErr
+}
+
+func (s *openAIPersonaOAuthClientStub) ExchangeCodeWithProfile(_ context.Context, _, _, _, _, _ string, profile OpenAIOAuthClientProfile) (*openai.TokenResponse, error) {
+	s.exchangeProfile = profile
+	return s.exchangeResponse, nil
+}
+
+func (s *openAIPersonaOAuthClientStub) RefreshTokenWithProfile(_ context.Context, _, _, _ string, profile OpenAIOAuthClientProfile) (*openai.TokenResponse, error) {
+	s.refreshProfile = profile
+	return s.refreshResponse, s.refreshErr
+}
 
 type openAIAccountPersonaRepoStub struct {
 	persona       OpenAIAccountPersona
@@ -125,4 +157,17 @@ func TestAccountPersonaOAuthRejectsAccountMismatchBeforePersistence(t *testing.T
 	require.Error(t, err)
 	require.Equal(t, "OPENAI_PERSONA_ACCOUNT_MISMATCH", infraerrors.Reason(err))
 	require.Zero(t, repo.authorizeCall)
+}
+
+func openAIPersonaTestJWT(accountID string) string {
+	payload, _ := json.Marshal(map[string]any{
+		"email": "operator@example.com",
+		"https://api.openai.com/auth": map[string]any{
+			"chatgpt_account_id": accountID,
+			"chatgpt_user_id":    "user-1",
+			"chatgpt_plan_type":  "pro",
+		},
+	})
+	encoded := base64.RawURLEncoding.EncodeToString(payload)
+	return "e30." + encoded + ".signature"
 }

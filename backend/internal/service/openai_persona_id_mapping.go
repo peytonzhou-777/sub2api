@@ -360,35 +360,42 @@ func (s *OpenAIGatewayService) ResolveOpenAIPersonaBindingForClientResponse(ctx 
 	if row == nil || account == nil || row.Scope.AccountID != account.ID {
 		return SessionPersonaSlotBinding{}, false, nil
 	}
-	persona, ok := NewDefaultSessionPersonaRegistry().Get(string(row.Scope.Persona))
+	if row.Scope.AccountPersonaID <= 0 || row.Scope.SessionEpoch <= 0 {
+		return SessionPersonaSlotBinding{}, false, nil
+	}
+	repo, ok := s.accountRepo.(OpenAIAccountPersonaRepository)
 	if !ok {
-		return SessionPersonaSlotBinding{}, false, fmt.Errorf("unknown mapped Persona %q", row.Scope.Persona)
+		return SessionPersonaSlotBinding{}, false, ErrOpenAIPersonaIDMappingUnavailable
 	}
-	binding := SessionPersonaSlotBinding{
-		AccountID:         row.Scope.AccountID,
-		SlotID:            row.Scope.SlotID,
-		SlotCount:         DefaultSessionPersonaSlotCount,
-		ScopeVersion:      SessionPersonaScopeVersionV3,
-		MappingVersion:    SessionPersonaScopeVersionV3,
-		PersonaID:         row.Scope.Persona,
-		PersonaVersion:    persona.EffectiveVersion(),
-		CredentialChainID: row.Scope.CredentialChainID,
-		State:             SessionPersonaSlotStateActive,
-		Enabled:           true,
-		Authorized:        true,
-		SessionEpoch:      row.Scope.SessionEpoch,
-		SlotGeneration:    row.Scope.SlotGeneration,
-		SlotSetGeneration: row.Scope.SlotSetGeneration,
-		ClientThreadID:    row.Scope.ThreadID,
-		ClientResponseID:  row.ClientID,
-		MappingKey:        row.Scope.ScopeKey,
-		Mapping:           SessionPersonaMappingPersonaV3,
-		Persona:           persona,
+	accountPersona, err := repo.GetAccountPersona(ctx, account.ID, row.Scope.AccountPersonaID)
+	if err != nil {
+		if errors.Is(err, ErrOpenAIAccountPersonaNotFound) {
+			return SessionPersonaSlotBinding{}, false, nil
+		}
+		return SessionPersonaSlotBinding{}, false, err
 	}
-	binding.UpstreamSessionID = EffectiveOpenCodeSessionID(binding)
-	binding, ok = ResolveSessionPersonaBindingForExistingThread(account, binding)
+	session, err := repo.GetAccountPersonaSession(ctx, account.ID, row.Scope.AccountPersonaID, row.Scope.SessionEpoch, time.Now().UTC())
+	if err != nil {
+		if errors.Is(err, ErrOpenAIAccountPersonaSessionNotFound) || errors.Is(err, ErrOpenAIAccountPersonaSessionExpired) {
+			return SessionPersonaSlotBinding{}, false, nil
+		}
+		return SessionPersonaSlotBinding{}, false, err
+	}
+	if accountPersona.ProfileID != row.Scope.Persona || accountPersona.ProfileVersion != row.Scope.ProfileVersion ||
+		session.CredentialChainID != row.Scope.CredentialChainID ||
+		session.PersonaGeneration != row.Scope.PersonaGeneration {
+		return SessionPersonaSlotBinding{}, false, nil
+	}
+	target, err := OpenAIExecutionTargetFromPersonaSession(*accountPersona, *session)
+	if err != nil {
+		return SessionPersonaSlotBinding{}, false, nil
+	}
+	binding, ok := SessionPersonaBindingFromExecutionTarget(target)
 	if !ok {
 		return SessionPersonaSlotBinding{}, false, nil
 	}
+	binding.ClientThreadID = row.Scope.ThreadID
+	binding.ClientResponseID = row.ClientID
+	binding.MappingKey = row.Scope.ScopeKey
 	return binding, true, nil
 }

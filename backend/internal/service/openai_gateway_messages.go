@@ -33,6 +33,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	if s != nil && s.testOpenAIExecutionTargetBinder != nil {
+		ctx = s.testOpenAIExecutionTargetBinder(ctx, c, account)
+	}
 	personaBinding, hasPersonaBinding := SessionPersonaBindingFromContextOrGin(ctx, c)
 	isOpenCodePersona := hasPersonaBinding && IsOpenCodePersona(personaBinding)
 	beginUpstreamResponseModelObservation(c)

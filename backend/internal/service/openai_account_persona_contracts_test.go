@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -22,6 +23,7 @@ func TestOpenAIAccountPersonaProtectedAndSchedulable(t *testing.T) {
 func TestOpenAIExecutionTargetContextRequiresCompleteIdentity(t *testing.T) {
 	target := OpenAIExecutionTarget{
 		AccountID: 1, AccountPersonaID: 2, PersonaGeneration: 3, SessionEpoch: 4,
+		SessionStartedAt: time.Unix(1_700_000_000, 0), DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
 		CredentialChainID: "chain", ProfileID: SessionPersonaOpenCode, ProfileVersion: "1.0.0",
 		InstallationID: "installation", UpstreamSessionID: "session",
 	}
@@ -40,12 +42,14 @@ func TestOpenAIExecutionTargetUsesHistoricalSessionIdentity(t *testing.T) {
 	persona := OpenAIAccountPersona{
 		ID: 2, AccountID: 1, ProfileID: SessionPersonaOpenCode,
 		ProfileVersion: "1.18.23", PersonaGeneration: 9, InstallationID: "current-installation",
+		DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
 	}
 	session := OpenAIAccountPersonaSession{
 		AccountPersonaID: 2, SessionEpoch: 4, PersonaGeneration: 3,
 		CredentialChainID: "historical-chain", ProfileID: SessionPersonaOpenCode,
 		ProfileVersion: "1.18.23", InstallationID: "historical-installation",
 		UpstreamSessionID: "historical-session", ProxySnapshotSet: true,
+		StartedAt: time.Unix(1_700_000_000, 0),
 	}
 	target, err := OpenAIExecutionTargetFromPersonaSession(persona, session)
 	require.NoError(t, err)
@@ -56,6 +60,7 @@ func TestOpenAIExecutionTargetUsesHistoricalSessionIdentity(t *testing.T) {
 func TestOpenAIPersonaRuntimeConcurrencyScopeUsesInstanceIdentity(t *testing.T) {
 	target := OpenAIExecutionTarget{
 		AccountID: 42, AccountPersonaID: 108, PersonaGeneration: 5, SessionEpoch: 9,
+		SessionStartedAt: time.Unix(1_700_000_000, 0), DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
 		CredentialChainID: "chain", ProfileID: SessionPersonaOpenCode,
 		ProfileVersion: "release", InstallationID: "install", UpstreamSessionID: "session",
 	}
@@ -69,6 +74,7 @@ func TestOpenAIPersonaRuntimeConcurrencyScopeUsesInstanceIdentity(t *testing.T) 
 func TestScopeOpenAIFailoverToPersonaOnlyForCredentialFailure(t *testing.T) {
 	target := OpenAIExecutionTarget{
 		AccountID: 42, AccountPersonaID: 108, PersonaGeneration: 5, SessionEpoch: 9,
+		SessionStartedAt: time.Unix(1_700_000_000, 0), DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
 		CredentialChainID: "chain", ProfileID: SessionPersonaOpenCode,
 		ProfileVersion: "release", InstallationID: "install", UpstreamSessionID: "session",
 	}

@@ -52,8 +52,22 @@ func configureCodexFingerprintV3TestState(svc *OpenAIGatewayService, account *Ac
 
 type codexOAuthProbeTestRepo struct {
 	AccountRepository
-	accounts map[int64]*Account
-	states   map[int64]CodexFingerprintState
+	OpenAIAccountPersonaRepository
+	accounts    map[int64]*Account
+	states      map[int64]CodexFingerprintState
+	personas    map[int64]OpenAIAccountPersona
+	credentials map[int64]OpenAIPersonaCredentialRecord
+	sessions    map[int64]OpenAIAccountPersonaSession
+}
+
+type codexOAuthProbeTestEncryptor struct{}
+
+func (codexOAuthProbeTestEncryptor) Encrypt(plaintext string) (string, error) {
+	return "TEST:" + plaintext, nil
+}
+
+func (codexOAuthProbeTestEncryptor) Decrypt(ciphertext string) (string, error) {
+	return strings.TrimPrefix(ciphertext, "TEST:"), nil
 }
 
 func codexFingerprintV3TestStateForAccount(accountID int64) CodexFingerprintState {
@@ -73,6 +87,41 @@ func (r *codexOAuthProbeTestRepo) GetByID(ctx context.Context, accountID int64) 
 		return nil, nil
 	}
 	return r.AccountRepository.GetByID(ctx, accountID)
+}
+
+func (r *codexOAuthProbeTestRepo) ListAccountPersonas(_ context.Context, accountID int64) ([]OpenAIAccountPersona, error) {
+	result := make([]OpenAIAccountPersona, 0, 1)
+	for _, persona := range r.personas {
+		if persona.AccountID == accountID {
+			result = append(result, persona)
+		}
+	}
+	return result, nil
+}
+
+func (r *codexOAuthProbeTestRepo) GetAccountPersona(_ context.Context, accountID, accountPersonaID int64) (*OpenAIAccountPersona, error) {
+	persona, ok := r.personas[accountPersonaID]
+	if !ok || persona.AccountID != accountID {
+		return nil, ErrOpenAIAccountPersonaNotFound
+	}
+	return &persona, nil
+}
+
+func (r *codexOAuthProbeTestRepo) GetAccountPersonaCredential(_ context.Context, accountPersonaID int64, credentialChainID string) (*OpenAIPersonaCredentialRecord, error) {
+	record, ok := r.credentials[accountPersonaID]
+	if !ok || record.CredentialChainID != credentialChainID {
+		return nil, ErrOpenAIPersonaCredentialChainNotReady
+	}
+	return &record, nil
+}
+
+func (r *codexOAuthProbeTestRepo) GetAccountPersonaSession(_ context.Context, accountID, accountPersonaID, sessionEpoch int64, _ time.Time) (*OpenAIAccountPersonaSession, error) {
+	session, ok := r.sessions[accountPersonaID]
+	persona, personaOK := r.personas[accountPersonaID]
+	if !ok || !personaOK || persona.AccountID != accountID || session.SessionEpoch != sessionEpoch {
+		return nil, ErrOpenAIAccountPersonaSessionNotFound
+	}
+	return &session, nil
 }
 
 func (r *codexOAuthProbeTestRepo) ValidateCodexFingerprintSecret(_ context.Context, _ string, _ time.Time) error {
@@ -118,12 +167,97 @@ func configureOpenAICodexGatewayTest(svc *OpenAIGatewayService) {
 		svc.cfg = &config.Config{}
 	}
 	svc.cfg.Gateway.CodexFingerprintSecret = string(testCodexFingerprintV3Secret())
+	var tokenCache OpenAITokenCache
+	if svc.openAITokenProvider != nil {
+		tokenCache = svc.openAITokenProvider.tokenCache
+	}
 	baseRepo := svc.accountRepo
-	svc.accountRepo = &codexOAuthProbeTestRepo{
+	repo := &codexOAuthProbeTestRepo{
 		AccountRepository: baseRepo,
 		accounts:          make(map[int64]*Account),
 		states:            make(map[int64]CodexFingerprintState),
+		personas:          make(map[int64]OpenAIAccountPersona),
+		credentials:       make(map[int64]OpenAIPersonaCredentialRecord),
+		sessions:          make(map[int64]OpenAIAccountPersonaSession),
 	}
+	repo.OpenAIAccountPersonaRepository = repo
+	svc.accountRepo = repo
+	oauth := NewOpenAIOAuthService(nil, nil)
+	oauth.configureAccountPersonaStore(repo)
+	oauth.configurePersonaCredentialStore(codexOAuthProbeTestEncryptor{}, nil)
+	svc.openAITokenProvider = NewOpenAITokenProvider(repo, tokenCache, oauth)
+	svc.testOpenAIExecutionTargetBinder = func(ctx context.Context, c *gin.Context, account *Account) context.Context {
+		return installOpenAICodexGatewayTestExecution(svc, ctx, c, account)
+	}
+}
+
+func installOpenAICodexGatewayTestExecution(svc *OpenAIGatewayService, ctx context.Context, c *gin.Context, account *Account) context.Context {
+	repo, ok := svc.accountRepo.(*codexOAuthProbeTestRepo)
+	if !ok || c == nil || c.Request == nil || account == nil {
+		return ctx
+	}
+
+	personaID := account.ID*1000 + 1
+	chainID := fmt.Sprintf("codex-test-chain-%d", account.ID)
+	installationID := fmt.Sprintf("codex-test-installation-%d", account.ID)
+	chatGPTAccountID := strings.TrimSpace(account.GetChatGPTAccountID())
+	accessToken := strings.TrimSpace(account.GetOpenAIAccessToken())
+	if accessToken == "" {
+		accessToken = "oauth-test-token"
+	}
+	persona := OpenAIAccountPersona{
+		ID: personaID, AccountID: account.ID, Position: 0,
+		ProfileID: SessionPersonaCodexCLIStrict, ProfileVersion: CodexOutboundProfileCLI0149,
+		CredentialOwner: OpenAICredentialOwnerAccountPrimary,
+		State:           OpenAIAccountPersonaStateActive, Enabled: true, PersonaGeneration: 1,
+		CurrentCredentialChainID: chainID, CurrentSessionEpoch: 1,
+		DeviceSeed: []byte("0123456789abcdef0123456789abcdef"), InstallationID: installationID,
+	}
+	session, sessionExists := repo.sessions[personaID]
+	if !sessionExists {
+		session = OpenAIAccountPersonaSession{
+			AccountPersonaID: personaID, SessionEpoch: 1, UpstreamSessionID: uuid.Must(uuid.NewV7()).String(),
+			State: OpenAIPersonaSessionCurrent, PersonaGeneration: 1, CredentialChainID: chainID,
+			ProfileID: persona.ProfileID, ProfileVersion: persona.ProfileVersion,
+			InstallationID: installationID, StartedAt: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		}
+	}
+	oauth := svc.openAITokenProvider.openAIOAuthService
+	payload, err := oauth.encryptPersonaCredential(&OpenAITokenInfo{
+		AccessToken: accessToken, ExpiresAt: time.Now().Add(time.Hour).Unix(),
+		ChatGPTAccountID: chatGPTAccountID,
+	})
+	if err != nil {
+		return ctx
+	}
+	repo.accounts[account.ID] = account
+	repo.personas[personaID] = persona
+	repo.sessions[personaID] = session
+	repo.credentials[personaID] = OpenAIPersonaCredentialRecord{
+		AccountPersonaID: personaID, AccountID: account.ID,
+		PersonaID: persona.ProfileID, ProfileVersion: persona.ProfileVersion,
+		PersonaGeneration: 1, CredentialChainID: chainID, EncryptedPayload: payload,
+		ChatGPTAccountID: chatGPTAccountID, InstallationID: installationID,
+		TokenVersion: 1, State: "ready",
+	}
+	target, err := OpenAIExecutionTargetFromPersonaSession(persona, session)
+	if err != nil {
+		return ctx
+	}
+	ctx = ContextWithOpenAIExecutionTarget(ctx, target)
+	c.Request = c.Request.WithContext(ContextWithOpenAIExecutionTarget(c.Request.Context(), target))
+	return ctx
+}
+
+// bindOpenAICodexGatewayTestExecution 为需要在转发前观察动态目标的测试显式绑定完整执行目标。
+func bindOpenAICodexGatewayTestExecution(t *testing.T, svc *OpenAIGatewayService, c *gin.Context, account *Account) context.Context {
+	t.Helper()
+	ctx := installOpenAICodexGatewayTestExecution(svc, c.Request.Context(), c, account)
+	resolved, ok := openAIExecutionTargetFromContextOrGin(context.Background(), c)
+	require.True(t, ok)
+	_, err := svc.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, account, resolved)
+	require.NoError(t, err)
+	return ctx
 }
 
 func requireCodexFingerprintV3UUID(t *testing.T, value string) {

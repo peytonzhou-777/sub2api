@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -140,6 +141,12 @@ func InitEnt(cfg *config.Config) (*ent.Client, *sql.DB, error) {
 	}); err != nil {
 		_ = drv.Close() // 迁移失败时关闭驱动，避免资源泄露
 		return nil, nil, err
+	}
+	if os.Getenv("SUB2API_OPENAI_PERSONA_MIGRATION") != "1" {
+		if err := EnsureOpenAIAccountPersonaArchitectureReady(migrationCtx, drv.DB()); err != nil {
+			_ = drv.Close()
+			return nil, nil, err
+		}
 	}
 
 	// 创建 Ent 客户端，绑定到已配置的数据库驱动。

@@ -5,14 +5,10 @@ import { mount } from '@vue/test-utils'
 const {
   updateAccountMock,
   checkMixedChannelRiskMock,
-  getOpenAIPersonaOAuthStatusMock,
-  revokeOpenAIPersonaAuthorizationMock,
   authIsSimpleMode
 } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn(),
-  getOpenAIPersonaOAuthStatusMock: vi.fn(),
-  revokeOpenAIPersonaAuthorizationMock: vi.fn(),
   authIsSimpleMode: { value: true }
 }))
 
@@ -36,9 +32,7 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       update: updateAccountMock,
-      checkMixedChannelRisk: checkMixedChannelRiskMock,
-      getOpenAIPersonaOAuthStatus: getOpenAIPersonaOAuthStatusMock,
-      revokeOpenAIPersonaAuthorization: revokeOpenAIPersonaAuthorizationMock
+      checkMixedChannelRisk: checkMixedChannelRiskMock
     },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
@@ -148,6 +142,12 @@ const GroupSelectorStub = defineComponent({
       </button>
     </div>
   `
+})
+
+const OpenAIAccountPersonasStub = defineComponent({
+  name: 'OpenAIAccountPersonas',
+  emits: ['authorize'],
+  template: `<button type="button" data-testid="dynamic-persona-authorize" @click="$emit('authorize', { id: 22, account_id: 7, position: 1, profile_id: 'opencode' })">authorize</button>`
 })
 
 function buildAccount() {
@@ -327,7 +327,8 @@ function mountModal(account = buildAccount()) {
         Icon: true,
         ProxySelector: true,
         GroupSelector: GroupSelectorStub,
-        ModelWhitelistSelector: ModelWhitelistSelectorStub
+        ModelWhitelistSelector: ModelWhitelistSelectorStub,
+        OpenAIAccountPersonas: OpenAIAccountPersonasStub
       }
     }
   })
@@ -336,9 +337,6 @@ function mountModal(account = buildAccount()) {
 describe('EditAccountModal', () => {
   beforeEach(() => {
     authIsSimpleMode.value = true
-    getOpenAIPersonaOAuthStatusMock.mockReset()
-    getOpenAIPersonaOAuthStatusMock.mockRejectedValue(new Error('status unavailable'))
-    revokeOpenAIPersonaAuthorizationMock.mockReset()
   })
 
   it('reopening the same account rehydrates the OpenAI whitelist from props', async () => {
@@ -706,127 +704,38 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_fingerprint_mode).toBe('off')
   })
 
-  it('renders OpenAI Persona mapping state and persists an explicit v3 enablement', async () => {
+  it('renders dynamic Personas and forwards the stable Persona identity for OAuth', async () => {
     const account = buildOpenAIOAuthParentAccount()
-    getOpenAIPersonaOAuthStatusMock.mockResolvedValue({
-      mapping_mode: 'legacy_v2',
-      slots: [
-        {
-          persona: 'codex_cli_strict',
-          slot_id: 0,
-          state: 'active',
-          enabled: true,
-          authorized: true,
-          credential_chain_id: 'strict-chain'
-        },
-        {
-          persona: 'opencode',
-          slot_id: 1,
-          state: 'active',
-          enabled: true,
-          authorized: true,
-          credential_chain_id: 'opencode-chain'
-        }
-      ]
-    })
-    account.extra = {
-      openai_persona_slot_states: { '0': 'active', '1': 'active' }
-    }
-    updateAccountMock.mockReset()
-    updateAccountMock.mockResolvedValue(account)
-
     const wrapper = mountModal(account)
-    await vi.waitFor(() => {
-      expect(wrapper.get('[data-testid="openai-persona-slot-0"]').text()).toContain('authorized')
-    })
+    await wrapper.get('[data-testid="dynamic-persona-authorize"]').trigger('click')
 
-    expect(wrapper.get('[data-testid="openai-persona-mapping"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="openai-persona-mapping-mode"]').text()).toContain('legacy_v2')
-    expect(wrapper.get('[data-testid="openai-persona-slot-1"]').text()).toContain('authorized')
-
-    await wrapper.get('[data-testid="openai-persona-mapping-toggle"]').trigger('click')
-    expect(wrapper.get('[data-testid="openai-persona-mapping-mode"]').text()).toContain('persona_v3')
-
-    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
-
-    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).toMatchObject({
-      openai_persona_mapping_enabled: true,
-      openai_persona_mapping_version: 3
-    })
+    expect(wrapper.emitted('authorizePersona')).toEqual([[
+      expect.objectContaining({ id: 22, account_id: account.id, position: 1, profile_id: 'opencode' })
+    ]])
     wrapper.unmount()
   })
 
-  it('revokes a Persona authorization from the account detail view', async () => {
-    const account = buildOpenAIOAuthParentAccount()
-    getOpenAIPersonaOAuthStatusMock.mockResolvedValue({
-      mapping_mode: 'persona_v3',
-      slots: [
-        { slot_id: 0, persona: 'codex_cli_strict', state: 'active', enabled: true, authorized: true, credential_chain_id: 'strict-chain' },
-        { slot_id: 1, persona: 'opencode', state: 'active', enabled: true, authorized: true, credential_chain_id: 'opencode-chain' }
-      ]
-    })
-    revokeOpenAIPersonaAuthorizationMock.mockResolvedValue(account)
-
-    const wrapper = mountModal(account)
-    await vi.waitFor(() => {
-      expect(wrapper.find('[data-testid="openai-persona-slot-1-revoke"]').exists()).toBe(true)
-    })
-    await wrapper.get('[data-testid="openai-persona-slot-1-revoke"]').trigger('click')
-    await (wrapper.vm as any).confirmPersonaAuthorizationRevoke()
-
-    expect(revokeOpenAIPersonaAuthorizationMock).toHaveBeenCalledWith(account.id, 1)
-    wrapper.unmount()
-  })
-
-  it('emits the fixed Persona slot when starting its OAuth authorization', async () => {
-    const account = buildOpenAIOAuthParentAccount()
-    getOpenAIPersonaOAuthStatusMock.mockResolvedValue({
-      account_id: account.id,
-      mapping_mode: 'legacy_v2',
-      slot_set_generation: 0,
-      slots: [
-        {
-          slot_id: 0,
-          persona: 'codex_cli_strict',
-          state: 'active',
-          authorized: true,
-          ready: true
-        },
-        {
-          slot_id: 1,
-          persona: 'opencode',
-          state: 'active',
-          authorized: false,
-          ready: false
-        }
-      ]
-    })
-
-    const wrapper = mountModal(account)
-    await wrapper.get('[data-testid="openai-persona-slot-1-oauth"]').trigger('click')
-
-    expect(wrapper.emitted('authorizePersona')).toEqual([[1]])
-    wrapper.unmount()
-  })
-
-  it('persists an explicit legacy override when disabling Persona v3 mapping', async () => {
+  it('removes fixed-slot projection keys when saving an OAuth account', async () => {
     const account = buildOpenAIOAuthParentAccount()
     account.extra = {
       openai_persona_mapping_enabled: true,
       openai_persona_mapping_version: 3,
-      openai_persona_mapping_active: true
+      openai_persona_mapping_active: true,
+      codex_session_slot_count: 2,
+      codex_subagent_max_inflight_per_session: 4
     }
     updateAccountMock.mockReset()
     updateAccountMock.mockResolvedValue(account)
 
     const wrapper = mountModal(account)
-    await wrapper.get('[data-testid="openai-persona-mapping-toggle"]').trigger('click')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
 
     const extra = updateAccountMock.mock.calls[0]?.[1]?.extra
-    expect(extra?.openai_persona_mapping_enabled).toBe(false)
+    expect(extra).not.toHaveProperty('openai_persona_mapping_enabled')
     expect(extra).not.toHaveProperty('openai_persona_mapping_version')
     expect(extra).not.toHaveProperty('openai_persona_mapping_active')
+    expect(extra).not.toHaveProperty('codex_session_slot_count')
+    expect(extra).not.toHaveProperty('codex_subagent_max_inflight_per_session')
     wrapper.unmount()
   })
 

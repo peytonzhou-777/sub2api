@@ -81,6 +81,10 @@ func newTestContext() (*gin.Context, *httptest.ResponseRecorder) {
 
 type openAIAccountTestRepo struct {
 	mockAccountRepoForGemini
+	OpenAIAccountPersonaRepository
+	personas           map[int64]OpenAIAccountPersona
+	sessions           map[int64]OpenAIAccountPersonaSession
+	credentials        map[int64]OpenAIPersonaCredentialRecord
 	updatedExtra       map[string]any
 	bulkUpdatedIDs     []int64
 	bulkUpdatedPayload AccountBulkUpdate
@@ -89,6 +93,31 @@ type openAIAccountTestRepo struct {
 	clearedErrorID     int64
 	setErrorID         int64
 	setErrorMsg        string
+}
+
+func (r *openAIAccountTestRepo) GetAccountPersona(_ context.Context, accountID, personaID int64) (*OpenAIAccountPersona, error) {
+	persona, ok := r.personas[personaID]
+	if !ok || persona.AccountID != accountID {
+		return nil, ErrOpenAIAccountPersonaNotFound
+	}
+	return &persona, nil
+}
+
+func (r *openAIAccountTestRepo) GetAccountPersonaSession(_ context.Context, accountID, personaID, epoch int64, _ time.Time) (*OpenAIAccountPersonaSession, error) {
+	persona, ok := r.personas[personaID]
+	session, sessionOK := r.sessions[personaID]
+	if !ok || !sessionOK || persona.AccountID != accountID || session.SessionEpoch != epoch {
+		return nil, ErrOpenAIAccountPersonaSessionNotFound
+	}
+	return &session, nil
+}
+
+func (r *openAIAccountTestRepo) GetAccountPersonaCredential(_ context.Context, personaID int64, chainID string) (*OpenAIPersonaCredentialRecord, error) {
+	credential, ok := r.credentials[personaID]
+	if !ok || credential.CredentialChainID != chainID {
+		return nil, ErrOpenAIPersonaCredentialChainNotReady
+	}
+	return &credential, nil
 }
 
 func (r *openAIAccountTestRepo) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
@@ -242,67 +271,6 @@ func TestAccountTestService_OpenAIShadowUsesParentCredentialsAndShadowModel(t *t
 	require.Contains(t, recorder.Body.String(), `"success":true`)
 }
 
-func TestAccountTestService_OpenAIOAuthIntelligenceUsesFixedPromptThroughShadow(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	ctx, recorder := newTestContext()
-
-	resp := newJSONResponse(http.StatusOK, "")
-	resp.Body = io.NopCloser(strings.NewReader(`data: {"type":"response.output_text.delta","delta":"29"}
-
-data: {"type":"response.completed"}
-
-`))
-
-	parentID := int64(101)
-	parent := &Account{
-		ID:       parentID,
-		Platform: PlatformOpenAI,
-		Type:     AccountTypeOAuth,
-		Status:   StatusActive,
-		Credentials: map[string]any{
-			"access_token":       "parent-token",
-			"chatgpt_account_id": "org-parent",
-		},
-	}
-	shadow := &Account{
-		ID:              201,
-		Platform:        PlatformOpenAI,
-		Type:            AccountTypeOAuth,
-		Status:          StatusActive,
-		ParentAccountID: &parentID,
-		QuotaDimension:  QuotaDimensionSpark,
-		Concurrency:     2,
-		Extra: map[string]any{
-			codexFingerprintModeExtraKey: "off",
-		},
-	}
-
-	repo := &openAIAccountTestRepo{
-		mockAccountRepoForGemini: mockAccountRepoForGemini{
-			accountsByID: map[int64]*Account{
-				parentID:  parent,
-				shadow.ID: shadow,
-			},
-		},
-	}
-	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
-	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
-
-	err := svc.TestOpenAIOAuthIntelligence(ctx, shadow.ID, "gpt-5.4", nil)
-	require.NoError(t, err)
-	require.Len(t, upstream.requests, 1)
-
-	req := upstream.requests[0]
-	require.Equal(t, "Bearer parent-token", req.Header.Get("Authorization"))
-	require.Equal(t, "org-parent", req.Header.Get("chatgpt-account-id"))
-	body := readOpenAITestRequestBody(t, req)
-	require.Equal(t, openAIOAuthIntelligenceTestPrompt, gjson.GetBytes(body, "input.0.content.0.text").String())
-	require.Equal(t, openAIOAuthIntelligenceTestEffort, gjson.GetBytes(body, "reasoning.effort").String())
-	require.False(t, gjson.GetBytes(body, "tools").Exists())
-	require.Contains(t, recorder.Body.String(), `"text":"29"`)
-	require.Contains(t, recorder.Body.String(), `"success":true`)
-}
-
 func newOpenAIPersonaV3IntelligenceAccount(id int64) *Account {
 	return &Account{
 		ID:          id,
@@ -311,79 +279,73 @@ func newOpenAIPersonaV3IntelligenceAccount(id int64) *Account {
 		Status:      StatusActive,
 		Concurrency: 1,
 		Credentials: map[string]any{
-			"access_token":       "strict-token",
-			"refresh_token":      "strict-refresh-token",
-			"expires_at":         time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
 			"chatgpt_account_id": "org-persona-v3",
-			openAIPersonaCredentialsKey: []any{
-				map[string]any{
-					"persona":             string(SessionPersonaOpenCode),
-					"slot_id":             1,
-					"credential_chain_id": "opencode-probe-chain",
-					"access_token":        "opencode-token",
-					"refresh_token":       "opencode-refresh-token",
-					"expires_at":          time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
-					"ready":               true,
-					"state":               "ready",
-				},
-			},
 		},
 		Extra: map[string]any{
-			openAIPersonaMappingEnabledExtraKey: true,
-			openAIPersonaMappingVersionExtraKey: SessionPersonaScopeVersionV3,
-			openAIPersonaSlotStateExtraKey: map[string]any{
-				"0": string(SessionPersonaSlotStateActive),
-				"1": string(SessionPersonaSlotStateActive),
-			},
-			openAIPersonaSlotEnabledExtraKey:    map[string]any{"0": true, "1": true},
-			OpenAIPersonaSlotAuthorizedExtraKey: map[string]any{"0": true, "1": true},
-			OpenAIPersonaActiveChainsExtraKey: map[string]any{
-				"0": "strict-probe-chain",
-				"1": "opencode-probe-chain",
-			},
-			OpenAIPersonaInstallationIDsExtraKey: map[string]any{
-				"0": "strict-installation",
-				"1": "opencode-installation",
-			},
-			OpenAIPersonaSlotGenerationsExtraKey:   map[string]any{"0": int64(1), "1": int64(1)},
-			OpenAIPersonaSlotSetGenerationExtraKey: int64(1),
-			codexFingerprintModeExtraKey:           "off",
+			codexFingerprintModeExtraKey: "off",
 		},
 	}
 }
 
 func newOpenAIPersonaV3IntelligenceService(t *testing.T, repo *openAIAccountTestRepo, upstream HTTPUpstream) *AccountTestService {
 	t.Helper()
-	personaRepo := newOpenAIPersonaCredentialRepoStub()
 	cache := newOpenAITokenCacheStub()
 	oauth := NewOpenAIOAuthService(nil, nil)
-	oauth.configurePersonaCredentialStore(personaRepo, openAIPersonaTestEncryptor{}, cache)
+	oauth.configurePersonaCredentialStore(openAIPersonaTestEncryptor{}, cache)
 	t.Cleanup(oauth.Stop)
 	for _, account := range repo.accountsByID {
-		if account == nil || !account.IsOpenAIPersonaMappingEnabled() {
+		if account == nil || account.IsCredentialShadow() {
 			continue
 		}
 		for _, seed := range []struct {
-			slotID  int
-			persona SessionPersonaID
-			chainID string
-			token   string
-			install string
+			personaID int64
+			position  int
+			persona   SessionPersonaID
+			chainID   string
+			token     string
+			install   string
+			session   string
 		}{
-			{slotID: 0, persona: SessionPersonaCodexCLIStrict, chainID: "strict-probe-chain", token: "strict-token", install: "strict-installation"},
-			{slotID: 1, persona: SessionPersonaOpenCode, chainID: "opencode-probe-chain", token: "opencode-token", install: "opencode-installation"},
+			{personaID: account.ID*10 + 1, position: 0, persona: SessionPersonaCodexCLIStrict, chainID: "strict-probe-chain", token: "strict-token", install: "strict-installation", session: "strict-session"},
+			{personaID: account.ID*10 + 2, position: 1, persona: SessionPersonaOpenCode, chainID: "opencode-probe-chain", token: "opencode-token", install: "opencode-installation", session: "opencode-session"},
 		} {
-			binding := SessionPersonaSlotBinding{
-				AccountID: account.ID, PersonaID: seed.persona, SlotID: seed.slotID,
-				CredentialChainID: seed.chainID, InstallationID: seed.install,
-				SlotGeneration: 1, SlotSetGeneration: 1,
+			if repo.personas == nil {
+				repo.personas = make(map[int64]OpenAIAccountPersona)
+				repo.sessions = make(map[int64]OpenAIAccountPersonaSession)
+				repo.credentials = make(map[int64]OpenAIPersonaCredentialRecord)
 			}
-			require.NoError(t, seedOpenAIPersonaCredential(personaRepo, oauth, account, binding, &OpenAITokenInfo{
+			profile, ok := NewDefaultSessionPersonaRegistry().Get(string(seed.persona))
+			require.True(t, ok)
+			info := &OpenAITokenInfo{
 				AccessToken: seed.token, RefreshToken: seed.token + "-refresh",
 				ExpiresAt: time.Now().Add(time.Hour).Unix(), ChatGPTAccountID: "org-persona-v3",
-			}))
+			}
+			payload, err := oauth.encryptPersonaCredential(info)
+			require.NoError(t, err)
+			repo.personas[seed.personaID] = OpenAIAccountPersona{
+				ID: seed.personaID, AccountID: account.ID, Position: seed.position,
+				ProfileID: seed.persona, ProfileVersion: profile.EffectiveVersion(),
+				CredentialOwner: OpenAICredentialOwnerPersonaIndependent,
+				State:           OpenAIAccountPersonaStateActive, Enabled: true, PersonaGeneration: 1,
+				CurrentCredentialChainID: seed.chainID, CurrentSessionEpoch: 1, InstallationID: seed.install,
+				DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
+			}
+			repo.sessions[seed.personaID] = OpenAIAccountPersonaSession{
+				AccountPersonaID: seed.personaID, SessionEpoch: 1, UpstreamSessionID: seed.session,
+				State: OpenAIPersonaSessionCurrent, PersonaGeneration: 1, CredentialChainID: seed.chainID,
+				ProfileID: seed.persona, ProfileVersion: profile.EffectiveVersion(), InstallationID: seed.install,
+				StartedAt: time.Unix(1_700_000_000, 0),
+			}
+			repo.credentials[seed.personaID] = OpenAIPersonaCredentialRecord{
+				AccountPersonaID: seed.personaID, AccountID: account.ID, PersonaID: seed.persona,
+				ProfileVersion: profile.EffectiveVersion(), PersonaGeneration: 1,
+				CredentialChainID: seed.chainID, EncryptedPayload: payload,
+				ChatGPTAccountID: "org-persona-v3", InstallationID: seed.install, TokenVersion: 1, State: "ready",
+			}
 		}
 	}
+	repo.OpenAIAccountPersonaRepository = repo
+	oauth.configureAccountPersonaStore(repo)
 	return &AccountTestService{
 		accountRepo:         repo,
 		httpUpstream:        upstream,
@@ -404,9 +366,9 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotZeroUsesStrictCode
 	resp.Body = io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\"}\n\n"))
 	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
 	svc := newOpenAIPersonaV3IntelligenceService(t, repo, upstream)
-	slotID := 0
+	personaID := account.ID*10 + 1
 
-	require.NoError(t, svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", &slotID))
+	require.NoError(t, svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", &personaID))
 	require.Len(t, upstream.requests, 1)
 	req := upstream.requests[0]
 	require.Equal(t, "Bearer strict-token", req.Header.Get("Authorization"))
@@ -428,9 +390,9 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotOneUsesOpenCodeCha
 	resp.Body = io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\"}\n\n"))
 	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
 	svc := newOpenAIPersonaV3IntelligenceService(t, repo, upstream)
-	slotID := 1
+	personaID := account.ID*10 + 2
 
-	require.NoError(t, svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", &slotID))
+	require.NoError(t, svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", &personaID))
 	require.Len(t, upstream.requests, 1)
 	req := upstream.requests[0]
 	require.Equal(t, "Bearer opencode-token", req.Header.Get("Authorization"))
@@ -441,7 +403,7 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotOneUsesOpenCodeCha
 	require.Empty(t, req.Header.Get("version"))
 	require.Empty(t, req.Header.Get("OpenAI-Beta"))
 	sessionID := req.Header.Get("session-id")
-	require.True(t, strings.HasPrefix(sessionID, "oc_probe_"))
+	require.Equal(t, "opencode-session", sessionID)
 	require.Equal(t, sessionID, req.Header.Get("X-Session-Id"))
 	require.Equal(t, sessionID, req.Header.Get("x-session-affinity"))
 	for key := range req.Header {
@@ -475,9 +437,9 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaShadowUsesParentChainA
 	resp.Body = io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\"}\n\n"))
 	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
 	svc := newOpenAIPersonaV3IntelligenceService(t, repo, upstream)
-	slotID := 1
+	personaID := parent.ID*10 + 2
 
-	require.NoError(t, svc.TestOpenAIOAuthIntelligence(ctx, shadow.ID, "gpt-5.4", &slotID))
+	require.NoError(t, svc.TestOpenAIOAuthIntelligence(ctx, shadow.ID, "gpt-5.4", &personaID))
 	require.Len(t, upstream.requests, 1)
 	req := upstream.requests[0]
 	require.Equal(t, "Bearer opencode-token", req.Header.Get("Authorization"))
@@ -489,54 +451,24 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaShadowUsesParentChainA
 func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotFailsClosed(t *testing.T) {
 	testCases := []struct {
 		name      string
-		slotID    *int
-		mutate    func(*Account)
+		personaID *int64
 		wantError string
 	}{
-		{name: "missing explicit slot", wantError: "requires persona_slot_id"},
-		{name: "invalid slot", slotID: func() *int { value := 2; return &value }(), wantError: "invalid session persona slot"},
-		{
-			name:   "draining OpenCode slot",
-			slotID: func() *int { value := 1; return &value }(),
-			mutate: func(account *Account) {
-				account.Extra[openAIPersonaSlotStateExtraKey] = map[string]any{"1": string(SessionPersonaSlotStateDraining)}
-			},
-			wantError: "not available for a new probe",
-		},
-		{
-			name:   "unauthorized OpenCode slot",
-			slotID: func() *int { value := 1; return &value }(),
-			mutate: func(account *Account) {
-				account.Extra[OpenAIPersonaSlotAuthorizedExtraKey] = map[string]any{"0": true, "1": false}
-				account.Extra[OpenAIPersonaActiveChainsExtraKey] = map[string]any{"0": "strict-probe-chain"}
-			},
-			wantError: "authorized=false",
-		},
-		{
-			name:   "slot on legacy account",
-			slotID: func() *int { value := 0; return &value }(),
-			mutate: func(account *Account) {
-				account.Extra[openAIPersonaMappingEnabledExtraKey] = false
-				account.Extra[openAIPersonaMappingVersionExtraKey] = SessionPersonaScopeVersionLegacyV2
-			},
-			wantError: "only supported by Persona v3 accounts",
-		},
+		{name: "missing explicit Persona", wantError: "requires account_persona_id"},
+		{name: "unknown Persona", personaID: func() *int64 { value := int64(999999); return &value }(), wantError: "not active and authorized"},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			ctx, recorder := newTestContext()
 			account := newOpenAIPersonaV3IntelligenceAccount(207)
-			if testCase.mutate != nil {
-				testCase.mutate(account)
-			}
 			repo := &openAIAccountTestRepo{mockAccountRepoForGemini: mockAccountRepoForGemini{
 				accountsByID: map[int64]*Account{account.ID: account},
 			}}
 			upstream := &queuedHTTPUpstream{}
 			svc := newOpenAIPersonaV3IntelligenceService(t, repo, upstream)
 
-			err := svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", testCase.slotID)
+			err := svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", testCase.personaID)
 			require.Error(t, err)
 			require.Empty(t, upstream.requests)
 			require.Contains(t, recorder.Body.String(), testCase.wantError)

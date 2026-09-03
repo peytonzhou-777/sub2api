@@ -3,7 +3,6 @@ import { apiClient } from '../client'
 export interface OpenAIPersonaAdmissionPolicy {
   max_concurrency: number
   max_active_client_sessions: number
-  max_active_client_sessions_per_user_group: number
   requests_per_minute: number
   tokens_per_minute: number
   max_queue_depth_per_account: number
@@ -18,6 +17,7 @@ export interface OpenAIAccountAdmissionConfig {
   max_wait_seconds: number
   max_concurrency: number
   max_active_client_sessions: number
+  max_active_client_sessions_per_user_group: number
   requests_per_minute: number
   tokens_per_minute: number
   max_subagents: number

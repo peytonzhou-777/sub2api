@@ -2,6 +2,8 @@ package admin
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -159,11 +161,38 @@ type openAIAccountPersonaDTO struct {
 	MaxActiveClientSessionsOverride *int                              `json:"max_active_client_sessions_override,omitempty"`
 	RowVersion                      int64                             `json:"row_version"`
 	DefaultProtected                bool                              `json:"default_protected"`
+	CredentialState                 string                            `json:"credential_state"`
+	CredentialUpdatedAt             *time.Time                        `json:"credential_updated_at,omitempty"`
+	CredentialExpiresAt             *time.Time                        `json:"credential_expires_at,omitempty"`
+	InstallationSummary             string                            `json:"installation_summary"`
+	SessionState                    service.OpenAIPersonaSessionState `json:"session_state,omitempty"`
+	SessionStartedAt                *time.Time                        `json:"session_started_at,omitempty"`
+	SessionLastActiveAt             *time.Time                        `json:"session_last_active_at,omitempty"`
+	ActiveClientSessions            int                               `json:"active_client_sessions"`
+	EarliestClientSessionReleaseAt  *time.Time                        `json:"earliest_client_session_release_at,omitempty"`
+	EffectiveMaxClientSessions      int                               `json:"effective_max_client_sessions"`
+	EffectiveMaxConcurrency         int                               `json:"effective_max_concurrency"`
+	EffectiveMaxWebSockets          int                               `json:"effective_max_websockets"`
+	EffectiveProxyID                *int64                            `json:"effective_proxy_id,omitempty"`
+	ProxyInherited                  bool                              `json:"proxy_inherited"`
 	CreatedAt                       time.Time                         `json:"created_at"`
 	UpdatedAt                       time.Time                         `json:"updated_at"`
 }
 
+func summarizeOpenAIInstallationID(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(digest[:6])
+}
+
 func openAIAccountPersonaFromService(persona service.OpenAIAccountPersona) openAIAccountPersonaDTO {
+	return openAIAccountPersonaFromAdminView(service.OpenAIAccountPersonaAdminView{Persona: persona})
+}
+
+func openAIAccountPersonaFromAdminView(view service.OpenAIAccountPersonaAdminView) openAIAccountPersonaDTO {
+	persona := view.Persona
 	return openAIAccountPersonaDTO{
 		ID: persona.ID, AccountID: persona.AccountID, Position: persona.Position,
 		ProfileID: persona.ProfileID, ProfileVersion: persona.ProfileVersion,
@@ -172,6 +201,12 @@ func openAIAccountPersonaFromService(persona service.OpenAIAccountPersona) openA
 		PersonaGeneration: persona.PersonaGeneration, CurrentSessionEpoch: persona.CurrentSessionEpoch,
 		ProxyID: persona.ProxyID, MaxActiveClientSessionsOverride: persona.MaxActiveClientSessionsOverride,
 		RowVersion: persona.RowVersion, DefaultProtected: persona.IsDefaultProtected(),
+		CredentialState: view.CredentialState, CredentialUpdatedAt: view.CredentialUpdatedAt,
+		CredentialExpiresAt: view.CredentialExpiresAt, InstallationSummary: summarizeOpenAIInstallationID(persona.InstallationID),
+		SessionState: view.SessionState, SessionStartedAt: view.SessionStartedAt, SessionLastActiveAt: view.SessionLastActiveAt,
+		ActiveClientSessions: view.ActiveClientSessions, EarliestClientSessionReleaseAt: view.EarliestClientSessionReleaseAt,
+		EffectiveMaxClientSessions: view.EffectiveMaxClientSessions, EffectiveMaxConcurrency: view.EffectiveMaxConcurrency,
+		EffectiveMaxWebSockets: view.EffectiveMaxWebSockets, EffectiveProxyID: view.EffectiveProxyID, ProxyInherited: view.ProxyInherited,
 		CreatedAt: persona.CreatedAt, UpdatedAt: persona.UpdatedAt,
 	}
 }
@@ -197,14 +232,19 @@ func (h *OpenAIOAuthHandler) ListAccountPersonas(c *gin.Context) {
 		response.BadRequest(c, "Invalid account ID")
 		return
 	}
-	personas, err := h.openaiOAuthService.ListAccountPersonas(c.Request.Context(), accountID)
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	personas, err := h.openaiOAuthService.ListAccountPersonaAdminViews(c.Request.Context(), account)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 	result := make([]openAIAccountPersonaDTO, 0, len(personas))
 	for _, persona := range personas {
-		result = append(result, openAIAccountPersonaFromService(persona))
+		result = append(result, openAIAccountPersonaFromAdminView(persona))
 	}
 	response.Success(c, result)
 }
@@ -450,182 +490,6 @@ func (h *OpenAIOAuthHandler) ExchangeCode(c *gin.Context) {
 	}
 
 	response.Success(c, tokenInfo)
-}
-
-// GetPersonaOAuthStatus reports slot readiness without exposing credentials.
-func (h *OpenAIOAuthHandler) GetPersonaOAuthStatus(c *gin.Context) {
-	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "Invalid account ID")
-		return
-	}
-	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	status, err := h.openaiOAuthService.GetPersonaOAuthStatus(c.Request.Context(), account)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, status)
-}
-
-// GeneratePersonaAuthURL starts one target-bound slot authorization.
-func (h *OpenAIOAuthHandler) GeneratePersonaAuthURL(c *gin.Context) {
-	accountID, slotID, ok := parseOpenAIPersonaTarget(c)
-	if !ok {
-		return
-	}
-	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	result, err := h.openaiOAuthService.GeneratePersonaAuthURL(c.Request.Context(), account, slotID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, result)
-}
-
-// ExchangePersonaCode persists both fixed slots as independent Persona chains.
-func (h *OpenAIOAuthHandler) ExchangePersonaCode(c *gin.Context) {
-	accountID, slotID, ok := parseOpenAIPersonaTarget(c)
-	if !ok {
-		return
-	}
-	var req openAIPersonaExchangeCodeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-	result, err := h.openaiOAuthService.ExchangePersonaCode(c.Request.Context(), accountID, slotID, &service.OpenAIExchangeCodeInput{
-		SessionID: req.SessionID,
-		Code:      req.Code,
-		State:     req.State,
-	})
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	err = h.openaiOAuthService.PersistPersonaAuthorization(c.Request.Context(), account, result)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	updated, err := h.adminService.GetAccount(c.Request.Context(), accountID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	slog.Info("openai_persona_oauth_authorized",
-		"account_id", accountID,
-		"persona", result.PersonaID,
-		"slot_id", slotID,
-		"credential_chain_id", result.CredentialChainID,
-		"slot_generation", result.SlotGeneration,
-		"slot_set_generation", result.SlotSetGeneration,
-	)
-	response.Success(c, dto.AccountFromService(updated))
-}
-
-// RefreshPersonaToken refreshes either Persona through the same chain-scoped
-// CAS path used by runtime requests.
-func (h *OpenAIOAuthHandler) RefreshPersonaToken(c *gin.Context) {
-	accountID, slotID, ok := parseOpenAIPersonaTarget(c)
-	if !ok {
-		return
-	}
-	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	status, err := h.openaiOAuthService.GetPersonaOAuthStatus(c.Request.Context(), account)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	var target *service.OpenAIPersonaOAuthSlotStatus
-	for index := range status.Slots {
-		if status.Slots[index].SlotID == slotID {
-			target = &status.Slots[index]
-			break
-		}
-	}
-	if target == nil || !target.Authorized || strings.TrimSpace(target.CredentialChainID) == "" {
-		response.BadRequest(c, "Persona OAuth credential chain is not configured")
-		return
-	}
-	binding := service.SessionPersonaSlotBinding{
-		AccountID:         accountID,
-		PersonaID:         target.PersonaID,
-		SlotID:            slotID,
-		CredentialChainID: target.CredentialChainID,
-		ScopeVersion:      service.SessionPersonaScopeVersionV3,
-		MappingVersion:    service.SessionPersonaScopeVersionV3,
-		SlotGeneration:    target.SlotGeneration,
-		SlotSetGeneration: target.SlotSetGeneration,
-		InstallationID:    target.InstallationID,
-	}
-	_, err = h.openaiOAuthService.RefreshPersonaCredential(c.Request.Context(), account, binding)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	updated, err := h.adminService.GetAccount(c.Request.Context(), accountID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, dto.AccountFromService(updated))
-}
-
-// RevokePersonaAuthorization destroys the locally stored authorization. OpenAI
-// does not expose a remote revoke endpoint for this fixed client flow.
-func (h *OpenAIOAuthHandler) RevokePersonaAuthorization(c *gin.Context) {
-	accountID, slotID, ok := parseOpenAIPersonaTarget(c)
-	if !ok {
-		return
-	}
-	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	if err = h.openaiOAuthService.RevokePersonaAuthorization(c.Request.Context(), account, slotID); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	slog.Info("openai_persona_oauth_revoked_locally", "account_id", accountID, "slot_id", slotID)
-	updated, err := h.adminService.GetAccount(c.Request.Context(), accountID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, dto.AccountFromService(updated))
-}
-
-func parseOpenAIPersonaTarget(c *gin.Context) (int64, int, bool) {
-	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "Invalid account ID")
-		return 0, 0, false
-	}
-	slotID, err := strconv.Atoi(c.Param("slot_id"))
-	if err != nil || (slotID != 0 && slotID != 1) {
-		response.BadRequest(c, "Invalid Persona slot ID")
-		return 0, 0, false
-	}
-	return accountID, slotID, true
 }
 
 // OpenAIRefreshTokenRequest represents the request for refreshing OpenAI token

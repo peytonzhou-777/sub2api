@@ -226,6 +226,16 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 	// 客户端身份和语义协议决定逻辑身份；HTTP/WS 只作为传输与连接池维度。
 	original.clientScope = resolveCodexFingerprintSessionScope(c, headers, identityHidden)
 	original.threadScope = resolveCodexFingerprintThreadScope(c, original.clientScope)
+	if target, ok := openAIExecutionTargetFromContextOrGin(ctx, c); ok {
+		if target.AccountID != account.ID {
+			return nil, ErrOpenAITokenBindingInvalid
+		}
+		// OpenCode 使用自己的 Session/Thread 投影，不得进入 Codex 指纹派生。
+		if target.ProfileID != SessionPersonaCodexCLIStrict {
+			return nil, nil
+		}
+		return newCodexFingerprintContextForExecutionTarget([]byte(secret), target, mode, original)
+	}
 	if mode != codexFingerprintDevice && original.threadID == "" {
 		return nil, errCodexFingerprintThreadMissing
 	}
@@ -395,6 +405,49 @@ func (s *OpenAIGatewayService) resolveCodexFingerprintContextForAttempt(
 		[]byte(secret), state.Seed, attemptEpoch, attemptEpochStartedAt, mode,
 		account.GetOpenAIDeviceID(), original,
 	)
+}
+
+// newCodexFingerprintContextForExecutionTarget 使用 AccountPersona 的设备种子和
+// Persona Session epoch 派生 Thread/Turn，Session 与 installation 始终服从已预留目标。
+func newCodexFingerprintContextForExecutionTarget(
+	clusterSecret []byte,
+	target OpenAIExecutionTarget,
+	mode codexFingerprintMode,
+	original codexFingerprintOriginalIDs,
+) (*CodexFingerprintContext, error) {
+	if !target.Valid() {
+		return nil, ErrOpenAITokenBindingInvalid
+	}
+	seed := append([]byte(nil), target.DeviceSeed...)
+	if len(seed) != codexFingerprintSeedBytes {
+		digest := sha256.Sum256(seed)
+		seed = digest[:]
+	}
+	original.sessionSlot = 0
+	original.sessionSlotCount = 1
+	original.sessionScopeVersion = codexFingerprintScopeV2
+	original.sessionScope = fmt.Sprintf("account-persona:%d:epoch:%d", target.AccountPersonaID, target.SessionEpoch)
+	original.sessionScopeHash = codexFingerprintSessionScopeHashV2(clusterSecret, original.sessionScope)
+	result, err := newCodexFingerprintContextV3(
+		clusterSecret,
+		hex.EncodeToString(seed),
+		target.SessionEpoch,
+		target.SessionStartedAt,
+		mode,
+		target.InstallationID,
+		original,
+	)
+	if err != nil || result == nil {
+		return result, err
+	}
+	result.accountID = target.AccountID
+	result.sessionEpoch = target.SessionEpoch
+	result.installationID = target.InstallationID
+	if mode != codexFingerprintDevice {
+		result.sessionID = target.UpstreamSessionID
+		result.promptCacheKey = target.UpstreamSessionID
+	}
+	return result, nil
 }
 
 func (s *OpenAIGatewayService) validateCodexFingerprintClusterSecret(ctx context.Context, secret string) error {

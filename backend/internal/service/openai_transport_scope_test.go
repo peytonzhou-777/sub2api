@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestOpenAITransportScopeFromExecutionTargetUsesDynamicPersonaIdentity(t *testing.T) {
 	proxyID := int64(9)
 	target := OpenAIExecutionTarget{
 		AccountID: 42, AccountPersonaID: 81, PersonaGeneration: 3, SessionEpoch: 7,
+		SessionStartedAt: time.Unix(1_700_000_000, 0), DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
 		CredentialChainID: "chain-dynamic", ProfileID: SessionPersonaOpenCode,
 		ProfileVersion: "1.18.23", InstallationID: "install-dynamic",
 		UpstreamSessionID: "session-dynamic", EffectiveProxyID: &proxyID, ProxyRevision: 11,
@@ -40,6 +42,7 @@ func TestResolveOpenAIUpstreamProxyURLUsesExecutionTargetSnapshot(t *testing.T) 
 	account := &Account{ID: 42, ProxyID: &accountProxyID, Proxy: &Proxy{ID: accountProxyID, Host: "account-proxy", Port: 8080}}
 	target := OpenAIExecutionTarget{
 		AccountID: account.ID, AccountPersonaID: 81, PersonaGeneration: 3, SessionEpoch: 7,
+		SessionStartedAt: time.Unix(1_700_000_000, 0), DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
 		CredentialChainID: "chain-dynamic", ProfileID: SessionPersonaOpenCode,
 		ProfileVersion: "1.18.23", InstallationID: "install-dynamic",
 		UpstreamSessionID: "session-dynamic", EffectiveProxyID: &targetProxyID,
@@ -59,7 +62,7 @@ func TestResolveOpenAIUpstreamProxyURLUsesExecutionTargetSnapshot(t *testing.T) 
 	}
 }
 
-func TestOpenAITransportScopeFromContextRequiresV3AndFullGenerations(t *testing.T) {
+func TestOpenAITransportScopeFromContextRejectsLegacySlotBinding(t *testing.T) {
 	binding := SessionPersonaSlotBinding{
 		AccountID:         42,
 		SlotID:            1,
@@ -78,31 +81,7 @@ func TestOpenAITransportScopeFromContextRequiresV3AndFullGenerations(t *testing.
 	}
 	ctx := ContextWithSessionPersonaBinding(context.Background(), binding)
 
-	scope, ok := OpenAITransportScopeFromContext(ctx, 42)
-	if !ok {
-		t.Fatal("complete v3 binding was not accepted")
-	}
-	if scope.AccountID != binding.AccountID || scope.Persona != binding.PersonaID ||
-		scope.SlotID != binding.SlotID || scope.SessionEpoch != binding.SessionEpoch ||
-		scope.CredentialChainID != binding.CredentialChainID {
-		t.Fatalf("scope mismatch: %#v", scope)
-	}
-
-	if _, ok := OpenAITransportScopeFromContext(ctx, 7); ok {
-		t.Fatal("scope with mismatched account was accepted")
-	}
-
-	legacy := binding
-	legacy.MappingVersion = SessionPersonaScopeVersionLegacyV2
-	legacyCtx := ContextWithSessionPersonaBinding(context.Background(), legacy)
-	if _, ok := OpenAITransportScopeFromContext(legacyCtx, 42); ok {
-		t.Fatal("legacy v2 binding was routed to CPA transport")
-	}
-
-	incomplete := binding
-	incomplete.CredentialChainID = ""
-	incompleteCtx := ContextWithSessionPersonaBinding(context.Background(), incomplete)
-	if _, ok := OpenAITransportScopeFromContext(incompleteCtx, 42); ok {
-		t.Fatal("binding without a credential chain was accepted")
+	if _, ok := OpenAITransportScopeFromContext(ctx, 42); ok {
+		t.Fatal("fixed-slot binding was routed to the dynamic CPA manager")
 	}
 }

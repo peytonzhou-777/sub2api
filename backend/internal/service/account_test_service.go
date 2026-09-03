@@ -343,7 +343,7 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 }
 
 // TestOpenAIOAuthIntelligence 使用固定题目检测 OpenAI OAuth 账号的文本回答能力。
-func (s *AccountTestService) TestOpenAIOAuthIntelligence(c *gin.Context, accountID int64, modelID string, personaSlotID *int) error {
+func (s *AccountTestService) TestOpenAIOAuthIntelligence(c *gin.Context, accountID int64, modelID string, accountPersonaID *int64) error {
 	account, err := s.accountRepo.GetByID(c.Request.Context(), accountID)
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Account not found")
@@ -366,9 +366,9 @@ func (s *AccountTestService) TestOpenAIOAuthIntelligence(c *gin.Context, account
 		openAIOAuthIntelligenceTestPrompt,
 		AccountTestModeDefault,
 		openAIAccountTestRequestOptions{
-			reasoningEffort:    openAIOAuthIntelligenceTestEffort,
-			personaSlotID:      personaSlotID,
-			requirePersonaSlot: true,
+			reasoningEffort:      openAIOAuthIntelligenceTestEffort,
+			accountPersonaID:     accountPersonaID,
+			requirePersonaTarget: true,
 		},
 	)
 }
@@ -694,10 +694,10 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 }
 
 type openAIAccountTestRequestOptions struct {
-	reasoningEffort    string
-	personaSlotID      *int
-	requirePersonaSlot bool
-	personaBinding     *SessionPersonaSlotBinding
+	reasoningEffort      string
+	accountPersonaID     *int64
+	requirePersonaTarget bool
+	personaBinding       *SessionPersonaSlotBinding
 }
 
 func (s *AccountTestService) testOpenAIAccountConnectionWithOptions(c *gin.Context, account *Account, modelID string, prompt string, mode string, testOptions openAIAccountTestRequestOptions) error {
@@ -744,18 +744,32 @@ func (s *AccountTestService) testOpenAIAccountConnectionWithOptions(c *gin.Conte
 	if testOptions.personaBinding != nil {
 		binding := testOptions.personaBinding.Clone()
 		personaBinding = &binding
-	} else if testOptions.personaSlotID != nil {
-		binding, bindingErr := ResolveSessionPersonaBindingForAdminProbe(credentialAccount, *testOptions.personaSlotID)
-		if bindingErr != nil {
-			return s.sendErrorAndEnd(c, bindingErr.Error())
+	} else if testOptions.accountPersonaID != nil {
+		repo, ok := s.accountRepo.(OpenAIAccountPersonaRepository)
+		if !ok {
+			return s.sendErrorAndEnd(c, "OpenAI AccountPersona repository is not configured")
 		}
-		if IsOpenCodePersona(binding) {
-			binding.UpstreamSessionID = "oc_probe_" + uuid.Must(uuid.NewV7()).String()
+		persona, personaErr := repo.GetAccountPersona(ctx, credentialAccount.ID, *testOptions.accountPersonaID)
+		if personaErr != nil || persona == nil || !persona.AcceptsNewRoot() {
+			return s.sendErrorAndEnd(c, "OpenAI AccountPersona is not active and authorized")
 		}
+		session, sessionErr := repo.GetAccountPersonaSession(ctx, credentialAccount.ID, persona.ID, persona.CurrentSessionEpoch, time.Now().UTC())
+		if sessionErr != nil || session == nil {
+			return s.sendErrorAndEnd(c, "OpenAI AccountPersona Session is unavailable")
+		}
+		target, targetErr := OpenAIExecutionTargetFromPersonaSession(*persona, *session)
+		if targetErr != nil {
+			return s.sendErrorAndEnd(c, "OpenAI AccountPersona identity is invalid")
+		}
+		binding, bindingOK := SessionPersonaBindingFromExecutionTarget(target)
+		if !bindingOK {
+			return s.sendErrorAndEnd(c, "OpenAI AccountPersona identity is invalid")
+		}
+		ctx = ContextWithOpenAIExecutionTarget(ctx, target)
 		personaBinding = &binding
 		testOptions.personaBinding = &binding
-	} else if testOptions.requirePersonaSlot && credentialAccount.IsOpenAIPersonaMappingEnabled() {
-		return s.sendErrorAndEnd(c, "Persona v3 intelligence test requires persona_slot_id")
+	} else if testOptions.requirePersonaTarget {
+		return s.sendErrorAndEnd(c, "Intelligence test requires account_persona_id")
 	}
 	if personaBinding != nil {
 		ctx = ContextWithSessionPersonaBinding(ctx, *personaBinding)
@@ -769,11 +783,11 @@ func (s *AccountTestService) testOpenAIAccountConnectionWithOptions(c *gin.Conte
 
 	if credentialAccount.IsOAuth() {
 		isOAuth = true
-		if personaBinding != nil {
+		if target, ok := OpenAIExecutionTargetFromContext(ctx); ok {
 			if s.openAITokenProvider == nil {
 				return s.sendErrorAndEnd(c, "OpenAI token provider is not configured")
 			}
-			resolvedToken, tokenErr := s.openAITokenProvider.GetAccessTokenForBinding(ctx, credentialAccount, *personaBinding)
+			resolvedToken, tokenErr := s.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, credentialAccount, target)
 			if tokenErr != nil {
 				return s.sendErrorAndEnd(c, "Failed to resolve Persona access token: "+tokenErr.Error())
 			}

@@ -512,6 +512,8 @@ type OpenAIGatewayService struct {
 	codexFingerprintStates              sync.Map // key: accountID, value: codexFingerprintStateCacheEntry
 	codexFingerprintSecretIDs           sync.Map // key: secret SHA-256, value: struct{}
 	codexSubagentQueueMaxWaitForTest    time.Duration
+	// testOpenAIExecutionTargetBinder 仅供同包测试在绕过调度器直调转发入口时装配完整动态目标。
+	testOpenAIExecutionTargetBinder func(context.Context, *gin.Context, *Account) context.Context
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
@@ -600,23 +602,6 @@ func NewOpenAIGatewayService(
 	}
 	svc.logOpenAIWSModeBootstrap()
 	return svc
-}
-
-// InvalidateOpenAIPersonaTransport fences a revoked credential chain from all
-// new HTTP and WS reuse while closing matching pooled WebSocket connections.
-func (s *OpenAIGatewayService) InvalidateOpenAIPersonaTransport(accountID int64, persona SessionPersonaID, slotID int, credentialChainID string) {
-	if s == nil {
-		return
-	}
-	if invalidator, ok := s.httpUpstream.(OpenAIPersonaTransportInvalidator); ok {
-		invalidator.InvalidateOpenAIPersonaTransport(accountID, persona, slotID, credentialChainID)
-	}
-	if s.openaiWSPool != nil {
-		s.openaiWSPool.ClearPersonaCredential(accountID, persona, slotID, credentialChainID)
-	}
-	if dialer, ok := s.openaiWSPassthroughDialer.(*coderOpenAIWSClientDialer); ok {
-		dialer.invalidatePersonaTransport(accountID, persona, slotID, credentialChainID)
-	}
 }
 
 func (s *OpenAIGatewayService) InvalidateOpenAIAccountPersonaCredentialTransport(accountID, accountPersonaID int64, credentialChainID string) {
@@ -1414,12 +1399,14 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 	}
 }
 
-// GetAccessTokenForRequest selects the credential chain from the immutable
-// request Persona binding when one is present. Legacy and non-Persona calls
-// intentionally retain the existing account-scoped token path.
+// GetAccessTokenForRequest requires the immutable AccountPersona execution
+// target for every OpenAI OAuth inference request.
 func (s *OpenAIGatewayService) GetAccessTokenForRequest(ctx context.Context, c *gin.Context, account *Account) (string, string, error) {
 	if account == nil {
 		return "", "", errors.New("account is nil")
+	}
+	if _, ok := openAIExecutionTargetFromContextOrGin(ctx, c); !ok && s != nil && s.testOpenAIExecutionTargetBinder != nil {
+		ctx = s.testOpenAIExecutionTargetBinder(ctx, c, account)
 	}
 	if target, ok := openAIExecutionTargetFromContextOrGin(ctx, c); ok && account.Type == AccountTypeOAuth {
 		if target.AccountID != account.ID || s == nil || s.openAITokenProvider == nil {
@@ -1431,20 +1418,8 @@ func (s *OpenAIGatewayService) GetAccessTokenForRequest(ctx context.Context, c *
 		}
 		return token, "oauth", nil
 	}
-	binding, hasBinding := SessionPersonaBindingFromContextOrGin(ctx, c)
-	if hasBinding &&
-		(binding.AccountID == 0 || binding.AccountID == account.ID) &&
-		account.Type == AccountTypeOAuth {
-		if s == nil || s.openAITokenProvider == nil {
-			return "", "", errors.New("openai persona token provider is not configured")
-		}
-		if _, ok := ParseSessionPersonaID(string(binding.PersonaID)); ok {
-			token, err := s.openAITokenProvider.GetAccessTokenForBinding(ctx, account, binding)
-			if err != nil {
-				return "", "", err
-			}
-			return token, "oauth", nil
-		}
+	if account.Type == AccountTypeOAuth {
+		return "", "", ErrOpenAITokenBindingInvalid
 	}
 	return s.GetAccessToken(ctx, account)
 }

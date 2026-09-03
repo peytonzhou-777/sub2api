@@ -1651,12 +1651,6 @@ func (p *openAIWSConnPool) ClearSessionScope(accountID int64, sessionScope strin
 	closeOpenAIWSConns(conns)
 }
 
-func (p *openAIWSConnPool) ClearPersonaCredential(accountID int64, persona SessionPersonaID, slotID int, credentialChainID string) {
-	p.clearTransportScopes(accountID, func(scope OpenAITransportScope) bool {
-		return scope.MatchesCredential(accountID, persona, slotID, credentialChainID)
-	})
-}
-
 func (p *openAIWSConnPool) ClearAccountPersonaCredential(accountID, accountPersonaID int64, credentialChainID string) {
 	p.clearTransportScopes(accountID, func(scope OpenAITransportScope) bool {
 		return scope.MatchesAccountPersonaCredential(accountPersonaID, credentialChainID)

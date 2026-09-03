@@ -259,18 +259,3 @@ func TestSessionPersonaBindingNormalizeLifecyclePreservesExplicitHardDisable(t *
 		t.Fatal("hard-disabled slot must not accept a new root")
 	}
 }
-
-func TestOpenAITokenCacheKeyForPersonaSeparatesCredentialChains(t *testing.T) {
-	account := &Account{ID: 42}
-	codex := OpenAITokenCacheKeyForPersona(account, SessionPersonaCodexCLIStrict, "codex-chain")
-	opencode := OpenAITokenCacheKeyForPersona(account, SessionPersonaOpenCode, "opencode-chain")
-	if codex == opencode {
-		t.Fatalf("Persona token cache keys collided: %q", codex)
-	}
-	if got, want := OpenAITokenCacheKeyForPersona(account, "", ""), OpenAITokenCacheKey(account); got != want {
-		t.Fatalf("legacy cache key changed: got %q want %q", got, want)
-	}
-	if got, want := OpenAITokenCacheKeyForPersona(account, SessionPersonaOpenCode, "chain/with spaces"), "openai:account:42:persona:opencode:chain:chain_with_spaces"; got != want {
-		t.Fatalf("sanitized Persona cache key = %q, want %q", got, want)
-	}
-}

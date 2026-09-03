@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -67,6 +68,7 @@ func TestSessionPersonaBindingPrefersDynamicExecutionTarget(t *testing.T) {
 	ctx := ContextWithSessionPersonaBinding(context.Background(), legacy)
 	target := OpenAIExecutionTarget{
 		AccountID: 42, AccountPersonaID: 81, PersonaGeneration: 3, SessionEpoch: 7,
+		SessionStartedAt: time.Unix(1_700_000_000, 0), DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
 		CredentialChainID: "chain-opencode", ProfileID: SessionPersonaOpenCode,
 		ProfileVersion: SessionPersonaOpenCodeVersion, InstallationID: "install-opencode",
 		UpstreamSessionID: "session-opencode",

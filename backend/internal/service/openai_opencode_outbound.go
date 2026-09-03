@@ -230,6 +230,51 @@ func prepareOpenCodeOutboundBody(body []byte, transport SessionPersonaTransport,
 	return json.Marshal(payload)
 }
 
+func sessionPersonaValueHasContinuation(value any, depth int) bool {
+	if depth > 8 {
+		return false
+	}
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			normalized := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(key), "-", "_"))
+			switch normalized {
+			case "previous_response_id", "x_codex_parent_thread_id",
+				"parent_thread_id", "forked_from_thread_id", "parent_turn_id", "root_turn_id",
+				"continuation", "resume", "resume_from":
+				if sessionPersonaValueIsNonEmpty(child) {
+					return true
+				}
+			}
+			if sessionPersonaValueHasContinuation(child, depth+1) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if sessionPersonaValueHasContinuation(child, depth+1) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func sessionPersonaValueIsNonEmpty(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return false
+	case string:
+		return strings.TrimSpace(typed) != ""
+	case bool:
+		return typed
+	case float64:
+		return typed != 0
+	default:
+		return true
+	}
+}
+
 func stripOpenCodeReasoningItems(payload map[string]any) {
 	input, ok := payload["input"].([]any)
 	if !ok {

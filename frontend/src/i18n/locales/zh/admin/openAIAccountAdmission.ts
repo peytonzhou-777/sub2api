@@ -7,6 +7,8 @@ export const openAIAccountAdmissionSettings = {
   globalMaxConcurrencyHint: 'Persona 未配置时继承；0 继续兼容账号旧并发值。',
   globalMaxActiveClientSessions: '全局最大活跃客户端 Session 数',
   globalMaxActiveClientSessionsHint: '每个账号的同一 Persona 默认最多同时容纳 1 个活跃客户端 Session；活跃时长使用“会话活跃占用”配置。',
+  userGroupMaxActiveClientSessions: '每用户/分组活跃客户端 Session 上限',
+  userGroupMaxActiveClientSessionsHint: '跨该用户的所有 API Key、账号和 Persona 统计；降低后不驱逐已有会话，新 Session 超限时仅返回“拒绝下游分发”。',
   rpm: '每账号 RPM',
   rpmHint: '每个 OpenAI 账号每分钟请求许可，0 表示不限制。',
   tpm: '每账号 TPM',

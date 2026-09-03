@@ -79,6 +79,7 @@ func TestProxyOpenAIWSHTTPBridgeTurnUsesOpenCodeExecutionTarget(t *testing.T) {
 	}
 	target := OpenAIExecutionTarget{
 		AccountID: account.ID, AccountPersonaID: 990, PersonaGeneration: 2, SessionEpoch: 3,
+		SessionStartedAt: time.Unix(1_700_000_000, 0), DeviceSeed: []byte("0123456789abcdef0123456789abcdef"),
 		CredentialChainID: "chain-opencode", ProfileID: SessionPersonaOpenCode,
 		ProfileVersion: SessionPersonaOpenCodeVersion, InstallationID: "install-opencode",
 		UpstreamSessionID: "oc_session_990", ProxyRevision: 5,

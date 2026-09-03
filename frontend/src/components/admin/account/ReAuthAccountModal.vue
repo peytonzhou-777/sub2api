@@ -210,6 +210,7 @@ import type { Account } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import OAuthAuthorizationFlow from '@/components/account/OAuthAuthorizationFlow.vue'
+import type { OpenAIAccountPersona } from '@/api/admin/accounts'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -225,7 +226,7 @@ interface OAuthFlowExposed {
 interface Props {
   show: boolean
   account: Account | null
-  personaSlot?: 0 | 1 | null
+  accountPersona?: OpenAIAccountPersona | null
 }
 
 const props = defineProps<Props>()
@@ -258,14 +259,15 @@ const isGemini = computed(() => props.account?.platform === 'gemini')
 const isAnthropic = computed(() => props.account?.platform === 'anthropic')
 const isAntigravity = computed(() => props.account?.platform === 'antigravity')
 const isGrok = computed(() => props.account?.platform === 'grok')
-const isOpenAIPersonaFlow = computed(() => isOpenAI.value && props.personaSlot != null)
+const isOpenAIPersonaFlow = computed(() => isOpenAI.value && props.accountPersona != null)
 const personaSlotLabel = computed(() => {
-  if (props.personaSlot === 1) return t('admin.accounts.openai.personaMapping.oauth.openCode')
-  return t('admin.accounts.openai.personaMapping.oauth.strictCodex')
+  const persona = props.accountPersona
+  if (!persona) return ''
+  return `#${persona.position} · ${persona.profile_id === 'opencode' ? 'OpenCode' : 'strict Codex'}`
 })
 const dialogTitle = computed(() =>
   isOpenAIPersonaFlow.value
-    ? t('admin.accounts.openai.personaMapping.oauth.title', { slot: props.personaSlot })
+    ? t('admin.accounts.openai.dynamicPersona.oauthTitle', { position: props.accountPersona?.position })
     : t('admin.accounts.reAuthorizeAccount')
 )
 
@@ -388,9 +390,9 @@ const handleGenerateUrl = async () => {
       openaiOAuth.loading.value = true
       openaiOAuth.error.value = ''
       try {
-        const result = await adminAPI.accounts.generateOpenAIPersonaAuthUrl(
+        const result = await adminAPI.accounts.generateOpenAIAccountPersonaAuthUrl(
           props.account.id,
-          props.personaSlot as 0 | 1
+          props.accountPersona!.id
         )
         openaiOAuth.authUrl.value = result.auth_url
         openaiOAuth.sessionId.value = result.session_id
@@ -441,9 +443,9 @@ const handleExchangeCode = async () => {
       oauthClient.loading.value = true
       oauthClient.error.value = ''
       try {
-        const updatedAccount = await adminAPI.accounts.exchangeOpenAIPersonaCode(
+        await adminAPI.accounts.exchangeOpenAIAccountPersonaCode(
           props.account.id,
-          props.personaSlot as 0 | 1,
+          props.accountPersona!.id,
           {
             session_id: sessionId,
             code: authCode.trim(),
@@ -451,7 +453,7 @@ const handleExchangeCode = async () => {
           }
         )
         appStore.showSuccess(t('admin.accounts.openai.personaMapping.oauth.success'))
-        emit('reauthorized', updatedAccount)
+        emit('reauthorized', props.account)
         handleClose()
       } catch (error: any) {
         oauthClient.error.value = error?.message || t('admin.accounts.oauth.authFailed')

@@ -682,13 +682,37 @@ func (h *AccountHandler) List(c *gin.Context) {
 	}
 
 	// Build response with concurrency info
+	admissionCfg := service.DefaultOpenAIAccountAdmissionConfig()
+	if h.settingService != nil {
+		if current, configErr := h.settingService.GetOpenAIAccountAdmissionConfig(c.Request.Context()); configErr == nil {
+			admissionCfg = current
+		}
+	}
+	personasByAccount := make(map[int64][]service.OpenAIAccountPersona)
+	if h.openaiOAuthService != nil {
+		openAIAccountIDs := make([]int64, 0)
+		for i := range accounts {
+			if accounts[i].IsOpenAIOAuth() {
+				openAIAccountIDs = append(openAIAccountIDs, accounts[i].ID)
+			}
+		}
+		if len(openAIAccountIDs) > 0 {
+			if loaded, personaErr := h.openaiOAuthService.ListAccountPersonasByAccountIDs(c.Request.Context(), openAIAccountIDs); personaErr == nil {
+				personasByAccount = loaded
+			}
+		}
+	}
 	result := make([]AccountWithConcurrency, len(accounts))
 	for i := range accounts {
 		acc := &accounts[i]
+		effectiveConcurrency := service.EffectiveOpenAIAccountAdmissionCapacity(acc, admissionCfg)
+		if acc.IsOpenAIOAuth() {
+			effectiveConcurrency = service.EffectiveOpenAIAccountPersonaCapacity(acc, personasByAccount[acc.ID], admissionCfg)
+		}
 		item := AccountWithConcurrency{
 			Account:              h.accountResponseFromService(acc),
 			CurrentConcurrency:   concurrencyCounts[acc.ID],
-			EffectiveConcurrency: h.effectiveAccountConcurrency(c.Request.Context(), acc),
+			EffectiveConcurrency: effectiveConcurrency,
 			SchedulerScore:       schedulerScores[acc.ID],
 			SchedulerScores:      schedulerGroupScores[acc.ID],
 			CodexOutboundProfile: service.CodexOutboundProfileStatusForAccount(acc),
@@ -742,6 +766,13 @@ func (h *AccountHandler) effectiveAccountConcurrency(ctx context.Context, accoun
 		if current, err := h.settingService.GetOpenAIAccountAdmissionConfig(ctx); err == nil {
 			cfg = current
 		}
+	}
+	if account.IsOpenAIOAuth() && h != nil && h.openaiOAuthService != nil {
+		personas, err := h.openaiOAuthService.ListAccountPersonas(ctx, account.ID)
+		if err != nil {
+			return 0
+		}
+		return service.EffectiveOpenAIAccountPersonaCapacity(account, personas, cfg)
 	}
 	return service.EffectiveOpenAIAccountAdmissionCapacity(account, cfg)
 }
@@ -1133,8 +1164,8 @@ type TestAccountRequest struct {
 
 // IntelligenceTestAccountRequest 表示 OpenAI OAuth 降智检测请求。
 type IntelligenceTestAccountRequest struct {
-	ModelID       string `json:"model_id"`
-	PersonaSlotID *int   `json:"persona_slot_id"`
+	ModelID          string `json:"model_id"`
+	AccountPersonaID *int64 `json:"account_persona_id"`
 }
 
 type SyncFromCRSRequest struct {
@@ -1194,7 +1225,7 @@ func (h *AccountHandler) IntelligenceTest(c *gin.Context) {
 	var req IntelligenceTestAccountRequest
 	_ = c.ShouldBindJSON(&req)
 
-	if err := h.accountTestService.TestOpenAIOAuthIntelligence(c, accountID, req.ModelID, req.PersonaSlotID); err != nil {
+	if err := h.accountTestService.TestOpenAIOAuthIntelligence(c, accountID, req.ModelID, req.AccountPersonaID); err != nil {
 		// 错误已通过 SSE 返回。
 		return
 	}

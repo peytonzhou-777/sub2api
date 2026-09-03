@@ -2,9 +2,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AccountTestModal from '../AccountTestModal.vue'
 
-const { getAvailableModels, getOpenAIPersonaOAuthStatus, updateAccount, copyToClipboard } = vi.hoisted(() => ({
+const { getAvailableModels, listOpenAIAccountPersonas, updateAccount, copyToClipboard } = vi.hoisted(() => ({
   getAvailableModels: vi.fn(),
-  getOpenAIPersonaOAuthStatus: vi.fn(),
+  listOpenAIAccountPersonas: vi.fn(),
   updateAccount: vi.fn(),
   copyToClipboard: vi.fn()
 }))
@@ -13,7 +13,7 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       getAvailableModels,
-      getOpenAIPersonaOAuthStatus,
+      listOpenAIAccountPersonas,
       update: updateAccount
     }
   }
@@ -104,10 +104,15 @@ describe('AccountTestModal', () => {
       { id: 'gemini-2.5-flash-image', display_name: 'Gemini 2.5 Flash Image' },
       { id: 'gemini-3.1-flash-image', display_name: 'Gemini 3.1 Flash Image' }
     ])
-    getOpenAIPersonaOAuthStatus.mockResolvedValue({
-      mapping_mode: 'legacy_v2',
-      slots: []
-    })
+    listOpenAIAccountPersonas.mockResolvedValue([{
+      id: 4201,
+      account_id: 42,
+      position: 0,
+      profile_id: 'codex_cli_strict',
+      state: 'active',
+      enabled: true,
+      authorized: true
+    }])
     updateAccount.mockReset()
     copyToClipboard.mockReset()
     Object.defineProperty(globalThis, 'localStorage', {
@@ -275,7 +280,7 @@ describe('AccountTestModal', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1)
     const [url, request] = (global.fetch as any).mock.calls[0]
     expect(String(url)).toContain('/admin/accounts/42/intelligence-test')
-    expect(JSON.parse(request.body)).toEqual({ model_id: 'gpt-5.4' })
+    expect(JSON.parse(request.body)).toEqual({ model_id: 'gpt-5.4', account_persona_id: 4201 })
     expect(wrapper.text()).toContain('29')
     expect(wrapper.text()).toContain('admin.accounts.intelligenceTestCompleted')
   })
@@ -316,34 +321,28 @@ describe('AccountTestModal', () => {
     ]])
   })
 
-  it('Persona v3 降智检测显示 slot 身份并提交显式选择', async () => {
+  it('动态 Persona 降智检测显示身份并提交稳定 ID', async () => {
     getAvailableModels.mockResolvedValue([
       { id: 'gpt-5.4', display_name: 'GPT-5.4' }
     ])
-    getOpenAIPersonaOAuthStatus.mockResolvedValue({
-      mapping_mode: 'persona_v3',
-      slots: [
+    listOpenAIAccountPersonas.mockResolvedValue([
         {
-          slot_id: 0,
-          persona: 'codex_cli_strict',
+          id: 5101,
+          position: 0,
+          profile_id: 'codex_cli_strict',
           state: 'active',
           enabled: true,
-          authorized: true,
-          slot_generation: 1,
-          slot_set_generation: 1
+          authorized: true
         },
         {
-          slot_id: 1,
-          persona: 'opencode',
+          id: 5102,
+          position: 1,
+          profile_id: 'opencode',
           state: 'active',
           enabled: true,
-          authorized: true,
-          credential_chain_id: 'opencode-chain',
-          slot_generation: 1,
-          slot_set_generation: 1
+          authorized: true
         }
-      ]
-    })
+      ])
     global.fetch = vi.fn().mockResolvedValue(
       createStreamResponse([
         'data: {"type":"test_complete","success":true}\n'
@@ -361,49 +360,44 @@ describe('AccountTestModal', () => {
     await wrapper.setProps({ show: true })
     await flushPromises()
 
-    expect(getOpenAIPersonaOAuthStatus).toHaveBeenCalledWith(51)
-    expect(wrapper.text()).toContain('admin.accounts.intelligencePersonaSlotStrict')
-    expect(wrapper.text()).toContain('admin.accounts.intelligencePersonaSlotOpenCode')
-    expect((wrapper.vm as any).selectedPersonaSlotId).toBe(0)
+    expect(listOpenAIAccountPersonas).toHaveBeenCalledWith(51)
+    expect(wrapper.text()).toContain('Codex CLI Strict')
+    expect(wrapper.text()).toContain('OpenCode')
+    expect((wrapper.vm as any).selectedAccountPersonaId).toBe(5101)
 
-    ;(wrapper.vm as any).selectedPersonaSlotId = 1
+    ;(wrapper.vm as any).selectedAccountPersonaId = 5102
     await (wrapper.vm as any).startTest()
     await flushPromises()
 
     const [, request] = (global.fetch as any).mock.calls[0]
     expect(JSON.parse(request.body)).toEqual({
       model_id: 'gpt-5.4',
-      persona_slot_id: 1
+      account_persona_id: 5102
     })
   })
 
-  it('Persona v3 所选 slot 不可用时禁止开始检测', async () => {
+  it('没有可用动态 Persona 时禁止开始检测', async () => {
     getAvailableModels.mockResolvedValue([
       { id: 'gpt-5.4', display_name: 'GPT-5.4' }
     ])
-    getOpenAIPersonaOAuthStatus.mockResolvedValue({
-      mapping_mode: 'persona_v3',
-      slots: [
+    listOpenAIAccountPersonas.mockResolvedValue([
         {
-          slot_id: 0,
-          persona: 'codex_cli_strict',
+          id: 5301,
+          position: 0,
+          profile_id: 'codex_cli_strict',
           state: 'draining',
           enabled: false,
-          authorized: true,
-          slot_generation: 1,
-          slot_set_generation: 1
+          authorized: true
         },
         {
-          slot_id: 1,
-          persona: 'opencode',
-          state: 'active',
-          enabled: true,
-          authorized: true,
-          slot_generation: 1,
-          slot_set_generation: 1
+          id: 5302,
+          position: 1,
+          profile_id: 'opencode',
+          state: 'draft',
+          enabled: false,
+          authorized: false
         }
-      ]
-    })
+      ])
 
     const wrapper = mountModal({
       id: 53,
@@ -415,9 +409,8 @@ describe('AccountTestModal', () => {
     await wrapper.setProps({ show: true })
     await flushPromises()
 
-    expect((wrapper.vm as any).selectedPersonaSlotId).toBe(0)
+    expect((wrapper.vm as any).selectedAccountPersonaId).toBeNull()
     expect((wrapper.vm as any).canStartTest).toBe(false)
-    expect(wrapper.text()).toContain('admin.accounts.intelligencePersonaSlotUnavailable')
     expect(global.fetch).not.toHaveBeenCalled()
   })
 })

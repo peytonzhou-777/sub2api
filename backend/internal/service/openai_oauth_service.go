@@ -18,7 +18,6 @@ type OpenAIOAuthService struct {
 	proxyRepo                   ProxyRepository
 	oauthClient                 OpenAIOAuthClient
 	privacyClientFactory        PrivacyClientFactory // 用于调用 chatgpt.com/backend-api（ImpersonateChrome）
-	personaCredentialRepo       OpenAIPersonaCredentialRepository
 	accountPersonaRepo          OpenAIAccountPersonaRepository
 	personaCredentialEncryptor  SecretEncryptor
 	personaTokenCache           OpenAITokenCache

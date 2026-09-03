@@ -422,9 +422,6 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 	svc := &OpenAIGatewayService{
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
 		httpUpstream: upstream,
-		openAITokenProvider: &OpenAITokenProvider{ // minimal: will be bypassed by nil cache/service, but GetAccessToken uses provider only if non-nil
-			accountRepo: nil,
-		},
 	}
 	configureOpenAICodexGatewayTest(svc)
 
@@ -440,9 +437,6 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 		Schedulable:    true,
 		RateMultiplier: f64p(1),
 	}
-
-	// Use the gateway method that reads token from credentials when provider is nil.
-	svc.openAITokenProvider = nil
 
 	result, err := svc.Forward(context.Background(), c, account, originalBody)
 	require.NoError(t, err)
@@ -2140,7 +2134,7 @@ func TestOpenAIGatewayService_CodexFingerprintHTTPTransformedHeaderBodyParityAnd
 	account.Schedulable = true
 	account.Concurrency = 1
 	account.Credentials = map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"}
-	configureCodexFingerprintV3TestState(svc, account)
+	configureOpenAICodexGatewayTest(svc)
 
 	_, err := svc.Forward(context.Background(), c, account, body)
 	require.NoError(t, err)
@@ -2207,7 +2201,7 @@ func TestOpenAIGatewayService_CodexFingerprintHTTPRawPassthroughHeaderBodyParity
 	account.Schedulable = true
 	account.Concurrency = 1
 	account.Credentials = map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"}
-	configureCodexFingerprintV3TestState(svc, account)
+	configureOpenAICodexGatewayTest(svc)
 
 	_, err := svc.Forward(context.Background(), c, account, body)
 	require.NoError(t, err)
@@ -2270,7 +2264,7 @@ func TestOpenAIGatewayService_CodexFingerprintCompactDoesNotRewriteBodyButStages
 	account.Schedulable = true
 	account.Concurrency = 1
 	account.Credentials = map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"}
-	configureCodexFingerprintV3TestState(svc, account)
+	configureOpenAICodexGatewayTest(svc)
 	staleIDs := newTestCodexFingerprintIDs(account, "stale-session", codexFingerprintSession)
 	require.NotNil(t, staleIDs)
 	stageCodexFingerprintIDs(c, staleIDs)
@@ -2315,7 +2309,7 @@ func TestOpenAIGatewayService_CodexFingerprintMessagesBridgeUsesFingerprintPromp
 	account.Schedulable = true
 	account.Concurrency = 1
 	account.Credentials = map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"}
-	configureCodexFingerprintV3TestState(svc, account)
+	configureOpenAICodexGatewayTest(svc)
 
 	_, err := svc.Forward(context.Background(), c, account, body)
 	require.NoError(t, err)

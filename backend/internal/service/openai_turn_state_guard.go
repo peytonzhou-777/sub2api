@@ -155,7 +155,13 @@ func (s *OpenAIGatewayService) isolateOpenAITurnStateAttempt(
 	if attemptCtx == nil {
 		attemptCtx = originalRequest.Context()
 	}
-	if _, ok := SessionPersonaBindingFromContext(attemptCtx); !ok {
+	if _, ok := OpenAIExecutionTargetFromContext(attemptCtx); !ok {
+		if target, bound := OpenAIExecutionTargetFromContext(originalRequest.Context()); bound {
+			attemptCtx = ContextWithOpenAIExecutionTarget(attemptCtx, target)
+		}
+	}
+	if _, dynamic := OpenAIExecutionTargetFromContext(attemptCtx); !dynamic {
+		// 仅为非动态兼容调用保留旧 Persona 投影；动态链路必须携带完整执行目标。
 		if binding, bound := SessionPersonaBindingFromContext(originalRequest.Context()); bound {
 			attemptCtx = ContextWithSessionPersonaBinding(attemptCtx, binding)
 		}
@@ -316,15 +322,8 @@ func openAITurnStateScopeForAttempt(ctx context.Context, c *gin.Context, account
 		slotGeneration = binding.SlotGeneration
 		slotSetGeneration = binding.SlotSetGeneration
 		credentialChainID = binding.CredentialChainID
-		proxyURL := ""
-		if account.Proxy != nil {
-			proxyURL = account.Proxy.URL()
-		}
-		transportScope := openAITransportScopeFromBinding(binding)
-		if !transportScope.ReadyForCPA(account.ID) {
-			return OpenAITurnStateScope{}, false
-		}
-		transportDigest = transportScope.OpenAICPAScopeFingerprint(proxyURL)
+		// 固定槽 binding 不得注册或恢复到动态 CPA Transport manager。
+		return OpenAITurnStateScope{}, false
 	}
 	profile := ResolveCodexOutboundProfile(account)
 	if transportDigest == "" {

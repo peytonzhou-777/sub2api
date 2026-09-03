@@ -47,8 +47,9 @@ func TestOpenAIGatewayService_Forward_CompactOnlyModelMappingOverridesOAuthUpstr
 		Status:      StatusActive,
 		Schedulable: true,
 	}
+	ctx := bindOpenAICodexGatewayTestExecution(t, svc, c, account)
 
-	result, err := svc.Forward(context.Background(), c, account, body)
+	result, err := svc.Forward(ctx, c, account, body)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "gpt-5.4", result.Model)
@@ -119,8 +120,9 @@ func TestOpenAIGatewayService_Forward_NormalizesCompactionTriggerAfterHistoryCle
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
 		Status:      StatusActive, Schedulable: true,
 	}
+	ctx := bindOpenAICodexGatewayTestExecution(t, svc, c, account)
 
-	result, err := svc.Forward(context.Background(), c, account, body)
+	result, err := svc.Forward(ctx, c, account, body)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	items := gjson.GetBytes(upstream.lastBody, "input").Array()
@@ -162,8 +164,9 @@ func TestOpenAIGatewayService_Forward_NonCompactRequestIgnoresCompactOnlyModelMa
 		Status:      StatusActive,
 		Schedulable: true,
 	}
+	ctx := bindOpenAICodexGatewayTestExecution(t, svc, c, account)
 
-	result, err := svc.Forward(context.Background(), c, account, body)
+	result, err := svc.Forward(ctx, c, account, body)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "gpt-5.4", result.Model)
@@ -204,8 +207,9 @@ func TestOpenAIGatewayService_OAuthPassthrough_CompactOnlyModelMappingOverridesU
 		Status:      StatusActive,
 		Schedulable: true,
 	}
+	ctx := bindOpenAICodexGatewayTestExecution(t, svc, c, account)
 
-	result, err := svc.Forward(context.Background(), c, account, originalBody)
+	result, err := svc.Forward(ctx, c, account, originalBody)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "gpt-5.4", result.Model)

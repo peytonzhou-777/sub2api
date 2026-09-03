@@ -51,6 +51,16 @@ func TestOpenAITurnStateAttemptStripsCrossAccountWithoutMutatingOriginalHeader(t
 }
 
 func stageOpenAITurnStateTestScope(c *gin.Context, account *Account, turnID string) {
+	target := OpenAIExecutionTarget{
+		AccountID: account.ID, AccountPersonaID: account.ID*1000 + 1,
+		PersonaGeneration: 3, SessionEpoch: 11,
+		SessionStartedAt:  time.Unix(1_700_000_000, 0),
+		CredentialChainID: "codex-chain-guard",
+		ProfileID:         SessionPersonaCodexCLIStrict, ProfileVersion: ResolveCodexOutboundProfile(account),
+		DeviceSeed:     []byte("0123456789abcdef0123456789abcdef"),
+		InstallationID: "installation-guard", UpstreamSessionID: "session-guard",
+	}
+	c.Request = c.Request.WithContext(ContextWithOpenAIExecutionTarget(c.Request.Context(), target))
 	ids := &codexFingerprintIDs{
 		accountID:           account.ID,
 		sessionScopeVersion: codexFingerprintScopeV2,
@@ -65,28 +75,6 @@ func stageOpenAITurnStateTestScope(c *gin.Context, account *Account, turnID stri
 	}
 	stageCodexFingerprintIDs(c, ids)
 	c.Set(codexFingerprintAdmissionPreparedContextKey, account.ID)
-	binding := SessionPersonaSlotBinding{
-		AccountID:               account.ID,
-		SlotID:                  0,
-		SlotCount:               2,
-		ScopeVersion:            SessionPersonaScopeVersionV3,
-		MappingVersion:          SessionPersonaScopeVersionV3,
-		FingerprintScopeVersion: codexFingerprintScopeV2,
-		PersonaID:               SessionPersonaCodexCLIStrict,
-		PersonaVersion:          ResolveCodexOutboundProfile(account),
-		CredentialChainID:       "codex-chain-guard",
-		InstallationID:          ids.installationID,
-		State:                   SessionPersonaSlotStateActive,
-		Enabled:                 true,
-		Authorized:              true,
-		SessionEpoch:            ids.sessionEpoch,
-		SlotGeneration:          3,
-		SlotSetGeneration:       5,
-	}
-	requireAttach := AttachSessionPersonaBindingToGin(c, binding)
-	if !requireAttach {
-		panic("failed to attach test Persona binding")
-	}
 }
 
 func TestOpenAITurnStateScopeMismatchReasons(t *testing.T) {

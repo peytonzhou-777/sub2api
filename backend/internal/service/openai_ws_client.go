@@ -237,12 +237,6 @@ func (d *coderOpenAIWSClientDialer) cpaHTTPClient(scope OpenAITransportScope, pr
 	return client, nil
 }
 
-func (d *coderOpenAIWSClientDialer) invalidatePersonaTransport(accountID int64, persona SessionPersonaID, slotID int, credentialChainID string) {
-	d.invalidateTransportScopes(func(scope OpenAITransportScope) bool {
-		return scope.MatchesCredential(accountID, persona, slotID, credentialChainID)
-	})
-}
-
 func (d *coderOpenAIWSClientDialer) invalidateAccountPersonaCredentialTransport(accountPersonaID int64, credentialChainID string) {
 	d.invalidateTransportScopes(func(scope OpenAITransportScope) bool {
 		return scope.MatchesAccountPersonaCredential(accountPersonaID, credentialChainID)

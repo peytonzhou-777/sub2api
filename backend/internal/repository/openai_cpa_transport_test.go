@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
@@ -11,50 +12,42 @@ import (
 	"golang.org/x/net/http2"
 )
 
-func TestDoWithTLSRoutesCompletePersonaScopeToCPAManager(t *testing.T) {
+func TestDoWithTLSRoutesCompleteAccountPersonaScopeToCPAManager(t *testing.T) {
 	cfg := &config.Config{
 		Gateway: config.GatewayConfig{
 			OpenAIHTTP2: config.GatewayOpenAIHTTP2Config{Enabled: true},
 		},
 	}
 	svc := &httpUpstreamService{cfg: cfg, clients: make(map[string]*upstreamClientEntry)}
-	binding := service.SessionPersonaSlotBinding{
+	target := service.OpenAIExecutionTarget{
 		AccountID:         42,
-		SlotID:            1,
-		SlotCount:         2,
-		MappingVersion:    service.SessionPersonaScopeVersionV3,
-		PersonaID:         service.SessionPersonaOpenCode,
-		PersonaVersion:    "1.18.23",
+		AccountPersonaID:  4201,
+		ProfileID:         service.SessionPersonaOpenCode,
+		ProfileVersion:    "1.18.23",
 		CredentialChainID: "chain-opencode",
 		InstallationID:    "install-opencode",
-		State:             service.SessionPersonaSlotStateActive,
-		Enabled:           true,
-		Authorized:        true,
 		SessionEpoch:      1,
-		SlotGeneration:    1,
-		SlotSetGeneration: 1,
+		SessionStartedAt:  time.Unix(1_700_000_000, 0),
+		DeviceSeed:        []byte("0123456789abcdef0123456789abcdef"),
+		PersonaGeneration: 1,
+		UpstreamSessionID: "session-opencode",
 	}
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://api.openai.com/v1/responses", nil)
 	if err != nil {
 		t.Fatalf("create request: %v", err)
 	}
 	ctx := service.WithHTTPUpstreamProfile(req.Context(), service.HTTPUpstreamProfileOpenAI)
-	ctx = service.ContextWithSessionPersonaBinding(ctx, binding)
+	ctx = service.ContextWithOpenAIExecutionTarget(ctx, target)
 	req = req.WithContext(ctx)
 
 	manager := svc.ensureOpenAICPAManager()
 	settings := svc.applyProfilePoolSettings(svc.resolvePoolSettings(svc.getIsolationMode(), 1), service.HTTPUpstreamProfileOpenAI)
 	poolKey := buildPoolKey(settings, upstreamProtocolModeOpenAICPAH2) + "|profile:" + tlsfingerprint.CPAChromeProfileVersion
 	fingerprint := openAITransportScopeFingerprint(service.OpenAITransportScope{
-		AccountID:         binding.AccountID,
-		Persona:           binding.PersonaID,
-		PersonaVersion:    binding.PersonaVersion,
-		SlotID:            binding.SlotID,
-		SessionEpoch:      binding.SessionEpoch,
-		SlotGeneration:    binding.SlotGeneration,
-		SlotSetGeneration: binding.SlotSetGeneration,
-		CredentialChainID: binding.CredentialChainID,
-		InstallationID:    binding.InstallationID,
+		AccountID: target.AccountID, AccountPersonaID: target.AccountPersonaID,
+		ProfileID: target.ProfileID, ProfileVersion: target.ProfileVersion,
+		SessionEpoch: target.SessionEpoch, PersonaGeneration: target.PersonaGeneration,
+		CredentialChainID: target.CredentialChainID, InstallationID: target.InstallationID,
 	}, directProxyKey, poolKey)
 	routed := false
 	manager.clients["cpa:"+fingerprint] = &upstreamClientEntry{
@@ -71,7 +64,7 @@ func TestDoWithTLSRoutesCompletePersonaScopeToCPAManager(t *testing.T) {
 		transportProfileVersion: tlsfingerprint.CPAChromeProfileVersion,
 	}
 
-	resp, err := svc.DoWithTLS(req, "", binding.AccountID, 1, &tlsfingerprint.Profile{Name: "legacy-input-is-ignored"})
+	resp, err := svc.DoWithTLS(req, "", target.AccountID, 1, &tlsfingerprint.Profile{Name: "legacy-input-is-ignored"})
 	if err != nil {
 		t.Fatalf("CPA-routed request failed: %v", err)
 	}
@@ -103,19 +96,18 @@ func TestOpenAICPATransportIsolatedByScopeAndManagerGeneration(t *testing.T) {
 
 	scope0 := service.OpenAITransportScope{
 		AccountID:         42,
-		Persona:           service.SessionPersonaCodexCLIStrict,
-		PersonaVersion:    "0.149.0",
-		SlotID:            0,
+		AccountPersonaID:  4201,
+		ProfileID:         service.SessionPersonaCodexCLIStrict,
+		ProfileVersion:    "0.149.0",
+		PersonaGeneration: 1,
 		SessionEpoch:      1,
-		SlotGeneration:    1,
-		SlotSetGeneration: 1,
 		CredentialChainID: "chain-codex",
 		InstallationID:    "install-codex",
 	}
 	scope1 := scope0
-	scope1.Persona = service.SessionPersonaOpenCode
-	scope1.PersonaVersion = "1.18.23"
-	scope1.SlotID = 1
+	scope1.AccountPersonaID++
+	scope1.ProfileID = service.SessionPersonaOpenCode
+	scope1.ProfileVersion = "1.18.23"
 	scope1.CredentialChainID = "chain-opencode"
 	scope1.InstallationID = "install-opencode"
 
@@ -167,7 +159,7 @@ func TestOpenAICPATransportIsolatedByScopeAndManagerGeneration(t *testing.T) {
 	}
 }
 
-func TestOpenAICPATransportInvalidationOnlyRemovesMatchingCredential(t *testing.T) {
+func TestOpenAICPATransportInvalidationOnlyRemovesMatchingAccountPersonaCredential(t *testing.T) {
 	cfg := &config.Config{
 		Gateway: config.GatewayConfig{
 			OpenAIHTTP2:        config.GatewayOpenAIHTTP2Config{Enabled: true},
@@ -178,8 +170,8 @@ func TestOpenAICPATransportInvalidationOnlyRemovesMatchingCredential(t *testing.
 	manager := svc.ensureOpenAICPAManager()
 	poolKey := "test-pool|profile:" + tlsfingerprint.CPAChromeProfileVersion
 	target := service.OpenAITransportScope{
-		AccountID: 42, Persona: service.SessionPersonaOpenCode, PersonaVersion: "1.18.23",
-		SlotID: 1, SessionEpoch: 1, SlotGeneration: 1, SlotSetGeneration: 1,
+		AccountID: 42, AccountPersonaID: 4201, ProfileID: service.SessionPersonaOpenCode, ProfileVersion: "1.18.23",
+		PersonaGeneration: 1, SessionEpoch: 1,
 		CredentialChainID: "chain-target", InstallationID: "install-target",
 	}
 	other := target
@@ -194,7 +186,7 @@ func TestOpenAICPATransportInvalidationOnlyRemovesMatchingCredential(t *testing.
 		}
 	}
 
-	svc.InvalidateOpenAIPersonaTransport(target.AccountID, target.Persona, target.SlotID, target.CredentialChainID)
+	svc.InvalidateOpenAIAccountPersonaCredentialTransport(target.AccountID, target.AccountPersonaID, target.CredentialChainID)
 	if len(manager.clients) != 1 {
 		t.Fatalf("expected only the non-matching credential transport to remain, got %d", len(manager.clients))
 	}

@@ -89,25 +89,27 @@ func TestOpenAIAccountAdmissionConfigForPersona(t *testing.T) {
 	}
 }
 
-func TestEffectiveOpenAIAccountAdmissionCapacityUsesActiveAuthorizedPersonaSlots(t *testing.T) {
-	account := newSessionPersonaOAuthAccount()
-	account.Concurrency = 4
-	account.Extra[openAIPersonaMappingEnabledExtraKey] = true
-	account.Extra[openAIPersonaMappingVersionExtraKey] = SessionPersonaScopeVersionV3
-	account.Extra[OpenAIPersonaSlotAuthorizedExtraKey] = map[string]any{"0": true, "1": true}
-	account.Extra[OpenAIPersonaActiveChainsExtraKey] = map[string]any{"0": "strict-chain", "1": "opencode-chain"}
+func TestEffectiveOpenAIAccountPersonaCapacityUsesDynamicPersonas(t *testing.T) {
+	account := &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 4}
 	cfg := DefaultOpenAIAccountAdmissionConfig()
 	cfg.PersonaPolicies = map[string]OpenAIPersonaAdmissionPolicy{
 		string(SessionPersonaCodexCLIStrict): {MaxConcurrency: 3},
 		string(SessionPersonaOpenCode):       {MaxConcurrency: 2},
 	}
 
-	if got := EffectiveOpenAIAccountAdmissionCapacity(account, cfg); got != 5 {
+	personas := []OpenAIAccountPersona{
+		{ID: 1, AccountID: account.ID, ProfileID: SessionPersonaCodexCLIStrict, State: OpenAIAccountPersonaStateActive, Enabled: true, CurrentCredentialChainID: "strict-chain", CurrentSessionEpoch: 1},
+		{ID: 2, AccountID: account.ID, ProfileID: SessionPersonaOpenCode, State: OpenAIAccountPersonaStateActive, Enabled: true, CurrentCredentialChainID: "opencode-chain", CurrentSessionEpoch: 1},
+	}
+	if got := EffectiveOpenAIAccountPersonaCapacity(account, personas, cfg); got != 5 {
 		t.Fatalf("active Persona capacity = %d, want 5", got)
 	}
-	account.Extra[openAIPersonaSlotStateExtraKey] = map[string]any{"1": string(SessionPersonaSlotStateDraining)}
-	if got := EffectiveOpenAIAccountAdmissionCapacity(account, cfg); got != 3 {
+	personas[1].State = OpenAIAccountPersonaStateDraining
+	if got := EffectiveOpenAIAccountPersonaCapacity(account, personas, cfg); got != 3 {
 		t.Fatalf("draining OpenCode capacity = %d, want 3", got)
+	}
+	if got := EffectiveOpenAIAccountAdmissionCapacity(account, cfg); got != 0 {
+		t.Fatalf("legacy OAuth capacity must fail closed, got %d", got)
 	}
 }
 
