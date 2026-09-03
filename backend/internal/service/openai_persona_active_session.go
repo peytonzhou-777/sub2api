@@ -169,6 +169,9 @@ func (r *openAIPersonaActiveSessionReservation) releasePending() {
 }
 
 func commitOpenAIPersonaActiveSession(ctx context.Context, accountID int64) {
+	if dynamic := dynamicOpenAIClientSessionReservationFromContext(ctx); dynamic != nil {
+		dynamic.commit()
+	}
 	reservation := openAIPersonaActiveSessionReservationFromContext(ctx)
 	if reservation == nil || reservation.accountID != accountID {
 		return
@@ -177,6 +180,9 @@ func commitOpenAIPersonaActiveSession(ctx context.Context, accountID int64) {
 }
 
 func releaseOpenAIPersonaActiveSessionReservation(ctx context.Context, accountID int64) {
+	if dynamic := dynamicOpenAIClientSessionReservationFromContext(ctx); dynamic != nil {
+		dynamic.rollback()
+	}
 	reservation := openAIPersonaActiveSessionReservationFromContext(ctx)
 	if reservation == nil || reservation.accountID != accountID {
 		return

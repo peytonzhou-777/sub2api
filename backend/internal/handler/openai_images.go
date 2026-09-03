@@ -23,6 +23,7 @@ import (
 func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 	streamStarted := false
 	defer h.recoverResponsesPanic(c, &streamStarted)
+	setOpenAIClientTransportHTTP(c)
 
 	requestStart := time.Now()
 
@@ -176,6 +177,10 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				zap.Error(err),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
+			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
+				h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "拒绝下游分发", streamStarted)
+				return
+			}
 			if len(failedAccountIDs) == 0 {
 				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, clientRequestModel, routingModel, service.PlatformOpenAI)
 				if !cls.ModelNotFound {

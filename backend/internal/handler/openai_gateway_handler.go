@@ -658,6 +658,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				zap.Error(openAICompatibleSelectionErrorForLog(err, requestPlatform)),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
+			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
+				h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "拒绝下游分发", streamStarted)
+				return
+			}
 			if errors.Is(err, service.ErrOpenAIPreviousResponseAccountUnavailable) {
 				h.gatewayService.RecordOpenAIContinuationRejected()
 				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "Continuation account is unavailable; retry when the original account recovers", streamStarted)
@@ -1351,6 +1355,10 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 				zap.Error(openAICompatibleSelectionErrorForLog(err, requestPlatform)),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
+			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
+				h.anthropicStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "拒绝下游分发", streamStarted)
+				return
+			}
 			if len(failedAccountIDs) == 0 {
 				if err != nil {
 					cls := classifyOpenAICompatibleNoAccountErrorFromGin(c, h.gatewayService, apiKey, currentRoutingModel, reqModel)
@@ -3256,6 +3264,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				zap.Error(openAICompatibleSelectionErrorForLog(err, requestPlatform)),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
+			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
+				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "拒绝下游分发")
+				return
+			}
 			if lastFailoverErr != nil {
 				closeOpenAIWSFailoverExhausted(c, wsConn, lastFailoverErr)
 			} else {
@@ -4804,10 +4816,18 @@ func (h *OpenAIGatewayHandler) openAICompactKeepaliveInterval() time.Duration {
 
 func setOpenAIClientTransportHTTP(c *gin.Context) {
 	service.SetOpenAIClientTransport(c, service.OpenAIClientTransportHTTP)
+	if c != nil && c.Request != nil {
+		ctx := service.ContextWithOpenAIInboundPersonaPreferenceFromHeaders(c.Request.Context(), c.GetHeader("User-Agent"), c.GetHeader("originator"))
+		c.Request = c.Request.WithContext(ctx)
+	}
 }
 
 func setOpenAIClientTransportWS(c *gin.Context) {
 	service.SetOpenAIClientTransport(c, service.OpenAIClientTransportWS)
+	if c != nil && c.Request != nil {
+		ctx := service.ContextWithOpenAIInboundPersonaPreferenceFromHeaders(c.Request.Context(), c.GetHeader("User-Agent"), c.GetHeader("originator"))
+		c.Request = c.Request.WithContext(ctx)
+	}
 }
 
 func ensureOpenAIPoolModeSessionHash(sessionHash string, account *service.Account) string {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -21,6 +22,20 @@ func TestDefaultOpenAIAccountAdmissionConfig(t *testing.T) {
 	if cfg.MaxActiveClientSessions != 1 {
 		t.Fatalf("default max active client Sessions = %d, want 1", cfg.MaxActiveClientSessions)
 	}
+	if cfg.MaxActiveClientSessionsPerUserGroup != 3 {
+		t.Fatalf("default User x Group max active client Sessions = %d, want 3", cfg.MaxActiveClientSessionsPerUserGroup)
+	}
+}
+
+func TestOpenAIAccountAdmissionConfigLegacyJSONKeepsUserGroupDefault(t *testing.T) {
+	cfg := DefaultOpenAIAccountAdmissionConfig()
+	requireNoField := `{"max_wait_seconds":45,"max_active_client_sessions":1,"default_output_tokens":4096,"jitter_min_ms":100,"jitter_max_ms":500,"max_queue_depth_per_account":100,"interactive_burst":4,"background_aging_seconds":5}`
+	if err := json.Unmarshal([]byte(requireNoField), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MaxActiveClientSessionsPerUserGroup != 3 {
+		t.Fatalf("legacy JSON default = %d, want 3", cfg.MaxActiveClientSessionsPerUserGroup)
+	}
 }
 
 func TestValidateOpenAIAccountAdmissionConfig(t *testing.T) {
@@ -31,6 +46,7 @@ func TestValidateOpenAIAccountAdmissionConfig(t *testing.T) {
 		{"max wait", func(c *OpenAIAccountAdmissionConfig) { c.MaxWaitSeconds = 121 }},
 		{"rpm", func(c *OpenAIAccountAdmissionConfig) { c.RequestsPerMinute = -1 }},
 		{"active client sessions", func(c *OpenAIAccountAdmissionConfig) { c.MaxActiveClientSessions = -1 }},
+		{"user group active client sessions", func(c *OpenAIAccountAdmissionConfig) { c.MaxActiveClientSessionsPerUserGroup = 0 }},
 		{"tpm", func(c *OpenAIAccountAdmissionConfig) { c.TokensPerMinute = 100000001 }},
 		{"jitter order", func(c *OpenAIAccountAdmissionConfig) { c.JitterMaxMS = c.JitterMinMS - 1 }},
 		{"queue depth", func(c *OpenAIAccountAdmissionConfig) { c.MaxQueueDepthPerAccount = 0 }},

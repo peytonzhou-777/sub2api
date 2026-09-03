@@ -2171,23 +2171,62 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	previousResponseCanMove bool,
 	useUpstreamTokenCost bool,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
-	selection, decision, err := s.selectAccountWithSchedulerOnce(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
-	if err == nil || openAIProxyStreamQuarantineBypassed(ctx) {
-		return selection, decision, err
+	platform = NormalizeOpenAICompatiblePlatform(platform)
+	var reservation *openAIClientSessionReservationState
+	var err error
+	if platform == PlatformOpenAI && s.clientSessionReservationRepo != nil {
+		reservation, err = s.beginOpenAIClientSessionReservation(ctx, groupID, sessionHash)
+		if err != nil {
+			return nil, OpenAIAccountScheduleDecision{}, err
+		}
 	}
-	if !errors.Is(err, ErrNoAvailableAccounts) && !errors.Is(err, ErrNoAvailableCompactAccounts) {
-		return selection, decision, err
+	rollback := func() {
+		if reservation != nil {
+			reservation.rollback()
+		}
 	}
-	// The circuit only ever quarantines PlatformOpenAI accounts.
-	if NormalizeOpenAICompatiblePlatform(platform) != PlatformOpenAI {
-		return selection, decision, err
+	selectOnce := func(candidateCtx context.Context, candidateExcluded map[int64]struct{}) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+		selection, decision, selectErr := s.selectAccountWithSchedulerOnce(candidateCtx, groupID, previousResponseID, sessionHash, requestedModel, candidateExcluded, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
+		if selectErr == nil || openAIProxyStreamQuarantineBypassed(candidateCtx) {
+			return selection, decision, selectErr
+		}
+		if (!errors.Is(selectErr, ErrNoAvailableAccounts) && !errors.Is(selectErr, ErrNoAvailableCompactAccounts)) || platform != PlatformOpenAI {
+			return selection, decision, selectErr
+		}
+		blocked := s.getOpenAIProxyStreamCircuit().activeBlockCount(time.Now())
+		if blocked == 0 {
+			return selection, decision, selectErr
+		}
+		s.logOpenAIProxyStreamQuarantineFailOpen(requestedModel, blocked)
+		return s.selectAccountWithSchedulerOnce(withOpenAIProxyStreamQuarantineBypass(candidateCtx), groupID, previousResponseID, sessionHash, requestedModel, candidateExcluded, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
 	}
-	blocked := s.getOpenAIProxyStreamCircuit().activeBlockCount(time.Now())
-	if blocked == 0 {
-		return selection, decision, err
+	if reservation == nil {
+		return selectOnce(ctx, excludedIDs)
 	}
-	s.logOpenAIProxyStreamQuarantineFailOpen(requestedModel, blocked)
-	return s.selectAccountWithSchedulerOnce(withOpenAIProxyStreamQuarantineBypass(ctx), groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
+	effectiveExcluded := cloneExcludedAccountIDs(excludedIDs)
+	if effectiveExcluded == nil {
+		effectiveExcluded = make(map[int64]struct{})
+	}
+	for {
+		selection, decision, selectErr := selectOnce(ctx, effectiveExcluded)
+		if selectErr != nil || selection == nil || selection.Account == nil {
+			rollback()
+			return selection, decision, selectErr
+		}
+		if attachErr := s.attachOpenAIPersonaReservation(ctx, selection, reservation, sessionHash); attachErr == nil {
+			return selection, decision, nil
+		} else if !errors.Is(attachErr, ErrOpenAIPersonaSessionCapacity) && !errors.Is(attachErr, ErrOpenAIAccountPersonaClaim) {
+			if selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			rollback()
+			return nil, decision, attachErr
+		}
+		if selection.ReleaseFunc != nil {
+			selection.ReleaseFunc()
+		}
+		effectiveExcluded[selection.Account.ID] = struct{}{}
+	}
 }
 
 func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(

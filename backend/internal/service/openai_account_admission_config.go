@@ -30,22 +30,24 @@ type cachedOpenAIAccountAdmissionConfig struct {
 
 // OpenAIAccountAdmissionConfig 是账号选定后的全局准入配置，不提供逐账号覆盖。
 type OpenAIAccountAdmissionConfig struct {
-	Enabled                 bool  `json:"enabled"`
-	QueueEnabled            bool  `json:"queue_enabled"`
-	MaxWaitSeconds          int   `json:"max_wait_seconds"`
-	MaxConcurrency          int   `json:"max_concurrency,omitempty"`
-	MaxActiveClientSessions int   `json:"max_active_client_sessions"`
-	RequestsPerMinute       int   `json:"requests_per_minute"`
-	TokensPerMinute         int64 `json:"tokens_per_minute"`
-	MaxSubagents            int   `json:"max_subagents,omitempty"`
-	SubagentDepth           int   `json:"subagent_depth,omitempty"`
-	MaxActiveWebSockets     int   `json:"max_active_websockets,omitempty"`
-	DefaultOutputTokens     int64 `json:"default_output_tokens"`
-	JitterMinMS             int   `json:"jitter_min_ms"`
-	JitterMaxMS             int   `json:"jitter_max_ms"`
-	MaxQueueDepthPerAccount int   `json:"max_queue_depth_per_account"`
-	InteractiveBurst        int   `json:"interactive_burst"`
-	BackgroundAgingSeconds  int   `json:"background_aging_seconds"`
+	Enabled                 bool `json:"enabled"`
+	QueueEnabled            bool `json:"queue_enabled"`
+	MaxWaitSeconds          int  `json:"max_wait_seconds"`
+	MaxConcurrency          int  `json:"max_concurrency,omitempty"`
+	MaxActiveClientSessions int  `json:"max_active_client_sessions"`
+	// MaxActiveClientSessionsPerUserGroup 限制同一用户在一个有效分组内可占用的客户端 Session 总数。
+	MaxActiveClientSessionsPerUserGroup int   `json:"max_active_client_sessions_per_user_group"`
+	RequestsPerMinute                   int   `json:"requests_per_minute"`
+	TokensPerMinute                     int64 `json:"tokens_per_minute"`
+	MaxSubagents                        int   `json:"max_subagents,omitempty"`
+	SubagentDepth                       int   `json:"subagent_depth,omitempty"`
+	MaxActiveWebSockets                 int   `json:"max_active_websockets,omitempty"`
+	DefaultOutputTokens                 int64 `json:"default_output_tokens"`
+	JitterMinMS                         int   `json:"jitter_min_ms"`
+	JitterMaxMS                         int   `json:"jitter_max_ms"`
+	MaxQueueDepthPerAccount             int   `json:"max_queue_depth_per_account"`
+	InteractiveBurst                    int   `json:"interactive_burst"`
+	BackgroundAgingSeconds              int   `json:"background_aging_seconds"`
 	// PersonaPolicies is optional for backward compatibility. When omitted,
 	// legacy top-level limits apply to every Persona. When present, the named
 	// Persona receives its own queue/RPM/capacity policy without changing the
@@ -58,18 +60,19 @@ type OpenAIAccountAdmissionConfig struct {
 // DefaultOpenAIAccountAdmissionConfig 返回默认关闭且可直接启用的保守配置。
 func DefaultOpenAIAccountAdmissionConfig() OpenAIAccountAdmissionConfig {
 	return OpenAIAccountAdmissionConfig{
-		Enabled:                 false,
-		QueueEnabled:            false,
-		MaxWaitSeconds:          45,
-		MaxActiveClientSessions: 1,
-		RequestsPerMinute:       0,
-		TokensPerMinute:         0,
-		DefaultOutputTokens:     4096,
-		JitterMinMS:             100,
-		JitterMaxMS:             500,
-		MaxQueueDepthPerAccount: 100,
-		InteractiveBurst:        4,
-		BackgroundAgingSeconds:  5,
+		Enabled:                             false,
+		QueueEnabled:                        false,
+		MaxWaitSeconds:                      45,
+		MaxActiveClientSessions:             1,
+		MaxActiveClientSessionsPerUserGroup: 3,
+		RequestsPerMinute:                   0,
+		TokensPerMinute:                     0,
+		DefaultOutputTokens:                 4096,
+		JitterMinMS:                         100,
+		JitterMaxMS:                         500,
+		MaxQueueDepthPerAccount:             100,
+		InteractiveBurst:                    4,
+		BackgroundAgingSeconds:              5,
 	}
 }
 
@@ -84,11 +87,11 @@ func ValidateOpenAIAccountAdmissionConfig(cfg OpenAIAccountAdmissionConfig) (Ope
 	if cfg.MaxConcurrency < 0 || cfg.MaxConcurrency > maxPersonaPolicyConcurrency {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("max_concurrency must be between 0 and %d", maxPersonaPolicyConcurrency))
 	}
-	if cfg.MaxActiveClientSessions == 0 {
-		cfg.MaxActiveClientSessions = 1
-	}
 	if cfg.MaxActiveClientSessions < 1 || cfg.MaxActiveClientSessions > maxPersonaPolicySessions {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("max_active_client_sessions must be between 1 and %d", maxPersonaPolicySessions))
+	}
+	if cfg.MaxActiveClientSessionsPerUserGroup < 1 || cfg.MaxActiveClientSessionsPerUserGroup > 10000 {
+		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", "max_active_client_sessions_per_user_group must be between 1 and 10000")
 	}
 	if cfg.MaxSubagents < 0 || cfg.MaxSubagents > maxPersonaPolicySubagents {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("max_subagents must be between 0 and %d", maxPersonaPolicySubagents))
