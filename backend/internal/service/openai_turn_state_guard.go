@@ -179,6 +179,26 @@ func (s *OpenAIGatewayService) isolateOpenAITurnStateAttempt(
 	if turnState == "" {
 		return requestBody, restore, nil
 	}
+	// 客户端只接触站点包装值；进入上游前恢复原始 opaque state。
+	if strings.HasPrefix(turnState, "ts1.") {
+		if s.turnStateCipher == nil || account == nil {
+			requestBody = stripOpenAITurnStateFromRequest(attemptRequest.Header, requestBody)
+			return requestBody, restore, nil
+		}
+		raw, err := s.turnStateCipher.unwrap(turnState, turnStateAADForContext(c, account.ID))
+		if err != nil {
+			requestBody = stripOpenAITurnStateFromRequest(attemptRequest.Header, requestBody)
+			logger.L().Warn("openai.turn_state_wrapper_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
+			return requestBody, restore, nil
+		}
+		turnState = raw
+		attemptRequest.Header.Set(openAIWSTurnStateHeader, raw)
+		requestBody = applyOpenAITurnStateToPayload(requestBody, raw)
+	} else if s.turnStateCipher != nil {
+		// 未包装值来自外部供应商或旧客户端，不能直接送往 OpenAI。
+		requestBody = stripOpenAITurnStateFromRequest(attemptRequest.Header, requestBody)
+		return requestBody, restore, nil
+	}
 	if account != nil && account.IsOpenAIOAuth() && !codexFingerprintAdmissionPreparedForAccount(c, account) {
 		if err := s.PrepareCodexFingerprintForAdmission(ctx, c, account, requestBody, false); err != nil {
 			restore()

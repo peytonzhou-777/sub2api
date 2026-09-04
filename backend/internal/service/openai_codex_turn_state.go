@@ -1,13 +1,89 @@
 package service
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
 )
+
+// openAITurnStateCipher 为客户端可见状态提供站点级 AEAD 封装。
+type openAITurnStateCipher struct{ key [32]byte }
+
+func newOpenAITurnStateCipher(cfg *config.Config) *openAITurnStateCipher {
+	if cfg == nil || strings.TrimSpace(cfg.JWT.Secret) == "" {
+		return nil
+	}
+	return &openAITurnStateCipher{key: sha256.Sum256([]byte("sub2api/turn-state/v1\x00" + cfg.JWT.Secret))}
+}
+func (c *openAITurnStateCipher) wrap(raw, aad string) (string, error) {
+	if c == nil || strings.TrimSpace(raw) == "" {
+		return "", fmt.Errorf("turn-state cipher unavailable")
+	}
+	b, err := aes.NewCipher(c.key[:])
+	if err != nil {
+		return "", err
+	}
+	g, err := cipher.NewGCM(b)
+	if err != nil {
+		return "", err
+	}
+	n := make([]byte, g.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, n); err != nil {
+		return "", err
+	}
+	sealed := g.Seal(n, n, []byte(raw), []byte(aad))
+	return "ts1." + base64.RawURLEncoding.EncodeToString(sealed), nil
+}
+func (c *openAITurnStateCipher) unwrap(token, aad string) (string, error) {
+	if c == nil || !strings.HasPrefix(token, "ts1.") {
+		return "", fmt.Errorf("invalid turn-state wrapper")
+	}
+	b, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(token, "ts1."))
+	if err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher(c.key[:])
+	if err != nil {
+		return "", err
+	}
+	g, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	if len(b) < g.NonceSize() {
+		return "", fmt.Errorf("turn-state wrapper too short")
+	}
+	out, err := g.Open(nil, b[:g.NonceSize()], b[g.NonceSize():], []byte(aad))
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+func turnStateAAD(accountID int64, sessionHash string) string {
+	return fmt.Sprintf("account:%d\x00session:%s", accountID, strings.TrimSpace(sessionHash))
+}
+
+func turnStateAADForContext(c *gin.Context, accountID int64) string {
+	base := turnStateAAD(accountID, openAITurnStateSessionHash(c))
+	if c != nil && c.Request != nil {
+		if target, ok := OpenAIExecutionTargetFromContext(c.Request.Context()); ok {
+			return fmt.Sprintf("%s\x00persona:%d\x00generation:%d\x00epoch:%d\x00credential:%s\x00profile:%s", base, target.AccountPersonaID, target.PersonaGeneration, target.SessionEpoch, target.CredentialChainID, target.ProfileVersion)
+		}
+	}
+	return base
+}
 
 // openAICodexTurnStateHeader 是 Codex 的回合状态头。上游在响应头中铸造该
 // 不透明 blob，客户端在同一回合的后续请求中原样回带（codex-rs 侧从
@@ -33,7 +109,7 @@ func openAICodexTurnStateSeed(c *gin.Context) string {
 
 // relayOpenAICodexTurnState 将上游 turn-state 显式写入下游响应头。跨账号溯源
 // 由 openai_turn_state_guard.go 按 state 哈希精确绑定，不能再按根 Session 粗记。
-func (s *OpenAIGatewayService) relayOpenAICodexTurnState(c *gin.Context, _ *Account, upstream http.Header) {
+func (s *OpenAIGatewayService) relayOpenAICodexTurnState(c *gin.Context, account *Account, upstream http.Header) {
 	if c == nil || c.Writer == nil {
 		return
 	}
@@ -42,6 +118,11 @@ func (s *OpenAIGatewayService) relayOpenAICodexTurnState(c *gin.Context, _ *Acco
 	if state == "" {
 		c.Writer.Header().Del(canonical)
 		return
+	}
+	if s.turnStateCipher != nil && account != nil {
+		if wrapped, err := s.turnStateCipher.wrap(state, turnStateAADForContext(c, account.ID)); err == nil {
+			state = wrapped
+		}
 	}
 	c.Writer.Header().Set(canonical, state)
 }

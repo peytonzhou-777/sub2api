@@ -473,6 +473,7 @@ type OpenAIGatewayService struct {
 	userPlatformQuotaRepo        UserPlatformQuotaRepository
 	liveAttestation              liveattestation.Provider
 	liveAttestationCipher        SecretEncryptor
+	turnStateCipher              *openAITurnStateCipher
 
 	openaiWSPoolOnce               sync.Once
 	openaiWSStateStoreOnce         sync.Once
@@ -589,6 +590,7 @@ func NewOpenAIGatewayService(
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
 		liveAttestation:       liveattestation.NewProvider(),
 		liveAttestationCipher: newLiveAttestationCipher(cfg),
+		turnStateCipher:       newOpenAITurnStateCipher(cfg),
 		responseHeaderFilter:  compileResponseHeaderFilter(cfg),
 		codexSnapshotThrottle: newAccountWriteThrottle(openAICodexSnapshotPersistMinInterval),
 		openaiModelTransient:  newOpenAIAccountModelTransientState(openAIModelTransientDefaultMax),
