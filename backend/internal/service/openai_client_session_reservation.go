@@ -351,6 +351,13 @@ func (s *OpenAIGatewayService) attachBoundOpenAIPersonaReservation(
 	state.personaLeaseID = reserved.LeaseID
 	selection.ExecutionTarget = &target
 	selection.clientSessionReservation = state
+	// 父 Thread 派生的新子 Thread 会继承已固化的执行目标，但仍拥有自己的
+	// provisional binding。必须在首次上游发送前把完整目标写入子 binding；
+	// helper 的 provisional token 门禁保证普通 continuation 不会被改写。
+	if bindErr := s.bindOpenAIUserAffinityConversationExecutionTarget(ctx, selection.Account.ID, target, clientHash); bindErr != nil {
+		state.rollback()
+		return bindErr
+	}
 	originalRelease := selection.ReleaseFunc
 	selection.ReleaseFunc = func() {
 		if originalRelease != nil {

@@ -266,6 +266,10 @@ func (r *schedulerConversationAffinityRepo) CommitOpenAIUserConversationBinding(
 		copy := *r.binding
 		r.aliasBindings[alias.ScopeKey+"\x00"+alias.Type+"\x00"+alias.Hash] = &copy
 	}
+	if transition.ResponseAliasHash != "" {
+		copy := *r.binding
+		r.aliasBindings[transition.ScopeKey+"\x00response_id\x00"+transition.ResponseAliasHash] = &copy
+	}
 	return true, nil
 }
 
@@ -839,7 +843,7 @@ func TestOpenAIGatewayService_CodexDerivedThreadLocksParentAndReservesOwnBinding
 	now := time.Now().UTC()
 	accountID := int64(36231)
 	accounts := []Account{{
-		ID: accountID, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		ID: accountID, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Status: StatusActive, Schedulable: true, Concurrency: 1,
 	}}
 	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t, nil, accounts, nil, 2)
@@ -852,6 +856,7 @@ func TestOpenAIGatewayService_CodexDerivedThreadLocksParentAndReservesOwnBinding
 		AccountID: accountID, SlotGeneration: 3, Status: "active",
 		ContextRebuildable: true, FirstOutputCommitted: true, ExpiresAt: now.Add(time.Hour),
 	}
+	bindOpenAIUserAffinityTestExecutionTarget(svc, parent)
 	repo.aliasBindings = map[string]*OpenAIUserConversationBinding{
 		openAICodexThreadAliasTestKey(nil, parentHash): parent,
 	}
@@ -877,6 +882,39 @@ func TestOpenAIGatewayService_CodexDerivedThreadLocksParentAndReservesOwnBinding
 	require.True(t, ok)
 	require.NotNil(t, attempt.conversation)
 	require.NotEqual(t, parent.ID, attempt.conversation.BindingID, "子线程必须提交自己的 provisional binding")
+	require.NotNil(t, selection.ExecutionTarget)
+	require.True(t, selection.ExecutionTarget.Valid())
+
+	reservationRepo := &openAIBoundPersonaReservationRepo{personaLeaseID: 3301}
+	reservationState := &openAIClientSessionReservationState{
+		repo: reservationRepo, token: "child-client-reservation", userLeaseID: 3201,
+	}
+	clientHash := strings.Repeat("d", 64)
+	require.NoError(t, svc.attachBoundOpenAIPersonaReservation(ctx, selection, reservationState, clientHash))
+	require.Equal(t, parent.AccountPersonaID, repo.binding.AccountPersonaID)
+	require.Equal(t, parent.PersonaSessionEpoch, repo.binding.PersonaSessionEpoch)
+	require.Equal(t, parent.CredentialChainID, repo.binding.CredentialChainID)
+	require.Equal(t, clientHash, repo.binding.RootClientSessionHash)
+	require.Equal(t, int64(3201), repo.binding.UserGroupLeaseID)
+	require.Equal(t, parent.ProfileID, repo.binding.ProfileID)
+	require.Equal(t, parent.ProfileVersion, repo.binding.ProfileVersion)
+
+	const childResponseID = "resp_child_persona_target"
+	svc.stageOpenAIUserAffinityResponseAlias(ctx, accountID, childResponseID)
+	require.True(t, svc.commitOpenAIUserAffinityConversation(ctx, accountID))
+
+	continuationCtx := context.WithValue(context.Background(), ctxkey.UserID, int64(42))
+	continuationCtx = context.WithValue(continuationCtx, ctxkey.APIKeyID, int64(77))
+	continuationCtx = context.WithValue(continuationCtx, ctxkey.RequestID, "child-persona-continuation")
+	continuationReq := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, childResponseID, "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	continued, continuedFound, continueErr := svc.selectOpenAIUserAffinityConversation(continuationCtx, continuationReq)
+	require.NoError(t, continueErr)
+	require.True(t, continuedFound)
+	require.NotNil(t, continued)
+	require.NotNil(t, continued.ExecutionTarget)
+	require.Equal(t, selection.ExecutionTarget.AccountPersonaID, continued.ExecutionTarget.AccountPersonaID)
+	require.Equal(t, selection.ExecutionTarget.SessionEpoch, continued.ExecutionTarget.SessionEpoch)
+	require.Equal(t, selection.ExecutionTarget.CredentialChainID, continued.ExecutionTarget.CredentialChainID)
 }
 
 func TestOpenAIGatewayService_CodexParentProvisionalFailsRetryably(t *testing.T) {

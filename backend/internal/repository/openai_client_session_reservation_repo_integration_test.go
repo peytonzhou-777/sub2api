@@ -190,6 +190,30 @@ func TestOpenAIConversationBindingPersistsExecutionTarget(t *testing.T) {
 	require.Equal(t, userLease.LeaseID, binding.UserGroupLeaseID)
 	require.Equal(t, target.ProfileID, binding.ProfileID)
 	require.Equal(t, target.ProfileVersion, binding.ProfileVersion)
+
+	responseAliasHash := strings.Repeat("9", 64)
+	transition.UserID = fixture.userID
+	transition.APIKeyID = fixture.apiKeyID
+	transition.ScopeKey = "openai"
+	transition.ConversationHash = conversationHash
+	transition.ResidentSlotID = residentSlotID
+	transition.SlotGeneration = 1
+	transition.ResponseAliasHash = responseAliasHash
+	transition.Config = service.DefaultOpenAIUserAffinityConfig()
+	firstCommit, err := repo.CommitOpenAIUserConversationBinding(ctx, transition)
+	require.NoError(t, err)
+	require.True(t, firstCommit)
+	continued, err := repo.GetOpenAIUserConversationBindingByAlias(ctx, fixture.userID, fixture.apiKeyID, "openai", "response_id", responseAliasHash)
+	require.NoError(t, err)
+	require.NotNil(t, continued)
+	require.True(t, continued.FirstOutputCommitted)
+	require.Equal(t, target.AccountPersonaID, continued.AccountPersonaID)
+	require.Equal(t, target.SessionEpoch, continued.PersonaSessionEpoch)
+	require.Equal(t, target.CredentialChainID, continued.CredentialChainID)
+	require.Equal(t, rootHash, continued.RootClientSessionHash)
+	require.Equal(t, userLease.LeaseID, continued.UserGroupLeaseID)
+	require.Equal(t, target.ProfileID, continued.ProfileID)
+	require.Equal(t, target.ProfileVersion, continued.ProfileVersion)
 }
 
 func TestOpenAIClientSessionReservationRollbackExpiresLeaseReferencedByBinding(t *testing.T) {
