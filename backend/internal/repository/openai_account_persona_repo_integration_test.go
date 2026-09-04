@@ -116,9 +116,19 @@ WHERE account_persona_id = $1 AND session_epoch = 2`, personas[0].ID).Scan(&newP
 	require.NoError(t, err)
 	require.True(t, swapped)
 
+	updatedMaxActive := 2
+	capacityUpdated, err := personaRepo.UpdateAccountPersona(ctx, service.OpenAIAccountPersonaUpdate{
+		AccountID: account.ID, AccountPersonaID: dynamic.ID, ExpectedRowVersion: authorized.RowVersion,
+		MaxActiveSessionsConfigured: true, MaxActiveClientSessionsOverride: &updatedMaxActive,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, capacityUpdated.MaxActiveClientSessionsOverride)
+	require.Equal(t, updatedMaxActive, *capacityUpdated.MaxActiveClientSessionsOverride)
+	require.Equal(t, service.OpenAIAccountPersonaStateActive, capacityUpdated.State)
+
 	disabled := false
 	draining, err := personaRepo.UpdateAccountPersona(ctx, service.OpenAIAccountPersonaUpdate{
-		AccountID: account.ID, AccountPersonaID: dynamic.ID, ExpectedRowVersion: authorized.RowVersion,
+		AccountID: account.ID, AccountPersonaID: dynamic.ID, ExpectedRowVersion: capacityUpdated.RowVersion,
 		Enabled: &disabled, OldSessionExpiresAt: time.Now().Add(48 * time.Hour),
 	})
 	require.NoError(t, err)

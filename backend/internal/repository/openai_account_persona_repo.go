@@ -367,12 +367,12 @@ VALUES ($1, $2, $3, 'current', $4, $5, $6, $7, $8::bigint, $9, $10, $11, TRUE)`,
 	}
 
 	updated, err := scanOpenAIAccountPersona(tx.QueryRowContext(ctx, `UPDATE openai_account_personas SET
-    enabled = $1, state = $2, proxy_id = $3::bigint,
+    enabled = $1, state = $2::varchar, proxy_id = $3::bigint,
     max_active_client_sessions_override = $4::int,
     persona_generation = $5, current_session_epoch = $6,
     row_version = row_version + 1, updated_at = NOW(),
-    draining_started_at = CASE WHEN $2 = 'draining' THEN COALESCE(draining_started_at, NOW()) ELSE NULL END,
-    disabled_at = CASE WHEN $2 = 'disabled' THEN COALESCE(disabled_at, NOW()) ELSE NULL END
+    draining_started_at = CASE WHEN $2::varchar = 'draining' THEN COALESCE(draining_started_at, NOW()) ELSE NULL END,
+    disabled_at = CASE WHEN $2::varchar = 'disabled' THEN COALESCE(disabled_at, NOW()) ELSE NULL END
 WHERE id = $7 AND account_id = $8 AND row_version = $9
 RETURNING id, account_id, position, profile_id, profile_version, credential_owner, state,
           enabled, persona_generation, COALESCE(current_credential_chain_id, ''),
