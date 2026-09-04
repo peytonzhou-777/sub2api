@@ -134,6 +134,10 @@ func (s *OpenAIGatewayService) relayOpenAICodexTurnState(c *gin.Context, account
 	if s.turnStateCipher != nil && account != nil {
 		if wrapped, err := s.wrapTurnStateForClient(c, account.ID, state); err == nil {
 			state = wrapped
+		} else {
+			// 加密失败时禁止回落到明文，避免安全边界静默失效。
+			c.Writer.Header().Del(canonical)
+			return
 		}
 	}
 	c.Writer.Header().Set(canonical, state)

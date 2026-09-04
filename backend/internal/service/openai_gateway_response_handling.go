@@ -124,9 +124,15 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
 			if s.turnStateCipher != nil && account != nil {
 				if wrapped, wrapErr := s.wrapTurnStateForClient(c, account.ID, pendingTurnState); wrapErr == nil {
 					clientTurnState = wrapped
+				} else {
+					clientTurnState = ""
 				}
 			}
-			c.Header(http.CanonicalHeaderKey(openAIWSTurnStateHeader), clientTurnState)
+			if clientTurnState == "" {
+				c.Writer.Header().Del(http.CanonicalHeaderKey(openAIWSTurnStateHeader))
+			} else {
+				c.Header(http.CanonicalHeaderKey(openAIWSTurnStateHeader), clientTurnState)
+			}
 			s.bindOpenAITurnStateProvenance(ctx, c, account, openAITurnStateSessionHash(c), pendingTurnState, s.openAIWSSessionStickyTTL())
 		}
 		// These headers describe this gateway's SSE stream and are stable across
