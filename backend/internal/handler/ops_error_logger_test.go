@@ -1436,6 +1436,24 @@ func TestClassifyOpsClientBusinessLimitedMarkerExcludesCustomPolicyDenialFromSLA
 	require.Equal(t, "client_request", errorSource)
 }
 
+func TestClassifyOpsLocalPolicyDenialOverridesStaleUpstreamAttribution(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+	c.Set(service.OpsUpstreamStatusCodeKey, http.StatusBadGateway)
+	c.Set(service.OpsUpstreamErrorMessageKey, "stale upstream failure")
+
+	errType := normalizeOpsErrorType("permission_error", "")
+	phase, isBusinessLimited, errorOwner, errorSource := classifyOpsErrorLog(c, errType, "拒绝下游分发", "", http.StatusForbidden)
+
+	require.Equal(t, "permission_error", errType)
+	require.Equal(t, "auth", phase)
+	require.True(t, isBusinessLimited)
+	require.Equal(t, "client", errorOwner)
+	require.Equal(t, "client_request", errorSource)
+}
+
 func TestClassifyOpsOtherErrorsStillCountForSLA(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()

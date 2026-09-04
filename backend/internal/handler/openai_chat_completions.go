@@ -191,7 +191,8 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
 			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
-				h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "拒绝下游分发", streamStarted)
+				markDownstreamDistributionDenied(c)
+				h.handleStreamingAwareError(c, downstreamDistributionDeniedStatus, downstreamDistributionDeniedType, downstreamDistributionDeniedMessage, streamStarted)
 				return
 			}
 			if len(failedAccountIDs) == 0 {

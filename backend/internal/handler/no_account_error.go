@@ -35,6 +35,29 @@ type noAccountErrorClassification struct {
 	ModelNotFound bool // true when this is a 404 model_not_found classification
 }
 
+const (
+	// downstreamDistributionDenied* describes a local admission-policy denial.
+	// It is deliberately a non-retryable 403 rather than a 429: no upstream
+	// request was made and retrying cannot create another user Session seat.
+	downstreamDistributionDeniedStatus  = http.StatusForbidden
+	downstreamDistributionDeniedType    = "permission_error"
+	downstreamDistributionDeniedMessage = "拒绝下游分发"
+)
+
+func downstreamDistributionDeniedClassification() noAccountErrorClassification {
+	return noAccountErrorClassification{
+		Status:  downstreamDistributionDeniedStatus,
+		ErrType: downstreamDistributionDeniedType,
+		Message: downstreamDistributionDeniedMessage,
+	}
+}
+
+// markDownstreamDistributionDenied records the decision as a local policy
+// limitation so Ops does not attribute it to an upstream provider.
+func markDownstreamDistributionDenied(c *gin.Context) {
+	service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+}
+
 var selectionModelRateLimitedPattern = regexp.MustCompile(`(?:model_rate_limited|rate_limited)=(\d+)`)
 
 // classifySelectionFailureError preserves the scheduler's compact reason when
@@ -44,7 +67,7 @@ func classifySelectionFailureError(err error, fallback noAccountErrorClassificat
 		return fallback
 	}
 	if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
-		return noAccountErrorClassification{Status: http.StatusTooManyRequests, ErrType: "rate_limit_error", Message: "拒绝下游分发"}
+		return downstreamDistributionDeniedClassification()
 	}
 	// A 404 model_not_found fallback is authoritative and must not be downgraded
 	// to a rate-limit verdict. classifyNoAccountError only reaches it through

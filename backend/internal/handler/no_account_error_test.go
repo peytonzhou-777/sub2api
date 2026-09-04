@@ -76,6 +76,25 @@ func TestClassifySelectionFailureError_RateLimitedPool(t *testing.T) {
 	require.Equal(t, fallback, classifySelectionFailureError(fmt.Errorf("no available accounts"), fallback))
 }
 
+func TestClassifySelectionFailureError_DownstreamDistributionDeniedIsNonRetryablePolicy(t *testing.T) {
+	fallback := noAccountErrorClassification{Status: http.StatusServiceUnavailable, ErrType: "api_error", Message: "Service temporarily unavailable"}
+
+	got := classifySelectionFailureError(service.ErrOpenAIUserGroupSessionCapacity, fallback)
+
+	require.Equal(t, http.StatusForbidden, got.Status)
+	require.Equal(t, "permission_error", got.ErrType)
+	require.Equal(t, "拒绝下游分发", got.Message)
+}
+
+func TestMarkDownstreamDistributionDeniedMarksLocalPolicy(t *testing.T) {
+	c := newTestGinContextWithRequest()
+
+	markDownstreamDistributionDenied(c)
+
+	require.True(t, service.HasOpsClientBusinessLimited(c))
+	require.Equal(t, service.OpsClientBusinessLimitedReasonLocalPolicyDenied, service.OpsClientBusinessLimitedReason(c))
+}
+
 func TestClassifyNoAccountError_NilAPIKey_Falls503(t *testing.T) {
 	c := newTestGinContextWithRequest()
 	fd := &fakeDiagnoser{resp: service.ModelAvailabilityDiagnosis{HasAccountsInPool: true, HasModelSupport: false}}

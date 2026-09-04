@@ -98,6 +98,27 @@ func TestOpenAIHandleStreamingAwareError_JSONEscaping(t *testing.T) {
 	}
 }
 
+func TestOpenAIHandleStreamingAwareError_DownstreamDistributionDeniedUsesPolicyStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	markDownstreamDistributionDenied(c)
+	(&OpenAIGatewayHandler{}).handleStreamingAwareError(
+		c,
+		downstreamDistributionDeniedStatus,
+		downstreamDistributionDeniedType,
+		downstreamDistributionDeniedMessage,
+		false,
+	)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	require.Empty(t, recorder.Header().Get("Retry-After"))
+	require.Equal(t, "permission_error", gjson.GetBytes(recorder.Body.Bytes(), "error.type").String())
+	require.Equal(t, "拒绝下游分发", gjson.GetBytes(recorder.Body.Bytes(), "error.message").String())
+}
+
 func TestOpenAIHandleStreamingAwareErrorWithCode_EmitsStableClassification(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

@@ -659,7 +659,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
 			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
-				h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "拒绝下游分发", streamStarted)
+				markDownstreamDistributionDenied(c)
+				h.handleStreamingAwareError(c, downstreamDistributionDeniedStatus, downstreamDistributionDeniedType, downstreamDistributionDeniedMessage, streamStarted)
 				return
 			}
 			if errors.Is(err, service.ErrOpenAIConversationResetRequired) {
@@ -1377,7 +1378,8 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
 			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
-				h.anthropicStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "拒绝下游分发", streamStarted)
+				markDownstreamDistributionDenied(c)
+				h.anthropicStreamingAwareError(c, downstreamDistributionDeniedStatus, downstreamDistributionDeniedType, downstreamDistributionDeniedMessage, streamStarted)
 				return
 			}
 			if len(failedAccountIDs) == 0 {
@@ -3170,7 +3172,8 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
 			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
-				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "拒绝下游分发")
+				markDownstreamDistributionDenied(c)
+				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, downstreamDistributionDeniedMessage)
 				return
 			}
 			if lastFailoverErr != nil {

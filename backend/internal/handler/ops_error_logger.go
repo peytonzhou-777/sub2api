@@ -2232,10 +2232,15 @@ func classifyOpsErrorLog(c *gin.Context, errType, message, code string, status i
 	routingCapacityLimited := isOpsRoutingCapacityLimited(c)
 	clientBusinessLimited := service.HasOpsClientBusinessLimited(c)
 	localModelConfiguration := clientBusinessLimited && service.OpsClientBusinessLimitedReason(c) == service.OpsClientBusinessLimitedReasonLocalModelConfiguration
+	localPolicyDenied := clientBusinessLimited && service.OpsClientBusinessLimitedReason(c) == service.OpsClientBusinessLimitedReasonLocalPolicyDenied
 	upstreamError := hasOpsUpstreamErrorContext(c)
 	accountAuthFailure := hasOpsAccountAuthFailure(c)
 	if localModelConfiguration {
 		phase = "routing"
+	} else if localPolicyDenied {
+		// A local admission/policy denial must remain client-owned even if a
+		// previous failover attempt left upstream telemetry on the context.
+		phase = "auth"
 	} else if accountAuthFailure && !routingCapacityLimited {
 		phase = "account_auth"
 	} else if upstreamError && !routingCapacityLimited {
@@ -2248,10 +2253,10 @@ func classifyOpsErrorLog(c *gin.Context, errType, message, code string, status i
 		phase = "routing"
 	}
 	msg := strings.ToLower(message)
-	effectiveUpstreamError := upstreamError && !localModelConfiguration
+	effectiveUpstreamError := upstreamError && !localModelConfiguration && !localPolicyDenied
 	localClientAuthError := !effectiveUpstreamError && phase == "auth" && isOpsClientAuthError(code, msg)
 	localBusinessLimited := !effectiveUpstreamError && classifyOpsIsBusinessLimited(errType, phase, code, status, message, localClientAuthError)
-	isBusinessLimited = localModelConfiguration || routingCapacityLimited || (clientBusinessLimited && !effectiveUpstreamError) || localBusinessLimited
+	isBusinessLimited = localModelConfiguration || localPolicyDenied || routingCapacityLimited || (clientBusinessLimited && !effectiveUpstreamError) || localBusinessLimited
 	errorOwner = classifyOpsErrorOwner(phase, message)
 	errorSource = classifyOpsErrorSource(phase, message)
 	return phase, isBusinessLimited, errorOwner, errorSource
