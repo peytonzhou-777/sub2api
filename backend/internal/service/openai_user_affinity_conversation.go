@@ -246,18 +246,6 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 			"binding_id", binding.ID, "account_id", binding.AccountID, "binding_source", bindingSource)
 		return nil, true, ErrNoAvailableAccounts
 	}
-	var executionTarget OpenAIExecutionTarget
-	if account.IsOpenAIOAuth() {
-		var targetErr error
-		executionTarget, targetErr = s.restoreOpenAIUserConversationExecutionTarget(ctx, binding)
-		if targetErr != nil {
-			// OAuth 续链缺少 Persona/epoch 身份时禁止重新选号，避免 Thread 跨出站设备。
-			if errors.Is(targetErr, ErrOpenAIConversationResetRequired) {
-				return nil, true, ErrOpenAIConversationResetRequired
-			}
-			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
-		}
-	}
 	if excluded || admission != openAIUserAffinityResidentAllowed {
 		if bindingSource == "codex_parent" {
 			// 父线程命中后属于硬锁；父账号不可用时不得把派生请求投递到其他账号。
@@ -274,6 +262,18 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		}
 		// 动态 Persona binding 已锁定完整 lineage；临时容量只在原目标排队，
 		// 不得沿用旧账号级 failover 把 continuation 搬到另一个 Persona。
+	}
+	var executionTarget OpenAIExecutionTarget
+	if account.IsOpenAIOAuth() {
+		var targetErr error
+		executionTarget, targetErr = s.restoreOpenAIUserConversationExecutionTarget(ctx, binding)
+		if targetErr != nil {
+			// OAuth 续链缺少 Persona/epoch 身份时禁止重新选号，避免 Thread 跨出站设备。
+			if errors.Is(targetErr, ErrOpenAIConversationResetRequired) {
+				return nil, true, ErrOpenAIConversationResetRequired
+			}
+			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
+		}
 	}
 	s.rememberOpenAIUserAffinityConversationAttempt(ctx, binding, config, "")
 	if bindingSource == "codex_parent" {

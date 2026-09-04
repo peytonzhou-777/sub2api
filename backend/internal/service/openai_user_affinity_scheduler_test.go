@@ -108,6 +108,14 @@ type schedulerConversationAffinityRepo struct {
 	rollbackTransitions        []OpenAIUserConversationTransition
 }
 
+type missingAccountConversationAffinityRepo struct {
+	*schedulerConversationAffinityRepo
+}
+
+func (r *missingAccountConversationAffinityRepo) GetByID(context.Context, int64) (*Account, error) {
+	return nil, ErrAccountNotFound
+}
+
 func withOpenAICodexThreadAffinityTestState(ctx context.Context, selfHash string, parentHashes ...string) (context.Context, *openAICodexThreadAffinityState) {
 	state := &openAICodexThreadAffinityState{
 		selfAliasHash:     selfHash,
@@ -1427,6 +1435,32 @@ func TestOpenAIGatewayService_HardUnavailableBindingWithoutCandidateDoesNotPollu
 	require.Empty(t, repo.reservations)
 	require.Equal(t, account.ID, repo.binding.AccountID)
 	require.Equal(t, "active", repo.binding.Status)
+}
+
+func TestOpenAIGatewayService_MissingBoundAccountFailsClosedWithoutPanic(t *testing.T) {
+	now := time.Now().UTC()
+	scopeKey := openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE)
+	accountID := int64(36258)
+	slot := OpenAIUserResidentSlot{ID: 58, UserID: 42, ScopeKey: scopeKey, AccountID: accountID, Generation: 1,
+		Status: OpenAIUserResidentSlotStatusActive, ScoreUpdatedAt: now, AdmittedAt: now, ExpiresAt: now.Add(time.Hour)}
+	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t, []OpenAIUserResidentSlot{slot}, nil, nil, 2)
+	svc.accountRepo = &missingAccountConversationAffinityRepo{schedulerConversationAffinityRepo: repo}
+	repo.binding = &OpenAIUserConversationBinding{
+		ID: 258, UserID: 42, APIKeyID: 77, ScopeKey: scopeKey, ConversationHash: strings.Repeat("0", 64),
+		ResidentSlotID: slot.ID, AccountID: accountID, SlotGeneration: slot.Generation, Status: "active",
+		ContextRebuildable: true, FirstOutputCommitted: true, ExpiresAt: now.Add(time.Hour),
+	}
+	bindOpenAIUserAffinityTestExecutionTarget(svc, repo.binding)
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = "missing-bound-account"
+
+	selection, found, err := svc.selectOpenAIUserAffinityConversation(ctx, req)
+	require.ErrorIs(t, err, ErrOpenAIPreviousResponseAccountUnavailable)
+	require.True(t, found)
+	require.Nil(t, selection)
+	require.Empty(t, repo.replacements)
+	require.Empty(t, repo.failovers)
+	require.Empty(t, repo.reservations)
 }
 
 func TestOpenAIGatewayService_NonRebuildableConversationFailsClosed(t *testing.T) {
