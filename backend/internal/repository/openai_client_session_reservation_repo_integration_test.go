@@ -144,6 +144,7 @@ func TestOpenAIConversationBindingPersistsExecutionTarget(t *testing.T) {
 	candidates, err := reservationRepo.ListOpenAIPersonaCapacityCandidates(ctx, []int64{fixture.account.ID}, fixture.userID, fixture.apiKeyID, rootHash, now)
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
+	require.False(t, candidates[0].ClaimedByUser, "用户没有 Persona claim 时应返回 false，而不是 SQL NULL 扫描错误")
 	target, err := service.OpenAIExecutionTargetFromPersonaSession(candidates[0].Persona, candidates[0].Session)
 	require.NoError(t, err)
 	target.UserGroupLeaseID = userLease.LeaseID

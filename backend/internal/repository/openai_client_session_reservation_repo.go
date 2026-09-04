@@ -420,7 +420,7 @@ func (r *openAIClientSessionReservationRepository) ListOpenAIPersonaCapacityCand
               (SELECT 1 FROM openai_persona_request_holds hold WHERE hold.lease_id = lease.id AND hold.expires_at > $3::timestamptz))) AS active_clients,
        (SELECT MIN(lease.active_until) FROM openai_persona_client_session_leases lease WHERE lease.account_persona_id = persona.id
           AND lease.state = 'active' AND lease.active_until > $3::timestamptz) AS earliest_release,
-		(claim.account_persona_id = persona.id) AS claimed_by_user,
+		COALESCE(claim.account_persona_id = persona.id, FALSE) AS claimed_by_user,
 		EXISTS (SELECT 1 FROM openai_persona_client_session_leases lease
 		        WHERE lease.account_persona_id = persona.id AND lease.user_id = $4 AND lease.api_key_id = $5
 		          AND lease.client_session_hash = $6
