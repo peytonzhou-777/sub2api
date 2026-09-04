@@ -43,6 +43,7 @@ const emptyPage = (pageSize = 20) => ({
   page_size: pageSize,
   pages: Math.ceil(40 / pageSize),
   group_options: [],
+  default_group_id: null,
 })
 
 const PaginationStub = {
@@ -128,9 +129,25 @@ describe('AccountPoolView', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-test="group-filter"]')).toBeTruthy()
+    expect(listAccountPool.mock.calls[0][0]).toMatchObject({ groupId: undefined })
     await wrapper.get('[data-test="group-filter"]').trigger('click')
     await flushPromises()
 
+    expect(listAccountPool.mock.calls[1][0]).toMatchObject({ page: 1, groupId: 2 })
+    wrapper.unmount()
+  })
+
+  it('全部密钥来自同一可见分组时默认筛选该分组', async () => {
+    const groupOptions = [{ id: 1, name: '公开分组' }, { id: 2, name: '专属分组' }]
+    listAccountPool.mockImplementation(async (options: { pageSize: number }) => ({
+      data: { ...emptyPage(options.pageSize), group_options: groupOptions, default_group_id: 2 },
+      notModified: false,
+    }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(listAccountPool).toHaveBeenCalledTimes(2)
+    expect(listAccountPool.mock.calls[0][0]).toMatchObject({ groupId: undefined })
     expect(listAccountPool.mock.calls[1][0]).toMatchObject({ page: 1, groupId: 2 })
     wrapper.unmount()
   })
@@ -214,6 +231,7 @@ describe('AccountPoolView', () => {
           reset_count_state: 'fresh',
           status: { code: 'active', resume_at: null, models: [] },
           residents: { active: 3, total: 8, applicable: true },
+          groups: [{ id: 1, name: '玩家可见分组' }],
           is_current_residence: true,
           is_seven_day_contact: true,
           is_historical_contact: true,
@@ -233,18 +251,19 @@ describe('AccountPoolView', () => {
     expect(headers).toEqual([
       'accountPool.columns.id',
       'accountPool.columns.platformType',
+      'accountPool.columns.group',
       'accountPool.columns.relation',
       'accountPool.columns.residents',
       'accountPool.columns.capacity',
       'accountPool.columns.usageWindow',
       'accountPool.columns.personalUsage',
-      'accountPool.columns.resetCount',
       'accountPool.columns.status',
     ])
     expect(wrapper.text()).toContain('OpenAI')
     expect(wrapper.text()).toContain('Plus')
     expect(wrapper.text()).toContain('accountPool.relations.currentResidence')
     expect(wrapper.text()).toContain('accountPool.relations.sevenDayContact')
+    expect(wrapper.text()).toContain('玩家可见分组')
     expect(wrapper.get('[data-test="resident-active"]').text()).toContain('3')
     expect(wrapper.get('[data-test="resident-total"]').text()).toContain('8')
     expect(wrapper.text()).toContain('0%')

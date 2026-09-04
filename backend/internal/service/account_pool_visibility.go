@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 )
 
 // SetUserAccessReader 注入号池用户可见范围读取器，保持权限投影与快照实现解耦。
@@ -58,21 +59,83 @@ func (s *APIKeyService) GetAccountPoolUserAccess(ctx context.Context, userID int
 		}
 	}
 
-	if !selectedVisible {
-		return &AccountPoolUserAccess{VisibleGroups: visibleGroups, AccountIDs: []int64{}}, nil
-	}
-	groupIDs := visibleGroupIDs
-	if selectedGroupID != nil {
-		groupIDs = []int64{*selectedGroupID}
-	}
-	accountIDs, err := s.groupRepo.GetAccountIDsByGroupIDs(ctx, groupIDs)
+	groupAccountIDs, err := s.getAccountPoolGroupAccountIDs(ctx, visibleGroupIDs)
 	if err != nil {
 		return nil, fmt.Errorf("list account pool group accounts: %w", err)
+	}
+	groupsByAccount := make(map[int64][]AccountPoolGroupOption)
+	for _, group := range visibleGroups {
+		for _, accountID := range groupAccountIDs[group.ID] {
+			groupsByAccount[accountID] = append(groupsByAccount[accountID], group)
+		}
+	}
+	defaultGroupID, err := s.getAccountPoolDefaultGroupID(ctx, userID, visibleGroups)
+	if err != nil {
+		return nil, fmt.Errorf("get account pool default group: %w", err)
+	}
+	if !selectedVisible {
+		return &AccountPoolUserAccess{
+			VisibleGroups: visibleGroups, AccountIDs: []int64{}, GroupsByAccount: groupsByAccount, DefaultGroupID: defaultGroupID,
+		}, nil
+	}
+	accountIDs := mergeAccountPoolGroupAccountIDs(groupAccountIDs, visibleGroups)
+	if selectedGroupID != nil {
+		accountIDs = append([]int64(nil), groupAccountIDs[*selectedGroupID]...)
 	}
 	if accountIDs == nil {
 		accountIDs = []int64{}
 	}
-	return &AccountPoolUserAccess{VisibleGroups: visibleGroups, AccountIDs: accountIDs}, nil
+	return &AccountPoolUserAccess{
+		VisibleGroups: visibleGroups, AccountIDs: accountIDs, GroupsByAccount: groupsByAccount, DefaultGroupID: defaultGroupID,
+	}, nil
+}
+
+func (s *APIKeyService) getAccountPoolGroupAccountIDs(ctx context.Context, groupIDs []int64) (map[int64][]int64, error) {
+	if reader, ok := s.groupRepo.(AccountPoolGroupAccountReader); ok {
+		return reader.GetAccountPoolGroupAccountIDs(ctx, groupIDs)
+	}
+	result := make(map[int64][]int64, len(groupIDs))
+	for _, groupID := range groupIDs {
+		accountIDs, err := s.groupRepo.GetAccountIDsByGroupIDs(ctx, []int64{groupID})
+		if err != nil {
+			return nil, err
+		}
+		result[groupID] = accountIDs
+	}
+	return result, nil
+}
+
+func (s *APIKeyService) getAccountPoolDefaultGroupID(ctx context.Context, userID int64, visibleGroups []AccountPoolGroupOption) (*int64, error) {
+	reader, ok := s.apiKeyRepo.(AccountPoolDefaultGroupReader)
+	if !ok {
+		return nil, nil
+	}
+	groupID, err := reader.GetAccountPoolDefaultGroupID(ctx, userID)
+	if err != nil || groupID == nil {
+		return nil, err
+	}
+	for _, group := range visibleGroups {
+		if group.ID == *groupID {
+			value := *groupID
+			return &value, nil
+		}
+	}
+	return nil, nil
+}
+
+func mergeAccountPoolGroupAccountIDs(groupAccountIDs map[int64][]int64, groups []AccountPoolGroupOption) []int64 {
+	seen := make(map[int64]struct{})
+	for _, group := range groups {
+		for _, accountID := range groupAccountIDs[group.ID] {
+			seen[accountID] = struct{}{}
+		}
+	}
+	result := make([]int64, 0, len(seen))
+	for accountID := range seen {
+		result = append(result, accountID)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
+	return result
 }
 
 func accountPoolGroupVisible(group Group, allowedGroups map[int64]struct{}, restrictPublicGroups bool) bool {

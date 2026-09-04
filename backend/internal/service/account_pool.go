@@ -90,20 +90,22 @@ type PublicAccountPoolAccount struct {
 	ResetCountState string                         `json:"reset_count_state"`
 	Status          PublicAccountPoolStatus        `json:"status"`
 	Residents       PublicAccountPoolResidents     `json:"residents"`
-	// 用户关系只在请求响应阶段投影，绝不写入公共号池快照。
-	IsCurrentResidence  bool `json:"is_current_residence"`
-	IsPrimaryResidence  bool `json:"is_primary_residence"`
-	IsSevenDayContact   bool `json:"is_seven_day_contact"`
-	IsHistoricalContact bool `json:"is_historical_contact"`
+	// 分组和用户关系只在请求响应阶段投影，绝不写入公共号池快照。
+	Groups              []AccountPoolGroupOption `json:"groups,omitempty"`
+	IsCurrentResidence  bool                     `json:"is_current_residence"`
+	IsPrimaryResidence  bool                     `json:"is_primary_residence"`
+	IsSevenDayContact   bool                     `json:"is_seven_day_contact"`
+	IsHistoricalContact bool                     `json:"is_historical_contact"`
 }
 
 type AccountPoolPage struct {
-	Items        []PublicAccountPoolAccount `json:"items"`
-	Total        int64                      `json:"total"`
-	Page         int                        `json:"page"`
-	PageSize     int                        `json:"page_size"`
-	Pages        int                        `json:"pages"`
-	GroupOptions []AccountPoolGroupOption   `json:"group_options"`
+	Items          []PublicAccountPoolAccount `json:"items"`
+	Total          int64                      `json:"total"`
+	Page           int                        `json:"page"`
+	PageSize       int                        `json:"page_size"`
+	Pages          int                        `json:"pages"`
+	GroupOptions   []AccountPoolGroupOption   `json:"group_options"`
+	DefaultGroupID *int64                     `json:"default_group_id"`
 }
 
 // AccountPoolGroupOption 是当前用户可见的号池分组选项，只暴露 ID 和名称。
@@ -114,8 +116,20 @@ type AccountPoolGroupOption struct {
 
 // AccountPoolUserAccess 是号池请求所需的用户可见分组与账号 ID 投影。
 type AccountPoolUserAccess struct {
-	VisibleGroups []AccountPoolGroupOption
-	AccountIDs    []int64
+	VisibleGroups   []AccountPoolGroupOption
+	AccountIDs      []int64
+	GroupsByAccount map[int64][]AccountPoolGroupOption
+	DefaultGroupID  *int64
+}
+
+// AccountPoolGroupAccountReader 批量读取分组与账号的归属关系，用于用户私有展示投影。
+type AccountPoolGroupAccountReader interface {
+	GetAccountPoolGroupAccountIDs(ctx context.Context, groupIDs []int64) (map[int64][]int64, error)
+}
+
+// AccountPoolDefaultGroupReader 读取用户密钥是否全部绑定到同一分组。
+type AccountPoolDefaultGroupReader interface {
+	GetAccountPoolDefaultGroupID(ctx context.Context, userID int64) (*int64, error)
 }
 
 // AccountPoolUserAccessReader 读取当前用户实时可见的号池分组和账号范围。

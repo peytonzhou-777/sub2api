@@ -109,6 +109,18 @@
                     </div>
                   </div>
                 </td>
+                <td class="min-w-36 px-4 py-3 text-sm">
+                  <div v-if="account.groups?.length" class="flex flex-wrap gap-1">
+                    <span
+                      v-for="group in account.groups"
+                      :key="group.id"
+                      class="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-700 dark:bg-dark-700 dark:text-gray-200"
+                    >
+                      {{ group.name }}
+                    </span>
+                  </div>
+                  <span v-else class="text-gray-400 dark:text-gray-500">--</span>
+                </td>
                 <td class="min-w-40 px-4 py-3 text-sm">
                   <div class="flex flex-wrap gap-1">
                     <span v-if="account.is_primary_residence" class="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
@@ -148,7 +160,6 @@
                     :auto-query-delay-ms="accountIndex * 150"
                   />
                 </td>
-                <td class="whitespace-nowrap px-4 py-3 text-sm">{{ account.reset_count_state === 'fresh' && account.reset_count != null ? account.reset_count : '--' }}</td>
                 <td class="min-w-36 px-4 py-3 text-sm"><AccountPoolStatusCell :status="account.status" /></td>
               </tr>
             </tbody>
@@ -199,7 +210,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
-const page = ref<AccountPoolPage>({ items: [], total: 0, page: 1, page_size: getPersistedPageSize(), pages: 1, group_options: [] })
+const page = ref<AccountPoolPage>({ items: [], total: 0, page: 1, page_size: getPersistedPageSize(), pages: 1, group_options: [], default_group_id: null })
 const loading = ref(false)
 const searchInput = ref('')
 const submittedId = ref('')
@@ -217,17 +228,18 @@ let debounceTimer: ReturnType<typeof setTimeout> | undefined
 let pollTimer: ReturnType<typeof setInterval> | undefined
 let retryTimer: ReturnType<typeof setTimeout> | undefined
 let sequence = 0
+let defaultGroupApplied = false
 
 const invalidSearch = computed(() => searchInput.value !== '' && /^0+$/.test(searchInput.value))
 const columns = computed(() => [
   { key: 'id' as const, label: t('accountPool.columns.id'), sortable: true },
   { key: 'platformType' as const, label: t('accountPool.columns.platformType'), sortable: false },
+  { key: 'group' as const, label: t('accountPool.columns.group'), sortable: false },
   { key: 'relation' as const, label: t('accountPool.columns.relation'), sortable: false },
   { key: 'residents' as const, label: t('accountPool.columns.residents'), sortable: false },
   { key: 'capacity' as const, label: t('accountPool.columns.capacity'), sortable: false },
   { key: 'usageWindow' as const, label: t('accountPool.columns.usageWindow'), sortable: false },
   { key: 'personalUsage' as const, label: t('accountPool.columns.personalUsage'), sortable: false },
-  { key: 'resetCount' as const, label: t('accountPool.columns.resetCount'), sortable: false },
   { key: 'status' as const, label: t('accountPool.columns.status'), sortable: true },
 ])
 const statusOptions = computed(() => [
@@ -346,6 +358,16 @@ async function load(force = false, targetPage = page.value.page) {
     if (current !== sequence) return
     if (result.data) {
       page.value = result.data
+      if (!defaultGroupApplied) {
+        defaultGroupApplied = true
+        const defaultGroupID = result.data.default_group_id
+        if (groupFilter.value === '' && defaultGroupID != null && result.data.group_options.length > 1 && result.data.group_options.some(group => group.id === defaultGroupID)) {
+          groupFilter.value = defaultGroupID
+          etag.value = ''
+          void load(true, 1)
+          return false
+        }
+      }
       if (groupFilter.value !== '' && !result.data.group_options.some(group => group.id === groupFilter.value)) {
         groupFilter.value = ''
         etag.value = ''

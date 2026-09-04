@@ -49,6 +49,7 @@ export interface AccountPoolAccount {
     contacted_users?: number
     applicable: boolean
   }
+  groups: AccountPoolGroupOption[]
   is_current_residence: boolean
   is_primary_residence?: boolean
   is_seven_day_contact: boolean
@@ -62,6 +63,7 @@ export interface AccountPoolPage {
   page_size: number
   pages: number
   group_options: AccountPoolGroupOption[]
+  default_group_id: number | null
 }
 
 export interface AccountPoolPersonalUsageWindow {

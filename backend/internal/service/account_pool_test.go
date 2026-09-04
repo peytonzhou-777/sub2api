@@ -129,6 +129,16 @@ type accountPoolVisibilityUserRepoStub struct {
 	user *User
 }
 
+type accountPoolDefaultGroupRepoStub struct {
+	APIKeyRepository
+	groupID *int64
+	err     error
+}
+
+func (r accountPoolDefaultGroupRepoStub) GetAccountPoolDefaultGroupID(context.Context, int64) (*int64, error) {
+	return r.groupID, r.err
+}
+
 func (r accountPoolVisibilityUserRepoStub) GetByID(context.Context, int64) (*User, error) {
 	return r.user, nil
 }
@@ -363,6 +373,11 @@ func TestAccountPoolListForUserFiltersVisibleGroupsBeforePagination(t *testing.T
 		access: &AccountPoolUserAccess{
 			VisibleGroups: []AccountPoolGroupOption{{ID: 10, Name: "公开分组"}, {ID: 20, Name: "专属分组"}},
 			AccountIDs:    []int64{1, 3, 4},
+			GroupsByAccount: map[int64][]AccountPoolGroupOption{
+				1: {{ID: 10, Name: "公开分组"}},
+				3: {{ID: 20, Name: "专属分组"}},
+				4: {{ID: 10, Name: "公开分组"}, {ID: 20, Name: "专属分组"}},
+			},
 		},
 		byGroup: map[int64]*AccountPoolUserAccess{
 			10: {VisibleGroups: []AccountPoolGroupOption{{ID: 10, Name: "公开分组"}, {ID: 20, Name: "专属分组"}}, AccountIDs: []int64{1, 4}},
@@ -382,6 +397,9 @@ func TestAccountPoolListForUserFiltersVisibleGroupsBeforePagination(t *testing.T
 	}
 	if len(page.GroupOptions) != 2 || page.GroupOptions[0].ID != 10 || page.GroupOptions[1].ID != 20 {
 		t.Fatalf("应返回用户可见分组选项: %+v", page.GroupOptions)
+	}
+	if len(page.Items[0].Groups) != 2 || page.Items[0].Groups[0].ID != 10 || page.Items[0].Groups[1].ID != 20 {
+		t.Fatalf("账号行应只投影用户可见分组: %+v", page.Items[0].Groups)
 	}
 
 	groupID := int64(10)
@@ -440,7 +458,8 @@ func TestAPIKeyServiceAccountPoolUserAccessUsesVisibleGroups(t *testing.T) {
 		},
 	}
 	userRepo := accountPoolVisibilityUserRepoStub{user: &User{ID: 42, AllowedGroups: []int64{2}}}
-	svc := NewAPIKeyService(nil, userRepo, groupRepo, nil, nil, nil, nil)
+	defaultGroupID := int64(2)
+	svc := NewAPIKeyService(accountPoolDefaultGroupRepoStub{groupID: &defaultGroupID}, userRepo, groupRepo, nil, nil, nil, nil)
 
 	access, err := svc.GetAccountPoolUserAccess(context.Background(), 42, nil)
 	if err != nil {
@@ -452,6 +471,18 @@ func TestAPIKeyServiceAccountPoolUserAccessUsesVisibleGroups(t *testing.T) {
 	if len(access.AccountIDs) != 3 || access.AccountIDs[0] != 101 || access.AccountIDs[1] != 102 || access.AccountIDs[2] != 103 {
 		t.Fatalf("多分组账号应按并集去重: %v", access.AccountIDs)
 	}
+	if access.DefaultGroupID == nil || *access.DefaultGroupID != 2 {
+		t.Fatalf("全部密钥同组时应返回默认分组: %+v", access.DefaultGroupID)
+	}
+	if len(access.GroupsByAccount[102]) != 2 || access.GroupsByAccount[102][0].ID != 1 || access.GroupsByAccount[102][1].ID != 2 {
+		t.Fatalf("账号应按可见分组投影归属: %+v", access.GroupsByAccount)
+	}
+	defaultGroupID = 3
+	access, err = svc.GetAccountPoolUserAccess(context.Background(), 42, nil)
+	if err != nil || access.DefaultGroupID != nil {
+		t.Fatalf("不可见分组不得成为默认筛选: access=%+v err=%v", access, err)
+	}
+	defaultGroupID = 2
 
 	selectedGroupID := int64(2)
 	access, err = svc.GetAccountPoolUserAccess(context.Background(), 42, &selectedGroupID)
