@@ -731,6 +731,8 @@ func UsageLogFromServiceAdmin(l *service.UsageLog) *AdminUsageLog {
 	usageLog.UpstreamEndpoint = l.UpstreamEndpoint
 	return &AdminUsageLog{
 		UsageLog:                usageLog,
+		AccountPersonaID:        l.AccountPersonaID,
+		PersonaProfile:          l.PersonaProfile,
 		AccountQueueWaitMs:      l.AccountQueueWaitMs,
 		IsSubagent:              l.IsSubagent,
 		UpstreamModel:           l.UpstreamModel,

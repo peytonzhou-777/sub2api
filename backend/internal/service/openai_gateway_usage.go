@@ -51,6 +51,15 @@ type OpenAIRecordUsageInput struct {
 	ChannelUsageFields
 }
 
+func openAIPersonaAuditFromContext(ctx context.Context) (*int64, string) {
+	binding, ok := SessionPersonaBindingFromContext(ctx)
+	if !ok || binding.AccountPersonaID <= 0 {
+		return nil, ""
+	}
+	id := binding.AccountPersonaID
+	return &id, strings.TrimSpace(string(binding.PersonaID))
+}
+
 // OpenAIAdmissionRejectedUsageInput 记录未发往上游的账号准入失败，不参与扣费。
 type OpenAIAdmissionRejectedUsageInput struct {
 	APIKey          *APIKey
@@ -76,8 +85,10 @@ func (s *OpenAIGatewayService) RecordOpenAIAdmissionRejectedUsage(ctx context.Co
 	waitMS := int(openAIAdmissionMaxInt64(input.QueueWaitMS, 0))
 	durationMS := waitMS
 	accountRateMultiplier := input.Account.BillingRateMultiplier()
+	accountPersonaID, personaProfile := openAIPersonaAuditFromContext(ctx)
 	usageLog := &UsageLog{
 		UserID: userID, APIKeyID: input.APIKey.ID, AccountID: input.Account.ID,
+		AccountPersonaID: accountPersonaID, PersonaProfile: personaProfile,
 		RequestID: resolveUsageBillingRequestID(ctx, ""), Model: input.Model, RequestedModel: input.Model,
 		BillingType: BillingTypeBalance, RequestType: RequestTypeAdmissionRejected,
 		Stream: input.Stream, DurationMs: &durationMS,
@@ -470,6 +481,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	durationMs := int(result.Duration.Milliseconds())
 	accountRateMultiplier := account.BillingRateMultiplier()
 	requestID := resolveUsageBillingRequestID(ctx, result.RequestID)
+	accountPersonaID, personaProfile := openAIPersonaAuditFromContext(ctx)
 	if result.OpenAIWSMode {
 		if upstreamRequestID := strings.TrimSpace(result.RequestID); upstreamRequestID != "" {
 			requestID = upstreamRequestID
@@ -508,6 +520,8 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		UserID:                   user.ID,
 		APIKeyID:                 apiKey.ID,
 		AccountID:                account.ID,
+		AccountPersonaID:         accountPersonaID,
+		PersonaProfile:           personaProfile,
 		RequestID:                requestID,
 		Model:                    result.Model,
 		RequestedModel:           requestedModel,

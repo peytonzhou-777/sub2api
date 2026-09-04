@@ -110,6 +110,13 @@
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">--</span>
         </template>
 
+        <template #cell-persona="{ row }">
+          <span v-if="row.account_persona_id" class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200" :title="`#${row.account_persona_id}`">
+            {{ row.persona_profile || 'Persona' }} #{{ row.account_persona_id }}
+          </span>
+          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+        </template>
+
         <template #cell-category="{ row }">
           <span class="text-sm text-gray-900 dark:text-white">
             {{ t('usage.errors.categories.' + mapErrorCategory(row.phase, row.type)) }}
@@ -211,6 +218,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'api_key', label: t('admin.ops.errorLog.apiKey') },
   { key: 'account', label: t('admin.ops.errorLog.account') },
   { key: 'account_id', label: t('accountPool.columns.id') },
+  { key: 'persona', label: t('admin.ops.errorLog.persona') },
   { key: 'platform', label: t('admin.ops.errorLog.platform') },
   { key: 'model', label: t('admin.ops.errorLog.model'), sortable: true },
   { key: 'endpoint', label: t('admin.ops.errorLog.endpoint') },

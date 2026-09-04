@@ -109,6 +109,8 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // first_event_ms
 			sqlmock.AnyArg(), // first_output_ms
 			log.NativeCompactionV2,
+			sqlmock.AnyArg(), // account_persona_id
+			sqlmock.AnyArg(), // persona_profile
 			createdAt,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
@@ -211,6 +213,8 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // first_event_ms
 			sqlmock.AnyArg(), // first_output_ms
 			log.NativeCompactionV2,
+			sqlmock.AnyArg(), // account_persona_id
+			sqlmock.AnyArg(), // persona_profile
 			createdAt,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
@@ -292,8 +296,8 @@ func TestPrepareUsageLogInsert_PersistsNativeCompactionV2WithoutChangingRequestT
 	prepared := prepareUsageLogInsert(log)
 
 	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
-	require.Equal(t, "boolean", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-2])
-	require.Equal(t, true, prepared.args[len(prepared.args)-2])
+	require.Equal(t, "boolean", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-4])
+	require.Equal(t, true, prepared.args[len(prepared.args)-4])
 	require.Equal(t, int16(service.RequestTypeStream), prepared.args[30])
 	require.Equal(t, service.RequestTypeStream, log.RequestType)
 	require.True(t, log.Stream)
@@ -977,10 +981,12 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{}, // prompt_cache_key_hash
 			sql.NullString{},
 			true,
-			sql.NullInt64{}, // first_response_ms
-			sql.NullInt64{}, // first_event_ms
-			sql.NullInt64{}, // first_output_ms
-			false,           // native_compaction_v2
+			sql.NullInt64{},  // first_response_ms
+			sql.NullInt64{},  // first_event_ms
+			sql.NullInt64{},  // first_output_ms
+			false,            // native_compaction_v2
+			sql.NullInt64{},  // account_persona_id
+			sql.NullString{}, // persona_profile
 			now,
 		}})
 		require.NoError(t, err)
@@ -1069,6 +1075,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},   // first_event_ms
 			sql.NullInt64{},   // first_output_ms
 			false,             // native_compaction_v2
+			sql.NullInt64{},   // account_persona_id
+			sql.NullString{},  // persona_profile
 			now,
 		}})
 		require.NoError(t, err)
@@ -1139,6 +1147,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},   // first_event_ms
 			sql.NullInt64{},   // first_output_ms
 			true,              // native_compaction_v2
+			sql.NullInt64{},   // account_persona_id
+			sql.NullString{},  // persona_profile
 			now,
 		}})
 		require.NoError(t, err)
@@ -1210,6 +1220,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},   // first_event_ms
 			sql.NullInt64{},   // first_output_ms
 			false,             // native_compaction_v2
+			sql.NullInt64{},   // account_persona_id
+			sql.NullString{},  // persona_profile
 			now,
 		}})
 		require.NoError(t, err)

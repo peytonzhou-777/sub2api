@@ -252,6 +252,7 @@ export default {
         apiKey: 'API Key',
         keyDeletedBadge: 'Key Deleted',
         account: 'Account',
+        persona: 'Persona',
         accountId: 'Account ID',
         status: 'Status',
         message: 'Message',
@@ -304,6 +305,7 @@ export default {
       },
       // Error Detail Modal
       errorDetail: {
+        persona: 'Persona',
         title: 'Error Detail',
         titleWithId: 'Error #{id}',
         noErrorSelected: 'No error selected.',

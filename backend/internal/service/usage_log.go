@@ -111,8 +111,12 @@ type UsageLog struct {
 	UserID    int64
 	APIKeyID  int64
 	AccountID int64
-	RequestID string
-	Model     string
+	// AccountPersonaID and PersonaProfile snapshot the OpenAI Persona selected for this request.
+	// They are nil/empty for non-OpenAI or historical rows without Persona routing.
+	AccountPersonaID *int64
+	PersonaProfile   string
+	RequestID        string
+	Model            string
 	// RequestedModel is the client-requested model name recorded for stable user/admin display.
 	// Empty should be treated as Model for backward compatibility with historical rows.
 	RequestedModel string

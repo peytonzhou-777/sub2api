@@ -40,6 +40,18 @@ func TestGatewayHandlerSubmitUsageRecordTask_WithPool(t *testing.T) {
 	}
 }
 
+func TestUsageRecordContextPreservesPersonaBinding(t *testing.T) {
+	binding := service.SessionPersonaSlotBinding{
+		AccountID: 42, AccountPersonaID: 108, PersonaID: service.SessionPersonaOpenCode,
+		SlotID: 1, SlotCount: 2, MappingVersion: service.SessionPersonaScopeVersionV3,
+	}
+	parent := service.ContextWithSessionPersonaBinding(context.Background(), binding)
+	got, ok := service.SessionPersonaBindingFromContext(usageRecordContext(parent, context.Background()))
+	require.True(t, ok)
+	require.Equal(t, binding.AccountPersonaID, got.AccountPersonaID)
+	require.Equal(t, binding.PersonaID, got.PersonaID)
+}
+
 func TestGatewayHandlerSubmitUsageRecordTask_WithoutPoolSyncFallback(t *testing.T) {
 	h := &GatewayHandler{}
 	var called atomic.Bool

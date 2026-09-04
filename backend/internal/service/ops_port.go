@@ -68,8 +68,11 @@ type OpsInsertErrorLogInput struct {
 	UserID    *int64
 	APIKeyID  *int64
 	AccountID *int64
-	GroupID   *int64
-	ClientIP  *string
+	// AccountPersonaID and PersonaProfile snapshot the selected OpenAI Persona.
+	AccountPersonaID *int64
+	PersonaProfile   string
+	GroupID          *int64
+	ClientIP         *string
 
 	Platform    string
 	Model       string

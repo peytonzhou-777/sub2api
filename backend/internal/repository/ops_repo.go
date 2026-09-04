@@ -76,10 +76,12 @@ INSERT INTO ops_error_logs (
   subagent_kind,
   inbound_transport,
   upstream_transport,
+  account_persona_id,
+  persona_profile,
   created_at,
   api_key_prefix
 ) VALUES (
-  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60
+	  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62
 )`
 
 func NewOpsRepository(db *sql.DB) service.OpsRepository {
@@ -209,6 +211,8 @@ func opsInsertErrorLogArgs(input *service.OpsInsertErrorLogInput) []any {
 		opsNullString(input.SubagentKind),
 		opsNullString(input.InboundTransport),
 		opsNullString(input.UpstreamTransport),
+		opsNullInt64(input.AccountPersonaID),
+		opsNullString(input.PersonaProfile),
 		input.CreatedAt,
 		opsNullString(input.APIKeyPrefix),
 	}
@@ -310,6 +314,8 @@ SELECT
   COALESCE(e.upstream_model, ''),
   COALESCE(e.user_agent, ''),
   e.request_type,
+  e.account_persona_id,
+  COALESCE(e.persona_profile, ''),
   COALESCE(ak.name, ''),
   ak.deleted_at
 FROM ops_error_logs e
@@ -344,6 +350,8 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 		var resolvedBy sql.NullInt64
 		var resolvedByName string
 		var requestType sql.NullInt64
+		var accountPersonaID sql.NullInt64
+		var personaProfile string
 		var apiKeyName string
 		var apiKeyDeletedAt sql.NullTime
 		if err := rows.Scan(
@@ -380,6 +388,8 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 			&item.UpstreamModel,
 			&item.UserAgent,
 			&requestType,
+			&accountPersonaID,
+			&personaProfile,
 			&apiKeyName,
 			&apiKeyDeletedAt,
 		); err != nil {
@@ -422,6 +432,11 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 			v := int16(requestType.Int64)
 			item.RequestType = &v
 		}
+		if accountPersonaID.Valid {
+			v := accountPersonaID.Int64
+			item.AccountPersonaID = &v
+		}
+		item.PersonaProfile = personaProfile
 		item.APIKeyName = apiKeyName
 		item.APIKeyDeleted = apiKeyDeletedAt.Valid
 		out = append(out, &item)
@@ -486,6 +501,8 @@ SELECT
   COALESCE(e.upstream_model, ''),
   e.request_type,
   COALESCE(e.user_agent, ''),
+  e.account_persona_id,
+  COALESCE(e.persona_profile, ''),
   e.auth_latency_ms,
   e.routing_latency_ms,
   e.upstream_latency_ms,
@@ -544,6 +561,8 @@ LIMIT 1`
 	var proxyID sql.NullInt64
 	var accountConcurrency sql.NullInt64
 	var requestType sql.NullInt64
+	var accountPersonaID sql.NullInt64
+	var personaProfile string
 	var detailAPIKeyName string
 	var detailAPIKeyDeletedAt sql.NullTime
 
@@ -586,6 +605,8 @@ LIMIT 1`
 		&out.UpstreamModel,
 		&requestType,
 		&out.UserAgent,
+		&accountPersonaID,
+		&personaProfile,
 		&authLatency,
 		&routingLatency,
 		&upstreamLatency,
@@ -694,6 +715,11 @@ LIMIT 1`
 		v := int16(requestType.Int64)
 		out.RequestType = &v
 	}
+	if accountPersonaID.Valid {
+		v := accountPersonaID.Int64
+		out.AccountPersonaID = &v
+	}
+	out.PersonaProfile = personaProfile
 	out.APIKeyName = detailAPIKeyName
 	out.APIKeyDeleted = detailAPIKeyDeletedAt.Valid
 

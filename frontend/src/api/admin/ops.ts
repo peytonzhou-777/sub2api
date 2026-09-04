@@ -920,6 +920,8 @@ export interface OpsErrorLog {
   api_key_deleted?: boolean
   account_id?: number | null
   account_name: string
+  account_persona_id?: number | null
+  persona_profile?: string | null
   group_id?: number | null
   group_name: string
 

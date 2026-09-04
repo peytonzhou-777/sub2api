@@ -440,7 +440,7 @@ func opsErrorLogConfig() (workerCount int, queueSize int) {
 }
 
 func setOpsRequestContext(c *gin.Context, model string, stream bool) {
-	if c == nil {
+	if c == nil || c.Request == nil {
 		return
 	}
 	model = strings.TrimSpace(model)
@@ -480,6 +480,20 @@ func setOpsSelectedAccount(c *gin.Context, accountID int64, platform ...string) 
 		}
 		c.Request = c.Request.WithContext(ctx)
 	}
+}
+
+// getOpsPersonaAudit snapshots the immutable Persona binding attached to this request.
+// Legacy/non-OpenAI requests intentionally return no Persona fields.
+func getOpsPersonaAudit(c *gin.Context) (*int64, string) {
+	if c == nil || c.Request == nil {
+		return nil, ""
+	}
+	binding, ok := service.SessionPersonaBindingFromContextOrGin(c.Request.Context(), c)
+	if !ok || binding.AccountPersonaID <= 0 {
+		return nil, ""
+	}
+	id := binding.AccountPersonaID
+	return &id, strings.TrimSpace(string(binding.PersonaID))
 }
 
 func markOpsRoutingCapacityLimited(c *gin.Context) {
@@ -1191,8 +1205,12 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 			ClientRequestID: clientRequestID,
 
 			AccountID: accountID,
-			Platform:  platform,
-			Model:     modelName,
+			PersonaProfile: func() string {
+				_, profile := getOpsPersonaAudit(c)
+				return profile
+			}(),
+			Platform: platform,
+			Model:    modelName,
 			RequestPath: func() string {
 				if c.Request != nil && c.Request.URL != nil {
 					return c.Request.URL.Path
@@ -1240,6 +1258,7 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 
 			CreatedAt: time.Now(),
 		}
+		entry.AccountPersonaID, _ = getOpsPersonaAudit(c)
 		applyOpsLatencyFieldsFromContext(c, entry)
 		applyOpsUpstreamFieldsFromContext(c, entry)
 		applyOpsRequestObservation(c, entry)
@@ -1488,8 +1507,12 @@ func logOpsStreamErrorValue(c *gin.Context, ops *service.OpsService, wireStatus 
 		ClientRequestID: clientRequestID,
 
 		AccountID: accountID,
-		Platform:  platform,
-		Model:     modelName,
+		PersonaProfile: func() string {
+			_, profile := getOpsPersonaAudit(c)
+			return profile
+		}(),
+		Platform: platform,
+		Model:    modelName,
 		RequestPath: func() string {
 			if c.Request != nil && c.Request.URL != nil {
 				return c.Request.URL.Path
@@ -1537,6 +1560,7 @@ func logOpsStreamErrorValue(c *gin.Context, ops *service.OpsService, wireStatus 
 
 		CreatedAt: time.Now(),
 	}
+	entry.AccountPersonaID, _ = getOpsPersonaAudit(c)
 	applyOpsLatencyFieldsFromContext(c, entry)
 	applyOpsUpstreamFieldsFromContext(c, entry)
 	applyOpsRequestObservation(c, entry)

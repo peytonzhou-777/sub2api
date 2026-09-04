@@ -372,6 +372,7 @@ export default {
     reasoningEffort: '推理强度',
     requestedReasoningEffort: '请求推理强度',
     endpoint: '端点',
+    persona: 'Persona',
     endpointDistribution: '端点分布',
     inbound: '入站',
     upstream: '上游',

@@ -232,6 +232,11 @@ func usageRecordContext(parent context.Context, base context.Context) context.Co
 	if requestID, _ := parent.Value(ctxkey.RequestID).(string); strings.TrimSpace(requestID) != "" {
 		base = context.WithValue(base, ctxkey.RequestID, strings.TrimSpace(requestID))
 	}
+	// Usage recording runs asynchronously; preserve the immutable Persona binding
+	// so the persisted usage row identifies the actual Account × Persona target.
+	if binding, ok := service.SessionPersonaBindingFromContext(parent); ok {
+		base = service.ContextWithSessionPersonaBinding(base, binding)
+	}
 	if queueWaitMS := service.OpenAIAccountQueueWaitMSFromContext(parent); queueWaitMS > 0 {
 		base = service.ContextWithOpenAIAccountQueueWait(base, time.Duration(queueWaitMS)*time.Millisecond)
 	}

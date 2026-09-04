@@ -52,7 +52,7 @@
           <span class="text-sm text-gray-900 dark:text-white">{{ row.account?.name || '-' }}</span>
         </template>
 
-		<template #cell-account_id="{ row }">
+        <template #cell-account_id="{ row }">
 		  <RouterLink
 		    v-if="Number(row.account_id) > 0"
 		    class="whitespace-nowrap font-mono text-sm text-primary-600 hover:underline dark:text-primary-400"
@@ -60,6 +60,13 @@
 		  >#{{ row.account_id }}</RouterLink>
 		  <span v-else>--</span>
 		</template>
+
+        <template #cell-persona="{ row }">
+          <span v-if="row.account_persona_id" class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200" :title="`#${row.account_persona_id}`">
+            {{ row.persona_profile || 'Persona' }} #{{ row.account_persona_id }}
+          </span>
+          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+        </template>
 
         <template #cell-model="{ row }">
           <div class="space-y-0.5 text-xs">

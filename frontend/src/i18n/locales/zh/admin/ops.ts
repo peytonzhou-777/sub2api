@@ -252,6 +252,7 @@ export default {
         apiKey: 'API Key',
         keyDeletedBadge: 'Key 已删除',
         account: '账号',
+        persona: 'Persona',
         accountId: '账号 ID',
         status: '状态码',
         message: '响应内容',
@@ -304,6 +305,7 @@ export default {
       },
       // Error Detail Modal
       errorDetail: {
+        persona: 'Persona',
         title: '错误详情',
         titleWithId: '错误 #{id}',
         noErrorSelected: '未选择错误。',

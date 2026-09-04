@@ -589,6 +589,9 @@ type UsageLog struct {
 // AdminUsageLog 是管理员接口使用的 usage log DTO（包含管理员字段）。
 type AdminUsageLog struct {
 	UsageLog
+	// OpenAI Persona snapshot used for this request (admin-only; absent for legacy/non-OpenAI rows).
+	AccountPersonaID *int64 `json:"account_persona_id,omitempty"`
+	PersonaProfile   string `json:"persona_profile,omitempty"`
 	// AccountQueueWaitMs 是账号选定后的准入排队耗时，仅管理员可见。
 	AccountQueueWaitMs *int `json:"account_queue_wait_ms"`
 	// IsSubagent 标记该用量是否来自已识别的 Codex 子代理请求。

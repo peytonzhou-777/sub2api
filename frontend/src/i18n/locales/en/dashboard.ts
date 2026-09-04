@@ -367,6 +367,7 @@ export default {
     reasoningEffort: 'Reasoning Effort',
     requestedReasoningEffort: 'Requested reasoning effort',
     endpoint: 'Endpoint',
+    persona: 'Persona',
     endpointDistribution: 'Endpoint Distribution',
     inbound: 'Inbound',
     upstream: 'Upstream',
