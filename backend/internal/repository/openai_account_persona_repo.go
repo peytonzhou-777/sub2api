@@ -527,7 +527,7 @@ WHERE account_persona_id = $2 AND state = 'current'`, input.OldSessionExpiresAt,
     (account_id, persona, credential_chain_id, slot_id, credentials, chatgpt_account_id,
      installation_id, token_version, state, last_error, last_refreshed_at,
      account_persona_id, profile_id, profile_version, persona_generation)
-VALUES ($1, $2, $3, NULL, $4::jsonb, $5, $6, 1, 'ready', '', NOW(), $7, $2, $8, $9)`,
+VALUES ($1, $2::varchar, $3, NULL, $4::jsonb, $5, $6, 1, 'ready', '', NOW(), $7, $2::varchar, $8, $9)`,
 		persona.AccountID, string(persona.ProfileID), strings.TrimSpace(input.CredentialChainID),
 		[]byte(input.EncryptedPayload), strings.TrimSpace(input.ChatGPTAccountID),
 		strings.TrimSpace(input.InstallationID), persona.ID, persona.ProfileVersion, nextGeneration); err != nil {

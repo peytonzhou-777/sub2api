@@ -13,14 +13,16 @@ import (
 
 var _ service.OpenAIPersonaIDMappingStore = (*accountRepository)(nil)
 
-const openAIPersonaIDMappingSelect = `
-SELECT id, user_id, api_key_id, account_id, scope_key, persona, slot_id,
+const openAIPersonaIDMappingProjection = `id, user_id, api_key_id, account_id, scope_key, persona, slot_id,
        session_epoch, slot_generation, slot_set_generation, credential_chain_id,
        thread_id, mapping_type, client_id, opencode_id, status,
        parent_mapping_id, root_mapping_id, created_at, updated_at,
        last_seen_at, expires_at,
        COALESCE(account_persona_id, 0), COALESCE(persona_generation, 0),
-       COALESCE(persona_session_epoch, 0), COALESCE(profile_id, ''), COALESCE(profile_version, '')
+       COALESCE(persona_session_epoch, 0), COALESCE(profile_id, ''), COALESCE(profile_version, '')`
+
+const openAIPersonaIDMappingSelect = `
+SELECT ` + openAIPersonaIDMappingProjection + `
 FROM openai_persona_id_mappings`
 
 func validateOpenAIPersonaIDMappingLookup(scope service.OpenAIPersonaIDMappingScope, mappingType service.OpenAIPersonaIDMappingType, value string) error {
@@ -183,6 +185,7 @@ func (r *accountRepository) UpsertOpenAIPersonaIDMapping(ctx context.Context, ma
 	if strings.TrimSpace(mapping.Status) == "" {
 		mapping.Status = "active"
 	}
+	// PostgreSQL 同一语句快照看不到数据修改 CTE 刚写入的基础表行，必须直接读取 RETURNING 结果。
 	query := `WITH upsert AS (
   INSERT INTO openai_persona_id_mappings
     (user_id, api_key_id, account_id, scope_key, persona, slot_id,
@@ -196,10 +199,10 @@ func (r *accountRepository) UpsertOpenAIPersonaIDMapping(ctx context.Context, ma
     updated_at = EXCLUDED.updated_at,
     expires_at = GREATEST(openai_persona_id_mappings.expires_at, EXCLUDED.expires_at),
     status = CASE WHEN openai_persona_id_mappings.status IN ('expired','revoked') THEN EXCLUDED.status ELSE openai_persona_id_mappings.status END
-  RETURNING id
+  RETURNING *
 )
-` + openAIPersonaIDMappingSelect + `
-WHERE id = (SELECT id FROM upsert)
+SELECT ` + openAIPersonaIDMappingProjection + `
+FROM upsert
 LIMIT 1`
 	rows, err := r.sql.QueryContext(ctx, query,
 		mapping.Scope.UserID,

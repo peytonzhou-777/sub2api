@@ -448,7 +448,7 @@ WHERE account_id=$5 AND persona=$2 AND credential_chain_id=$6 AND state='ready'`
     (account_id, persona, credential_chain_id, slot_id, credentials, chatgpt_account_id,
      installation_id, token_version, state, last_error, last_refreshed_at,
      account_persona_id, profile_id, profile_version, persona_generation)
-VALUES ($1,$2,$3,NULL,$4::jsonb,$5,$6,$7,'ready','',NOW(),$8,$2,$9,$10)`,
+VALUES ($1,$2::varchar,$3,NULL,$4::jsonb,$5,$6,$7,'ready','',NOW(),$8,$2::varchar,$9,$10)`,
 				account.ID, string(persona.ProfileID), persona.CredentialChainID, []byte(persona.CredentialPayload),
 				persona.ChatGPTAccountID, persona.InstallationID, persona.CredentialVersion,
 				personaID, persona.ProfileVersion, persona.Generation); err != nil {
