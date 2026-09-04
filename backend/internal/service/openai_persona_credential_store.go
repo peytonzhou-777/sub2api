@@ -73,7 +73,10 @@ func (s *OpenAIOAuthService) encryptPersonaCredential(info *OpenAITokenInfo) (js
 }
 
 func (s *OpenAIOAuthService) decryptPersonaCredential(record *OpenAIPersonaCredentialRecord) (*OpenAITokenInfo, error) {
-	if s == nil || s.personaCredentialEncryptor == nil || record == nil || (record.State != "ready" && record.State != "refreshing") {
+	// draining 链只允许既有 Thread 在旧 Session 宽限期内读取；刷新入口仍只接受
+	// current ready 链。若这里拒绝 draining，主 Persona 重授权会立即打断所有旧 Thread。
+	if s == nil || s.personaCredentialEncryptor == nil || record == nil ||
+		(record.State != "ready" && record.State != "refreshing" && record.State != "draining") {
 		return nil, ErrOpenAIPersonaCredentialChainNotReady
 	}
 	var envelope openAIPersonaCredentialEnvelope

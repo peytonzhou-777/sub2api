@@ -544,6 +544,8 @@ func registerOpenAIOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		openai.POST("/refresh-token", h.Admin.OpenAIOAuth.RefreshToken)
 		openai.GET("/persona-profiles", h.Admin.OpenAIOAuth.ListAccountPersonaProfiles)
 		openai.POST("/accounts/:id/refresh", h.Admin.OpenAIOAuth.RefreshAccountToken)
+		openai.POST("/accounts/:id/oauth/generate-auth-url", h.Admin.OpenAIOAuth.GeneratePrimaryAccountPersonaAuthURL)
+		openai.POST("/accounts/:id/oauth/exchange-code", h.Admin.OpenAIOAuth.ExchangePrimaryAccountPersonaCode)
 		openai.GET("/accounts/:id/personas", h.Admin.OpenAIOAuth.ListAccountPersonas)
 		openai.POST("/accounts/:id/personas", h.Admin.OpenAIOAuth.CreateAccountPersona)
 		openai.PATCH("/accounts/:id/personas/:persona_id", h.Admin.OpenAIOAuth.UpdateAccountPersona)

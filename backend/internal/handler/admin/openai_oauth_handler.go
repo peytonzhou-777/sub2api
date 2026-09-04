@@ -145,6 +145,15 @@ type openAIPersonaExchangeCodeRequest struct {
 	State     string `json:"state" binding:"required"`
 }
 
+func parseOpenAIAccountID(c *gin.Context) (int64, bool) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || accountID <= 0 {
+		response.BadRequest(c, "Invalid account ID")
+		return 0, false
+	}
+	return accountID, true
+}
+
 type openAIAccountPersonaDTO struct {
 	ID                              int64                             `json:"id"`
 	AccountID                       int64                             `json:"account_id"`
@@ -343,6 +352,25 @@ func (h *OpenAIOAuthHandler) GenerateAccountPersonaAuthURL(c *gin.Context) {
 	response.Success(c, result)
 }
 
+// GeneratePrimaryAccountPersonaAuthURL 为账号菜单“重新授权”签发 position 0 专用 OAuth Session。
+func (h *OpenAIOAuthHandler) GeneratePrimaryAccountPersonaAuthURL(c *gin.Context) {
+	accountID, ok := parseOpenAIAccountID(c)
+	if !ok {
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	result, err := h.openaiOAuthService.GeneratePrimaryAccountPersonaAuthURL(c.Request.Context(), account)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
 func (h *OpenAIOAuthHandler) ExchangeAccountPersonaCode(c *gin.Context) {
 	accountID, personaID, ok := parseOpenAIAccountPersonaTarget(c)
 	if !ok {
@@ -371,6 +399,45 @@ func (h *OpenAIOAuthHandler) ExchangeAccountPersonaCode(c *gin.Context) {
 		return
 	}
 	response.Success(c, openAIAccountPersonaFromService(*persona))
+}
+
+// ExchangePrimaryAccountPersonaCode 在服务端交换并直接轮换 position 0 凭据，
+// 不再把 runtime Token 回传浏览器后写入账号顶层 credentials。
+func (h *OpenAIOAuthHandler) ExchangePrimaryAccountPersonaCode(c *gin.Context) {
+	accountID, ok := parseOpenAIAccountID(c)
+	if !ok {
+		return
+	}
+	var req openAIPersonaExchangeCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	result, err := h.openaiOAuthService.ExchangePrimaryAccountPersonaCode(c.Request.Context(), accountID, &service.OpenAIExchangeCodeInput{
+		SessionID: req.SessionID, Code: req.Code, State: req.State,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if _, err = h.openaiOAuthService.PersistPrimaryAccountPersonaAuthorization(c.Request.Context(), account, result); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	updatedAccount, clearErr := h.adminService.ClearAccountError(c.Request.Context(), accountID)
+	if clearErr != nil {
+		slog.Warn("openai_primary_persona_reauth.clear_account_error_failed", "account_id", accountID, "error", clearErr)
+		updatedAccount, _ = h.adminService.GetAccount(c.Request.Context(), accountID)
+	}
+	if updatedAccount == nil {
+		updatedAccount = account
+	}
+	response.Success(c, dto.AccountFromService(updatedAccount))
 }
 
 func (h *OpenAIOAuthHandler) RevokeAccountPersonaAuthorization(c *gin.Context) {

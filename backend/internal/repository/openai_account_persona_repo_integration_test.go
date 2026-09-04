@@ -43,6 +43,39 @@ func TestOpenAIAccountPersonaRepository_PrimaryCreateAndDynamicLifecycle(t *test
 	_, err = personaRepo.RevokeAccountPersonaAuthorization(ctx, account.ID, personas[0].ID, personas[0].RowVersion)
 	require.ErrorIs(t, err, service.ErrOpenAIDefaultPersonaProtected)
 	require.ErrorIs(t, personaRepo.RetireAccountPersona(ctx, account.ID, personas[0].ID, personas[0].RowVersion), service.ErrOpenAIDefaultPersonaProtected)
+	_, err = personaRepo.AuthorizeAccountPersona(ctx, service.OpenAIAccountPersonaAuthorization{
+		AccountID: account.ID, AccountPersonaID: personas[0].ID, ExpectedRowVersion: personas[0].RowVersion,
+		PersonaGeneration: personas[0].PersonaGeneration, CredentialChainID: "forbidden-primary-chain",
+		EncryptedPayload: json.RawMessage(`{"format_version":1,"ciphertext":"forbidden"}`),
+		ChatGPTAccountID: "acct-dynamic", InstallationID: personas[0].InstallationID,
+		UpstreamSessionID: "forbidden-primary-session", OldSessionExpiresAt: time.Now().Add(time.Hour),
+	})
+	require.ErrorIs(t, err, service.ErrOpenAIDefaultPersonaProtected)
+
+	primaryReauthorized, err := personaRepo.ReauthorizePrimaryAccountPersona(ctx, service.OpenAIAccountPersonaAuthorization{
+		AccountID: account.ID, AccountPersonaID: personas[0].ID, ExpectedRowVersion: personas[0].RowVersion,
+		PersonaGeneration: personas[0].PersonaGeneration, CredentialChainID: "primary-chain-reauthorized",
+		EncryptedPayload: json.RawMessage(`{"format_version":1,"ciphertext":"primary-cipher-reauthorized"}`),
+		ChatGPTAccountID: "acct-dynamic", InstallationID: personas[0].InstallationID,
+		UpstreamSessionID: "primary-session-reauthorized", OldSessionExpiresAt: time.Now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+	require.True(t, primaryReauthorized.IsDefaultProtected())
+	require.Equal(t, int64(2), primaryReauthorized.CurrentSessionEpoch)
+	require.Equal(t, int64(2), primaryReauthorized.PersonaGeneration)
+	var oldPrimaryState, newPrimaryState, oldPrimarySessionState, newPrimarySessionState string
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT state FROM openai_account_persona_credentials
+WHERE account_persona_id = $1 AND credential_chain_id = 'primary-chain'`, personas[0].ID).Scan(&oldPrimaryState))
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT state FROM openai_account_persona_credentials
+WHERE account_persona_id = $1 AND credential_chain_id = 'primary-chain-reauthorized'`, personas[0].ID).Scan(&newPrimaryState))
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT state FROM openai_account_persona_sessions
+WHERE account_persona_id = $1 AND session_epoch = 1`, personas[0].ID).Scan(&oldPrimarySessionState))
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT state FROM openai_account_persona_sessions
+WHERE account_persona_id = $1 AND session_epoch = 2`, personas[0].ID).Scan(&newPrimarySessionState))
+	require.Equal(t, "draining", oldPrimaryState)
+	require.Equal(t, "ready", newPrimaryState)
+	require.Equal(t, "draining", oldPrimarySessionState)
+	require.Equal(t, "current", newPrimarySessionState)
 
 	maxActive := 1
 	dynamic, err := personaRepo.CreateAccountPersona(ctx, service.OpenAIAccountPersonaCreate{

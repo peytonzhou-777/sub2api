@@ -232,6 +232,31 @@ func (s *OpenAIOAuthService) GenerateAccountPersonaAuthURL(ctx context.Context, 
 	if personaRecord.IsDefaultProtected() {
 		return nil, infraerrors.Conflict("DEFAULT_PERSONA_PROTECTED", "default Persona authorization is managed by account login")
 	}
+	return s.generateAccountPersonaAuthURL(ctx, account, personaRecord)
+}
+
+// GeneratePrimaryAccountPersonaAuthURL 将账号“重新授权”明确绑定到受保护的 position 0。
+// Token 交换结果留在服务端，避免重新落回已废弃的账号顶层 runtime Token 路径。
+func (s *OpenAIOAuthService) GeneratePrimaryAccountPersonaAuthURL(ctx context.Context, account *Account) (*OpenAIAuthURLResult, error) {
+	if account == nil || !account.IsOpenAIOAuth() || s == nil || s.accountPersonaRepo == nil {
+		return nil, infraerrors.BadRequest("OPENAI_PERSONA_ACCOUNT_INVALID", "account is not an OpenAI OAuth account")
+	}
+	personas, err := s.accountPersonaRepo.ListAccountPersonas(ctx, account.ID)
+	if err != nil {
+		return nil, openAIAccountPersonaAPIError(err)
+	}
+	for i := range personas {
+		if personas[i].IsDefaultProtected() {
+			return s.generateAccountPersonaAuthURL(ctx, account, &personas[i])
+		}
+	}
+	return nil, infraerrors.Conflict("OPENAI_PRIMARY_PERSONA_MISSING", "OpenAI account primary Persona is unavailable")
+}
+
+func (s *OpenAIOAuthService) generateAccountPersonaAuthURL(ctx context.Context, account *Account, personaRecord *OpenAIAccountPersona) (*OpenAIAuthURLResult, error) {
+	if personaRecord == nil || personaRecord.AccountID != account.ID {
+		return nil, infraerrors.BadRequest("OPENAI_PERSONA_TARGET_MISMATCH", "OAuth target does not belong to this account")
+	}
 	profile, ok := NewDefaultSessionPersonaRegistry().Get(string(personaRecord.ProfileID))
 	if !ok || !profile.Valid() || profile.EffectiveVersion() != personaRecord.ProfileVersion {
 		return nil, infraerrors.Conflict("OPENAI_PERSONA_PROFILE_VERSION_UNAVAILABLE", "Persona profile version is unavailable")
@@ -281,6 +306,26 @@ func (s *OpenAIOAuthService) GenerateAccountPersonaAuthURL(ctx context.Context, 
 	}, nil
 }
 
+// ExchangePrimaryAccountPersonaCode 只接受由账号级主 Persona 入口签发的 OAuth Session。
+// 浏览器无需也不能提交 Persona ID，因此不能把账号重新授权改投到其他 Persona。
+func (s *OpenAIOAuthService) ExchangePrimaryAccountPersonaCode(ctx context.Context, accountID int64, input *OpenAIExchangeCodeInput) (*OpenAIPersonaOAuthExchangeResult, error) {
+	if input == nil {
+		return nil, infraerrors.BadRequest("OPENAI_OAUTH_REQUEST_INVALID", "OAuth exchange input is required")
+	}
+	session, ok := s.sessionStore.Get(input.SessionID)
+	if !ok || session.AccountID != accountID || session.AccountPersonaID <= 0 {
+		return nil, infraerrors.BadRequest("OPENAI_PERSONA_TARGET_MISMATCH", "OAuth session target does not match this account primary Persona")
+	}
+	persona, err := s.accountPersonaRepo.GetAccountPersona(ctx, accountID, session.AccountPersonaID)
+	if err != nil {
+		return nil, openAIAccountPersonaAPIError(err)
+	}
+	if !persona.IsDefaultProtected() {
+		return nil, infraerrors.BadRequest("OPENAI_PERSONA_TARGET_MISMATCH", "OAuth session is not bound to the account primary Persona")
+	}
+	return s.ExchangeAccountPersonaCode(ctx, accountID, persona.ID, input)
+}
+
 func (s *OpenAIOAuthService) ExchangeAccountPersonaCode(ctx context.Context, accountID, accountPersonaID int64, input *OpenAIExchangeCodeInput) (*OpenAIPersonaOAuthExchangeResult, error) {
 	if input == nil {
 		return nil, infraerrors.BadRequest("OPENAI_OAUTH_REQUEST_INVALID", "OAuth exchange input is required")
@@ -320,8 +365,28 @@ func (s *OpenAIOAuthService) ExchangeAccountPersonaCode(ctx context.Context, acc
 }
 
 func (s *OpenAIOAuthService) PersistAccountPersonaAuthorization(ctx context.Context, account *Account, result *OpenAIPersonaOAuthExchangeResult) (*OpenAIAccountPersona, error) {
+	return s.persistAccountPersonaAuthorization(ctx, account, result, false)
+}
+
+// PersistPrimaryAccountPersonaAuthorization 是 position 0 唯一的交互式重授权写入口。
+// 它沿用 Persona generation/Session epoch 轮换，旧 Thread 仍按旧 scope 在宽限期内排空。
+func (s *OpenAIOAuthService) PersistPrimaryAccountPersonaAuthorization(ctx context.Context, account *Account, result *OpenAIPersonaOAuthExchangeResult) (*OpenAIAccountPersona, error) {
+	return s.persistAccountPersonaAuthorization(ctx, account, result, true)
+}
+
+func (s *OpenAIOAuthService) persistAccountPersonaAuthorization(ctx context.Context, account *Account, result *OpenAIPersonaOAuthExchangeResult, requirePrimary bool) (*OpenAIAccountPersona, error) {
 	if account == nil || result == nil || result.TokenInfo == nil || result.AccountID != account.ID || result.AccountPersonaID <= 0 {
 		return nil, infraerrors.BadRequest("OPENAI_PERSONA_TARGET_MISMATCH", "OAuth result does not belong to this AccountPersona")
+	}
+	persona, err := s.accountPersonaRepo.GetAccountPersona(ctx, account.ID, result.AccountPersonaID)
+	if err != nil {
+		return nil, openAIAccountPersonaAPIError(err)
+	}
+	if requirePrimary != persona.IsDefaultProtected() {
+		return nil, infraerrors.BadRequest("OPENAI_PERSONA_TARGET_MISMATCH", "OAuth result does not match the requested authorization path")
+	}
+	if strings.TrimSpace(result.TokenInfo.AccessToken) == "" || strings.TrimSpace(result.TokenInfo.RefreshToken) == "" {
+		return nil, infraerrors.BadRequest("OPENAI_PERSONA_TOKEN_INCOMPLETE", "Persona authorization did not return a complete token chain")
 	}
 	expectedAccountID := strings.TrimSpace(account.GetChatGPTAccountID())
 	actualAccountID := strings.TrimSpace(result.TokenInfo.ChatGPTAccountID)
@@ -340,14 +405,18 @@ func (s *OpenAIOAuthService) PersistAccountPersonaAuthorization(ctx context.Cont
 	if s.settingService != nil {
 		policy = s.settingService.GetCodexFingerprintEpochPolicy(ctx)
 	}
-	return s.accountPersonaRepo.AuthorizeAccountPersona(ctx, OpenAIAccountPersonaAuthorization{
+	authorization := OpenAIAccountPersonaAuthorization{
 		AccountID: account.ID, AccountPersonaID: result.AccountPersonaID,
 		ExpectedRowVersion: result.PersonaRowVersion, PersonaGeneration: result.PersonaGeneration,
 		CredentialChainID: result.CredentialChainID, EncryptedPayload: payload,
 		ChatGPTAccountID: actualAccountID, OAuthClientID: result.TokenInfo.ClientID,
 		InstallationID: result.InstallationID, UpstreamSessionID: upstreamSessionID,
 		OldSessionExpiresAt: time.Now().Add(time.Duration(policy.OldEpochGraceHours) * time.Hour),
-	})
+	}
+	if requirePrimary {
+		return s.accountPersonaRepo.ReauthorizePrimaryAccountPersona(ctx, authorization)
+	}
+	return s.accountPersonaRepo.AuthorizeAccountPersona(ctx, authorization)
 }
 
 func (s *OpenAIOAuthService) RevokeAccountPersonaAuthorization(ctx context.Context, accountID, accountPersonaID, expectedRowVersion int64) error {

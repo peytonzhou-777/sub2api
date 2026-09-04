@@ -462,6 +462,16 @@ WHERE id = $1 AND account_id = $2 AND row_version = $3`, accountPersonaID, accou
 }
 
 func (r *openAIAccountPersonaRepository) AuthorizeAccountPersona(ctx context.Context, input service.OpenAIAccountPersonaAuthorization) (*service.OpenAIAccountPersona, error) {
+	return r.authorizeAccountPersona(ctx, input, false)
+}
+
+// ReauthorizePrimaryAccountPersona 通过账号级登录轮换受保护的 position 0；普通 Persona
+// 授权入口仍不能借此修改默认 Persona 的身份或生命周期约束。
+func (r *openAIAccountPersonaRepository) ReauthorizePrimaryAccountPersona(ctx context.Context, input service.OpenAIAccountPersonaAuthorization) (*service.OpenAIAccountPersona, error) {
+	return r.authorizeAccountPersona(ctx, input, true)
+}
+
+func (r *openAIAccountPersonaRepository) authorizeAccountPersona(ctx context.Context, input service.OpenAIAccountPersonaAuthorization, requirePrimary bool) (*service.OpenAIAccountPersona, error) {
 	if r == nil || r.db == nil || input.AccountID <= 0 || input.AccountPersonaID <= 0 ||
 		input.ExpectedRowVersion <= 0 || input.PersonaGeneration <= 0 || strings.TrimSpace(input.CredentialChainID) == "" ||
 		len(input.EncryptedPayload) == 0 || strings.TrimSpace(input.ChatGPTAccountID) == "" ||
@@ -481,7 +491,10 @@ WHERE account_id = $1 AND id = $2 AND state <> 'retired' FOR UPDATE`, input.Acco
 	if err != nil {
 		return nil, err
 	}
-	if persona.IsDefaultProtected() {
+	if requirePrimary && !persona.IsDefaultProtected() {
+		return nil, service.ErrOpenAIAccountPersonaIdentityMismatch
+	}
+	if !requirePrimary && persona.IsDefaultProtected() {
 		return nil, service.ErrOpenAIDefaultPersonaProtected
 	}
 	if persona.RowVersion != input.ExpectedRowVersion || persona.PersonaGeneration != input.PersonaGeneration ||

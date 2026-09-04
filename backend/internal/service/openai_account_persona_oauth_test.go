@@ -45,8 +45,10 @@ func (s *openAIPersonaOAuthClientStub) RefreshTokenWithProfile(_ context.Context
 }
 
 type openAIAccountPersonaRepoStub struct {
-	persona       OpenAIAccountPersona
-	authorizeCall int
+	persona          OpenAIAccountPersona
+	authorizeCall    int
+	primaryAuthCall  int
+	lastPrimaryInput OpenAIAccountPersonaAuthorization
 }
 
 func (s *openAIAccountPersonaRepoStub) ListAccountPersonas(context.Context, int64) ([]OpenAIAccountPersona, error) {
@@ -75,6 +77,13 @@ func (*openAIAccountPersonaRepoStub) RetireAccountPersona(context.Context, int64
 
 func (s *openAIAccountPersonaRepoStub) AuthorizeAccountPersona(context.Context, OpenAIAccountPersonaAuthorization) (*OpenAIAccountPersona, error) {
 	s.authorizeCall++
+	persona := s.persona
+	return &persona, nil
+}
+
+func (s *openAIAccountPersonaRepoStub) ReauthorizePrimaryAccountPersona(_ context.Context, input OpenAIAccountPersonaAuthorization) (*OpenAIAccountPersona, error) {
+	s.primaryAuthCall++
+	s.lastPrimaryInput = input
 	persona := s.persona
 	return &persona, nil
 }
@@ -126,6 +135,66 @@ func TestAccountPersonaOAuthRejectsDefaultPersonaAuthorization(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, 409, infraerrors.Code(err))
 	require.Equal(t, "DEFAULT_PERSONA_PROTECTED", infraerrors.Reason(err))
+}
+
+func TestPrimaryAccountPersonaReauthorizationUsesProtectedServerBoundPath(t *testing.T) {
+	profile, ok := NewDefaultSessionPersonaRegistry().Get(string(SessionPersonaCodexCLIStrict))
+	require.True(t, ok)
+	repo := &openAIAccountPersonaRepoStub{persona: OpenAIAccountPersona{
+		ID: 21, AccountID: 9, Position: 0, ProfileID: SessionPersonaCodexCLIStrict,
+		ProfileVersion: profile.EffectiveVersion(), CredentialOwner: OpenAICredentialOwnerAccountPrimary,
+		PersonaGeneration: 3, RowVersion: 5, InstallationID: "primary-installation",
+	}}
+	client := &openAIPersonaOAuthClientStub{exchangeResponse: &openai.TokenResponse{
+		AccessToken: "new-access", RefreshToken: "new-refresh",
+		IDToken: openAIPersonaTestJWT("account-9"), ExpiresIn: 3600,
+	}}
+	svc := NewOpenAIOAuthService(nil, client)
+	defer svc.Stop()
+	svc.configureAccountPersonaStore(repo)
+	svc.configurePersonaCredentialStore(openAIPersonaTestEncryptor{}, nil)
+	account := &Account{
+		ID: 9, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Credentials: map[string]any{"chatgpt_account_id": "account-9"},
+	}
+
+	auth, err := svc.GeneratePrimaryAccountPersonaAuthURL(context.Background(), account)
+	require.NoError(t, err)
+	session, ok := svc.sessionStore.Get(auth.SessionID)
+	require.True(t, ok)
+	require.Equal(t, int64(21), session.AccountPersonaID)
+	require.NotEmpty(t, session.CredentialChainID)
+
+	result, err := svc.ExchangePrimaryAccountPersonaCode(context.Background(), account.ID, &OpenAIExchangeCodeInput{
+		SessionID: auth.SessionID, Code: "code", State: session.State,
+	})
+	require.NoError(t, err)
+	_, err = svc.PersistPrimaryAccountPersonaAuthorization(context.Background(), account, result)
+	require.NoError(t, err)
+	require.Equal(t, 1, repo.primaryAuthCall)
+	require.Zero(t, repo.authorizeCall)
+	require.Equal(t, account.ID, repo.lastPrimaryInput.AccountID)
+	require.Equal(t, repo.persona.ID, repo.lastPrimaryInput.AccountPersonaID)
+	require.Equal(t, repo.persona.PersonaGeneration, repo.lastPrimaryInput.PersonaGeneration)
+	require.Equal(t, "account-9", repo.lastPrimaryInput.ChatGPTAccountID)
+	require.NotEmpty(t, repo.lastPrimaryInput.EncryptedPayload)
+	require.NotEmpty(t, repo.lastPrimaryInput.UpstreamSessionID)
+}
+
+func TestDecryptPersonaCredentialAllowsDrainingThreadChain(t *testing.T) {
+	svc := NewOpenAIOAuthService(nil, nil)
+	defer svc.Stop()
+	svc.configurePersonaCredentialStore(openAIPersonaTestEncryptor{}, nil)
+	payload, err := svc.encryptPersonaCredential(&OpenAITokenInfo{
+		AccessToken: "old-access", RefreshToken: "old-refresh", ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	})
+	require.NoError(t, err)
+
+	info, err := svc.decryptPersonaCredential(&OpenAIPersonaCredentialRecord{
+		State: "draining", EncryptedPayload: payload,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "old-access", info.AccessToken)
 }
 
 func TestAccountPersonaOAuthRejectsAccountMismatchBeforePersistence(t *testing.T) {

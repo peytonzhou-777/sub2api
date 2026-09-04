@@ -1543,6 +1543,13 @@ func (h *AccountHandler) ApplyOAuthCredentials(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	if existing.IsOpenAIOAuth() {
+		response.ErrorFrom(c, infraerrors.Conflict(
+			"OPENAI_ACCOUNT_PERSONA_REAUTH_REQUIRED",
+			"OpenAI OAuth re-authorization must rotate the account primary Persona credential",
+		))
+		return
+	}
 
 	// Drop SSO/password residue; re-auth must leave only OAuth tokens on disk.
 	req.Credentials = service.SanitizeStoredCredentials(existing.Platform, req.Credentials)

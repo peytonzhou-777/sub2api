@@ -405,7 +405,20 @@ const handleGenerateUrl = async () => {
         openaiOAuth.loading.value = false
       }
     } else {
-      await openaiOAuth.generateAuthUrl(props.account.proxy_id)
+      openaiOAuth.loading.value = true
+      openaiOAuth.error.value = ''
+      try {
+        const result = await adminAPI.accounts.generateOpenAIPrimaryPersonaAuthUrl(props.account.id)
+        openaiOAuth.authUrl.value = result.auth_url
+        openaiOAuth.sessionId.value = result.session_id
+        const parsed = new URL(result.auth_url)
+        openaiOAuth.oauthState.value = parsed.searchParams.get('state') || ''
+      } catch (error: any) {
+        openaiOAuth.error.value = error?.message || t('admin.accounts.oauth.openai.failedToGenerateUrl')
+        appStore.showError(openaiOAuth.error.value)
+      } finally {
+        openaiOAuth.loading.value = false
+      }
     }
   } else if (isGemini.value) {
     const creds = (props.account.credentials || {}) as Record<string, unknown>
@@ -464,31 +477,26 @@ const handleExchangeCode = async () => {
       return
     }
 
-    const tokenInfo = await oauthClient.exchangeAuthCode(
-      authCode.trim(),
-      sessionId,
-      stateToUse,
-      props.account.proxy_id
-    )
-    if (!tokenInfo) return
-
-    // Build credentials and extra info
-    const credentials = oauthClient.buildCredentials(tokenInfo)
-    const extra = oauthClient.buildExtraInfo(tokenInfo)
-
+    oauthClient.loading.value = true
+    oauthClient.error.value = ''
     try {
-      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
-        type: 'oauth',
-        credentials,
-        extra
-      })
+      const updatedAccount = await adminAPI.accounts.exchangeOpenAIPrimaryPersonaCode(
+        props.account.id,
+        {
+          session_id: sessionId,
+          code: authCode.trim(),
+          state: stateToUse
+        }
+      )
 
       appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
       emit('reauthorized', updatedAccount)
       handleClose()
     } catch (error: any) {
-      oauthClient.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+      oauthClient.error.value = error?.message || t('admin.accounts.oauth.authFailed')
       appStore.showError(oauthClient.error.value)
+    } finally {
+      oauthClient.loading.value = false
     }
   } else if (isGemini.value) {
     const sessionId = geminiOAuth.sessionId.value

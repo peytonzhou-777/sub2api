@@ -891,12 +891,33 @@ export async function generateOpenAIAccountPersonaAuthUrl(id: number, personaId:
   return data
 }
 
+/** Generate an account-bound OAuth session for the protected position 0 Persona. */
+export async function generateOpenAIPrimaryPersonaAuthUrl(id: number): Promise<OpenAIPersonaAuthURLResult> {
+  const { data } = await apiClient.post<OpenAIPersonaAuthURLResult>(
+    `/admin/openai/accounts/${id}/oauth/generate-auth-url`,
+    {}
+  )
+  return data
+}
+
 export async function exchangeOpenAIAccountPersonaCode(
   id: number,
   personaId: number,
   payload: { session_id: string; code: string; state: string }
 ): Promise<OpenAIAccountPersona> {
   const { data } = await apiClient.post<OpenAIAccountPersona>(`/admin/openai/accounts/${id}/personas/${personaId}/oauth/exchange-code`, payload)
+  return data
+}
+
+/** Exchange and persist the protected position 0 credential without exposing tokens to the browser. */
+export async function exchangeOpenAIPrimaryPersonaCode(
+  id: number,
+  payload: { session_id: string; code: string; state: string }
+): Promise<Account> {
+  const { data } = await apiClient.post<Account>(
+    `/admin/openai/accounts/${id}/oauth/exchange-code`,
+    payload
+  )
   return data
 }
 
@@ -1219,7 +1240,9 @@ export const accountsAPI = {
   updateOpenAIAccountPersona,
   retireOpenAIAccountPersona,
   generateOpenAIAccountPersonaAuthUrl,
+  generateOpenAIPrimaryPersonaAuthUrl,
   exchangeOpenAIAccountPersonaCode,
+  exchangeOpenAIPrimaryPersonaCode,
   refreshOpenAIAccountPersona,
   revokeOpenAIAccountPersona,
   rotateOpenAIAccountPersonaSession,

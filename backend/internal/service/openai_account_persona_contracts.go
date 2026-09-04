@@ -205,6 +205,8 @@ type OpenAIAccountPersonaRepository interface {
 	UpdateAccountPersona(ctx context.Context, input OpenAIAccountPersonaUpdate) (*OpenAIAccountPersona, error)
 	RetireAccountPersona(ctx context.Context, accountID, accountPersonaID, expectedRowVersion int64) error
 	AuthorizeAccountPersona(ctx context.Context, input OpenAIAccountPersonaAuthorization) (*OpenAIAccountPersona, error)
+	// ReauthorizePrimaryAccountPersona 仅供账号级重新登录轮换受保护的 position 0 授权链。
+	ReauthorizePrimaryAccountPersona(ctx context.Context, input OpenAIAccountPersonaAuthorization) (*OpenAIAccountPersona, error)
 	RevokeAccountPersonaAuthorization(ctx context.Context, accountID, accountPersonaID, expectedRowVersion int64) ([]string, error)
 	GetAccountPersonaCredential(ctx context.Context, accountPersonaID int64, credentialChainID string) (*OpenAIPersonaCredentialRecord, error)
 	ClaimAccountPersonaCredentialRefresh(ctx context.Context, accountPersonaID int64, credentialChainID string, expectedVersion int64) (bool, error)
