@@ -144,6 +144,11 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 				reqLog.Info("openai_alpha_search.account_select_aborted_client_disconnected", zap.Error(err))
 				return
 			}
+			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
+				markDownstreamDistributionDenied(c)
+				h.errorResponse(c, downstreamDistributionDeniedStatus, downstreamDistributionDeniedType, downstreamDistributionDeniedMessage)
+				return
+			}
 			if len(failedAccountIDs) == 0 {
 				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, requestedModel, requestedModel, service.PlatformOpenAI)
 				if !cls.ModelNotFound {

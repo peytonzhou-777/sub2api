@@ -144,6 +144,11 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 				zap.Error(err),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
+			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
+				markDownstreamDistributionDenied(c)
+				h.errorResponse(c, downstreamDistributionDeniedStatus, downstreamDistributionDeniedType, downstreamDistributionDeniedMessage)
+				return
+			}
 			if len(failedAccountIDs) == 0 {
 				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, reqModel, reqModel, service.PlatformOpenAI)
 				if !cls.ModelNotFound {
