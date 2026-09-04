@@ -229,7 +229,8 @@ func (r *schedulerConversationAffinityRepo) ReserveOpenAIUserConversationBinding
 		ID: int64(200 + len(r.reservations)), UserID: reservation.UserID, APIKeyID: reservation.APIKeyID,
 		ScopeKey: reservation.ScopeKey, ConversationHash: reservation.ConversationHash,
 		ResidentSlotID: residentSlotID, AccountID: reservation.AccountID, SlotGeneration: slotGeneration,
-		Status: "provisional", ContextRebuildable: reservation.ContextRebuildable,
+		BindingEpoch: OpenAIConversationBindingEpoch,
+		Status:       "provisional", ContextRebuildable: reservation.ContextRebuildable,
 		ExpiresAt: time.Now().UTC().Add(2 * time.Minute), ProvisionalToken: reservation.ProvisionalToken,
 		ManageActiveRoute: reservation.ManageActiveRoute,
 	}
@@ -348,6 +349,34 @@ func newMultiSlotAffinitySchedulerTestService(t *testing.T, slots []OpenAIUserRe
 	ctx = context.WithValue(ctx, ctxkey.APIKeyID, int64(77))
 	ctx = context.WithValue(ctx, ctxkey.RequestID, "multi-slot-selection")
 	return svc, repo, ctx
+}
+
+// bindOpenAIUserAffinityTestExecutionTarget 为 OAuth 续链测试补齐当前代的不可变 Persona 执行目标。
+func bindOpenAIUserAffinityTestExecutionTarget(svc *OpenAIGatewayService, binding *OpenAIUserConversationBinding) {
+	personaID := binding.AccountID*10 + 1
+	chainID := "affinity-test-chain"
+	installationID := "affinity-test-installation"
+	startedAt := time.Now().UTC().Add(-time.Minute)
+	binding.BindingEpoch = OpenAIConversationBindingEpoch
+	binding.AccountPersonaID = personaID
+	binding.PersonaSessionEpoch = 1
+	binding.CredentialChainID = chainID
+	binding.ProfileID = SessionPersonaCodexCLIStrict
+	binding.ProfileVersion = CodexOutboundProfileCLI0149
+	svc.accountPersonaRepo = &openAIExecutionTargetRestorePersonaRepo{
+		persona: OpenAIAccountPersona{
+			ID: personaID, AccountID: binding.AccountID, ProfileID: SessionPersonaCodexCLIStrict,
+			ProfileVersion: CodexOutboundProfileCLI0149, State: OpenAIAccountPersonaStateActive,
+			Enabled: true, PersonaGeneration: 1, CurrentCredentialChainID: chainID, CurrentSessionEpoch: 1,
+			DeviceSeed: []byte("0123456789abcdef0123456789abcdef"), InstallationID: installationID,
+		},
+		session: OpenAIAccountPersonaSession{
+			AccountPersonaID: personaID, SessionEpoch: 1, UpstreamSessionID: "affinity-test-session",
+			State: OpenAIPersonaSessionCurrent, PersonaGeneration: 1, CredentialChainID: chainID,
+			ProfileID: SessionPersonaCodexCLIStrict, ProfileVersion: CodexOutboundProfileCLI0149,
+			InstallationID: installationID, StartedAt: startedAt,
+		},
+	}
 }
 
 func openAIUserAffinityTestQuotaExtra(now time.Time, used7D float64) map[string]any {
@@ -1076,6 +1105,7 @@ func TestOpenAIGatewayService_UnderfilledHardUnavailableBindingStartsReplacement
 		ResidentSlotID: 53, AccountID: 36253, SlotGeneration: 1, Status: "active",
 		ContextRebuildable: true, FirstOutputCommitted: true, ExpiresAt: now.Add(time.Hour),
 	}
+	bindOpenAIUserAffinityTestExecutionTarget(svc, repo.binding)
 	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
 	req.SessionHash = "underfilled-hard-unavailable"
 
@@ -1262,6 +1292,7 @@ func TestOpenAIGatewayService_HardUnavailableBindingWithoutCandidateDoesNotPollu
 		ResidentSlotID: slot.ID, AccountID: account.ID, SlotGeneration: slot.Generation, Status: "active",
 		ContextRebuildable: true, FirstOutputCommitted: true, ExpiresAt: now.Add(time.Hour),
 	}
+	bindOpenAIUserAffinityTestExecutionTarget(svc, repo.binding)
 	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
 	req.SessionHash = "no-healthy-candidate"
 
@@ -1311,7 +1342,7 @@ func TestOpenAIGatewayService_UnknownStrictResponseAliasFailsClosed(t *testing.T
 	req.PreviousResponseCanMove = false
 
 	selection, found, err := svc.selectOpenAIUserAffinityConversation(ctx, req)
-	require.ErrorIs(t, err, ErrOpenAIPreviousResponseAccountUnavailable)
+	require.ErrorIs(t, err, ErrOpenAIConversationResetRequired)
 	require.True(t, found)
 	require.Nil(t, selection)
 	require.Equal(t, "response_id", repo.aliasType)
@@ -1329,7 +1360,7 @@ func TestDefaultOpenAIAccountScheduler_DoesNotUseGroupResponseCacheWhenAffinityI
 	req.PreviousResponseCanMove = false
 
 	selection, decision, err := scheduler.Select(ctx, req)
-	require.ErrorIs(t, err, ErrOpenAIPreviousResponseAccountUnavailable)
+	require.ErrorIs(t, err, ErrOpenAIConversationResetRequired)
 	require.Nil(t, selection)
 	require.False(t, decision.StickyPreviousHit)
 }

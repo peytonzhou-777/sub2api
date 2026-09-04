@@ -11,11 +11,10 @@ func (s *OpenAIGatewayService) effectiveOpenAIAccountAdmissionCapacity(ctx conte
 		}
 	}
 	if account != nil && account.IsOpenAIOAuth() {
-		repo, ok := s.accountRepo.(OpenAIAccountPersonaRepository)
-		if !ok {
+		if s.accountPersonaRepo == nil {
 			return 0
 		}
-		personas, err := repo.ListAccountPersonas(ctx, account.ID)
+		personas, err := s.accountPersonaRepo.ListAccountPersonas(ctx, account.ID)
 		if err != nil {
 			return 0
 		}

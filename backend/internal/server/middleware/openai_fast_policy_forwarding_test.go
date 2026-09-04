@@ -62,7 +62,7 @@ func TestAPIKeyAuthForwardsUserScopedOpenAIFastPolicyToUpstream(t *testing.T) {
 	gatewayService := service.NewOpenAIGatewayService(
 		nil, nil, nil, nil, nil, nil, nil, cfg,
 		nil, nil, nil, nil, nil, &openAIFastPolicyForwardingHTTPUpstream{transport: upstreamServer.Client().Transport},
-		nil, nil, nil, nil, nil, nil, settingService, nil,
+		nil, nil, nil, nil, nil, nil, settingService, nil, nil,
 	)
 
 	groupID := int64(101)

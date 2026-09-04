@@ -156,7 +156,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 	if binding == nil {
 		// 不可重建续链在作用域化 alias 未命中时必须失败关闭，禁止回落到 group 级旧缓存。
 		if identity.aliasHash != "" && !identity.contextRebuildable {
-			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
+			return nil, true, ErrOpenAIConversationResetRequired
 		}
 		return nil, false, nil
 	}
@@ -175,7 +175,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 			"binding_id", binding.ID, "account_id", binding.AccountID, "slot_id", binding.ResidentSlotID,
 			"slot_generation", binding.SlotGeneration)
 		if !binding.ContextRebuildable || !identity.contextRebuildable {
-			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
+			return nil, true, ErrOpenAIConversationResetRequired
 		}
 		// reservation 会在 scope 锁内再次校验并把 stale binding 转回 provisional，
 		// 这里先交还当前 scope 的居民槽位选择流程。
@@ -252,6 +252,9 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		executionTarget, targetErr = s.restoreOpenAIUserConversationExecutionTarget(ctx, binding)
 		if targetErr != nil {
 			// OAuth 续链缺少 Persona/epoch 身份时禁止重新选号，避免 Thread 跨出站设备。
+			if errors.Is(targetErr, ErrOpenAIConversationResetRequired) {
+				return nil, true, ErrOpenAIConversationResetRequired
+			}
 			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
 		}
 	}
@@ -320,27 +323,32 @@ func (s *OpenAIGatewayService) restoreOpenAIUserConversationExecutionTarget(
 ) (OpenAIExecutionTarget, error) {
 	if binding == nil || binding.AccountPersonaID <= 0 || binding.PersonaSessionEpoch <= 0 ||
 		binding.CredentialChainID == "" || binding.ProfileID == "" || binding.ProfileVersion == "" ||
-		len(strings.TrimSpace(binding.RootClientSessionHash)) != 64 || binding.UserGroupLeaseID <= 0 {
+		binding.BindingEpoch != OpenAIConversationBindingEpoch {
+		return OpenAIExecutionTarget{}, ErrOpenAIConversationResetRequired
+	}
+	if s == nil || s.accountPersonaRepo == nil {
 		return OpenAIExecutionTarget{}, ErrOpenAIPreviousResponseAccountUnavailable
 	}
-	repo, ok := s.accountRepo.(OpenAIAccountPersonaRepository)
-	if !ok {
+	persona, err := s.accountPersonaRepo.GetAccountPersona(ctx, binding.AccountID, binding.AccountPersonaID)
+	if errors.Is(err, ErrOpenAIAccountPersonaNotFound) || (err == nil && persona == nil) {
+		return OpenAIExecutionTarget{}, ErrOpenAIConversationResetRequired
+	}
+	if err != nil {
 		return OpenAIExecutionTarget{}, ErrOpenAIPreviousResponseAccountUnavailable
 	}
-	persona, err := repo.GetAccountPersona(ctx, binding.AccountID, binding.AccountPersonaID)
-	if err != nil || persona == nil {
-		return OpenAIExecutionTarget{}, ErrOpenAIPreviousResponseAccountUnavailable
+	session, err := s.accountPersonaRepo.GetAccountPersonaSession(ctx, binding.AccountID, binding.AccountPersonaID, binding.PersonaSessionEpoch, time.Now().UTC())
+	if errors.Is(err, ErrOpenAIAccountPersonaSessionNotFound) || errors.Is(err, ErrOpenAIAccountPersonaSessionExpired) ||
+		(err == nil && session == nil) {
+		return OpenAIExecutionTarget{}, ErrOpenAIConversationResetRequired
 	}
-	session, err := repo.GetAccountPersonaSession(ctx, binding.AccountID, binding.AccountPersonaID, binding.PersonaSessionEpoch, time.Now().UTC())
-	if err != nil || session == nil {
+	if err != nil {
 		return OpenAIExecutionTarget{}, ErrOpenAIPreviousResponseAccountUnavailable
 	}
 	target, err := OpenAIExecutionTargetFromPersonaSession(*persona, *session)
 	if err != nil || target.CredentialChainID != binding.CredentialChainID ||
 		target.ProfileID != binding.ProfileID || target.ProfileVersion != binding.ProfileVersion {
-		return OpenAIExecutionTarget{}, ErrOpenAIPreviousResponseAccountUnavailable
+		return OpenAIExecutionTarget{}, ErrOpenAIConversationResetRequired
 	}
-	target.UserGroupLeaseID = binding.UserGroupLeaseID
 	return target, nil
 }
 
@@ -471,6 +479,7 @@ func (s *OpenAIGatewayService) rememberOpenAIUserAffinityConversationAttempt(ctx
 		ScopeKey: binding.ScopeKey, ConversationHash: binding.ConversationHash,
 		ResidentSlotID: binding.ResidentSlotID, AccountID: binding.AccountID,
 		SlotGeneration: binding.SlotGeneration, ProvisionalToken: token, Config: config,
+		BindingEpoch:     binding.BindingEpoch,
 		AccountPersonaID: binding.AccountPersonaID, PersonaSessionEpoch: binding.PersonaSessionEpoch,
 		CredentialChainID: binding.CredentialChainID, RootClientSessionHash: binding.RootClientSessionHash,
 		UserGroupLeaseID: binding.UserGroupLeaseID, ProfileID: binding.ProfileID, ProfileVersion: binding.ProfileVersion,

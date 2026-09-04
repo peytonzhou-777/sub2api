@@ -71,14 +71,14 @@ func TestGetOpenAIUserConversationBindingByAliasScopesLookup(t *testing.T) {
 	now := time.Now().UTC()
 	hash := strings.Repeat("a", 64)
 	mock.ExpectQuery(`(?s)FROM openai_user_conversation_aliases a.*JOIN openai_user_conversation_bindings b`).
-		WithArgs(int64(42), int64(9), "openai", "response_id", hash).
+		WithArgs(int64(42), int64(9), "openai", "response_id", hash, service.OpenAIConversationBindingEpoch).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "user_id", "api_key_id", "scope_key", "conversation_hash", "resident_slot_id",
-			"account_id", "slot_generation", "status", "context_rebuildable", "first_output_committed",
+			"account_id", "slot_generation", "binding_epoch", "status", "context_rebuildable", "first_output_committed",
 			"active_until", "expires_at", "last_success_at", "provisional_token",
 			"account_persona_id", "persona_session_epoch", "credential_chain_id",
 			"root_client_session_hash", "user_group_client_session_lease_id", "profile_id", "profile_version",
-		}).AddRow(5, 42, 9, "openai", hash, 7, 11, 3, "active", true, true,
+		}).AddRow(5, 42, 9, "openai", hash, 7, 11, 3, service.OpenAIConversationBindingEpoch, "active", true, true,
 			now.Add(time.Hour), now.Add(7*24*time.Hour), now, nil,
 			101, 4, "chain-a", strings.Repeat("b", 64), 55, "opencode", "release"))
 
@@ -90,6 +90,7 @@ func TestGetOpenAIUserConversationBindingByAliasScopesLookup(t *testing.T) {
 	require.Equal(t, int64(11), binding.AccountID)
 	require.True(t, binding.FirstOutputCommitted)
 	require.Equal(t, int64(101), binding.AccountPersonaID)
+	require.Equal(t, service.OpenAIConversationBindingEpoch, binding.BindingEpoch)
 	require.Equal(t, service.SessionPersonaOpenCode, binding.ProfileID)
 	require.NoError(t, mock.ExpectationsWereMet())
 }

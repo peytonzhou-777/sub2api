@@ -227,7 +227,7 @@ func TestOpenAIPersonaBindingResolvesFromClientResponse(t *testing.T) {
 		},
 	}
 	repo.OpenAIAccountPersonaRepository = repo
-	svc := &OpenAIGatewayService{personaIDMappingStore: store, accountRepo: repo}
+	svc := &OpenAIGatewayService{personaIDMappingStore: store, accountRepo: repo, accountPersonaRepo: repo}
 	c := testOpenCodeGinContext()
 	bound, err := svc.EnsureOpenCodeThreadMapping(context.Background(), c, binding, nil)
 	require.NoError(t, err)

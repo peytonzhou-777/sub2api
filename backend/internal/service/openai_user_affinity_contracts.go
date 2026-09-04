@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+// OpenAIConversationBindingEpoch 是当前可恢复的持久化 Thread 绑定代际。
+// 提升该值必须配套数据库迁移，使旧代绑定退出运行时但保留审计记录。
+const OpenAIConversationBindingEpoch int64 = 2
+
 // ErrOpenAIUserAffinityPlacementStale 表示归属投影在并发收敛期间已经失效。
 // 调度层应将其视为 placement miss 并重新选择，而不是转换成 503。
 var ErrOpenAIUserAffinityPlacementStale = errors.New("openai user affinity placement stale")
@@ -268,6 +272,7 @@ type OpenAIUserConversationBinding struct {
 	ResidentSlotID        int64            `json:"resident_slot_id"`
 	AccountID             int64            `json:"account_id"`
 	SlotGeneration        int64            `json:"slot_generation"`
+	BindingEpoch          int64            `json:"binding_epoch"`
 	AccountPersonaID      int64            `json:"account_persona_id"`
 	PersonaSessionEpoch   int64            `json:"persona_session_epoch"`
 	CredentialChainID     string           `json:"credential_chain_id"`
@@ -323,6 +328,7 @@ type OpenAIUserConversationTransition struct {
 	ResidentSlotID        int64
 	AccountID             int64
 	SlotGeneration        int64
+	BindingEpoch          int64
 	AccountPersonaID      int64
 	PersonaSessionEpoch   int64
 	CredentialChainID     string

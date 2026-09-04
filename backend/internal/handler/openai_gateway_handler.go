@@ -662,6 +662,15 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "拒绝下游分发", streamStarted)
 				return
 			}
+			if errors.Is(err, service.ErrOpenAIConversationResetRequired) {
+				h.handleStreamingAwareError(c, http.StatusConflict, "invalid_request_error", "Conversation state expired; start a new conversation", streamStarted)
+				return
+			}
+			if errors.Is(err, service.ErrOpenAIPersonaSessionCapacity) {
+				markOpsRoutingCapacityLimited(c)
+				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "rate_limit_error", openAIAccountBusyClientMessage, streamStarted)
+				return
+			}
 			if errors.Is(err, service.ErrOpenAIPreviousResponseAccountUnavailable) {
 				h.gatewayService.RecordOpenAIContinuationRejected()
 				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "Continuation account is unavailable; retry when the original account recovers", streamStarted)
@@ -728,13 +737,15 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				hasBoundPersona = true
 			}
 		}
-		boundOpenCodeContinuation := hasBoundPersona &&
+		boundPersonaContinuation := hasBoundPersona &&
 			(boundPersona.AccountID == 0 || boundPersona.AccountID == account.ID) &&
-			service.IsOpenCodePersona(boundPersona)
-		if previousResponseID != "" && requestPlatform == service.PlatformOpenAI && !account.IsOpenAIApiKey() && !boundOpenCodeContinuation {
-			// The public Responses HTTP API supports previous_response_id on API-key
-			// accounts. OAuth/SetupToken upstreams do not, so keep searching instead
-			// of silently deleting continuation state from a mixed account pool.
+			boundPersona.Valid()
+		boundExecutionTargetContinuation := selection.ExecutionTarget != nil && selection.ExecutionTarget.Valid() &&
+			selection.ExecutionTarget.AccountID == account.ID
+		if previousResponseID != "" && requestPlatform == service.PlatformOpenAI && !account.IsOpenAIApiKey() &&
+			!boundPersonaContinuation && !boundExecutionTargetContinuation {
+			// OAuth 续链必须先恢复到完整的固定 Persona/Session/credential target；
+			// 无绑定请求继续失败关闭，禁止把 continuation 状态带到任意账号。
 			failedAccountIDs[account.ID] = struct{}{}
 			if selection.ReleaseFunc != nil {
 				selection.ReleaseFunc()
@@ -746,7 +757,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				Scope:            service.GatewayFailureScopeRequest,
 				Reason:           service.OpenAIHTTPContinuationUnsupportedReason,
 				ClientStatusCode: http.StatusBadRequest,
-				ClientMessage:    "previous_response_id requires an OpenAI API-key account for HTTP requests",
+				ClientMessage:    "previous_response_id requires a pinned OpenAI Persona for OAuth HTTP requests",
 			}
 			reqLog.Debug("openai.account_skipped_http_continuation_unsupported",
 				zap.Int64("account_id", account.ID),
@@ -3119,6 +3130,14 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if finishSameAccountRetry() {
 					continue
 				}
+				return
+			}
+			if errors.Is(err, service.ErrOpenAIConversationResetRequired) {
+				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "conversation state expired; start a new conversation")
+				return
+			}
+			if errors.Is(err, service.ErrOpenAIPersonaSessionCapacity) {
+				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, openAIAccountBusyClientMessage)
 				return
 			}
 			if errors.Is(err, service.ErrOpenAIPreviousResponseAccountUnavailable) {

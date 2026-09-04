@@ -30,6 +30,10 @@ const (
 // ErrOpenAIPreviousResponseAccountUnavailable 表示不可迁移续链的原账号当前不可用。
 var ErrOpenAIPreviousResponseAccountUnavailable = errors.New("openai previous response account unavailable")
 
+// ErrOpenAIConversationResetRequired 表示客户端引用的旧代或已失效续链不能安全恢复。
+// 该错误不可重试；客户端应建立新的根会话。
+var ErrOpenAIConversationResetRequired = errors.New("openai conversation reset required")
+
 const (
 	openAIAdvancedSchedulerSettingCacheTTL  = 5 * time.Second
 	openAIAdvancedSchedulerSettingDBTimeout = 2 * time.Second
@@ -2218,6 +2222,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 			rollback()
 			return selection, decision, selectErr
 		}
+		boundContinuation := selection.ExecutionTarget != nil && selection.ExecutionTarget.Valid()
 		if attachErr := s.attachOpenAIPersonaReservation(ctx, selection, reservation, sessionHash); attachErr == nil {
 			return selection, decision, nil
 		} else if !errors.Is(attachErr, ErrOpenAIPersonaSessionCapacity) && !errors.Is(attachErr, ErrOpenAIAccountPersonaClaim) {
@@ -2226,6 +2231,14 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 			}
 			rollback()
 			return nil, decision, attachErr
+		} else if boundContinuation {
+			// continuation 已固定到 Account×Persona×Session Epoch；容量不足只能在原
+			// Persona 等待/重试，禁止沿用新根 BestFit 逻辑跨 Persona 或跨账号迁移。
+			if selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			rollback()
+			return nil, decision, ErrOpenAIPersonaSessionCapacity
 		}
 		if selection.ReleaseFunc != nil {
 			selection.ReleaseFunc()

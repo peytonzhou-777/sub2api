@@ -77,6 +77,14 @@ func (p OpenAIAccountPersona) AcceptsNewRoot() bool {
 		p.CurrentCredentialChainID != "" && p.CurrentSessionEpoch > 0
 }
 
+// AcceptsExistingThread 允许 active/draining Persona 为已固定 Thread 续租占用；
+// hard-disabled/retired Persona 仍立即拒绝，避免安全事件后继续出站。
+func (p OpenAIAccountPersona) AcceptsExistingThread() bool {
+	return p.ID > 0 && p.AccountID > 0 &&
+		(p.State == OpenAIAccountPersonaStateActive || p.State == OpenAIAccountPersonaStateDraining) &&
+		p.CurrentCredentialChainID != "" && p.CurrentSessionEpoch > 0
+}
+
 type OpenAIAccountPersonaSession struct {
 	AccountPersonaID  int64
 	SessionEpoch      int64

@@ -57,7 +57,8 @@ WHERE lease.user_id = $2 AND lease.effective_group_id = $3 AND lease.state = 'ac
                   WHERE hold.lease_id = lease.id AND hold.expires_at > $1::timestamptz)`, input.Now, input.UserID, input.EffectiveGroupID); err != nil {
 		return nil, err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM openai_user_group_client_session_leases lease
+	if _, err = tx.ExecContext(ctx, `UPDATE openai_user_group_client_session_leases lease
+SET state = 'expired', active_until = $3::timestamptz, updated_at = $3::timestamptz
 WHERE lease.user_id = $1 AND lease.effective_group_id = $2 AND lease.state = 'provisional'
   AND NOT EXISTS (SELECT 1 FROM openai_user_group_session_request_holds hold
                   WHERE hold.lease_id = lease.id AND hold.expires_at > $3::timestamptz)`, input.UserID, input.EffectiveGroupID, input.Now); err != nil {
@@ -149,7 +150,7 @@ WHERE id = $1 AND account_id = $2 FOR UPDATE`, input.AccountPersonaID, input.Acc
 	if err != nil {
 		return nil, err
 	}
-	if !persona.AcceptsNewRoot() {
+	if !persona.AcceptsNewRoot() && !(input.ExistingThread && persona.AcceptsExistingThread()) {
 		return nil, service.ErrOpenAIPersonaSessionCapacity
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM openai_persona_request_holds WHERE account_persona_id = $1 AND expires_at <= $2::timestamptz`, input.AccountPersonaID, input.Now); err != nil {
@@ -160,7 +161,8 @@ WHERE lease.account_persona_id = $2 AND lease.state = 'active' AND lease.active_
   AND NOT EXISTS (SELECT 1 FROM openai_persona_request_holds hold WHERE hold.lease_id = lease.id AND hold.expires_at > $1::timestamptz)`, input.Now, input.AccountPersonaID); err != nil {
 		return nil, err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM openai_persona_client_session_leases lease
+	if _, err = tx.ExecContext(ctx, `UPDATE openai_persona_client_session_leases lease
+SET state = 'expired', active_until = $2::timestamptz, updated_at = $2::timestamptz
 WHERE lease.account_persona_id = $1 AND lease.state = 'provisional'
   AND NOT EXISTS (SELECT 1 FROM openai_persona_request_holds hold WHERE hold.lease_id = lease.id AND hold.expires_at > $2::timestamptz)`, input.AccountPersonaID, input.Now); err != nil {
 		return nil, err
@@ -368,7 +370,10 @@ func (r *openAIClientSessionReservationRepository) RollbackClientSessionReservat
 		if _, err = tx.ExecContext(ctx, `DELETE FROM openai_user_group_session_request_holds WHERE reservation_token = $1::uuid`, token); err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, `DELETE FROM openai_user_group_client_session_leases lease WHERE id = $1 AND state = 'provisional' AND NOT EXISTS (SELECT 1 FROM openai_user_group_session_request_holds hold WHERE hold.lease_id = lease.id AND hold.expires_at > $2::timestamptz)`, userLeaseID, now); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE openai_user_group_client_session_leases lease
+SET state = 'expired', active_until = $2::timestamptz, updated_at = $2::timestamptz
+WHERE id = $1 AND state = 'provisional'
+  AND NOT EXISTS (SELECT 1 FROM openai_user_group_session_request_holds hold WHERE hold.lease_id = lease.id AND hold.expires_at > $2::timestamptz)`, userLeaseID, now); err != nil {
 			return err
 		}
 	} else if !errors.Is(userErr, sql.ErrNoRows) {
@@ -387,7 +392,10 @@ func (r *openAIClientSessionReservationRepository) RollbackClientSessionReservat
 		if _, err = tx.ExecContext(ctx, `DELETE FROM openai_persona_request_holds WHERE reservation_token = $1::uuid`, token); err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, `DELETE FROM openai_persona_client_session_leases lease WHERE id = $1 AND state = 'provisional' AND NOT EXISTS (SELECT 1 FROM openai_persona_request_holds hold WHERE hold.lease_id = lease.id AND hold.expires_at > $2::timestamptz)`, personaLeaseID, now); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE openai_persona_client_session_leases lease
+SET state = 'expired', active_until = $2::timestamptz, updated_at = $2::timestamptz
+WHERE id = $1 AND state = 'provisional'
+  AND NOT EXISTS (SELECT 1 FROM openai_persona_request_holds hold WHERE hold.lease_id = lease.id AND hold.expires_at > $2::timestamptz)`, personaLeaseID, now); err != nil {
 			return err
 		}
 		if _, err = tx.ExecContext(ctx, `DELETE FROM openai_account_user_persona_claims claim WHERE account_id = $1 AND user_id = $2 AND account_persona_id = $3 AND NOT EXISTS (SELECT 1 FROM openai_persona_client_session_leases lease WHERE lease.account_persona_id = claim.account_persona_id AND lease.user_id = claim.user_id AND ((lease.state = 'active' AND lease.active_until > $4::timestamptz) OR EXISTS (SELECT 1 FROM openai_persona_request_holds hold WHERE hold.lease_id = lease.id AND hold.expires_at > $4::timestamptz)))`, accountID, personaUserID, personaID, now); err != nil {

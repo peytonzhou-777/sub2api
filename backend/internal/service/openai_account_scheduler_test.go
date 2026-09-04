@@ -1713,8 +1713,10 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_SessionStickyRateLimite
 	cache := &schedulerTestGatewayCache{sessionBindings: map[string]int64{"openai:session_hash_rate_limited": 31001}}
 	snapshotCache := &openAISnapshotCacheStub{snapshotAccounts: []*Account{staleSticky, staleBackup}, accountsByID: map[int64]*Account{31001: freshSticky, 31002: freshBackup}}
 	snapshotService := &SchedulerSnapshotService{cache: snapshotCache}
+	accountRepo := schedulerTestOpenAIAccountRepo{accounts: []Account{*freshSticky, *freshBackup}}
 	svc := &OpenAIGatewayService{
-		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: []Account{*freshSticky, *freshBackup}},
+		accountRepo:        accountRepo,
+		accountPersonaRepo: accountRepo,
 		cache:              cache,
 		cfg:                &config.Config{},
 		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
@@ -2123,8 +2125,10 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_SessionStickyDBRuntimeR
 		accountsByID:     map[int64]*Account{33001: staleSticky, 33002: staleBackup},
 	}
 	snapshotService := &SchedulerSnapshotService{cache: snapshotCache}
+	accountRepo := schedulerTestOpenAIAccountRepo{accounts: []Account{dbSticky, dbBackup}}
 	svc := &OpenAIGatewayService{
-		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: []Account{dbSticky, dbBackup}},
+		accountRepo:        accountRepo,
+		accountPersonaRepo: accountRepo,
 		cache:              cache,
 		cfg:                &config.Config{},
 		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
@@ -2335,8 +2339,10 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_SessionSticky(t *testin
 		},
 	}
 
+	accountRepo := schedulerTestOpenAIAccountRepo{accounts: []Account{account}}
 	svc := &OpenAIGatewayService{
-		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: []Account{account}},
+		accountRepo:        accountRepo,
+		accountPersonaRepo: accountRepo,
 		cache:              cache,
 		cfg:                &config.Config{},
 		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
@@ -2689,8 +2695,10 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_SubscriptionPriorityCho
 	}
 	cfg := newSchedulerTestSubscriptionPriorityConfig()
 	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.UpstreamCost = 100
+	accountRepo := schedulerTestOpenAIAccountRepo{accounts: accounts}
 	svc := &OpenAIGatewayService{
-		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
+		accountRepo:        accountRepo,
+		accountPersonaRepo: accountRepo,
 		cache:              &schedulerTestGatewayCache{},
 		cfg:                cfg,
 		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true", "", "true"),
@@ -2952,8 +2960,10 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_SessionSticky_ForceHTTP
 		},
 	}
 
+	accountRepo := schedulerTestOpenAIAccountRepo{accounts: []Account{account}}
 	svc := &OpenAIGatewayService{
-		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: []Account{account}},
+		accountRepo:        accountRepo,
+		accountPersonaRepo: accountRepo,
 		cache:              cache,
 		cfg:                &config.Config{},
 		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
@@ -3863,8 +3873,10 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_SubscriptionPriorityWai
 	concurrencyCache := schedulerTestConcurrencyCache{
 		acquireResults: map[int64]bool{38011: false, 38012: true},
 	}
+	accountRepo := schedulerTestOpenAIAccountRepo{accounts: accounts}
 	svc := &OpenAIGatewayService{
-		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
+		accountRepo:        accountRepo,
+		accountPersonaRepo: accountRepo,
 		cache:              &schedulerTestGatewayCache{},
 		cfg:                newSchedulerTestSubscriptionPriorityConfig(),
 		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true", "", "true"),

@@ -48,6 +48,7 @@ type OpenAIPersonaSessionReserveInput struct {
 	MaxSessions       int
 	Now               time.Time
 	HoldUntil         time.Time
+	ExistingThread    bool
 }
 
 type OpenAIClientSessionLeaseReservation struct {
@@ -317,11 +318,10 @@ func (s *OpenAIGatewayService) attachBoundOpenAIPersonaReservation(
 	if target.AccountID != selection.Account.ID {
 		return ErrOpenAIPreviousResponseAccountUnavailable
 	}
-	repo, ok := s.accountRepo.(OpenAIAccountPersonaRepository)
-	if !ok {
+	if s.accountPersonaRepo == nil {
 		return ErrOpenAIPreviousResponseAccountUnavailable
 	}
-	persona, err := repo.GetAccountPersona(ctx, target.AccountID, target.AccountPersonaID)
+	persona, err := s.accountPersonaRepo.GetAccountPersona(ctx, target.AccountID, target.AccountPersonaID)
 	if err != nil || persona == nil || persona.ProfileID != target.ProfileID || persona.ProfileVersion != target.ProfileVersion {
 		return ErrOpenAIPreviousResponseAccountUnavailable
 	}
@@ -340,7 +340,7 @@ func (s *OpenAIGatewayService) attachBoundOpenAIPersonaReservation(
 	reserved, err := state.repo.ReservePersonaSession(ctx, OpenAIPersonaSessionReserveInput{
 		ReservationToken: state.token, AccountID: target.AccountID, AccountPersonaID: target.AccountPersonaID,
 		UserID: userID, APIKeyID: apiKeyID, ClientSessionHash: clientHash, MaxSessions: maxSessions,
-		Now: now, HoldUntil: holdUntil,
+		Now: now, HoldUntil: holdUntil, ExistingThread: true,
 	})
 	if err != nil {
 		return err

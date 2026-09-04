@@ -363,18 +363,17 @@ func (s *OpenAIGatewayService) ResolveOpenAIPersonaBindingForClientResponse(ctx 
 	if row.Scope.AccountPersonaID <= 0 || row.Scope.SessionEpoch <= 0 {
 		return SessionPersonaSlotBinding{}, false, nil
 	}
-	repo, ok := s.accountRepo.(OpenAIAccountPersonaRepository)
-	if !ok {
+	if s.accountPersonaRepo == nil {
 		return SessionPersonaSlotBinding{}, false, ErrOpenAIPersonaIDMappingUnavailable
 	}
-	accountPersona, err := repo.GetAccountPersona(ctx, account.ID, row.Scope.AccountPersonaID)
+	accountPersona, err := s.accountPersonaRepo.GetAccountPersona(ctx, account.ID, row.Scope.AccountPersonaID)
 	if err != nil {
 		if errors.Is(err, ErrOpenAIAccountPersonaNotFound) {
 			return SessionPersonaSlotBinding{}, false, nil
 		}
 		return SessionPersonaSlotBinding{}, false, err
 	}
-	session, err := repo.GetAccountPersonaSession(ctx, account.ID, row.Scope.AccountPersonaID, row.Scope.SessionEpoch, time.Now().UTC())
+	session, err := s.accountPersonaRepo.GetAccountPersonaSession(ctx, account.ID, row.Scope.AccountPersonaID, row.Scope.SessionEpoch, time.Now().UTC())
 	if err != nil {
 		if errors.Is(err, ErrOpenAIAccountPersonaSessionNotFound) || errors.Is(err, ErrOpenAIAccountPersonaSessionExpired) {
 			return SessionPersonaSlotBinding{}, false, nil

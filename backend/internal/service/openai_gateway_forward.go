@@ -639,7 +639,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			}
 		}
 	}
-	if !isOpenCodePersona &&
+	_, hasPinnedExecutionTarget := openAIExecutionTargetFromContextOrGin(ctx, c)
+	if !isOpenCodePersona && !hasPinnedExecutionTarget &&
 		wsDecision.Transport != OpenAIUpstreamTransportResponsesWebsocketV2 &&
 		!account.IsOpenAIApiKey() && gjson.GetBytes(body, "previous_response_id").Exists() {
 		markPatchDelete("previous_response_id")
