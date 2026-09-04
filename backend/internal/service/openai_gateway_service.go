@@ -474,6 +474,8 @@ type OpenAIGatewayService struct {
 	liveAttestation              liveattestation.Provider
 	liveAttestationCipher        SecretEncryptor
 	turnStateCipher              *openAITurnStateCipher
+	turnStateClientTokens        sync.Map // key: scope AAD + raw state hash, value: wrapped token
+	turnStateClientTokenWrites   atomic.Int64
 
 	openaiWSPoolOnce               sync.Once
 	openaiWSStateStoreOnce         sync.Once

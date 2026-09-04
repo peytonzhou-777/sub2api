@@ -122,7 +122,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
 		if pendingTurnState != "" {
 			clientTurnState := pendingTurnState
 			if s.turnStateCipher != nil && account != nil {
-				if wrapped, wrapErr := s.turnStateCipher.wrap(pendingTurnState, turnStateAADForContext(c, account.ID)); wrapErr == nil {
+				if wrapped, wrapErr := s.wrapTurnStateForClient(c, account.ID, pendingTurnState); wrapErr == nil {
 					clientTurnState = wrapped
 				}
 			}

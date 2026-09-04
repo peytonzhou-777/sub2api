@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -77,12 +78,18 @@ func turnStateAAD(accountID int64, sessionHash string) string {
 
 func turnStateAADForContext(c *gin.Context, accountID int64) string {
 	base := turnStateAAD(accountID, openAITurnStateSessionHash(c))
-	if c != nil && c.Request != nil {
-		if target, ok := OpenAIExecutionTargetFromContext(c.Request.Context()); ok {
-			return fmt.Sprintf("%s\x00persona:%d\x00generation:%d\x00epoch:%d\x00credential:%s\x00profile:%s", base, target.AccountPersonaID, target.PersonaGeneration, target.SessionEpoch, target.CredentialChainID, target.ProfileVersion)
+	logicalTurn := ""
+	if c != nil {
+		if value, ok := c.Get(codexFingerprintLogicalTurnSourceContextKey); ok {
+			logicalTurn, _ = value.(string)
 		}
 	}
-	return base
+	if c != nil && c.Request != nil {
+		if target, ok := OpenAIExecutionTargetFromContext(c.Request.Context()); ok {
+			return fmt.Sprintf("%s\x00turn:%s\x00persona:%d\x00generation:%d\x00epoch:%d\x00credential:%s\x00profile:%s", base, logicalTurn, target.AccountPersonaID, target.PersonaGeneration, target.SessionEpoch, target.CredentialChainID, target.ProfileVersion)
+		}
+	}
+	return fmt.Sprintf("%s\x00turn:%s", base, logicalTurn)
 }
 
 // openAICodexTurnStateHeader 是 Codex 的回合状态头。上游在响应头中铸造该
@@ -93,6 +100,11 @@ const openAICodexTurnStateHeader = "x-codex-turn-state"
 
 type openAICodexTurnStateOrigin struct {
 	accountID int64
+	expiresAt time.Time
+}
+
+type openAITurnStateClientToken struct {
+	token     string
 	expiresAt time.Time
 }
 
@@ -120,11 +132,38 @@ func (s *OpenAIGatewayService) relayOpenAICodexTurnState(c *gin.Context, account
 		return
 	}
 	if s.turnStateCipher != nil && account != nil {
-		if wrapped, err := s.turnStateCipher.wrap(state, turnStateAADForContext(c, account.ID)); err == nil {
+		if wrapped, err := s.wrapTurnStateForClient(c, account.ID, state); err == nil {
 			state = wrapped
 		}
 	}
 	c.Writer.Header().Set(canonical, state)
+}
+
+func (s *OpenAIGatewayService) wrapTurnStateForClient(c *gin.Context, accountID int64, raw string) (string, error) {
+	aad := turnStateAADForContext(c, accountID)
+	digest := sha256.Sum256([]byte(aad + "\x00" + raw))
+	key := hex.EncodeToString(digest[:])
+	if value, ok := s.turnStateClientTokens.Load(key); ok {
+		if cached, valid := value.(openAITurnStateClientToken); valid && time.Now().Before(cached.expiresAt) {
+			return cached.token, nil
+		}
+		s.turnStateClientTokens.Delete(key)
+	}
+	token, err := s.turnStateCipher.wrap(raw, aad)
+	if err != nil {
+		return "", err
+	}
+	s.turnStateClientTokens.Store(key, openAITurnStateClientToken{token: token, expiresAt: time.Now().Add(2 * time.Hour)})
+	if s.turnStateClientTokenWrites.Add(1)%256 == 0 {
+		now := time.Now()
+		s.turnStateClientTokens.Range(func(k, v any) bool {
+			if cached, ok := v.(openAITurnStateClientToken); !ok || now.After(cached.expiresAt) {
+				s.turnStateClientTokens.Delete(k)
+			}
+			return true
+		})
+	}
+	return token, nil
 }
 
 // noteOpenAICodexTurnStateProvenance 记录当前下游会话最近一次铸造账号。
