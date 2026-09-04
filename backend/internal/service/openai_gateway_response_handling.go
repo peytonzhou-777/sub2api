@@ -120,7 +120,13 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(
 		}
 		// 同时记录本地持久化溯源，覆盖流已提交但随后失败的场景。
 		if pendingTurnState != "" {
-			c.Header(http.CanonicalHeaderKey(openAIWSTurnStateHeader), pendingTurnState)
+			clientTurnState := pendingTurnState
+			if s.turnStateCipher != nil && account != nil {
+				if wrapped, wrapErr := s.turnStateCipher.wrap(pendingTurnState, turnStateAADForContext(c, account.ID)); wrapErr == nil {
+					clientTurnState = wrapped
+				}
+			}
+			c.Header(http.CanonicalHeaderKey(openAIWSTurnStateHeader), clientTurnState)
 			s.bindOpenAITurnStateProvenance(ctx, c, account, openAITurnStateSessionHash(c), pendingTurnState, s.openAIWSSessionStickyTTL())
 		}
 		// These headers describe this gateway's SSE stream and are stable across

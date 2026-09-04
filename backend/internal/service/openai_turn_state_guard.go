@@ -195,9 +195,8 @@ func (s *OpenAIGatewayService) isolateOpenAITurnStateAttempt(
 		attemptRequest.Header.Set(openAIWSTurnStateHeader, raw)
 		requestBody = applyOpenAITurnStateToPayload(requestBody, raw)
 	} else if s.turnStateCipher != nil {
-		// 未包装值来自外部供应商或旧客户端，不能直接送往 OpenAI。
-		requestBody = stripOpenAITurnStateFromRequest(attemptRequest.Header, requestBody)
-		return requestBody, restore, nil
+		// 旧版本客户端可能仍在回带明文状态；继续进入 provenance 校验，
+		// 只有本站已登记且作用域完全匹配时才允许短期迁移，否则剥离。
 	}
 	if account != nil && account.IsOpenAIOAuth() && !codexFingerprintAdmissionPreparedForAccount(c, account) {
 		if err := s.PrepareCodexFingerprintForAdmission(ctx, c, account, requestBody, false); err != nil {
@@ -515,6 +514,29 @@ func extractOpenAITurnStateFromMetadataEvent(eventType string, payload []byte) s
 		}
 	}
 	return ""
+}
+
+// wrapOpenAITurnStateMetadataEvent 处理 WS/事件载体中的状态，避免只封装响应头而
+// 仍把上游原始 blob 写入客户端可见的 metadata。
+func (s *OpenAIGatewayService) wrapOpenAITurnStateMetadataEvent(c *gin.Context, account *Account, eventType string, payload []byte) []byte {
+	if s == nil || s.turnStateCipher == nil || account == nil || len(payload) == 0 {
+		return payload
+	}
+	raw := extractOpenAITurnStateFromMetadataEvent(eventType, payload)
+	if raw == "" {
+		return payload
+	}
+	wrapped, err := s.turnStateCipher.wrap(raw, turnStateAADForContext(c, account.ID))
+	if err != nil {
+		return payload
+	}
+	updated := payload
+	for _, path := range []string{"headers.x-codex-turn-state", "headers.x_codex_turn_state", "response.headers.x-codex-turn-state", "response.headers.x_codex_turn_state"} {
+		if next, setErr := sjson.SetBytes(updated, path, wrapped); setErr == nil {
+			updated = next
+		}
+	}
+	return updated
 }
 
 func cloneOpenAIAttemptHeaderWithTurnState(base http.Header, turnState string) http.Header {

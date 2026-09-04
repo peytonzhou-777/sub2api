@@ -1108,6 +1108,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			if isOpenAIWSTurnStateCommitEvent(eventType) {
 				commitPendingTurnState()
 			}
+			// 客户端可见 WS metadata 也必须使用站点包装值；上面的提交仍基于原始值。
+			upstreamMessage = s.wrapOpenAITurnStateMetadataEvent(c, account, eventType, upstreamMessage)
 			if !turnAccepted && isOpenAIWSTurnAcceptedEvent(eventType) {
 				turnAccepted = true
 				if hooks != nil && hooks.OnTurnAccepted != nil {
