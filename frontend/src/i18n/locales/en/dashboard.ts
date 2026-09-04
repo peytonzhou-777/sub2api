@@ -996,7 +996,7 @@ export default {
     querySevenDayUsage: 'Query 7-day personal usage',
     sortAscending: 'Sort ascending',
     sortDescending: 'Sort descending',
-    columns: { id: 'Account ID', platformType: 'Account Type', relation: 'My Relationship', residents: 'Residents', capacity: 'Account Capacity', usageWindow: 'Account Usage', personalUsage: 'Personal Usage', resetCount: 'Account Reset Count', status: 'Account Status' },
+    columns: { id: 'Account ID', platformType: 'Account Type', group: 'Group', relation: 'My Relationship', residents: 'Residents', capacity: 'Account Capacity', usageWindow: 'Account Usage', personalUsage: 'Personal Usage', status: 'Account Status' },
     relations: { all: 'All relationships', currentResidence: 'Resident account', primaryResidence: 'Primary account', sevenDayContact: 'Contacted in 7 days', historicalContact: 'Historically contacted' },
     residents: { active: 'Active in 1 hour', total: 'Current residents', draining: 'Draining slots', conversations: 'Active conversations', contacted: '7-day contacted users' },
     personalUsage: { query: 'Query personal usage', loading: 'Loading', unavailable: 'Temporarily unavailable', notSupported: 'Not supported', observedAt: 'Observed', requests: 'Requests', input: 'Input', output: 'Output', total: 'Total', cacheRate: 'Cache rate', billing: 'Billed' },

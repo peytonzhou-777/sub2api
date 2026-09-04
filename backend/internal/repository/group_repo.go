@@ -1015,6 +1015,34 @@ func (r *groupRepository) GetAccountIDsByGroupIDs(ctx context.Context, groupIDs 
 	return accountIDs, nil
 }
 
+// GetAccountPoolGroupAccountIDs 批量返回号池展示所需的分组账号映射。
+func (r *groupRepository) GetAccountPoolGroupAccountIDs(ctx context.Context, groupIDs []int64) (map[int64][]int64, error) {
+	result := make(map[int64][]int64, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return result, nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT group_id, account_id
+		FROM account_groups
+		WHERE group_id = ANY($1)
+		ORDER BY group_id, account_id`, pq.Array(groupIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var groupID, accountID int64
+		if err := rows.Scan(&groupID, &accountID); err != nil {
+			return nil, err
+		}
+		result[groupID] = append(result[groupID], accountID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // BindAccountsToGroup 将多个账号绑定到指定分组（批量插入，忽略已存在的绑定）
 func (r *groupRepository) BindAccountsToGroup(ctx context.Context, groupID int64, accountIDs []int64) error {
 	if len(accountIDs) == 0 {

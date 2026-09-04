@@ -518,6 +518,29 @@ func (r *apiKeyRepository) ListAllByUserID(ctx context.Context, userID int64, fi
 	return outKeys, nil
 }
 
+// GetAccountPoolDefaultGroupID 仅当用户全部未删除密钥都绑定同一分组时返回该分组。
+func (r *apiKeyRepository) GetAccountPoolDefaultGroupID(ctx context.Context, userID int64) (*int64, error) {
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT MIN(group_id)
+		FROM api_keys
+		WHERE user_id = $1 AND deleted_at IS NULL
+		HAVING COUNT(*) > 0
+		   AND COUNT(group_id) = COUNT(*)
+		   AND COUNT(DISTINCT group_id) = 1`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		return nil, rows.Err()
+	}
+	var groupID int64
+	if err := rows.Scan(&groupID); err != nil {
+		return nil, err
+	}
+	return &groupID, rows.Err()
+}
+
 // ListActiveSecurityDepositKeys 返回参与保证金资格重算的 active 且已绑定分组密钥。
 func (r *apiKeyRepository) ListActiveSecurityDepositKeys(ctx context.Context, userID int64) ([]service.SecurityDepositKeyReference, error) {
 	return r.listActiveSecurityDepositKeys(ctx, apikey.UserIDEQ(userID))

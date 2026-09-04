@@ -1,4 +1,5 @@
 import { apiClient } from './client'
+import type { GroupPlatform, SubscriptionType } from '@/types'
 
 export type AccountPoolFreshness = 'fresh' | 'stale' | 'unavailable'
 export type AccountPoolStatusCode = 'active' | 'disabled' | 'error' | 'temporarily_unavailable' | 'overloaded' | 'rate_limited' | 'paused' | 'quota_exceeded'
@@ -9,6 +10,9 @@ export type AccountPoolRelationFilter = 'current_residence' | 'primary_residence
 export interface AccountPoolGroupOption {
   id: number
   name: string
+  platform?: GroupPlatform
+  subscription_type?: SubscriptionType
+  rate_multiplier?: number
 }
 
 export interface AccountPoolAccount {
@@ -49,6 +53,7 @@ export interface AccountPoolAccount {
     contacted_users?: number
     applicable: boolean
   }
+  groups: AccountPoolGroupOption[]
   is_current_residence: boolean
   is_primary_residence?: boolean
   is_seven_day_contact: boolean
@@ -62,6 +67,7 @@ export interface AccountPoolPage {
   page_size: number
   pages: number
   group_options: AccountPoolGroupOption[]
+  default_group_id: number | null
 }
 
 export interface AccountPoolPersonalUsageWindow {

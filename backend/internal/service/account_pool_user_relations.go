@@ -75,7 +75,9 @@ func (s *AccountPoolService) ListForUser(ctx context.Context, enabledEpoch strin
 		return nil, err
 	}
 	result.GroupOptions = append([]AccountPoolGroupOption{}, access.VisibleGroups...)
+	result.DefaultGroupID = access.DefaultGroupID
 	for i := range result.Items {
+		result.Items[i].Groups = append([]AccountPoolGroupOption{}, access.GroupsByAccount[result.Items[i].ID]...)
 		relation := relationByAccount[result.Items[i].ID]
 		result.Items[i].IsCurrentResidence = relation.IsCurrentResidence
 		result.Items[i].IsPrimaryResidence = relation.IsPrimaryResidence
