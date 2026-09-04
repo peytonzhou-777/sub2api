@@ -163,6 +163,19 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	if account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
 		return "", errors.New("not an openai oauth account")
 	}
+	// OpenAI OAuth runtime credentials are scoped to AccountPersona.  Keep this
+	// account-level method as a compatibility façade, but never read OAuth
+	// runtime tokens from accounts.credentials.  Resolve the protected strict
+	// Codex Persona (the default administrative/upstream identity) and delegate
+	// to the chain-bound path. PAT and Agent Identity continue through their
+	// dedicated legacy handling below.
+	if !account.IsOpenAIPersonalAccessToken() && !account.IsOpenAIAgentIdentity() && p.openAIOAuthService != nil && p.openAIOAuthService.accountPersonaRepo != nil {
+		target, targetErr := p.DefaultExecutionTarget(ctx, account)
+		if targetErr != nil {
+			return "", targetErr
+		}
+		return p.GetAccessTokenForExecutionTarget(ctx, account, target)
+	}
 
 	cacheKey := OpenAITokenCacheKey(account)
 
@@ -314,6 +327,43 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	}
 
 	return accessToken, nil
+}
+
+// defaultExecutionTarget returns the current position-0 strict Codex Persona
+// target.  Position 0 is protected and is the only implicit fallback allowed
+// for callers that have not carried an explicit Persona binding.
+func (p *OpenAITokenProvider) DefaultExecutionTarget(ctx context.Context, account *Account) (OpenAIExecutionTarget, error) {
+	if p == nil || p.openAIOAuthService == nil || p.openAIOAuthService.accountPersonaRepo == nil {
+		return OpenAIExecutionTarget{}, ErrOpenAIPersonaCredentialStoreUnavailable
+	}
+	personas, err := p.openAIOAuthService.accountPersonaRepo.ListAccountPersonas(ctx, account.ID)
+	if err != nil {
+		return OpenAIExecutionTarget{}, err
+	}
+	var selected *OpenAIAccountPersona
+	for i := range personas {
+		persona := &personas[i]
+		if persona.IsDefaultProtected() {
+			selected = persona
+			break
+		}
+	}
+	if selected == nil {
+		return OpenAIExecutionTarget{}, ErrOpenAIAccountPersonaNotFound
+	}
+	if !selected.AcceptsNewRoot() {
+		return OpenAIExecutionTarget{}, ErrOpenAIPersonaCredentialChainNotReady
+	}
+	session, err := p.openAIOAuthService.accountPersonaRepo.GetAccountPersonaSession(
+		ctx, account.ID, selected.ID, selected.CurrentSessionEpoch, time.Now().UTC(),
+	)
+	if err != nil {
+		return OpenAIExecutionTarget{}, err
+	}
+	if session == nil {
+		return OpenAIExecutionTarget{}, ErrOpenAIAccountPersonaSessionNotFound
+	}
+	return OpenAIExecutionTargetFromPersonaSession(*selected, *session)
 }
 
 // GetAccessTokenForExecutionTarget 只读取动态 AccountPersona 绑定的 credential chain。

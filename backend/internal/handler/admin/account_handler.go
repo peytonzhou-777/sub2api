@@ -1341,6 +1341,17 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 			h.adminService.EnsureOpenAIPrivacy(ctx, account)
 			return nil, "", err
 		}
+		if account.IsOpenAIOAuth() && !account.IsOpenAIPersonalAccessToken() && !account.IsOpenAIAgentIdentity() {
+			// OAuth runtime credentials are persisted by the Persona refresh
+			// service. Do not feed them through UpdateAccount(credentials), which
+			// is intentionally rejected by the architecture guard.
+			updated, loadErr := h.adminService.GetAccount(ctx, account.ID)
+			if loadErr != nil || updated == nil {
+				return nil, "", loadErr
+			}
+			h.adminService.EnsureOpenAIPrivacy(ctx, updated)
+			return updated, "", nil
+		}
 
 		newCredentials = h.openaiOAuthService.BuildAccountCredentials(tokenInfo)
 		for k, v := range account.Credentials {

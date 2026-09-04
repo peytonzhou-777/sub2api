@@ -1606,7 +1606,19 @@ func (s *adminServiceImpl) EnsureOpenAIPrivacy(ctx context.Context, account *Acc
 		return ""
 	}
 
-	token, _ := account.Credentials["access_token"].(string)
+	token := ""
+	if account.IsOpenAIOAuth() && !account.IsOpenAIPersonalAccessToken() && !account.IsOpenAIAgentIdentity() && s.openAITokenProvider != nil {
+		target, err := s.openAITokenProvider.DefaultExecutionTarget(ctx, account)
+		if err != nil {
+			return ""
+		}
+		token, err = s.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, account, target)
+		if err != nil {
+			return ""
+		}
+	} else {
+		token, _ = account.Credentials["access_token"].(string)
+	}
 	if token == "" {
 		return ""
 	}
@@ -1640,7 +1652,19 @@ func (s *adminServiceImpl) ForceOpenAIPrivacy(ctx context.Context, account *Acco
 		return ""
 	}
 
-	token, _ := account.Credentials["access_token"].(string)
+	token := ""
+	if account.IsOpenAIOAuth() && !account.IsOpenAIPersonalAccessToken() && !account.IsOpenAIAgentIdentity() && s.openAITokenProvider != nil {
+		target, err := s.openAITokenProvider.DefaultExecutionTarget(ctx, account)
+		if err != nil {
+			return ""
+		}
+		token, err = s.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, account, target)
+		if err != nil {
+			return ""
+		}
+	} else {
+		token, _ = account.Credentials["access_token"].(string)
+	}
 	if token == "" {
 		return ""
 	}

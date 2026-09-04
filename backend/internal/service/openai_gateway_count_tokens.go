@@ -66,7 +66,7 @@ func (s *OpenAIGatewayService) ForwardResponsesInputTokens(
 		return nil
 	}
 
-	token, _, err := s.GetAccessToken(ctx, account)
+	token, err := s.getOpenAIOAuthToken(ctx, c, account)
 	if err != nil {
 		writeOpenAIResponsesInputTokensError(c, http.StatusBadGateway, "upstream_error", "Failed to get access token")
 		return fmt.Errorf("responses input_tokens: get access token: %w", err)
@@ -307,7 +307,7 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 		zap.String("upstream_model", prepared.UpstreamModel),
 	)
 
-	token, _, err := s.GetAccessToken(ctx, account)
+	token, err := s.getOpenAIOAuthToken(ctx, c, account)
 	if err != nil {
 		writeAnthropicCountTokensError(c, http.StatusBadGateway, "upstream_error", "Failed to get access token")
 		return fmt.Errorf("get access token: %w", err)

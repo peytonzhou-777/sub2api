@@ -791,6 +791,24 @@ func (s *AccountTestService) testOpenAIAccountConnectionWithOptions(c *gin.Conte
 	} else if testOptions.requirePersonaTarget {
 		return s.sendErrorAndEnd(c, "Intelligence test requires account_persona_id")
 	}
+	if personaBinding == nil && credentialAccount.IsOpenAIOAuth() && !credentialAccount.IsOpenAIPersonalAccessToken() && !credentialAccount.IsOpenAIAgentIdentity() {
+		if s.openAITokenProvider == nil {
+			return s.sendErrorAndEnd(c, "OpenAI token provider is not configured")
+		}
+		target, targetErr := s.openAITokenProvider.DefaultExecutionTarget(ctx, credentialAccount)
+		if targetErr != nil {
+			return s.sendErrorAndEnd(c, "OpenAI Persona is not active and authorized")
+		}
+		_, tokenErr := s.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, credentialAccount, target)
+		if tokenErr != nil {
+			return s.sendErrorAndEnd(c, "Failed to resolve Persona access token: "+tokenErr.Error())
+		}
+		ctx = ContextWithOpenAIExecutionTarget(ctx, target)
+		if binding, ok := SessionPersonaBindingFromExecutionTarget(target); ok {
+			personaBinding = &binding
+			testOptions.personaBinding = &binding
+		}
+	}
 	if personaBinding != nil {
 		ctx = ContextWithSessionPersonaBinding(ctx, *personaBinding)
 		c.Request = c.Request.WithContext(ctx)
@@ -2187,7 +2205,19 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	case credentialAccount.IsOAuth():
 		isOAuth = true
 		if !credentialAccount.IsOpenAIAgentIdentity() {
-			authToken = credentialAccount.GetOpenAIAccessToken()
+			if credentialAccount.IsOpenAIOAuth() && !credentialAccount.IsOpenAIPersonalAccessToken() && s.openAITokenProvider != nil {
+				target, targetErr := s.openAITokenProvider.DefaultExecutionTarget(ctx, credentialAccount)
+				if targetErr != nil {
+					return s.sendErrorAndEnd(c, "OpenAI Persona is not active and authorized")
+				}
+				token, tokenErr := s.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, credentialAccount, target)
+				if tokenErr != nil {
+					return s.sendErrorAndEnd(c, "Failed to resolve Persona access token: "+tokenErr.Error())
+				}
+				authToken = token
+			} else {
+				authToken = credentialAccount.GetOpenAIAccessToken()
+			}
 		}
 		if authToken == "" && !credentialAccount.IsOpenAIAgentIdentity() {
 			return s.sendErrorAndEnd(c, "No access token available")
@@ -3118,7 +3148,19 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	}
 	authToken := ""
 	if !credentialAccount.IsOpenAIAgentIdentity() {
-		authToken = credentialAccount.GetOpenAIAccessToken()
+		if credentialAccount.IsOpenAIOAuth() && !credentialAccount.IsOpenAIPersonalAccessToken() && s.openAITokenProvider != nil {
+			target, targetErr := s.openAITokenProvider.DefaultExecutionTarget(ctx, credentialAccount)
+			if targetErr != nil {
+				return s.sendErrorAndEnd(c, "OpenAI Persona is not active and authorized")
+			}
+			token, tokenErr := s.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, credentialAccount, target)
+			if tokenErr != nil {
+				return s.sendErrorAndEnd(c, "Failed to resolve Persona access token: "+tokenErr.Error())
+			}
+			authToken = token
+		} else {
+			authToken = credentialAccount.GetOpenAIAccessToken()
+		}
 	}
 	if authToken == "" && !credentialAccount.IsOpenAIAgentIdentity() {
 		return s.sendErrorAndEnd(c, "No access token available")

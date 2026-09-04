@@ -918,7 +918,20 @@ func (s *AccountTestService) buildOpenAIOAuthUpstreamModelsRequest(ctx context.C
 			}
 		}
 	} else {
-		accessToken := strings.TrimSpace(credentialAccount.GetOpenAIAccessToken())
+		accessToken := ""
+		if credentialAccount.IsOpenAIOAuth() && !credentialAccount.IsOpenAIPersonalAccessToken() && !credentialAccount.IsOpenAIAgentIdentity() && s.openAITokenProvider != nil {
+			target, targetErr := s.openAITokenProvider.DefaultExecutionTarget(ctx, credentialAccount)
+			if targetErr != nil {
+				return nil, newUpstreamModelSyncConfigError("OpenAI Persona is not active and authorized", targetErr)
+			}
+			var tokenErr error
+			accessToken, tokenErr = s.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, credentialAccount, target)
+			if tokenErr != nil {
+				return nil, newUpstreamModelSyncConfigError("Failed to resolve OpenAI Persona access token", tokenErr)
+			}
+		} else {
+			accessToken = strings.TrimSpace(credentialAccount.GetOpenAIAccessToken())
+		}
 		if accessToken == "" {
 			return nil, newUpstreamModelSyncConfigError("No OpenAI access token is available", nil)
 		}

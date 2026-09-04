@@ -607,6 +607,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		}
 
 		credentials := sanitizeCredentialsMap(src.Credentials)
+		credentials = sanitizeCRSOpenAIAccountCredentials(credentials)
 		// Normalize token_type
 		if v, ok := credentials["token_type"].(string); !ok || strings.TrimSpace(v) == "" {
 			credentials["token_type"] = "Bearer"
@@ -658,8 +659,17 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		}
 		if existing != nil {
 			credentials = mergeMap(existing.Credentials, credentials)
+			credentials = sanitizeCRSOpenAIAccountCredentials(credentials)
 		}
 		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformOpenAI, AccountTypeOAuth, credentials, extra)
+
+		if existing == nil {
+			item.Action = "failed"
+			item.Error = "OpenAI OAuth CRS import requires a Persona OAuth authorization; use the admin Persona authorization flow"
+			result.Failed++
+			result.Items = append(result.Items, item)
+			continue
+		}
 
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
@@ -1445,22 +1455,10 @@ func (s *CRSSyncService) refreshOAuthToken(ctx context.Context, account *Account
 			}
 		}
 	case PlatformOpenAI:
-		if s.openaiOAuthService == nil {
-			return nil
-		}
-		tokenInfo, refreshErr := s.openaiOAuthService.RefreshAccountToken(ctx, account)
-		if refreshErr != nil {
-			err = refreshErr
-		} else {
-			newCredentials = s.openaiOAuthService.BuildAccountCredentials(tokenInfo)
-			// Preserve non-token settings from existing credentials
-			for k, v := range account.Credentials {
-				if _, exists := newCredentials[k]; !exists {
-					newCredentials[k] = v
-				}
-			}
-			newCredentials = NormalizeOpenAIPersonalAccessTokenCredentials(account, tokenInfo, newCredentials)
-		}
+		// OpenAI OAuth runtime credentials belong to AccountPersona. CRS does
+		// not carry a trusted Persona authorization chain, so never refresh or
+		// persist imported tokens at the account level.
+		return nil
 	case PlatformGemini:
 		if s.geminiOAuthService == nil {
 			return nil
@@ -1486,6 +1484,19 @@ func (s *CRSSyncService) refreshOAuthToken(ctx context.Context, account *Account
 	}
 
 	return newCredentials
+}
+
+func sanitizeCRSOpenAIAccountCredentials(credentials map[string]any) map[string]any {
+	result := make(map[string]any, len(credentials))
+	for key, value := range credentials {
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "access_token", "refresh_token", "id_token", "expires_at", "expires_in", "client_id":
+			continue
+		default:
+			result[key] = value
+		}
+	}
+	return result
 }
 
 // buildSelectedSet converts a slice of selected CRS account IDs to a set for O(1) lookup.

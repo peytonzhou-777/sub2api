@@ -264,7 +264,7 @@ func (s *OpenAIGatewayService) createUpstreamLiveCall(
 	request *LiveCallRequest,
 	attestation string,
 ) (*LiveCallCreated, error) {
-	token, _, err := s.GetAccessToken(ctx, account)
+	token, err := s.getOpenAIOAuthToken(ctx, nil, account)
 	if err != nil {
 		logLiveCreateStageFailure(ctx, account.ID, "access_token", err)
 		return nil, err
@@ -418,7 +418,7 @@ func (s *OpenAIGatewayService) liveSidebandHeaders(
 	account *Account,
 	record *LiveCallRecord,
 ) (http.Header, error) {
-	token, _, err := s.GetAccessToken(ctx, account)
+	token, err := s.getOpenAIOAuthToken(ctx, nil, account)
 	if err != nil {
 		return nil, err
 	}

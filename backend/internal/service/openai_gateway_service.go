@@ -1423,3 +1423,24 @@ func (s *OpenAIGatewayService) GetAccessTokenForRequest(ctx context.Context, c *
 	}
 	return s.GetAccessToken(ctx, account)
 }
+
+// getOpenAIOAuthToken resolves the immutable request target when present and
+// otherwise uses the protected strict Codex Persona for administrative and
+// compatibility calls. PAT/Agent Identity continue through GetAccessToken.
+func (s *OpenAIGatewayService) getOpenAIOAuthToken(ctx context.Context, c *gin.Context, account *Account) (string, error) {
+	if account == nil {
+		return "", errors.New("account is nil")
+	}
+	if account.IsOpenAIOAuth() && !account.IsOpenAIPersonalAccessToken() && !account.IsOpenAIAgentIdentity() && s.openAITokenProvider != nil {
+		if target, ok := openAIExecutionTargetFromContextOrGin(ctx, c); ok {
+			return s.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, account, target)
+		}
+		target, err := s.openAITokenProvider.DefaultExecutionTarget(ctx, account)
+		if err != nil {
+			return "", err
+		}
+		return s.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, account, target)
+	}
+	token, _, err := s.GetAccessToken(ctx, account)
+	return token, err
+}

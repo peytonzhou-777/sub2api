@@ -685,6 +685,7 @@ type adminServiceImpl struct {
 	defaultLimitedCreditGranter DefaultLimitedCreditGranter
 	userSubRepo                 UserSubscriptionRepository
 	privacyClientFactory        PrivacyClientFactory
+	openAITokenProvider         *OpenAITokenProvider
 	runtimeBlocker              AccountRuntimeBlocker
 	affiliateService            adminRechargeAffiliateAccruer
 	compositeRouteRepo          CompositeModelRouteRepository
@@ -692,6 +693,13 @@ type adminServiceImpl struct {
 	// 分组平台变更后用来失效渠道缓存；可为 nil（缓存会在 TTL 到期后自然重建）
 	channelCacheInvalidator           ChannelCacheInvalidator
 	securityDepositGroupKeyReconciler SecurityDepositGroupKeyReconciler
+}
+
+// SetOpenAITokenProvider 注入 Persona-scoped OpenAI OAuth token provider。
+func (s *adminServiceImpl) SetOpenAITokenProvider(provider *OpenAITokenProvider) {
+	if s != nil {
+		s.openAITokenProvider = provider
+	}
 }
 
 // ChannelCacheInvalidator 失效渠道缓存。

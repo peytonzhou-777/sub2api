@@ -69,6 +69,7 @@ type TokenRefreshService struct {
 	// OpenAI privacy: 刷新成功后检查并设置 training opt-out
 	privacyClientFactory PrivacyClientFactory
 	proxyRepo            ProxyRepository
+	openAITokenProvider  *OpenAITokenProvider
 
 	stopCh        chan struct{}
 	stopOnce      sync.Once
@@ -168,6 +169,12 @@ func (s *TokenRefreshService) setCandidateAfterID(afterID int64) {
 func (s *TokenRefreshService) SetPrivacyDeps(factory PrivacyClientFactory, proxyRepo ProxyRepository) {
 	s.privacyClientFactory = factory
 	s.proxyRepo = proxyRepo
+}
+
+func (s *TokenRefreshService) SetOpenAITokenProvider(provider *OpenAITokenProvider) {
+	if s != nil {
+		s.openAITokenProvider = provider
+	}
 }
 
 // SetRefreshAPI 注入统一的 OAuth 刷新 API
@@ -682,7 +689,15 @@ func (s *TokenRefreshService) processProviderAccounts(
 					results <- refreshResult{accountID: account.ID, err: errRefreshSkipped}
 					continue
 				}
-				err := s.refreshWithRetryWithRateGate(ctx, account, state.registration.refresher, state.registration.executor, refreshWindow, state)
+				var err error
+				// OpenAI OAuth stores runtime tokens in AccountPersona chains. Do
+				// not route this provider through OAuthRefreshAPI's account-level
+				// credential persistence path.
+				if personaRefresher, ok := state.registration.refresher.(PersonaAwareTokenRefresher); ok && account.IsOpenAIOAuth() && !account.IsOpenAIPersonalAccessToken() {
+					err = personaRefresher.RefreshPersonas(ctx, account, refreshWindow)
+				} else {
+					err = s.refreshWithRetryWithRateGate(ctx, account, state.registration.refresher, state.registration.executor, refreshWindow, state)
+				}
 				state.recordResult(err)
 				results <- refreshResult{accountID: account.ID, err: err}
 			}
@@ -1451,7 +1466,19 @@ func (s *TokenRefreshService) ensureOpenAIPrivacy(ctx context.Context, account *
 		return
 	}
 
-	token, _ := account.Credentials["access_token"].(string)
+	token := ""
+	if account.IsOpenAIOAuth() && !account.IsOpenAIPersonalAccessToken() && !account.IsOpenAIAgentIdentity() && s.openAITokenProvider != nil {
+		target, err := s.openAITokenProvider.DefaultExecutionTarget(ctx, account)
+		if err != nil {
+			return
+		}
+		token, err = s.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, account, target)
+		if err != nil {
+			return
+		}
+	} else {
+		token, _ = account.Credentials["access_token"].(string)
+	}
 	if token == "" {
 		return
 	}

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 )
@@ -18,6 +19,13 @@ type TokenRefresher interface {
 	// Refresh 执行token刷新，返回更新后的credentials
 	// 注意：返回的map应该保留原有credentials中的所有字段，只更新token相关字段
 	Refresh(ctx context.Context, account *Account) (map[string]any, error)
+}
+
+// PersonaAwareTokenRefresher 是不再把运行时凭据写入 accounts.credentials
+// 的刷新器扩展。OpenAI OAuth 使用 AccountPersona credential chain，后台
+// 刷新必须按 Persona 独立执行。
+type PersonaAwareTokenRefresher interface {
+	RefreshPersonas(ctx context.Context, account *Account, refreshWindow time.Duration) error
 }
 
 // ClaudeTokenRefresher 处理Anthropic/Claude OAuth token刷新
@@ -101,6 +109,11 @@ func (r *OpenAITokenRefresher) CanRefresh(account *Account) bool {
 // NeedsRefresh 检查token是否需要刷新
 // expires_at 缺失且处于限流状态时需要刷新，防止限流期间 token 静默过期
 func (r *OpenAITokenRefresher) NeedsRefresh(account *Account, refreshWindow time.Duration) bool {
+	if r.accountRepo != nil && account != nil && account.IsOpenAIOAuth() && !account.IsOpenAIPersonalAccessToken() {
+		// Persona chain 的 expiry 不在账号快照中；让后台 worker 进入
+		// Persona-aware 分支，由该分支逐链检查并按需刷新。
+		return true
+	}
 	if account.IsOpenAIPersonalAccessToken() {
 		return false
 	}
@@ -118,6 +131,15 @@ func (r *OpenAITokenRefresher) NeedsRefresh(account *Account, refreshWindow time
 // Refresh 执行token刷新
 // 保留原有credentials中的所有字段，只更新token相关字段
 func (r *OpenAITokenRefresher) Refresh(ctx context.Context, account *Account) (map[string]any, error) {
+	if r.accountRepo != nil && r.openaiOAuthService != nil && account != nil && account.IsOpenAIOAuth() && !account.IsOpenAIPersonalAccessToken() {
+		if err := r.RefreshPersonas(ctx, account, openAITokenRefreshSkew); err != nil {
+			return nil, err
+		}
+		// Persona-aware callers persist credentials inside the Persona store.
+		// Returning nil prevents the generic account-level persistence path from
+		// touching accounts.credentials.
+		return nil, nil
+	}
 	tokenInfo, err := r.openaiOAuthService.RefreshAccountToken(ctx, account)
 	if err != nil {
 		return nil, err
@@ -129,4 +151,47 @@ func (r *OpenAITokenRefresher) Refresh(ctx context.Context, account *Account) (m
 	newCredentials = NormalizeOpenAIPersonalAccessTokenCredentials(account, tokenInfo, newCredentials)
 
 	return newCredentials, nil
+}
+
+// RefreshPersonas refreshes every current, independently-authorized Persona
+// chain that is inside the refresh window. A failure is reported only for the
+// affected chain; other Personas continue to refresh.
+func (r *OpenAITokenRefresher) RefreshPersonas(ctx context.Context, account *Account, refreshWindow time.Duration) error {
+	if r == nil || r.openaiOAuthService == nil || r.accountRepo == nil || account == nil {
+		return errors.New("openai persona refresher is not configured")
+	}
+	personas, err := r.openaiOAuthService.ListAccountPersonas(ctx, account.ID)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, persona := range personas {
+		if persona.CurrentCredentialChainID == "" || persona.State == OpenAIAccountPersonaStateRetired || !persona.Enabled {
+			continue
+		}
+		record, recErr := r.openaiOAuthService.accountPersonaRepo.GetAccountPersonaCredential(ctx, persona.ID, persona.CurrentCredentialChainID)
+		if recErr != nil {
+			if firstErr == nil {
+				firstErr = recErr
+			}
+			continue
+		}
+		if record == nil || record.State != "ready" {
+			continue
+		}
+		info, decErr := r.openaiOAuthService.decryptPersonaCredential(record)
+		if decErr != nil {
+			if firstErr == nil {
+				firstErr = decErr
+			}
+			continue
+		}
+		if info.ExpiresAt > 0 && time.Until(time.Unix(info.ExpiresAt, 0)) >= refreshWindow {
+			continue
+		}
+		if _, refreshErr := r.openaiOAuthService.RefreshAccountPersonaCredential(ctx, account, persona.ID); refreshErr != nil && firstErr == nil {
+			firstErr = refreshErr
+		}
+	}
+	return firstErr
 }

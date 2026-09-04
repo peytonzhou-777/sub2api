@@ -667,6 +667,21 @@ func (h *OpenAIOAuthHandler) RefreshAccountToken(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	if account.IsOpenAIOAuth() && !account.IsOpenAIPersonalAccessToken() && !account.IsOpenAIAgentIdentity() {
+		// Persona refresh already persisted the credential chain. Never write
+		// returned runtime tokens back to the account-level credentials JSON.
+		updatedAccount, loadErr := h.adminService.GetAccount(c.Request.Context(), accountID)
+		if loadErr != nil || updatedAccount == nil {
+			if loadErr != nil {
+				response.ErrorFrom(c, loadErr)
+			} else {
+				response.NotFound(c, "Account not found")
+			}
+			return
+		}
+		response.Success(c, dto.AccountFromService(updatedAccount))
+		return
+	}
 
 	// Build new credentials from token info
 	newCredentials := h.openaiOAuthService.BuildAccountCredentials(tokenInfo)

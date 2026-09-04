@@ -620,7 +620,15 @@ func (s *OpenAIQuotaService) prepareUpstreamCall(ctx context.Context, accountID 
 		if s.tokenProvider == nil {
 			return "", "", "", false, infraerrors.New(http.StatusInternalServerError, "OPENAI_QUOTA_NOT_CONFIGURED", "openai quota token provider is not configured")
 		}
-		accessToken, err = s.tokenProvider.GetAccessToken(ctx, account)
+		if account.IsOpenAIOAuth() && !account.IsOpenAIPersonalAccessToken() {
+			target, targetErr := s.tokenProvider.DefaultExecutionTarget(ctx, account)
+			if targetErr != nil {
+				return "", "", "", false, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_PERSONA_UNAVAILABLE", "failed to resolve strict Codex Persona: %v", targetErr)
+			}
+			accessToken, err = s.tokenProvider.GetAccessTokenForExecutionTarget(ctx, account, target)
+		} else {
+			accessToken, err = s.tokenProvider.GetAccessToken(ctx, account)
+		}
 		if err != nil {
 			return "", "", "", false, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_TOKEN_UNAVAILABLE", "failed to acquire access token: %v", err)
 		}

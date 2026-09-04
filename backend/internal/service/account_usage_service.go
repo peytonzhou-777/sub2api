@@ -298,12 +298,20 @@ type AccountUsageService struct {
 	grokQuotaFetcher        *GrokQuotaFetcher
 	grokQuotaService        *GrokQuotaService
 	openAIQuotaService      *OpenAIQuotaService
+	openAITokenProvider     *OpenAITokenProvider
 	cache                   *UsageCache
 	identityCache           IdentityCache
 	tlsFPProfileService     *TLSFingerprintProfileService
 	openAIGatewayService    *OpenAIGatewayService
 	agentIdentityTaskMu     sync.Mutex
 	agentIdentityWS         agentIdentityWSConnectionInvalidator
+}
+
+// SetOpenAITokenProvider 注入按 Persona chain 解析 OAuth token 的提供器。
+func (s *AccountUsageService) SetOpenAITokenProvider(provider *OpenAITokenProvider) {
+	if s != nil {
+		s.openAITokenProvider = provider
+	}
 }
 
 // NewAccountUsageService 创建AccountUsageService实例
@@ -835,7 +843,19 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 	}
 	accessToken := ""
 	if !account.IsOpenAIAgentIdentity() {
-		accessToken = account.GetOpenAIAccessToken()
+		if account.IsOpenAIOAuth() && !account.IsOpenAIPersonalAccessToken() && s.openAITokenProvider != nil {
+			target, targetErr := s.openAITokenProvider.DefaultExecutionTarget(ctx, account)
+			if targetErr != nil {
+				return nil, fmt.Errorf("resolve OpenAI Persona target: %w", targetErr)
+			}
+			var tokenErr error
+			accessToken, tokenErr = s.openAITokenProvider.GetAccessTokenForExecutionTarget(ctx, account, target)
+			if tokenErr != nil {
+				return nil, fmt.Errorf("resolve OpenAI Persona access token: %w", tokenErr)
+			}
+		} else {
+			accessToken = account.GetOpenAIAccessToken()
+		}
 	}
 	if accessToken == "" && !account.IsOpenAIAgentIdentity() {
 		return nil, fmt.Errorf("no access token available")

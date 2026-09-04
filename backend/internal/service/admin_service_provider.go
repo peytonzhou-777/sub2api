@@ -28,8 +28,9 @@ func ProvideAdminService(
 	compositeResolver *CompositeRouteResolver,
 	channelCacheInvalidator ChannelCacheInvalidator,
 	securityDepositGroupKeyReconciler SecurityDepositGroupKeyReconciler,
+	openAITokenProvider *OpenAITokenProvider,
 ) AdminService {
-	return NewAdminServiceWithDependencies(AdminServiceDependencies{
+	svc := NewAdminServiceWithDependencies(AdminServiceDependencies{
 		UserRepository:                    userRepo,
 		GroupRepository:                   groupRepo,
 		AccountRepository:                 accountRepo,
@@ -55,4 +56,8 @@ func ProvideAdminService(
 		ChannelCacheInvalidator:           channelCacheInvalidator,
 		SecurityDepositGroupKeyReconciler: securityDepositGroupKeyReconciler,
 	})
+	if impl, ok := svc.(*adminServiceImpl); ok {
+		impl.SetOpenAITokenProvider(openAITokenProvider)
+	}
+	return svc
 }

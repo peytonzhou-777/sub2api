@@ -368,6 +368,25 @@ func (s *OpenAIOAuthService) RefreshAccountToken(ctx context.Context, account *A
 	if account.Type != AccountTypeOAuth {
 		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_INVALID_ACCOUNT_TYPE", "account is not an OAuth account")
 	}
+	// OpenAI OAuth runtime credentials are Persona-scoped. Keep this legacy
+	// method for admin/compat callers, but resolve the protected strict Codex
+	// Persona instead of reading account-level access/refresh tokens.
+	if !account.IsOpenAIPersonalAccessToken() && !account.IsOpenAIAgentIdentity() && s.accountPersonaRepo != nil {
+		personas, listErr := s.accountPersonaRepo.ListAccountPersonas(ctx, account.ID)
+		if listErr != nil {
+			return nil, listErr
+		}
+		for _, persona := range personas {
+			if !persona.IsDefaultProtected() {
+				continue
+			}
+			if persona.CurrentCredentialChainID == "" {
+				return nil, ErrOpenAIPersonaCredentialChainNotReady
+			}
+			return s.RefreshAccountPersonaCredential(ctx, account, persona.ID)
+		}
+		return nil, ErrOpenAIAccountPersonaNotFound
+	}
 
 	var proxyURL string
 	if account.ProxyID != nil && s.proxyRepo != nil {

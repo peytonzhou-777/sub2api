@@ -143,6 +143,7 @@ func ProvideTokenRefreshService(
 	proxyRepo ProxyRepository,
 	refreshAPI *OAuthRefreshAPI,
 	runtimeBlocker AccountRuntimeBlocker,
+	openAITokenProvider *OpenAITokenProvider,
 ) *TokenRefreshService {
 	svc := NewTokenRefreshService(accountRepo, oauthService, openaiOAuthService, geminiOAuthService, antigravityOAuthService, cacheInvalidator, schedulerCache, cfg, tempUnschedCache, grokOAuthService)
 	// 注入 OpenAI privacy opt-out 依赖
@@ -152,6 +153,7 @@ func ProvideTokenRefreshService(
 	// 调用侧显式注入后台刷新策略，避免策略漂移
 	svc.SetRefreshPolicy(DefaultBackgroundRefreshPolicy())
 	svc.SetAccountRuntimeBlocker(runtimeBlocker)
+	svc.SetOpenAITokenProvider(openAITokenProvider)
 	svc.Start()
 	return svc
 }
@@ -255,6 +257,11 @@ func ProvideAccountUsageService(
 	)
 	service.agentIdentityWS = openAIGatewayService
 	service.openAIGatewayService = openAIGatewayService
+	// Usage probes for OpenAI OAuth must resolve the strict Codex Persona
+	// credential chain instead of account-level runtime tokens.
+	if openAIGatewayService != nil {
+		service.SetOpenAITokenProvider(openAIGatewayService.openAITokenProvider)
+	}
 	return service
 }
 
