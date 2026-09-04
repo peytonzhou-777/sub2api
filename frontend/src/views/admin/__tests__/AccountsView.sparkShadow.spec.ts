@@ -308,12 +308,12 @@ describe('admin AccountsView — 账号行展示', () => {
     wrapper.unmount()
   })
 
-  it('实际路由列区分 Sol、Luna、无法判断和不支持账号', async () => {
+  it('降智检测列区分通过、失败、未标记和不支持账号', async () => {
     listAccounts.mockResolvedValue({
       items: [
-        { id: 301, name: 'sol', platform: 'openai', type: 'oauth', extra: { codex_route_detection: { status: 'sol' } } },
-        { id: 302, name: 'luna', platform: 'openai', type: 'oauth', extra: { codex_route_detection: { status: 'luna' } } },
-        { id: 303, name: 'inconclusive', platform: 'openai', type: 'oauth', extra: { codex_route_detection: { status: 'inconclusive' } } },
+        { id: 301, name: 'passed', platform: 'openai', type: 'oauth', intelligence_test_status: 'passed' },
+        { id: 302, name: 'failed', platform: 'openai', type: 'oauth', intelligence_test_status: 'failed' },
+        { id: 303, name: 'unmarked', platform: 'openai', type: 'oauth', intelligence_test_status: '' },
         { id: 304, name: 'unsupported', platform: 'openai', type: 'apikey' },
       ],
       total: 4,
@@ -325,9 +325,9 @@ describe('admin AccountsView — 账号行展示', () => {
     const wrapper = mountViewWithRow()
     await flushPromises()
 
-    expect(wrapper.get('[data-row="sol"]').text()).toContain('admin.accounts.routeDetectionStatusSol')
-    expect(wrapper.get('[data-row="luna"]').text()).toContain('admin.accounts.routeDetectionStatusLuna')
-    expect(wrapper.get('[data-row="inconclusive"]').text()).toContain('admin.accounts.routeDetectionStatusInconclusive')
+    expect(wrapper.get('[data-row="passed"]').text()).toContain('admin.accounts.intelligenceTestStatusPassed')
+    expect(wrapper.get('[data-row="failed"]').text()).toContain('admin.accounts.intelligenceTestStatusFailed')
+    expect(wrapper.get('[data-row="unmarked"]').text()).toContain('admin.accounts.intelligenceTestStatusUnmarked')
     expect(wrapper.get('[data-row="unsupported"]').text()).toMatch(/-$/)
     wrapper.unmount()
   })

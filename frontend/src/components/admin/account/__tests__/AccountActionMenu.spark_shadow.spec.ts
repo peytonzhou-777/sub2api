@@ -177,7 +177,7 @@ describe('AccountActionMenu — spark shadow 按钮可见性', () => {
   it.each([
     { name: 'OpenAI OAuth 母账号', parentAccountID: null },
     { name: 'OpenAI OAuth 影子账号', parentAccountID: 42 }
-  ])('$name 显示「实际路由检测」按钮', ({ parentAccountID }) => {
+  ])('$name 显示「降智检测」按钮', ({ parentAccountID }) => {
     const account = makeAccount({
       platform: 'openai',
       type: 'oauth',
@@ -188,40 +188,40 @@ describe('AccountActionMenu — spark shadow 按钮可见性', () => {
       attachTo: document.body
     })
 
-    expect(getBodyText()).toContain('admin.accounts.routeDetection')
+    expect(getBodyText()).toContain('admin.accounts.intelligenceTest')
     wrapper.unmount()
   })
 
   it.each([
     { name: 'OpenAI API Key', platform: 'openai', type: 'apikey' },
     { name: '非 OpenAI OAuth', platform: 'anthropic', type: 'oauth' }
-  ] as const)('$name 隐藏「实际路由检测」按钮', ({ platform, type }) => {
+  ] as const)('$name 隐藏「降智检测」按钮', ({ platform, type }) => {
     const account = makeAccount({ platform, type, parent_account_id: null })
     const wrapper = mount(AccountActionMenu, {
       props: { show: true, account, position },
       attachTo: document.body
     })
 
-    expect(getBodyText()).not.toContain('admin.accounts.routeDetection')
+    expect(getBodyText()).not.toContain('admin.accounts.intelligenceTest')
     wrapper.unmount()
   })
 
-  it('点击「实际路由检测」触发 route-detection 事件并携带 account', async () => {
+  it('点击「降智检测」触发 intelligence-test 事件并携带 account', async () => {
     const account = makeAccount({ platform: 'openai', type: 'oauth', parent_account_id: 42 })
     const wrapper = mount(AccountActionMenu, {
       props: { show: true, account, position },
       attachTo: document.body
     })
 
-    const routeDetectionButton = getBodyButtons().find((button) =>
-      button.textContent?.includes('admin.accounts.routeDetection')
+    const intelligenceTestButton = getBodyButtons().find((button) =>
+      button.textContent?.includes('admin.accounts.intelligenceTest')
     )
-    expect(routeDetectionButton).toBeDefined()
+    expect(intelligenceTestButton).toBeDefined()
 
-    routeDetectionButton!.click()
+    intelligenceTestButton!.click()
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.emitted('route-detection')?.[0]?.[0]).toMatchObject({
+    expect(wrapper.emitted('intelligence-test')?.[0]?.[0]).toMatchObject({
       id: account.id,
       platform: 'openai',
       type: 'oauth'

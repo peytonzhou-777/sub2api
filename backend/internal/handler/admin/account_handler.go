@@ -1162,6 +1162,12 @@ type TestAccountRequest struct {
 	AudioDataURL string `json:"audio_data_url"`
 }
 
+// IntelligenceTestAccountRequest 表示 OpenAI OAuth 降智检测请求。
+type IntelligenceTestAccountRequest struct {
+	ModelID          string `json:"model_id"`
+	AccountPersonaID *int64 `json:"account_persona_id"`
+}
+
 type SyncFromCRSRequest struct {
 	BaseURL            string   `json:"base_url" binding:"required"`
 	Username           string   `json:"username" binding:"required"`
@@ -1207,33 +1213,22 @@ func (h *AccountHandler) Test(c *gin.Context) {
 	}
 }
 
-// RouteDetection 检测 OpenAI OAuth Sol 请求本次实际落到的引擎家族。
-// POST /api/v1/admin/accounts/:id/route-detection
-func (h *AccountHandler) RouteDetection(c *gin.Context) {
+// IntelligenceTest 使用固定题目检测 OpenAI OAuth 账号的文本回答能力。
+// POST /api/v1/admin/accounts/:id/intelligence-test
+func (h *AccountHandler) IntelligenceTest(c *gin.Context) {
 	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid account ID")
 		return
 	}
 
-	result, err := h.accountTestService.DetectOpenAIOAuthRoute(c.Request.Context(), accountID)
-	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrCodexRouteDetectionUnsupported):
-			response.BadRequest(c, err.Error())
-		case errors.Is(err, service.ErrCodexRouteDetectionBusy):
-			response.Error(c, http.StatusConflict, err.Error())
-		default:
-			response.ErrorFrom(c, err)
-		}
+	var req IntelligenceTestAccountRequest
+	_ = c.ShouldBindJSON(&req)
+
+	if err := h.accountTestService.TestOpenAIOAuthIntelligence(c, accountID, req.ModelID, req.AccountPersonaID); err != nil {
+		// 错误已通过 SSE 返回。
 		return
 	}
-	response.Success(c, result)
-}
-
-// IntelligenceTest 保留旧路由兼容，执行同一套固定实际路由检测，不再接受模型或 Persona 输入。
-func (h *AccountHandler) IntelligenceTest(c *gin.Context) {
-	h.RouteDetection(c)
 }
 
 // RecoverState handles unified recovery of recoverable account runtime state.
