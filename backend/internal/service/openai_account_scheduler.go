@@ -2211,10 +2211,14 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	if effectiveExcluded == nil {
 		effectiveExcluded = make(map[int64]struct{})
 	}
-	effectiveExcluded, err = s.openAIAccountsWithPersonaCapacity(ctx, groupID, effectiveExcluded, sessionHash)
-	if err != nil {
-		rollback()
-		return nil, OpenAIAccountScheduleDecision{}, err
+	// continuation 必须先恢复持久化的 Account×Persona×Epoch，再对该精确 Persona
+	// 续租。账号级容量预筛选只服务新根，不能把仍有效的固定目标伪装成账号失效。
+	if strings.TrimSpace(previousResponseID) == "" {
+		effectiveExcluded, err = s.openAIAccountsWithPersonaCapacity(ctx, groupID, effectiveExcluded, sessionHash)
+		if err != nil {
+			rollback()
+			return nil, OpenAIAccountScheduleDecision{}, err
+		}
 	}
 	for {
 		selection, decision, selectErr := selectOnce(ctx, effectiveExcluded)

@@ -302,6 +302,52 @@ func TestOpenAIClientSessionReservationRepository_PersonaSeatClaimAndCommit(t *t
 	require.ErrorIs(t, err, service.ErrOpenAIPersonaSessionCapacity)
 }
 
+func TestOpenAIClientSessionReservationRepository_ConcurrentSameSessionRollbackDoesNotBreakAcceptedLease(t *testing.T) {
+	fixture := newOpenAIReservationFixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	repo := NewOpenAIClientSessionReservationRepository(integrationDB)
+	clientHash := strings.Repeat("7", 64)
+	tokens := []string{uuid.NewString(), uuid.NewString()}
+	var userLeaseID, personaLeaseID int64
+	for _, token := range tokens {
+		userLease, err := repo.ReserveUserGroupSession(ctx, service.OpenAIUserGroupSessionReserveInput{
+			ReservationToken: token, UserID: fixture.userID, EffectiveGroupID: fixture.groupID,
+			ClientSessionHash: clientHash, MaxSessions: 1, Now: now, HoldUntil: now.Add(time.Minute),
+		})
+		require.NoError(t, err)
+		personaLease, err := repo.ReservePersonaSession(ctx, service.OpenAIPersonaSessionReserveInput{
+			ReservationToken: token, AccountID: fixture.account.ID, AccountPersonaID: fixture.persona.ID,
+			UserID: fixture.userID, APIKeyID: fixture.apiKeyID, ClientSessionHash: clientHash,
+			MaxSessions: 1, Now: now, HoldUntil: now.Add(time.Minute), ExistingThread: true,
+		})
+		require.NoError(t, err)
+		if userLeaseID == 0 {
+			userLeaseID, personaLeaseID = userLease.LeaseID, personaLease.LeaseID
+		}
+		require.Equal(t, userLeaseID, userLease.LeaseID)
+		require.Equal(t, personaLeaseID, personaLease.LeaseID)
+	}
+
+	require.NoError(t, repo.RollbackClientSessionReservation(ctx, tokens[0], now.Add(time.Second)))
+	activeUntil := now.Add(40 * time.Minute)
+	target, err := repo.CommitClientSessionReservation(ctx, service.OpenAIClientSessionReservationCommit{
+		ReservationToken: tokens[1], Now: now.Add(2 * time.Second), ActiveUntil: activeUntil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, userLeaseID, target.UserGroupLeaseID)
+	require.Equal(t, personaLeaseID, target.PersonaLeaseID)
+
+	var userState, personaState string
+	var userActiveUntil, personaActiveUntil time.Time
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT state, active_until FROM openai_user_group_client_session_leases WHERE id = $1`, userLeaseID).Scan(&userState, &userActiveUntil))
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT state, active_until FROM openai_persona_client_session_leases WHERE id = $1`, personaLeaseID).Scan(&personaState, &personaActiveUntil))
+	require.Equal(t, "active", userState)
+	require.Equal(t, "active", personaState)
+	require.WithinDuration(t, activeUntil, userActiveUntil, time.Microsecond)
+	require.WithinDuration(t, activeUntil, personaActiveUntil, time.Microsecond)
+}
+
 func TestOpenAIClientSessionReservationRepository_DrainingPersonaOnlyAcceptsExistingThread(t *testing.T) {
 	fixture := newOpenAIReservationFixture(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)

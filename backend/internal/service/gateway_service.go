@@ -580,6 +580,10 @@ type AccountSelectionResult struct {
 	Acquired    bool
 	ReleaseFunc func()
 	WaitPlan    *AccountWaitPlan // nil means no wait allowed
+	// accountPermitReleaseFunc 仅释放调度器预抢的账号并发 permit。Persona 客户端
+	// Session reservation 拥有独立生命周期，统一准入交接时不得随 permit 回滚。
+	accountPermitReleaseFunc     func()
+	accountPermitReleaseCaptured bool
 	// ExecutionTarget 是动态 Persona 架构下不可拆分的账号、Persona 与 Session epoch 选择结果。
 	ExecutionTarget          *OpenAIExecutionTarget
 	clientSessionReservation *openAIClientSessionReservationState
@@ -587,6 +591,33 @@ type AccountSelectionResult struct {
 	// 局部 ctx 上，handler 必须经 ContextWithSelectionProfitGate 重放后才能在
 	// 调度栈之外做抢槽后终检与准入后粘性绑定。
 	profitGate *openAIProfitControlGate
+}
+
+// AccountPermitReleaseFunc 返回只释放调度器账号并发 permit 的函数。
+// 未附加动态 Persona reservation 的兼容结果仍沿用原 ReleaseFunc。
+func (r *AccountSelectionResult) AccountPermitReleaseFunc() func() {
+	if r == nil {
+		return nil
+	}
+	if r.accountPermitReleaseCaptured {
+		return r.accountPermitReleaseFunc
+	}
+	return r.ReleaseFunc
+}
+
+// ReleaseAccountPermit 仅执行账号并发 permit 释放，不改变客户端 Session 占用。
+func (r *AccountSelectionResult) ReleaseAccountPermit() {
+	if release := r.AccountPermitReleaseFunc(); release != nil {
+		release()
+	}
+}
+
+// RollbackOpenAIClientSessionReservation 放弃尚未被上游接受的客户端 Session 预留。
+func (r *AccountSelectionResult) RollbackOpenAIClientSessionReservation() {
+	if r == nil || r.clientSessionReservation == nil {
+		return
+	}
+	r.clientSessionReservation.rollback()
 }
 
 // ProfitGateActive 报告本次选号是否处于利润门之下。

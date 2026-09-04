@@ -823,6 +823,11 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			}
 			return forwardResult, forwardErr
 		}()
+		if err != nil || !openAIForwardSucceededForScheduling(result) {
+			// 未收到 accepted 的终端失败必须释放本次请求 hold；若上游已接受，
+			// reservation 已提交，幂等 rollback 不会缩短活跃会话 TTL。
+			selection.RollbackOpenAIClientSessionReservation()
+		}
 		var cyberBlockBodyHTTP []byte
 		if service.GetOpsCyberPolicy(c) != nil {
 			cyberBlockBodyHTTP = sessionHashBody
@@ -1449,6 +1454,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			}()
 			return h.gatewayService.ForwardAsAnthropic(c.Request.Context(), c, account, forwardBody, promptCacheKey, defaultMappedModel)
 		}()
+		if err != nil || !openAIForwardSucceededForScheduling(result) {
+			selection.RollbackOpenAIClientSessionReservation()
+		}
 		var cyberBlockBodyMsg []byte
 		if service.GetOpsCyberPolicy(c) != nil {
 			cyberBlockBodyMsg = body
@@ -2225,7 +2233,7 @@ func (h *OpenAIGatewayHandler) acquireOpenAIAccountSlot(
 				reqLog.Warn("openai.bind_sticky_session_after_profit_admission_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 			}
 		}
-		return wrapReleaseOnDone(ctx, selection.ReleaseFunc), openAISlotAcquireOK
+		return wrapReleaseOnDone(ctx, selection.AccountPermitReleaseFunc()), openAISlotAcquireOK
 	}
 	if selection.WaitPlan == nil {
 		h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(ctx, account.ID)
@@ -2418,6 +2426,12 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 		return h.acquireResponsesAccountSlot(c, groupID, sessionHash, selection, reqStream, streamStarted, reqLog)
 	}
 	account := selection.Account
+	reservationTransferred := false
+	defer func() {
+		if !reservationTransferred {
+			selection.RollbackOpenAIClientSessionReservation()
+		}
+	}()
 	var personaBinding service.SessionPersonaSlotBinding
 	var hasPersonaBinding bool
 	ctx := service.ContextWithSelectionProfitGate(c.Request.Context(), selection)
@@ -2444,6 +2458,7 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 	}
 	if h.accountAdmission == nil || account.Platform != service.PlatformOpenAI {
 		release, result := h.acquireResponsesAccountSlot(c, groupID, sessionHash, selection, reqStream, streamStarted, reqLog)
+		reservationTransferred = result == openAISlotAcquireOK
 		return release, result
 	}
 	cfg, err := h.accountAdmission.Config(c.Request.Context())
@@ -2457,9 +2472,8 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 			// Persona 槽位容量是 v3 的基础语义；总开关仅停用 RPM/TPM 与排队，
 			// 不能退回旧账号并发，否则调度容量、管理页与实际执行会分裂。
 			if selection.Acquired && selection.ReleaseFunc != nil {
-				selection.ReleaseFunc()
+				selection.ReleaseAccountPermit()
 				selection.Acquired = false
-				selection.ReleaseFunc = nil
 			}
 			if err := h.gatewayService.PrepareCodexFingerprintForAdmission(ctx, c, account, body, false); err != nil {
 				reqLog.Warn("openai.codex_fingerprint_persona_capacity_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(err))
@@ -2481,17 +2495,18 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "rate_limit_error", openAIAccountBusyClientMessage, *streamStarted)
 				return nil, openAISlotAcquireFailed
 			}
+			reservationTransferred = true
 			return wrapReleaseOnDone(ctx, release), openAISlotAcquireOK
 		}
 		release, result := h.acquireResponsesAccountSlot(c, groupID, sessionHash, selection, reqStream, streamStarted, reqLog)
+		reservationTransferred = result == openAISlotAcquireOK
 		return release, result
 	}
 
 	// 调度器可能已抢槽；启用统一准入后必须先释放，避免排队期间占用账号并发。
 	if selection.Acquired && selection.ReleaseFunc != nil {
-		selection.ReleaseFunc()
+		selection.ReleaseAccountPermit()
 		selection.Acquired = false
-		selection.ReleaseFunc = nil
 	}
 	maxConcurrency := account.Concurrency
 	if selection.WaitPlan != nil && selection.WaitPlan.MaxConcurrency > 0 {
@@ -2557,6 +2572,7 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlotWithAdmission(
 	if err := h.gatewayService.BindStickySessionAfterProfitAdmission(ctx, groupID, sessionHash, latest.ID); err != nil {
 		reqLog.Warn("openai.bind_sticky_session_after_profit_admission_failed", zap.Int64("account_id", latest.ID), zap.Error(err))
 	}
+	reservationTransferred = true
 	return wrapReleaseOnDone(ctx, result.ReleaseFunc), openAISlotAcquireOK
 }
 
@@ -3180,6 +3196,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		}
 
 		account := selection.Account
+		abandonClientSessionReservation := func() {
+			selection.RollbackOpenAIClientSessionReservation()
+		}
 		accountMaxConcurrency := account.Concurrency
 		if selection.WaitPlan != nil && selection.WaitPlan.MaxConcurrency > 0 {
 			accountMaxConcurrency = selection.WaitPlan.MaxConcurrency
@@ -3189,7 +3208,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		admissionCtx := service.ContextWithSelectionProfitGate(ctx, selection)
 		executionTarget, hasExecutionTarget := service.OpenAIExecutionTargetFromContext(admissionCtx)
 		c.Request = c.Request.WithContext(admissionCtx)
-		accountReleaseFunc := selection.ReleaseFunc
+		// 调度器账号 permit 与客户端 Session reservation 分离：连接级准入只接管
+		// permit；reservation 留在请求上下文，首个 accepted turn 提交、失败回滚。
+		accountReleaseFunc := selection.AccountPermitReleaseFunc()
 		var personaBinding service.SessionPersonaSlotBinding
 		var hasPersonaBinding bool
 		if account.Platform == service.PlatformOpenAI && account.IsOpenAIOAuth() {
@@ -3199,6 +3220,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				selection.Acquired = false
 				selection.ReleaseFunc = nil
+				abandonClientSessionReservation()
 				reqLog.Warn("openai.websocket_account_persona_execution_target_missing", zap.Int64("account_id", account.ID))
 				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "OpenAI Persona execution target is unavailable")
 				return
@@ -3208,6 +3230,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if accountReleaseFunc != nil {
 					accountReleaseFunc()
 				}
+				abandonClientSessionReservation()
 				closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "OpenAI Persona execution target is invalid")
 				return
 			}
@@ -3217,6 +3240,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		if h.accountAdmission != nil && account.Platform == service.PlatformOpenAI {
 			admissionCfg, cfgErr := h.accountAdmission.Config(admissionCtx)
 			if cfgErr != nil {
+				abandonClientSessionReservation()
 				reqLog.Warn("openai.websocket_account_admission_config_failed", zap.Error(cfgErr))
 				closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "account admission control is temporarily unavailable")
 				return
@@ -3226,15 +3250,16 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				// accounts and unbound continuations. A v3 root prepared above
 				// reuses its frozen snapshot instead of generating a second one.
 				if prepareErr := h.gatewayService.PrepareCodexFingerprintForAdmission(admissionCtx, c, account, wsAttemptMessage, true); prepareErr != nil {
+					abandonClientSessionReservation()
 					reqLog.Warn("openai.websocket_codex_fingerprint_admission_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(prepareErr))
 					closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "Codex session identity is temporarily unavailable")
 					return
 				}
 				if selection.Acquired && accountReleaseFunc != nil {
-					accountReleaseFunc()
+					selection.ReleaseAccountPermit()
 				}
 				selection.Acquired = false
-				selection.ReleaseFunc = nil
+				accountReleaseFunc = nil
 				personaMaxConcurrency := 0
 				if hasPersonaBinding {
 					admissionCfg, accountMaxConcurrency, personaMaxConcurrency = applyOpenAIPersonaAdmissionPolicy(admissionCtx, admissionCfg, account, personaBinding, accountMaxConcurrency)
@@ -3257,6 +3282,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				populateOpenAIPersonaAdmissionRequest(admissionCtx, &admissionRequest, personaBinding, hasPersonaBinding)
 				admissionResult, admissionErr := h.accountAdmission.Acquire(admissionCtx, admissionRequest, admissionCfg)
 				if admissionErr != nil {
+					abandonClientSessionReservation()
 					var typedErr *service.OpenAIAccountAdmissionError
 					var waitMS int64
 					if errors.As(admissionErr, &typedErr) {
@@ -3281,26 +3307,29 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 			} else if hasPersonaBinding && personaBinding.EffectiveMappingVersion() >= service.SessionPersonaScopeVersionV3 {
 				if prepareErr := h.gatewayService.PrepareCodexFingerprintForAdmission(admissionCtx, c, account, wsAttemptMessage, true); prepareErr != nil {
+					abandonClientSessionReservation()
 					reqLog.Warn("openai.websocket_persona_capacity_prepare_failed", zap.Int64("account_id", account.ID), zap.Error(prepareErr))
 					closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "Codex session identity is temporarily unavailable")
 					return
 				}
 				if selection.Acquired && accountReleaseFunc != nil {
-					accountReleaseFunc()
+					selection.ReleaseAccountPermit()
 				}
 				selection.Acquired = false
-				selection.ReleaseFunc = nil
+				accountReleaseFunc = nil
 				personaMaxConcurrency := 0
 				_, accountMaxConcurrency, personaMaxConcurrency = applyOpenAIPersonaAdmissionPolicy(admissionCtx, admissionCfg, account, personaBinding, accountMaxConcurrency)
 				release, acquired, acquireErr := h.gatewayService.TryAcquireCodexSessionAdmissionSlots(
 					admissionCtx, c, account, accountMaxConcurrency, personaMaxConcurrency, h.concurrencyHelper.TryAcquireAccountSlot,
 				)
 				if acquireErr != nil {
+					abandonClientSessionReservation()
 					reqLog.Warn("openai.websocket_persona_capacity_acquire_failed", zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)), zap.Int("slot_id", personaBinding.SlotID), zap.Error(acquireErr))
 					closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "Persona capacity is temporarily unavailable")
 					return
 				}
 				if !acquired {
+					abandonClientSessionReservation()
 					h.gatewayService.RecordOpenAIUserAffinityCapacityFailure(admissionCtx, account.ID, "websocket_persona_concurrency_unavailable")
 					closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, openAIAccountBusyClientMessage)
 					return
@@ -3316,6 +3345,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if accountReleaseFunc != nil {
 					accountReleaseFunc()
 				}
+				abandonClientSessionReservation()
 				reqLog.Debug("openai.websocket_account_slot_profit_vetoed", zap.Int64("account_id", account.ID), zap.String("reason", reason))
 				if sameAccountRetryActive {
 					if finishSameAccountRetry() {
@@ -3335,6 +3365,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		}
 		if !selection.Acquired {
 			if selection.WaitPlan == nil {
+				abandonClientSessionReservation()
 				if sameAccountRetryActive {
 					if finishSameAccountRetry() {
 						continue
@@ -3351,6 +3382,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				selection.WaitPlan.MaxConcurrency,
 			)
 			if err != nil {
+				abandonClientSessionReservation()
 				reqLog.Warn("openai.websocket_account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 				if sameAccountRetryActive {
 					if finishSameAccountRetry() {
@@ -3362,6 +3394,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return
 			}
 			if !fastAcquired {
+				abandonClientSessionReservation()
 				if sameAccountRetryActive {
 					if finishSameAccountRetry() {
 						continue
@@ -3379,6 +3412,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if fastReleaseFunc != nil {
 					fastReleaseFunc()
 				}
+				abandonClientSessionReservation()
 				reqLog.Debug("openai.websocket_account_slot_profit_vetoed", zap.Int64("account_id", account.ID), zap.String("reason", reason))
 				if sameAccountRetryActive {
 					if finishSameAccountRetry() {
@@ -3417,6 +3451,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if accountReleaseFunc != nil {
 					accountReleaseFunc()
 				}
+				abandonClientSessionReservation()
 				reqLog.Warn("openai.websocket_persona_lease_acquire_failed", zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)), zap.Int("slot_id", personaBinding.SlotID), zap.Error(leaseErr))
 				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "Persona WebSocket capacity is temporarily unavailable")
 				return
@@ -3425,6 +3460,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if accountReleaseFunc != nil {
 					accountReleaseFunc()
 				}
+				abandonClientSessionReservation()
 				reqLog.Info("openai.websocket_persona_capacity_rejected", zap.Int64("account_id", account.ID), zap.String("persona", string(personaBinding.PersonaID)), zap.Int("slot_id", personaBinding.SlotID), zap.Int("max_active_websockets", policy.MaxActiveWebSockets))
 				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "Persona WebSocket capacity is full, please retry later")
 				return
@@ -3447,6 +3483,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 
 		token, _, err := h.gatewayService.GetRequestCredential(ctx, c, account)
 		if err != nil {
+			abandonClientSessionReservation()
 			reqLog.Warn("openai.websocket_get_access_token_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 			if ctx.Err() != nil {
 				return

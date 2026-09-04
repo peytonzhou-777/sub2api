@@ -290,17 +290,10 @@ func (s *OpenAIGatewayService) attachOpenAIPersonaReservation(ctx context.Contex
 		target.ReservationToken = state.token
 		state.personaLeaseID = reserved.LeaseID
 		selection.ExecutionTarget = &target
-		selection.clientSessionReservation = state
+		selection.attachOpenAIClientSessionReservation(state)
 		if bindErr := s.bindOpenAIUserAffinityConversationExecutionTarget(ctx, selection.Account.ID, target, clientHash); bindErr != nil {
 			state.rollback()
 			return bindErr
-		}
-		originalRelease := selection.ReleaseFunc
-		selection.ReleaseFunc = func() {
-			if originalRelease != nil {
-				originalRelease()
-			}
-			state.rollback()
 		}
 		return nil
 	}
@@ -350,7 +343,7 @@ func (s *OpenAIGatewayService) attachBoundOpenAIPersonaReservation(
 	target.ReservationToken = state.token
 	state.personaLeaseID = reserved.LeaseID
 	selection.ExecutionTarget = &target
-	selection.clientSessionReservation = state
+	selection.attachOpenAIClientSessionReservation(state)
 	// 父 Thread 派生的新子 Thread 会继承已固化的执行目标，但仍拥有自己的
 	// provisional binding。必须在首次上游发送前把完整目标写入子 binding；
 	// helper 的 provisional token 门禁保证普通 continuation 不会被改写。
@@ -358,14 +351,30 @@ func (s *OpenAIGatewayService) attachBoundOpenAIPersonaReservation(
 		state.rollback()
 		return bindErr
 	}
-	originalRelease := selection.ReleaseFunc
-	selection.ReleaseFunc = func() {
+	return nil
+}
+
+// attachOpenAIClientSessionReservation 将“放弃选号”保留为完整释放，同时冻结一个
+// 仅用于统一准入交接的账号 permit 释放入口，避免排队前误回滚客户端 Session lease。
+func (r *AccountSelectionResult) attachOpenAIClientSessionReservation(state *openAIClientSessionReservationState) {
+	if r == nil || state == nil {
+		return
+	}
+	if !r.accountPermitReleaseCaptured {
+		originalRelease := r.ReleaseFunc
 		if originalRelease != nil {
-			originalRelease()
+			var releaseOnce sync.Once
+			r.accountPermitReleaseFunc = func() {
+				releaseOnce.Do(originalRelease)
+			}
 		}
+		r.accountPermitReleaseCaptured = true
+	}
+	r.clientSessionReservation = state
+	r.ReleaseFunc = func() {
+		r.ReleaseAccountPermit()
 		state.rollback()
 	}
-	return nil
 }
 
 // openAIAccountsWithPersonaCapacity 在常驻/BestFit 写状态前构造数据库权威的账号可用集合。

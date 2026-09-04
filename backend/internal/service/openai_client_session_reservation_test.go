@@ -13,9 +13,17 @@ import (
 
 type openAIBoundPersonaReservationRepo struct {
 	OpenAIClientSessionReservationRepository
+	userLeaseID    int64
 	personaLeaseID int64
 	reserveErr     error
 	rollbackTokens []string
+	commits        []OpenAIClientSessionReservationCommit
+	candidates     []OpenAIPersonaCapacityCandidate
+	listCalls      int
+}
+
+func (r *openAIBoundPersonaReservationRepo) ReserveUserGroupSession(context.Context, OpenAIUserGroupSessionReserveInput) (*OpenAIClientSessionLeaseReservation, error) {
+	return &OpenAIClientSessionLeaseReservation{LeaseID: r.userLeaseID}, nil
 }
 
 func (r *openAIBoundPersonaReservationRepo) ReservePersonaSession(context.Context, OpenAIPersonaSessionReserveInput) (*OpenAIClientSessionLeaseReservation, error) {
@@ -28,6 +36,16 @@ func (r *openAIBoundPersonaReservationRepo) ReservePersonaSession(context.Contex
 func (r *openAIBoundPersonaReservationRepo) RollbackClientSessionReservation(_ context.Context, token string, _ time.Time) error {
 	r.rollbackTokens = append(r.rollbackTokens, token)
 	return nil
+}
+
+func (r *openAIBoundPersonaReservationRepo) CommitClientSessionReservation(_ context.Context, commit OpenAIClientSessionReservationCommit) (OpenAIExecutionTarget, error) {
+	r.commits = append(r.commits, commit)
+	return OpenAIExecutionTarget{}, nil
+}
+
+func (r *openAIBoundPersonaReservationRepo) ListOpenAIPersonaCapacityCandidates(context.Context, []int64, int64, int64, string, time.Time) ([]OpenAIPersonaCapacityCandidate, error) {
+	r.listCalls++
+	return append([]OpenAIPersonaCapacityCandidate(nil), r.candidates...), nil
 }
 
 type openAIExecutionTargetBindingStore struct {
@@ -142,4 +160,62 @@ func TestAttachBoundOpenAIPersonaReservationDoesNotRewriteCommittedContinuation(
 	require.NoError(t, err)
 	require.Empty(t, store.transitions)
 	require.Empty(t, reservationRepo.rollbackTokens)
+}
+
+func TestAccountPermitHandoffKeepsClientSessionReservationUntilAccepted(t *testing.T) {
+	svc, _, reservationRepo, ctx, selection, state := openAIBoundPersonaReservationTestFixture(t, "")
+	state.activeTTL = 40 * time.Minute
+	permitReleases := 0
+	selection.Acquired = true
+	selection.ReleaseFunc = func() { permitReleases++ }
+
+	require.NoError(t, svc.attachBoundOpenAIPersonaReservation(ctx, selection, state, strings.Repeat("e", 64)))
+	selection.ReleaseAccountPermit()
+	selection.ReleaseAccountPermit()
+
+	require.Equal(t, 1, permitReleases)
+	require.Empty(t, reservationRepo.rollbackTokens, "统一准入交接不能回滚客户端 Session")
+	require.False(t, state.rolledBack)
+
+	acceptedCtx := ContextWithSelectionProfitGate(ctx, selection)
+	svc.RecordOpenAIUserAffinityAccepted(acceptedCtx, selection.Account.ID)
+	require.Len(t, reservationRepo.commits, 1)
+	require.Equal(t, "client-reservation", reservationRepo.commits[0].ReservationToken)
+	require.WithinDuration(t, reservationRepo.commits[0].Now.Add(40*time.Minute), reservationRepo.commits[0].ActiveUntil, time.Second)
+	require.True(t, state.committed)
+
+	selection.ReleaseFunc()
+	require.Equal(t, 1, permitReleases)
+	require.Empty(t, reservationRepo.rollbackTokens, "accepted 后释放执行槽不得缩短活跃 lease")
+}
+
+func TestWaitPlanClientSessionReservationCommitsWithoutSchedulerPermit(t *testing.T) {
+	svc, _, reservationRepo, ctx, selection, state := openAIBoundPersonaReservationTestFixture(t, "")
+	selection.Acquired = false
+	selection.ReleaseFunc = nil
+	selection.WaitPlan = &AccountWaitPlan{AccountID: selection.Account.ID, MaxConcurrency: 1, Timeout: time.Second}
+
+	require.NoError(t, svc.attachBoundOpenAIPersonaReservation(ctx, selection, state, strings.Repeat("f", 64)))
+	require.Nil(t, selection.AccountPermitReleaseFunc())
+	svc.RecordOpenAIUserAffinityAccepted(ContextWithSelectionProfitGate(ctx, selection), selection.Account.ID)
+
+	require.Len(t, reservationRepo.commits, 1)
+	require.Empty(t, reservationRepo.rollbackTokens)
+}
+
+func TestAbandonedClientSessionReservationRollsBackExactlyOnce(t *testing.T) {
+	svc, _, reservationRepo, ctx, selection, state := openAIBoundPersonaReservationTestFixture(t, "")
+	permitReleases := 0
+	selection.Acquired = true
+	selection.ReleaseFunc = func() { permitReleases++ }
+	require.NoError(t, svc.attachBoundOpenAIPersonaReservation(ctx, selection, state, strings.Repeat("1", 64)))
+
+	selection.ReleaseFunc()
+	selection.ReleaseFunc()
+	selection.RollbackOpenAIClientSessionReservation()
+
+	require.Equal(t, 1, permitReleases)
+	require.Equal(t, []string{"client-reservation"}, reservationRepo.rollbackTokens)
+	require.True(t, state.rolledBack)
+	require.Empty(t, reservationRepo.commits)
 }
