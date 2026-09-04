@@ -807,6 +807,11 @@ func normalizeRequestedModelForLookup(platform, requestedModel string) string {
 	if trimmed == "" {
 		return ""
 	}
+	// OpenAI 官方模型映射通常只保存具体上游 ID；公开别名在查找时归一化，
+	// 避免账号已支持 gpt-6-astra 却因请求 gpt-6 被调度层排除。
+	if platform == PlatformOpenAI && normalizeKnownOpenAICodexModel(trimmed) == "gpt-6-astra" {
+		return "gpt-6-astra"
+	}
 	if platform != PlatformGemini && platform != PlatformAntigravity {
 		return trimmed
 	}

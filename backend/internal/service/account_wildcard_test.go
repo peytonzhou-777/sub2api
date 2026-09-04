@@ -222,6 +222,17 @@ func TestAccountIsModelSupported(t *testing.T) {
 			expected:       true,
 		},
 		{
+			name:     "openai gpt6 alias matches astra mapping",
+			platform: PlatformOpenAI,
+			credentials: map[string]any{
+				"model_mapping": map[string]any{
+					"gpt-6-astra": "gpt-6-astra",
+				},
+			},
+			requestedModel: "gpt-6",
+			expected:       true,
+		},
+		{
 			name: "wildcard match not supported",
 			credentials: map[string]any{
 				"model_mapping": map[string]any{
@@ -306,6 +317,17 @@ func TestAccountGetMappedModel(t *testing.T) {
 			},
 			requestedModel: "gemini-3.1-pro-preview-customtools",
 			expected:       "gemini-3.1-pro-preview",
+		},
+		{
+			name:     "openai gpt6 alias resolves through astra mapping",
+			platform: PlatformOpenAI,
+			credentials: map[string]any{
+				"model_mapping": map[string]any{
+					"gpt-6-astra": "gpt-6-astra",
+				},
+			},
+			requestedModel: "gpt-6",
+			expected:       "gpt-6-astra",
 		},
 		{
 			name:     "gemini customtools exact mapping wins over normalized fallback",
