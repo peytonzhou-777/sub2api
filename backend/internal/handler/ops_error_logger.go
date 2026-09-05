@@ -485,6 +485,14 @@ func setOpsSelectedAccount(c *gin.Context, accountID int64, platform ...string) 
 // getOpsPersonaAudit snapshots the immutable Persona binding attached to this request.
 // Legacy/non-OpenAI requests intentionally return no Persona fields.
 func getOpsPersonaAudit(c *gin.Context) (*int64, string) {
+	if c != nil {
+		if value, ok := c.Get("openai_continuation_failure"); ok {
+			if failure, ok := value.(*service.OpenAIContinuationSelectionError); ok && failure.AccountPersonaID > 0 {
+				id := failure.AccountPersonaID
+				return &id, failure.Profile
+			}
+		}
+	}
 	if c == nil || c.Request == nil {
 		return nil, ""
 	}

@@ -1494,6 +1494,23 @@ func (s *OpenAIGatewayService) ValidateOpenAIHTTPResponseOwner(
 		return false, nil
 	}
 	ownerUserID, ownerAPIKeyID, found, err := s.getOpenAIWSStateStore().GetHTTPResponseOwner(ctx, groupID, responseID)
+	if err == nil && !found {
+		// 缓存归属过期后仍可用本租户的持久化失效证据区分旧续链和未知响应。
+		if expiry, ok := s.accountRepo.(OpenAIConversationActivityStore); ok {
+			aliases := make([]OpenAIUserConversationAlias, 0, 2)
+			for _, capability := range []OpenAIEndpointCapability{"", OpenAIEndpointCapabilityResponses} {
+				scope := openAIUserAffinityScopeKey(&groupID, false, capability, "", OpenAIUpstreamTransportHTTPSSE)
+				aliases = append(aliases, OpenAIUserConversationAlias{ScopeKey: scope, Type: "response_id", Hash: openAIUserAffinityScopedStateHash(userID, apiKeyID, scope, "response_id", responseID)})
+			}
+			expired, lookupErr := expiry.HasExpiredOpenAIConversation(ctx, userID, apiKeyID, "", "", aliases)
+			if lookupErr != nil {
+				return false, lookupErr
+			}
+			if expired {
+				return false, ErrOpenAIConversationResetRequired
+			}
+		}
+	}
 	if err != nil || !found {
 		return false, err
 	}

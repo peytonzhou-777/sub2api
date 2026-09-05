@@ -55,6 +55,7 @@ WHERE account_persona_id = $1 AND expires_at <= $2::timestamptz`, input.AccountP
 SET state = 'expired', updated_at = $1::timestamptz
 WHERE lease.account_persona_id = $2 AND lease.state = 'active'
   AND lease.active_until <= $1::timestamptz
+  AND NOT openai_persona_user_has_activity(lease.account_persona_id,lease.user_id)
   AND NOT EXISTS (
       SELECT 1 FROM openai_persona_user_request_holds hold
       WHERE hold.lease_id = lease.id AND hold.expires_at > $1::timestamptz
@@ -64,6 +65,7 @@ WHERE lease.account_persona_id = $2 AND lease.state = 'active'
 	if _, err = tx.ExecContext(ctx, `UPDATE openai_persona_active_user_leases lease
 SET state = 'expired', active_until = $2::timestamptz, updated_at = $2::timestamptz
 WHERE lease.account_persona_id = $1 AND lease.state = 'provisional'
+  AND NOT openai_persona_user_has_activity(lease.account_persona_id,lease.user_id)
   AND NOT EXISTS (
       SELECT 1 FROM openai_persona_user_request_holds hold
       WHERE hold.lease_id = lease.id AND hold.expires_at > $2::timestamptz
@@ -121,6 +123,7 @@ func ensureOpenAIPersonaUserCapacity(ctx context.Context, tx *sql.Tx, personaID 
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM openai_persona_active_user_leases lease
 WHERE lease.account_persona_id = $1
   AND ((lease.state = 'active' AND lease.active_until > $2::timestamptz)
+       OR openai_persona_user_has_activity(lease.account_persona_id,lease.user_id)
        OR EXISTS (
            SELECT 1 FROM openai_persona_user_request_holds hold
            WHERE hold.lease_id = lease.id AND hold.expires_at > $2::timestamptz
@@ -233,6 +236,7 @@ WHERE reservation_token = $1::uuid`, token); err != nil {
 	if _, err = tx.ExecContext(ctx, `UPDATE openai_persona_active_user_leases lease
 SET state = 'expired', active_until = $2::timestamptz, updated_at = $2::timestamptz
 WHERE id = $1 AND state = 'provisional'
+  AND NOT openai_persona_user_has_activity(lease.account_persona_id,lease.user_id)
   AND NOT EXISTS (
       SELECT 1 FROM openai_persona_user_request_holds hold
       WHERE hold.lease_id = lease.id AND hold.expires_at > $2::timestamptz
@@ -261,6 +265,7 @@ func (r *openAIPersonaUserReservationRepository) ListOpenAIPersonaCapacityCandid
        (SELECT COUNT(*) FROM openai_persona_active_user_leases lease
         WHERE lease.account_persona_id = persona.id
           AND ((lease.state = 'active' AND lease.active_until > $2::timestamptz)
+       OR openai_persona_user_has_activity(lease.account_persona_id,lease.user_id)
                OR EXISTS (SELECT 1 FROM openai_persona_user_request_holds hold
                           WHERE hold.lease_id = lease.id AND hold.expires_at > $2::timestamptz))) AS active_users,
        (SELECT MIN(lease.active_until) FROM openai_persona_active_user_leases lease
@@ -269,6 +274,7 @@ func (r *openAIPersonaUserReservationRepository) ListOpenAIPersonaCapacityCandid
        EXISTS (SELECT 1 FROM openai_persona_active_user_leases lease
                WHERE lease.account_persona_id = persona.id AND lease.user_id = $3
                  AND ((lease.state = 'active' AND lease.active_until > $2::timestamptz)
+       OR openai_persona_user_has_activity(lease.account_persona_id,lease.user_id)
                       OR EXISTS (SELECT 1 FROM openai_persona_user_request_holds hold
                                  WHERE hold.lease_id = lease.id AND hold.expires_at > $2::timestamptz))) AS user_already_active
 FROM openai_account_personas persona

@@ -186,7 +186,8 @@ func TestOpenAIUserConversationBindingProvisionalLifecycle(t *testing.T) {
 	require.Equal(t, "active", loaded.Status)
 	require.True(t, loaded.FirstOutputCommitted)
 	require.NotNil(t, loaded.ActiveUntil)
-	require.Greater(t, loaded.ExpiresAt.Sub(time.Now().UTC()), 6*24*time.Hour)
+	require.WithinDuration(t, *loaded.ActiveUntil, loaded.ExpiresAt, time.Millisecond)
+	require.WithinDuration(t, time.Now().UTC().Add(config.ConversationActiveTTL()), loaded.ExpiresAt, 5*time.Second)
 	byAlias, err := repo.GetOpenAIUserConversationBindingByAlias(ctx, user.ID, apiKey.ID, scopeKey, "response_id", aliasHash)
 	require.NoError(t, err)
 	require.NotNil(t, byAlias)
@@ -942,7 +943,7 @@ func TestCrossScopeLineageConcurrentRebuildLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	valid, err = repo.ValidateOpenAIUserConversationBinding(ctx, *sourceBinding)
 	require.NoError(t, err)
-	require.False(t, valid)
+	require.True(t, valid, "常驻偏好过期不应使仍活跃的原绑定失效")
 }
 
 func TestCrossScopeLineageLateCommitCannotOverwriteNewOwner(t *testing.T) {

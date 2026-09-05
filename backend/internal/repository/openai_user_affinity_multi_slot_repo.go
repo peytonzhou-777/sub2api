@@ -112,19 +112,12 @@ func (r *accountRepository) ConvergeOpenAIUserResidentSlots(ctx context.Context,
 			pending_token = CASE WHEN COALESCE(last_success_at, created_at) + ($4::bigint * INTERVAL '1 second') <= $3 THEN NULL ELSE pending_token END,
 			pending_expires_at = CASE WHEN COALESCE(last_success_at, created_at) + ($4::bigint * INTERVAL '1 second') <= $3 THEN NULL ELSE pending_expires_at END,
 			updated_at = $3
-		WHERE user_id = $1 AND scope_key = $2 AND status IN ('provisional', 'active', 'draining')`,
-		userID, scopeKey, now, residentTTLSeconds, int64(config.ConversationActiveTTL().Seconds())); err != nil {
+		WHERE user_id = $1 AND scope_key = $2 AND status IN ('provisional', 'active', 'draining')
+          AND NOT openai_conversation_has_activity(id)`,
+		userID, scopeKey, now, int64(config.ConversationActiveTTL().Seconds()), int64(config.ConversationActiveTTL().Seconds())); err != nil {
 		return err
 	}
-	if _, err := exec.ExecContext(ctx, `
-		UPDATE openai_user_conversation_bindings b SET status = 'expired', expires_at = $3,
-			pending_resident_slot_id = NULL, pending_account_id = NULL, pending_slot_generation = NULL,
-			pending_token = NULL, pending_expires_at = NULL, updated_at = $3
-		FROM openai_user_resident_slots s
-		WHERE b.resident_slot_id = s.id AND s.user_id = $1 AND s.scope_key = $2
-		  AND s.status = 'expired' AND b.status IN ('active', 'draining')`, userID, scopeKey, now); err != nil {
-		return err
-	}
+	// 常驻槽位过期只结束选号偏好，不终止仍活跃的会话。
 	if config.RuntimeResidentAccountSlotCount() > 1 {
 		// 多槽位 projection 必须由同账号同 generation 的 live slot 支撑；
 		// slot 收敛后及时过期孤立 placement，避免后续请求反复命中旧账号。
@@ -404,7 +397,8 @@ func (r *accountRepository) GetOpenAIUserConversationBinding(ctx context.Context
 		       root_client_session_hash, user_group_client_session_lease_id, profile_id, profile_version
 		FROM openai_user_conversation_bindings
 		WHERE user_id = $1 AND api_key_id = $2 AND scope_key = $3 AND conversation_hash = $4
-		  AND binding_epoch = $5 AND status IN ('provisional', 'active', 'draining') AND expires_at > NOW()`,
+		  AND binding_epoch = $5 AND status IN ('provisional', 'active', 'draining')
+          AND openai_conversation_is_live(id, active_until, expires_at)`,
 		userID, apiKeyID, normalizeOpenAIUserAffinityScopeKey(scopeKey), strings.ToLower(strings.TrimSpace(conversationHash)),
 		service.OpenAIConversationBindingEpoch)
 }
@@ -420,8 +414,9 @@ func (r *accountRepository) GetOpenAIUserConversationBindingByAlias(ctx context.
 		FROM openai_user_conversation_aliases a
 		JOIN openai_user_conversation_bindings b ON b.id = a.binding_id
 		WHERE a.user_id = $1 AND a.api_key_id = $2 AND a.scope_key = $3
-		  AND a.alias_type = $4 AND a.alias_hash = $5 AND a.expires_at > NOW()
-		  AND b.binding_epoch = $6 AND b.status IN ('provisional', 'active', 'draining') AND b.expires_at > NOW()`,
+		  AND a.alias_type = $4 AND a.alias_hash = $5 AND (a.expires_at > NOW() OR openai_conversation_has_activity(a.binding_id))
+		  AND b.binding_epoch = $6 AND b.status IN ('provisional', 'active', 'draining')
+          AND openai_conversation_is_live(b.id, b.active_until, b.expires_at)`,
 		userID, apiKeyID, normalizeOpenAIUserAffinityScopeKey(scopeKey),
 		strings.ToLower(strings.TrimSpace(aliasType)), strings.ToLower(strings.TrimSpace(aliasHash)), service.OpenAIConversationBindingEpoch)
 }
@@ -450,11 +445,11 @@ func validateOpenAIUserConversationBinding(
 			WHERE b.id = $1 AND b.user_id = $2 AND b.api_key_id = $3 AND b.scope_key = $4
 			  AND b.conversation_hash = $5::char(64) AND b.account_id = $6 AND b.slot_generation = $7
 			  AND b.binding_epoch = $8
-			  AND b.status IN ('provisional', 'active', 'draining') AND b.expires_at > NOW()
+			  AND b.status IN ('provisional', 'active', 'draining')
+              AND openai_conversation_is_live(b.id, b.active_until, b.expires_at)
 			  AND s.user_id = b.user_id AND s.scope_key = b.scope_key
 			  AND s.account_id = b.account_id AND s.generation = b.slot_generation
-			  AND s.status IN ('provisional', 'active', 'replacement_pending', 'draining')
-			  AND s.expires_at > NOW()
+			  AND s.status IN ('provisional', 'active', 'replacement_pending', 'draining', 'expired')
 		)`, []any{binding.ID, binding.UserID, binding.APIKeyID,
 		normalizeOpenAIUserAffinityScopeKey(binding.ScopeKey), strings.ToLower(strings.TrimSpace(binding.ConversationHash)),
 		binding.AccountID, binding.SlotGeneration, service.OpenAIConversationBindingEpoch}, &valid)
@@ -652,8 +647,9 @@ func getOpenAIUserConversationBindingByAliasesForUpdate(
 			FROM openai_user_conversation_aliases a
 			JOIN openai_user_conversation_bindings b ON b.id = a.binding_id
 			WHERE a.user_id = $1 AND a.api_key_id = $2 AND a.scope_key = $3
-			  AND a.alias_type = $4 AND a.alias_hash = $5 AND a.expires_at > NOW()
-			  AND b.binding_epoch = $6 AND b.status IN ('provisional', 'active', 'draining') AND b.expires_at > NOW()
+			  AND a.alias_type = $4 AND a.alias_hash = $5 AND (a.expires_at > NOW() OR openai_conversation_has_activity(a.binding_id))
+			  AND b.binding_epoch = $6 AND b.status IN ('provisional', 'active', 'draining')
+          AND openai_conversation_is_live(b.id, b.active_until, b.expires_at)
 			FOR UPDATE OF a, b`, []any{userID, apiKeyID, alias.ScopeKey, alias.Type, alias.Hash,
 			service.OpenAIConversationBindingEpoch})
 		if err != nil {
@@ -775,6 +771,15 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 			return nil, false, err
 		}
 	}
+	if existing != nil && existing.BindingEpoch == service.OpenAIConversationBindingEpoch && existing.FirstOutputCommitted {
+		var live bool
+		if err := scanSingleRow(ctx, exec, `SELECT openai_conversation_is_live(id,active_until,expires_at) AND status IN ('active','draining') FROM openai_user_conversation_bindings WHERE id=$1`, []any{existing.ID}, &live); err != nil {
+			return nil, false, err
+		}
+		if !live {
+			return nil, false, service.ErrOpenAIConversationResetRequired
+		}
+	}
 	if existing != nil && existing.ExpiresAt.After(now) &&
 		(existing.Status == "provisional" || existing.Status == "active" || existing.Status == "draining") {
 		existingValid, validateErr := validateOpenAIUserConversationBinding(ctx, exec, *existing)
@@ -801,6 +806,25 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 		return nil, false, service.ErrOpenAIUserAffinityReservationConflict
 	}
 
+	// 外层事务可能继续使用同一仓储；不可替换的 provisional 满槽必须在触达写入前拒绝。
+	preferenceLimit := reservation.MaxResidentSlots
+	if preferenceLimit < 1 {
+		preferenceLimit = 1
+	}
+	if preferenceLimit > 5 {
+		preferenceLimit = 5
+	}
+	var occupiedPreferences, replaceablePreferences int
+	var hasTargetPreference bool
+	if err := scanSingleRow(ctx, exec, `SELECT COUNT(*),COUNT(*) FILTER (WHERE status='active'),COALESCE(BOOL_OR(account_id=$3),FALSE)
+        FROM openai_user_resident_slots WHERE user_id=$1 AND scope_key=$2
+        AND status IN ('provisional','active','replacement_pending') AND expires_at>$4::timestamptz`,
+		[]any{reservation.UserID, reservation.ScopeKey, reservation.AccountID, now}, &occupiedPreferences, &replaceablePreferences, &hasTargetPreference); err != nil {
+		return nil, false, err
+	}
+	if !hasTargetPreference && occupiedPreferences >= preferenceLimit && replaceablePreferences == 0 {
+		return nil, false, service.ErrOpenAIUserAffinityResidentSlotsFull
+	}
 	effectiveMax := reservation.Config.DefaultMaxResidentUsers
 	if maxResidentUsers.Valid && maxResidentUsers.Int64 > 0 {
 		effectiveMax = int(maxResidentUsers.Int64)
@@ -937,7 +961,24 @@ func (r *accountRepository) ReserveOpenAIUserConversationBinding(ctx context.Con
 			return nil, false, service.ErrOpenAIUserAffinityDrainingSlotConflict
 		}
 		if activeSlotCount >= maxSlots {
-			return nil, false, service.ErrOpenAIUserAffinityResidentSlotsFull
+			// 新目标已通过资格校验，只替换最冷的稳定偏好，保留其会话引用供续接。
+			var victimID int64
+			var victimIndex int
+			err := scanSingleRow(ctx, exec, `SELECT id,slot_index FROM openai_user_resident_slots
+                WHERE user_id=$1 AND scope_key=$2 AND status='active'
+                ORDER BY usage_score * POWER(0.5,GREATEST(EXTRACT(EPOCH FROM ($3::timestamptz-score_updated_at)),0)/$4::double precision),
+                         last_success_at ASC NULLS FIRST,id FOR UPDATE LIMIT 1`,
+				[]any{reservation.UserID, reservation.ScopeKey, now, reservation.Config.ResidentTTL().Seconds()}, &victimID, &victimIndex)
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, false, service.ErrOpenAIUserAffinityResidentSlotsFull
+			}
+			if err != nil {
+				return nil, false, err
+			}
+			if _, err = exec.ExecContext(ctx, `UPDATE openai_user_resident_slots SET status='draining',updated_at=$2::timestamptz WHERE id=$1`, victimID, now); err != nil {
+				return nil, false, err
+			}
+			delete(usedIndexes, victimIndex)
 		}
 		slotIndex := 1
 		for ; slotIndex <= maxSlots; slotIndex++ {
@@ -1506,7 +1547,7 @@ func (r *accountRepository) CommitOpenAIUserConversationBinding(ctx context.Cont
 		return false, err
 	}
 	if slotGeneration != transition.SlotGeneration ||
-		(slotStatus != service.OpenAIUserResidentSlotStatusActive && slotStatus != service.OpenAIUserResidentSlotStatusProvisional && slotStatus != service.OpenAIUserResidentSlotStatusDraining && slotStatus != service.OpenAIUserResidentSlotStatusReset) ||
+		(slotStatus != service.OpenAIUserResidentSlotStatusActive && slotStatus != service.OpenAIUserResidentSlotStatusProvisional && slotStatus != service.OpenAIUserResidentSlotStatusDraining && slotStatus != service.OpenAIUserResidentSlotStatusReset && slotStatus != service.OpenAIUserResidentSlotStatusExpired) ||
 		(slotStatus == service.OpenAIUserResidentSlotStatusProvisional && (!slotToken.Valid || slotToken.String != transition.ProvisionalToken || !now.Before(slotExpiresAt))) {
 		return false, nil
 	}
@@ -1519,13 +1560,16 @@ func (r *accountRepository) CommitOpenAIUserConversationBinding(ctx context.Cont
 			provisional_token = NULL, updated_at = $1
 		WHERE id = $4 AND account_id = $5 AND expires_at > $1
 		  AND (status IN ('active', 'draining') OR (status = 'provisional' AND provisional_token = $6))`,
-		now, now.Add(transition.Config.ConversationActiveTTL()), now.Add(transition.Config.ResidentTTL()),
+		now, now.Add(transition.Config.ConversationActiveTTL()), now.Add(transition.Config.ConversationActiveTTL()),
 		transition.BindingID, transition.AccountID, transition.ProvisionalToken)
 	if err != nil {
 		return false, err
 	}
 	affected, err := result.RowsAffected()
 	if err != nil || affected == 0 {
+		return false, err
+	}
+	if err := syncOpenAIConversationUserLease(ctx, exec, transition.BindingID, now, transition.Config.ConversationActiveTTL()); err != nil {
 		return false, err
 	}
 	increment := 0.0
@@ -1535,13 +1579,13 @@ func (r *accountRepository) CommitOpenAIUserConversationBinding(ctx context.Cont
 	residentTTLSeconds := transition.Config.ResidentTTL().Seconds()
 	slotResult, err := exec.ExecContext(ctx, `
 		UPDATE openai_user_resident_slots SET
-			status = CASE WHEN status IN ('draining', 'reset') THEN status ELSE 'active' END,
+			status = CASE WHEN status IN ('draining', 'reset', 'expired') THEN status ELSE 'active' END,
 			last_success_at = $1,
 			expires_at = $2,
 			usage_score = usage_score * POWER(0.5, GREATEST(EXTRACT(EPOCH FROM ($1 - score_updated_at)), 0) / $3::double precision) + $4,
 			score_updated_at = $1, provisional_token = NULL, updated_at = $1
 		WHERE id = $5 AND account_id = $6 AND generation = $7
-		  AND status IN ('provisional', 'active', 'draining', 'reset')`, now, now.Add(transition.Config.ResidentTTL()),
+		  AND status IN ('provisional', 'active', 'draining', 'reset', 'expired')`, now, now.Add(transition.Config.ResidentTTL()),
 		residentTTLSeconds, increment, slotID, transition.AccountID, transition.SlotGeneration)
 	if err != nil {
 		return false, err
@@ -1559,19 +1603,19 @@ func (r *accountRepository) CommitOpenAIUserConversationBinding(ctx context.Cont
 			ON CONFLICT (user_id, api_key_id, scope_key, alias_type, alias_hash) DO UPDATE SET
 				binding_id = EXCLUDED.binding_id, account_id = EXCLUDED.account_id,
 				expires_at = EXCLUDED.expires_at`, transition.BindingID, responseAliasHash,
-			now.Add(transition.Config.ResidentTTL()), transition.AccountID); err != nil {
+			now.Add(transition.Config.ConversationActiveTTL()), transition.AccountID); err != nil {
 			return false, err
 		}
 	}
 	if err := upsertOpenAIUserConversationAliases(ctx, exec, &service.OpenAIUserConversationBinding{
 		ID: transition.BindingID, UserID: transition.UserID, APIKeyID: transition.APIKeyID,
 		ScopeKey: normalizeOpenAIUserAffinityScopeKey(transition.ScopeKey), AccountID: transition.AccountID,
-	}, transition.UserID, transition.APIKeyID, transition.ScopeKey, aliases, now.Add(transition.Config.ResidentTTL())); err != nil {
+	}, transition.UserID, transition.APIKeyID, transition.ScopeKey, aliases, now.Add(transition.Config.ConversationActiveTTL())); err != nil {
 		return false, err
 	}
 	if _, err := exec.ExecContext(ctx, `
 		UPDATE openai_user_conversation_aliases SET expires_at = $2
-		WHERE binding_id = $1`, transition.BindingID, now.Add(transition.Config.ResidentTTL())); err != nil {
+		WHERE binding_id = $1`, transition.BindingID, now.Add(transition.Config.ConversationActiveTTL())); err != nil {
 		return false, err
 	}
 	if firstCommit {
@@ -1709,12 +1753,15 @@ func (r *accountRepository) commitOpenAIUserConversationFailover(ctx context.Con
 			pending_token = NULL, pending_expires_at = NULL, updated_at = $1
 		WHERE id = $7 AND pending_token = $8`, now, transition.ResidentSlotID, transition.AccountID,
 		transition.SlotGeneration, now.Add(transition.Config.ConversationActiveTTL()),
-		now.Add(transition.Config.ResidentTTL()), transition.BindingID, transition.ProvisionalToken)
+		now.Add(transition.Config.ConversationActiveTTL()), transition.BindingID, transition.ProvisionalToken)
 	if err != nil {
 		return false, err
 	}
 	affected, err := result.RowsAffected()
 	if err != nil || affected == 0 {
+		return false, err
+	}
+	if err := syncOpenAIConversationUserLease(ctx, exec, transition.BindingID, now, transition.Config.ConversationActiveTTL()); err != nil {
 		return false, err
 	}
 	if _, err := exec.ExecContext(ctx, `
@@ -1746,19 +1793,19 @@ func (r *accountRepository) commitOpenAIUserConversationFailover(ctx context.Con
 			ON CONFLICT (user_id, api_key_id, scope_key, alias_type, alias_hash) DO UPDATE SET
 				binding_id = EXCLUDED.binding_id, account_id = EXCLUDED.account_id,
 				expires_at = EXCLUDED.expires_at`, transition.BindingID, responseAliasHash,
-			now.Add(transition.Config.ResidentTTL()), transition.AccountID); err != nil {
+			now.Add(transition.Config.ConversationActiveTTL()), transition.AccountID); err != nil {
 			return false, err
 		}
 	}
 	if err := upsertOpenAIUserConversationAliases(ctx, exec, &service.OpenAIUserConversationBinding{
 		ID: transition.BindingID, UserID: transition.UserID, APIKeyID: transition.APIKeyID,
 		ScopeKey: normalizeOpenAIUserAffinityScopeKey(transition.ScopeKey), AccountID: transition.AccountID,
-	}, transition.UserID, transition.APIKeyID, transition.ScopeKey, aliases, now.Add(transition.Config.ResidentTTL())); err != nil {
+	}, transition.UserID, transition.APIKeyID, transition.ScopeKey, aliases, now.Add(transition.Config.ConversationActiveTTL())); err != nil {
 		return false, err
 	}
 	if _, err := exec.ExecContext(ctx, `
 		UPDATE openai_user_conversation_aliases SET account_id = $2, expires_at = $3
-		WHERE binding_id = $1`, transition.BindingID, transition.AccountID, now.Add(transition.Config.ResidentTTL())); err != nil {
+		WHERE binding_id = $1`, transition.BindingID, transition.AccountID, now.Add(transition.Config.ConversationActiveTTL())); err != nil {
 		return false, err
 	}
 	if _, err := exec.ExecContext(ctx, `

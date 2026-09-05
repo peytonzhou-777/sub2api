@@ -2225,7 +2225,32 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 		return s.selectAccountWithSchedulerOnce(withOpenAIProxyStreamQuarantineBypass(candidateCtx), groupID, previousResponseID, sessionHash, requestedModel, candidateExcluded, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
 	}
 	if reservation == nil {
-		return selectOnce(ctx, excludedIDs)
+		selection, decision, err := selectOnce(ctx, excludedIDs)
+		if err == nil && selection != nil && selection.Account != nil {
+			if err = s.BeginOpenAIConversationActivity(ctx, selection.Account.ID); err != nil {
+				if selection.ReleaseFunc != nil {
+					selection.ReleaseFunc()
+				}
+				return nil, decision, err
+			}
+		}
+		return selection, decision, err
+	}
+	// Thread/父系/会话 alias 也是续接；必须在新根容量预筛选之前恢复精确目标。
+	ctx = s.withOpenAIQuotaAutoPauseContext(ctx)
+	if requiredImageCapability == "" {
+		ctx = s.withOpenAIProfitControlGate(ctx, groupID)
+	}
+	req := newOpenAIUserAffinityScheduleRequest(groupID, platform, previousResponseID, requestedModel, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, excludedIDs)
+	req.SessionHash, req.PreviousResponseCanMove = sessionHash, previousResponseCanMove
+	bound, found, boundErr := s.selectOpenAIUserAffinityConversation(ctx, req)
+	if boundErr != nil {
+		rollback()
+		return nil, OpenAIAccountScheduleDecision{}, boundErr
+	}
+	if found && (bound == nil || bound.Account == nil) {
+		rollback()
+		return nil, OpenAIAccountScheduleDecision{}, ErrNoAvailableAccounts
 	}
 	effectiveExcluded := cloneExcludedAccountIDs(excludedIDs)
 	if effectiveExcluded == nil {
@@ -2233,7 +2258,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	}
 	// continuation 必须先恢复持久化的 Account×Persona×Epoch，再对该精确 Persona
 	// 续租。账号级容量预筛选只服务新根，不能把仍有效的固定目标伪装成账号失效。
-	if strings.TrimSpace(previousResponseID) == "" {
+	if !found {
 		var occupiedAccounts map[int64]struct{}
 		effectiveExcluded, occupiedAccounts, err = s.openAIAccountsWithPersonaCapacity(ctx, groupID, effectiveExcluded)
 		if err != nil {
@@ -2243,20 +2268,36 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 		ctx = contextWithOpenAIUserOccupiedPersonaAccounts(ctx, occupiedAccounts)
 	}
 	for {
-		selection, decision, selectErr := selectOnce(ctx, effectiveExcluded)
+		var selection *AccountSelectionResult
+		var decision OpenAIAccountScheduleDecision
+		var selectErr error
+		if bound != nil {
+			selection, bound = bound, nil
+			decision.Layer = openAIAccountScheduleLayerConversationBinding
+			decision.SelectedAccountID, decision.SelectedAccountType = selection.Account.ID, selection.Account.Type
+		} else {
+			selection, decision, selectErr = selectOnce(ctx, effectiveExcluded)
+		}
 		if selectErr != nil || selection == nil || selection.Account == nil {
 			rollback()
 			return selection, decision, selectErr
 		}
 		boundContinuation := selection.ExecutionTarget != nil && selection.ExecutionTarget.Valid()
 		if attachErr := s.attachOpenAIPersonaReservation(ctx, selection, reservation, sessionHash); attachErr == nil {
+			if activityErr := s.BeginOpenAIConversationActivity(ctx, selection.Account.ID, reservation.token); activityErr != nil {
+				if selection.ReleaseFunc != nil {
+					selection.ReleaseFunc()
+				}
+				rollback()
+				return nil, decision, activityErr
+			}
 			return selection, decision, nil
 		} else if !errors.Is(attachErr, ErrOpenAIPersonaUserCapacity) {
 			if selection.ReleaseFunc != nil {
 				selection.ReleaseFunc()
 			}
 			rollback()
-			return nil, decision, attachErr
+			return nil, decision, s.continuationSelectionError(ctx, selection.Account.ID, attachErr)
 		} else if boundContinuation {
 			// continuation 已固定到 Account×Persona×Session Epoch；容量不足只能在原
 			// Persona 等待/重试，禁止沿用新根 BestFit 逻辑跨 Persona 或跨账号迁移。
@@ -2264,7 +2305,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 				selection.ReleaseFunc()
 			}
 			rollback()
-			return nil, decision, ErrOpenAIPersonaUserCapacity
+			return nil, decision, s.continuationSelectionError(ctx, selection.Account.ID, ErrOpenAIPersonaUserCapacity)
 		}
 		if selection.ReleaseFunc != nil {
 			selection.ReleaseFunc()

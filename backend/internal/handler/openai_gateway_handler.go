@@ -480,6 +480,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
+	c.Request = c.Request.WithContext(service.ContextWithOpenAIContinuationState(c.Request.Context(), c.Request.Header, body))
 	previousResponseID := strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String())
 	previousResponseCanMove := true
 	if previousResponseID != "" {
@@ -507,6 +508,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			subject.UserID,
 			apiKey.ID,
 		)
+		if errors.Is(ownershipErr, service.ErrOpenAIConversationResetRequired) {
+			h.errorResponse(c, http.StatusConflict, "invalid_request_error", "Conversation state expired; start a new conversation")
+			return
+		}
 		if ownershipErr != nil {
 			reqLog.Warn("openai.previous_response_owner_lookup_failed", zap.Error(ownershipErr))
 		}
@@ -659,6 +664,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				reqLog.Info("openai.account_select_aborted_client_disconnected", zap.Error(err))
 				return
 			}
+			recordOpenAIContinuationSelectionFailure(c, reqLog, err)
 			reqLog.Warn("openai.account_select_failed",
 				zap.Error(openAICompatibleSelectionErrorForLog(err, requestPlatform)),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
@@ -2784,6 +2790,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 	firstMessageToolCoverage := service.AnalyzeToolCallOutputContextCoverageBytes(firstMessage)
+	ctx = service.ContextWithOpenAIContinuationState(ctx, c.Request.Header, firstMessage)
 	previousResponseCanMove := !firstMessageToolCoverage.HasFunctionCallOutput || firstMessageToolCoverage.ContextCoversAllCallIDs
 	reqLog = reqLog.With(
 		zap.Bool("ws_ingress", true),
@@ -3140,6 +3147,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			)
 		}
 		if err != nil {
+			recordOpenAIContinuationSelectionFailure(c, reqLog, err)
 			if sameAccountRetryActive {
 				reqLog.Warn("openai.websocket_same_account_retry_unavailable",
 					zap.Int64("account_id", sameAccountRetryID),
@@ -3671,6 +3679,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				if turn == 1 {
 					return nil
+				}
+				if err := h.gatewayService.ResumeOpenAIConversationActivity(ctx, account.ID); err != nil {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "Conversation state expired; start a new conversation", err)
 				}
 				if !gjson.ValidBytes(payload) {
 					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", errors.New("invalid json"))

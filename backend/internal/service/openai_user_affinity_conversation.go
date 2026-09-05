@@ -89,7 +89,7 @@ func (s *OpenAIGatewayService) usesOpenAIUserAffinityScopedAliases(ctx context.C
 }
 
 // selectOpenAIUserAffinityConversation 在居民槽位前恢复已提交的长期会话绑定。
-func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.Context, req OpenAIAccountScheduleRequest) (*AccountSelectionResult, bool, error) {
+func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.Context, req OpenAIAccountScheduleRequest) (selection *AccountSelectionResult, handled bool, resultErr error) {
 	if s == nil || s.settingService == nil || s.accountRepo == nil || NormalizeOpenAICompatiblePlatform(req.Platform) != PlatformOpenAI {
 		return nil, false, nil
 	}
@@ -115,12 +115,31 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 	}
 	selfBinding = s.acceptOpenAICodexLineageBinding(ctx, req, identity, selfBinding)
 	parentBinding = s.acceptOpenAICodexLineageBinding(ctx, req, identity, parentBinding)
+	// 过期的自身 Thread 不能借用仍活跃的父系或旧 Session 索引重新激活。
+	if selfBinding == nil && identity.codexThreadHash != "" {
+		if expiryStore, ok := s.accountRepo.(OpenAIConversationActivityStore); ok {
+			aliases := []OpenAIUserConversationAlias{openAICodexThreadReservationAlias(req.GroupID, identity.codexThreadHash)}
+			if topology != nil {
+				for _, hash := range topology.selfLookupHashes {
+					aliases = append(aliases, openAICodexThreadReservationAlias(req.GroupID, hash))
+				}
+			}
+			expired, err := expiryStore.HasExpiredOpenAIConversation(ctx, identity.userID, identity.apiKeyID, identity.scopeKey, identity.conversationHash, aliases)
+			if err != nil {
+				return nil, true, err
+			}
+			if expired {
+				return nil, true, ErrOpenAIConversationResetRequired
+			}
+		}
+	}
 	var binding *OpenAIUserConversationBinding
 	bindingSource := ""
 	if selfBinding != nil {
 		binding = selfBinding
 		bindingSource = "codex_self"
 	} else if parentBinding != nil && identity.codexThreadHash != "" {
+
 		binding = parentBinding
 		bindingSource = "codex_parent"
 	} else if identity.aliasHash != "" {
@@ -154,12 +173,41 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		}
 	}
 	if binding == nil {
-		// 不可重建续链在作用域化 alias 未命中时必须失败关闭，禁止回落到 group 级旧缓存。
-		if identity.aliasHash != "" && !identity.contextRebuildable {
+		if topology != nil && len(topology.parentAliasHashes) > 0 {
 			return nil, true, ErrOpenAIConversationResetRequired
+		}
+		// 不可重建续链在作用域化 alias 未命中时必须失败关闭，禁止回落到 group 级旧缓存。
+		if identity.aliasHash != "" {
+			return nil, true, ErrOpenAIConversationResetRequired
+		}
+		if opaque, _ := ctx.Value(openAIContinuationStateKey{}).(bool); opaque {
+			return nil, true, ErrOpenAIConversationResetRequired
+		}
+		if expiryStore, ok := s.accountRepo.(OpenAIConversationActivityStore); ok {
+			aliases := []OpenAIUserConversationAlias{}
+			if identity.codexThreadHash != "" {
+				aliases = append(aliases, openAICodexThreadReservationAlias(req.GroupID, identity.codexThreadHash))
+			}
+			if topology != nil {
+				for _, hash := range topology.parentAliasHashes {
+					aliases = append(aliases, openAICodexThreadReservationAlias(req.GroupID, hash))
+				}
+			}
+			expired, err := expiryStore.HasExpiredOpenAIConversation(ctx, identity.userID, identity.apiKeyID, identity.scopeKey, identity.conversationHash, aliases)
+			if err != nil {
+				return nil, true, err
+			}
+			if expired {
+				return nil, true, ErrOpenAIConversationResetRequired
+			}
 		}
 		return nil, false, nil
 	}
+	defer func() {
+		if resultErr != nil {
+			resultErr = &OpenAIContinuationSelectionError{Cause: resultErr, BindingID: binding.ID, AccountID: binding.AccountID, AccountPersonaID: binding.AccountPersonaID, SessionEpoch: binding.PersonaSessionEpoch, Profile: string(binding.ProfileID), Source: bindingSource}
+		}
+	}()
 	if binding.AccountPersonaID > 0 {
 		if _, excluded := OpenAIAttemptExclusionsFromContext(ctx).AccountPersonaIDs[binding.AccountPersonaID]; excluded {
 			return nil, true, ErrOpenAIPreviousResponseAccountUnavailable
@@ -286,7 +334,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		}, binding, false); err != nil {
 			return nil, true, err
 		}
-	} else if bindingSource != "codex_parent" && identity.codexThreadHash != "" {
+	} else if bindingSource != "codex_parent" && identity.codexThreadHash != "" && (bindingSource != "codex_self" || binding.ConversationHash != identity.codexThreadHash) {
 		// 为升级前或 v1 Session+Thread 索引命中的会话补齐稳定的 v2 Thread 别名。
 		legacyIdentity := identity
 		legacyIdentity.conversationHash = binding.ConversationHash

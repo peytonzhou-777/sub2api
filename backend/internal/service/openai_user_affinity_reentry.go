@@ -80,6 +80,7 @@ type openAIUserAffinityMetrics struct {
 // openAIUserAffinityState 集中保存进程级亲和性协调状态，减少网关主结构的接线字段。
 type openAIUserAffinityState struct {
 	requests          sync.Map
+	activities        sync.Map
 	accepted          sync.Map
 	demandCache       sync.Map
 	metrics           openAIUserAffinityMetrics
@@ -486,6 +487,9 @@ func (s *OpenAIGatewayService) pruneOpenAIUserAffinityRequestStates() {
 	}
 	now := time.Now().UTC()
 	s.openaiAffinity.requests.Range(func(key, value any) bool {
+		if _, active := s.openaiAffinity.activities.Load(key); active {
+			return true
+		}
 		state, ok := value.(*openAIUserAffinityRequestState)
 		retention := 10 * time.Minute
 		if ok && state != nil && state.conversation != nil && state.conversation.Config.ConversationActiveTTL() > retention {

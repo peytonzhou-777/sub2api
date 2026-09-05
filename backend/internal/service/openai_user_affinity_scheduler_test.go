@@ -768,6 +768,13 @@ func TestOpenAIGatewayService_MissingAliasAndBindingRebuildsFromActiveRoute(t *t
 	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "missing-response", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
 	req.SessionHash = "missing-binding-active-route"
 	req.PreviousResponseCanMove = true
+	rejected, handled, resetErr := svc.selectOpenAIUserAffinityConversation(ctx, req)
+	require.ErrorIs(t, resetErr, ErrOpenAIConversationResetRequired)
+	require.True(t, handled)
+	require.Nil(t, rejected)
+	require.Empty(t, repo.reservations)
+	// 只有不携带旧续链状态的新根才允许使用常驻偏好。
+	req.PreviousResponseID = ""
 
 	selection, found, err := svc.selectOpenAIUserAffinityConversation(ctx, req)
 	require.NoError(t, err)

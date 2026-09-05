@@ -155,7 +155,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlotsOnce(ctx con
 			if admissionErr != nil {
 				return nil, true, admissionErr
 			}
-			if admission == openAIUserAffinityResidentAllowed || routeSlot != nil && slot.ID == routeSlot.ID && admission == openAIUserAffinityResidentTemporaryCapacity {
+			if admission == openAIUserAffinityResidentAllowed {
 				return s.selectOpenAIUserAffinityResidentSlot(ctx, req, config, identity, slot)
 			}
 		}
@@ -165,8 +165,8 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlotsOnce(ctx con
 		if admissionErr != nil {
 			return nil, true, admissionErr
 		}
-		if admission == openAIUserAffinityResidentAllowed || admission == openAIUserAffinityResidentTemporaryCapacity {
-			// 自己拥有或尚无人拥有的活动账号保持稳定；临时容量失败也不主动扩散。
+		if admission == openAIUserAffinityResidentAllowed {
+			// 可准入的活动账号优先；临时容量不足时继续寻找其他偏好。
 			return s.selectOpenAIUserAffinityResidentSlot(ctx, req, config, identity, routeSlot)
 		}
 	}
@@ -198,7 +198,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlotsOnce(ctx con
 	}
 
 	// 无空闲槽可退让时继续允许共享；活动路由优先，其他共享槽按活跃用户数升序。
-	if routeSlot != nil {
+	if routeSlot != nil && !openAIUserAffinityAccountExcluded(req, routeSlot.AccountID) {
 		selection, handled, selectErr := s.selectOpenAIUserAffinityResidentSlot(ctx, req, config, identity, routeSlot)
 		if selectErr == nil && selection != nil {
 			return selection, true, nil
@@ -227,7 +227,17 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlotsOnce(ctx con
 		}
 		return s.selectOpenAIUserAffinityResidentSlot(ctx, req, config, identity, slot)
 	}
-	return nil, true, ErrOpenAIUserAffinityNoCandidateSlot
+	// 常驻槽位只保存偏好；现有偏好均不可准入时允许接纳组内新目标。
+	selection, handled, fillErr := s.fillOpenAIUserAffinityResidentSlot(ctx, req, config, identity, occupiedSlots, activeSlots, hardExcluded, !resetPending)
+	if selection == nil && errors.Is(fillErr, ErrNoAvailableAccounts) && !errors.Is(fillErr, ErrOpenAIUserAffinityReservationRetry) {
+		return nil, true, ErrOpenAIUserAffinityNoCandidateSlot
+	}
+	return selection, handled, fillErr
+}
+
+func openAIUserAffinityAccountExcluded(req OpenAIAccountScheduleRequest, accountID int64) bool {
+	_, excluded := req.ExcludedIDs[accountID]
+	return excluded
 }
 
 func isOpenAIUserAffinityResidentSlotReusable(status string) bool {
@@ -256,6 +266,9 @@ func openAIUserAffinityReservationErrorReason(err error) string {
 func (s *OpenAIGatewayService) openAIUserAffinityResidentSlotAdmission(ctx context.Context, req OpenAIAccountScheduleRequest, slot *OpenAIUserResidentSlot) (openAIUserAffinityResidentAdmission, error) {
 	if slot == nil || slot.AccountID <= 0 {
 		return openAIUserAffinityResidentPermanentUnavailable, nil
+	}
+	if openAIUserAffinityAccountExcluded(req, slot.AccountID) {
+		return openAIUserAffinityResidentTemporaryCapacity, nil
 	}
 	account, err := s.getOpenAIUserAffinityResidentAccount(ctx, slot.AccountID)
 	if err != nil {

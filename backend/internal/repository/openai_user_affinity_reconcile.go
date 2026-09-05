@@ -27,13 +27,16 @@ func (r *accountRepository) ReconcileOpenAIUserAffinity(ctx context.Context, now
 		name string
 		sql  string
 	}{
+		{"conversation_holds", `DELETE FROM openai_conversation_request_holds WHERE expires_at <= $1::timestamptz`},
 		{"resident_slots", `UPDATE openai_user_resident_slots SET status = 'expired',
 			provisional_token = NULL, updated_at = $1
 			WHERE status IN ('provisional', 'active', 'replacement_pending') AND expires_at <= $1`},
 		{"conversation_bindings", `UPDATE openai_user_conversation_bindings SET status = 'expired',
 			pending_resident_slot_id = NULL, pending_account_id = NULL, pending_slot_generation = NULL,
 			pending_token = NULL, pending_expires_at = NULL, updated_at = $1
-			WHERE status IN ('provisional', 'active', 'draining', 'reset') AND expires_at <= $1`},
+			WHERE status IN ('provisional', 'active', 'draining', 'reset')
+              AND LEAST(COALESCE(active_until,expires_at),expires_at) <= $1::timestamptz
+              AND NOT openai_conversation_has_activity(id)`},
 		{"conversation_pending", `UPDATE openai_user_conversation_bindings SET
 			pending_resident_slot_id = NULL, pending_account_id = NULL, pending_slot_generation = NULL,
 			pending_token = NULL, pending_expires_at = NULL, updated_at = $1
@@ -48,12 +51,12 @@ func (r *accountRepository) ReconcileOpenAIUserAffinity(ctx context.Context, now
 			WHERE s.status = 'draining' AND NOT EXISTS (
 				SELECT 1 FROM openai_user_conversation_bindings b
 				WHERE b.resident_slot_id = s.id AND b.status IN ('provisional', 'active', 'draining')
-				  AND b.expires_at > $1
+				  AND openai_conversation_is_live(b.id,b.active_until,b.expires_at)
 			)`},
 		{"reset_slots", `UPDATE openai_user_resident_slots s SET status = 'expired', updated_at = $1
 			WHERE s.status = 'reset' AND NOT EXISTS (
 				SELECT 1 FROM openai_user_conversation_bindings b
-				WHERE b.resident_slot_id = s.id AND b.status = 'draining' AND b.expires_at > $1
+				WHERE b.resident_slot_id = s.id AND b.status = 'draining' AND openai_conversation_is_live(b.id,b.active_until,b.expires_at)
 			)`},
 		// Placement 收敛放在 slot/binding 之后，与按 scope 的 Converge 保持一致锁顺序。
 		{"placements", `UPDATE user_account_placements SET status = 'expired', updated_at = $1
@@ -61,7 +64,8 @@ func (r *accountRepository) ReconcileOpenAIUserAffinity(ctx context.Context, now
 		// 别名清理与按 scope 的 TTL 收敛可能并发触碰同一行；先有序加锁并跳过占用行，避免死锁。
 		{"conversation_aliases", `WITH expired_aliases AS (
 			SELECT id FROM openai_user_conversation_aliases
-			WHERE expires_at <= $1
+			WHERE expires_at <= $1::timestamptz - INTERVAL '30 days'
+              AND NOT openai_conversation_has_activity(binding_id)
 			ORDER BY id
 			FOR UPDATE SKIP LOCKED
 		)

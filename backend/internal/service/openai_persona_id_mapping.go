@@ -363,6 +363,13 @@ func (s *OpenAIGatewayService) ResolveOpenAIPersonaBindingForClientResponse(ctx 
 	if row.Scope.AccountPersonaID <= 0 || row.Scope.SessionEpoch <= 0 {
 		return SessionPersonaSlotBinding{}, false, nil
 	}
+	if _, guarded := s.accountRepo.(OpenAIConversationActivityStore); guarded {
+		attempt, found := s.openAIUserAffinityAttempt(ctx, account.ID)
+		if !found || attempt.conversation == nil || attempt.conversation.AccountPersonaID != row.Scope.AccountPersonaID ||
+			attempt.conversation.PersonaSessionEpoch != row.Scope.SessionEpoch || attempt.conversation.CredentialChainID != row.Scope.CredentialChainID {
+			return SessionPersonaSlotBinding{}, false, ErrOpenAIConversationResetRequired
+		}
+	}
 	if s.accountPersonaRepo == nil {
 		return SessionPersonaSlotBinding{}, false, ErrOpenAIPersonaIDMappingUnavailable
 	}

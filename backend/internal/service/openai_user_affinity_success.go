@@ -12,14 +12,18 @@ import (
 )
 
 type openAIUserAffinityAcceptedState struct {
-	config    OpenAIUserAffinityConfig
-	createdAt time.Time
-	touched   bool
+	config     OpenAIUserAffinityConfig
+	createdAt  time.Time
+	touched    bool
+	requestKey string
 }
 
 // RecordOpenAIUserAffinityAccepted 在收到首个非错误上游响应时冻结成功判定配置。
 func (s *OpenAIGatewayService) RecordOpenAIUserAffinityAccepted(ctx context.Context, accountID int64, eventKeys ...string) {
 	commitOpenAIPersonaUserReservation(ctx, accountID)
+	if s != nil {
+		s.touchOpenAIConversationActivity(ctx, accountID)
+	}
 	if s == nil || s.settingService == nil || s.accountRepo == nil || accountID <= 0 {
 		return
 	}
@@ -31,7 +35,7 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinityAccepted(ctx context.Cont
 	if key == "" {
 		return
 	}
-	state := openAIUserAffinityAcceptedState{config: config, createdAt: time.Now().UTC()}
+	state := openAIUserAffinityAcceptedState{config: config, createdAt: time.Now().UTC(), requestKey: openAIUserAffinityRequestKey(ctx)}
 	if config.TouchSuccessMode == OpenAIUserAffinityTouchAccepted {
 		state.touched = s.touchOpenAIUserAffinity(ctx, accountID, config)
 	}
@@ -41,6 +45,7 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinityAccepted(ctx context.Cont
 
 // RecordOpenAIUserAffinitySuccess 在响应或 WebSocket turn 成功完成后消费 accepted 事实。
 func (s *OpenAIGatewayService) RecordOpenAIUserAffinitySuccess(ctx context.Context, accountID int64, eventKeys ...string) {
+	defer s.endOpenAIConversationActivity(ctx)
 	if s == nil || accountID <= 0 {
 		return
 	}
@@ -77,6 +82,7 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinitySuccess(ctx context.Conte
 
 // RecordOpenAIUserAffinityFailure 清理失败终态，并让回流 followers 尽快进入 CAS 接棒。
 func (s *OpenAIGatewayService) RecordOpenAIUserAffinityFailure(ctx context.Context, accountID int64, eventKeys ...string) {
+	defer s.endOpenAIConversationActivity(ctx)
 	rollbackOpenAIPersonaUserReservation(ctx, accountID)
 	if s == nil || accountID <= 0 {
 		return
@@ -161,6 +167,11 @@ func (s *OpenAIGatewayService) pruneOpenAIUserAffinityAcceptedStates() {
 	}
 	s.openaiAffinity.accepted.Range(func(key, value any) bool {
 		state, ok := value.(openAIUserAffinityAcceptedState)
+		if ok {
+			if _, active := s.openaiAffinity.activities.Load(state.requestKey); active {
+				return true
+			}
+		}
 		retention := state.config.ConversationActiveTTL()
 		if retention < 10*time.Minute {
 			retention = 10 * time.Minute
