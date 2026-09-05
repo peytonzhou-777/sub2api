@@ -54,10 +54,8 @@ func NewCPAChromeDialer(proxyURL *url.URL, sessionCache utls.ClientSessionCache,
 	}
 }
 
-// NewCPAChromeWSH1Dialer returns a CPA Chrome dialer whose ALPN is pinned to
-// HTTP/1.1 for the WebSocket Upgrade handshake. The TLS ClientHello remains
-// the same Chrome profile; only the negotiated application protocol differs
-// from the HTTP/2 REST transport.
+// NewCPAChromeWSH1Dialer 基于同一 Chrome 模板构造 WS ClientHello，
+// 仅声明 HTTP/1.1 ALPN 并移除 ALPS，避免与 REST 的 HTTP/2 传输混用。
 func NewCPAChromeWSH1Dialer(proxyURL *url.URL, sessionCache utls.ClientSessionCache) *CPAChromeDialer {
 	dialer := NewCPAChromeDialer(proxyURL, sessionCache, false)
 	dialer.nextProtos = []string{"http/1.1"}
@@ -88,16 +86,52 @@ func (d *CPAChromeDialer) DialTLSContext(ctx context.Context, network, addr stri
 		utlsConfig.NextProtos = append([]string(nil), d.nextProtos...)
 	}
 	utlsConn := utls.UClient(conn, utlsConfig, utls.HelloChrome_Auto)
+	if len(d.nextProtos) > 0 {
+		if err := configureCPAChromeWSClientHello(utlsConn); err != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("CPA Chrome WS ClientHello setup failed: %w", err)
+		}
+	}
 	if err := utlsConn.HandshakeContext(ctx); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("CPA Chrome TLS handshake failed: %w", err)
 	}
 	state := utlsConn.ConnectionState()
+	// 未协商 ALPN 时仍可使用 HTTP/1.1；明确选中其他协议则禁止交给 WS Upgrade。
+	if len(d.nextProtos) > 0 && state.NegotiatedProtocol != "" && state.NegotiatedProtocol != "http/1.1" {
+		_ = utlsConn.Close()
+		return nil, fmt.Errorf("CPA Chrome WS TLS negotiated %q, want http/1.1", state.NegotiatedProtocol)
+	}
 	if d.requireH2 && state.NegotiatedProtocol != "h2" {
 		_ = utlsConn.Close()
 		return nil, fmt.Errorf("CPA Chrome TLS negotiated %q, want h2", state.NegotiatedProtocol)
 	}
 	return utlsConn, nil
+}
+
+// configureCPAChromeWSClientHello 在模板构建后修改真实扩展；仅设置 Config.NextProtos 会被模板覆盖。
+func configureCPAChromeWSClientHello(conn *utls.UConn) error {
+	if err := conn.BuildHandshakeState(); err != nil {
+		return err
+	}
+	extensions := conn.Extensions[:0]
+	foundALPN := false
+	for _, extension := range conn.Extensions {
+		switch ext := extension.(type) {
+		case *utls.ALPNExtension:
+			ext.AlpnProtocols = []string{"http/1.1"}
+			foundALPN = true
+		case *utls.ApplicationSettingsExtension, *utls.ApplicationSettingsExtensionNew:
+			// Chrome 的 ALPS 声明仅服务于 H2，WS 的 H1 握手不携带该扩展。
+			continue
+		}
+		extensions = append(extensions, extension)
+	}
+	if !foundALPN {
+		return errors.New("Chrome ClientHello has no ALPN extension")
+	}
+	conn.Extensions = extensions
+	return nil
 }
 
 // DialTLSContextHTTP1 adapts the CPA dialer to net/http.Transport's TLS
