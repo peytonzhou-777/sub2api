@@ -3878,6 +3878,7 @@ import {
   parseDateTimeLocalInput
 } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
+import { extractApiErrorMessage } from '@/utils/apiError'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
 import {
   OPENAI_WS_MODE_CTX_POOL,
@@ -6149,67 +6150,42 @@ const handleOpenAIExchange = async (authCode: string) => {
       return
     }
 
-    const tokenInfo = await oauthClient.exchangeAuthCode(
-      authCode.trim(),
-      oauthClient.sessionId.value,
-      stateToUse,
-      form.proxy_id
-    )
-    if (!tokenInfo) return
+    const credentialExtras = buildOpenAICodexImportCredentialExtras()
+    if (credentialExtras === null) return
 
-    const credentials = oauthClient.buildCredentials(tokenInfo)
-    const oauthExtra = oauthClient.buildExtraInfo(tokenInfo) as Record<string, unknown> | undefined
-    const extra = buildOpenAIExtra(oauthExtra)
-    const shouldCreateOpenAI = form.platform === 'openai'
-
-    // Add model mapping for OpenAI OAuth accounts（透传模式下不应用）
-    if (shouldCreateOpenAI && !isOpenAIModelRestrictionDisabled.value) {
-      const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
-      if (modelMapping) {
-        credentials.model_mapping = modelMapping
-      }
-    }
-    if (shouldCreateOpenAI) {
-      const compactModelMapping = buildOpenAICompactModelMapping()
-      if (compactModelMapping) {
-        credentials.compact_model_mapping = compactModelMapping
-      }
-    }
-
-    // 应用临时不可调度配置
-    if (!applyTempUnschedConfig(credentials)) {
-      return
-    }
-
-    if (shouldCreateOpenAI) {
-      await adminAPI.accounts.create({
-        name: form.name,
-        notes: form.notes,
-        platform: 'openai',
-        type: 'oauth',
-        credentials,
-        extra,
-        proxy_id: form.proxy_id,
-        concurrency: form.concurrency,
-        load_factor: form.load_factor ?? undefined,
-        priority: form.priority,
-        rate_multiplier: form.rate_multiplier,
-        group_ids: form.group_ids,
-        expires_at: form.expires_at,
-        auto_pause_on_expired: autoPauseOnExpired.value
-      })
-      appStore.showSuccess(t('admin.accounts.accountCreated'))
-    }
+    await adminAPI.accounts.createOpenAIOAuth({
+      ...buildOpenAIOAuthCreateOptions(credentialExtras),
+      session_id: oauthClient.sessionId.value,
+      code: authCode.trim(),
+      state: stateToUse
+    })
+    appStore.showSuccess(t('admin.accounts.accountCreated'))
 
     emit('created')
     handleClose()
   } catch (error: any) {
-    oauthClient.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+    oauthClient.error.value = extractApiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
     appStore.showError(oauthClient.error.value)
   } finally {
     oauthClient.loading.value = false
   }
 }
+
+// 统一透传新增表单配置，Token 只交给后端的 Persona 建号入口。
+const buildOpenAIOAuthCreateOptions = (credentialExtras: Record<string, unknown>) => ({
+  name: form.name,
+  notes: form.notes,
+  proxy_id: form.proxy_id,
+  concurrency: form.concurrency,
+  load_factor: form.load_factor ?? undefined,
+  priority: form.priority,
+  rate_multiplier: form.rate_multiplier,
+  group_ids: form.group_ids,
+  expires_at: form.expires_at,
+  auto_pause_on_expired: autoPauseOnExpired.value,
+  credential_extras: credentialExtras,
+  extra: buildOpenAIExtra()
+})
 
 // OpenAI 手动 RT 批量验证和创建
 // OpenAI Mobile RT client_id
@@ -6404,6 +6380,9 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
   const oauthClient = openaiOAuth
   if (!refreshTokenInput.trim()) return
 
+  const credentialExtras = buildOpenAICodexImportCredentialExtras()
+  if (credentialExtras === null) return
+
   const refreshTokens = refreshTokenInput
     .split('\n')
     .map((rt) => rt.trim())
@@ -6420,66 +6399,18 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
   let successCount = 0
   let failedCount = 0
   const errors: string[] = []
-  const shouldCreateOpenAI = form.platform === 'openai'
 
   try {
     for (let i = 0; i < refreshTokens.length; i++) {
       try {
-        const tokenInfo = await oauthClient.validateRefreshToken(
-          refreshTokens[i],
-          form.proxy_id,
-          clientId
-        )
-        if (!tokenInfo) {
-          failedCount++
-          errors.push(`#${i + 1}: ${oauthClient.error.value || 'Validation failed'}`)
-          oauthClient.error.value = ''
-          continue
-        }
-
-        const credentials = oauthClient.buildCredentials(tokenInfo)
-        if (clientId) {
-          credentials.client_id = clientId
-        }
-        const oauthExtra = oauthClient.buildExtraInfo(tokenInfo) as Record<string, unknown> | undefined
-        const extra = buildOpenAIExtra(oauthExtra)
-
-        // Add model mapping for OpenAI OAuth accounts（透传模式下不应用）
-        if (shouldCreateOpenAI && !isOpenAIModelRestrictionDisabled.value) {
-          const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
-          if (modelMapping) {
-            credentials.model_mapping = modelMapping
-          }
-        }
-        if (shouldCreateOpenAI) {
-          const compactModelMapping = buildOpenAICompactModelMapping()
-          if (compactModelMapping) {
-            credentials.compact_model_mapping = compactModelMapping
-          }
-        }
-
-        // Generate account name; fallback to email if name is empty (ent schema requires NotEmpty)
-        const baseName = form.name || tokenInfo.email || 'OpenAI OAuth Account'
-        const accountName = refreshTokens.length > 1 ? `${baseName} #${i + 1}` : baseName
-
-        if (shouldCreateOpenAI) {
-          await adminAPI.accounts.create({
-            name: accountName,
-            notes: form.notes,
-            platform: 'openai',
-            type: 'oauth',
-            credentials,
-            extra,
-            proxy_id: form.proxy_id,
-            concurrency: form.concurrency,
-            load_factor: form.load_factor ?? undefined,
-            priority: form.priority,
-            rate_multiplier: form.rate_multiplier,
-            group_ids: form.group_ids,
-            expires_at: form.expires_at,
-            auto_pause_on_expired: autoPauseOnExpired.value
-          })
-        }
+        await adminAPI.accounts.createOpenAIOAuth({
+          ...buildOpenAIOAuthCreateOptions(credentialExtras),
+          name: refreshTokens.length > 1
+            ? `${form.name || 'OpenAI OAuth Account'} #${i + 1}`
+            : form.name,
+          refresh_token: refreshTokens[i],
+          client_id: clientId
+        })
 
         successCount++
       } catch (error: any) {

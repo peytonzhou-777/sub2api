@@ -752,6 +752,19 @@ export async function createOpenAICodexPAT(payload: OpenAICodexPATCreateRequest)
   return data
 }
 
+export type OpenAIOAuthCreateRequest = Omit<CreateAccountRequest, 'platform' | 'type' | 'credentials'> & {
+  credential_extras?: Record<string, unknown>
+} & (
+  | { session_id: string; code: string; state: string; refresh_token?: never; client_id?: never }
+  | { refresh_token: string; client_id?: string; session_id?: never; code?: never; state?: never }
+)
+
+/** 在服务端交换凭据并原子创建账号及主 Persona。 */
+export async function createOpenAIOAuth(payload: OpenAIOAuthCreateRequest): Promise<Account> {
+  const { data } = await apiClient.post<Account>('/admin/openai/create-from-oauth', payload)
+  return data
+}
+
 /**
  * Get Antigravity default model mapping from backend
  * @returns Default model mapping (from -> to)
@@ -1243,6 +1256,7 @@ export const accountsAPI = {
   importData,
   importCodexSession,
   createOpenAICodexPAT,
+  createOpenAIOAuth,
   getAntigravityDefaultModelMapping,
   batchDelete,
   batchClearError,

@@ -718,33 +718,82 @@ func (h *OpenAIOAuthHandler) RefreshAccountToken(c *gin.Context) {
 	response.Success(c, dto.AccountFromService(updatedAccount))
 }
 
-// CreateAccountFromOAuth creates a new OpenAI OAuth account from token info
+// OpenAIOAuthCreateRequest 承载授权码或手动 RT，以及新增账号的非机密配置。
+type OpenAIOAuthCreateRequest struct {
+	SessionID          string         `json:"session_id"`
+	Code               string         `json:"code"`
+	State              string         `json:"state"`
+	RedirectURI        string         `json:"redirect_uri"`
+	RefreshToken       string         `json:"refresh_token"`
+	ClientID           string         `json:"client_id"`
+	Name               string         `json:"name"`
+	Notes              *string        `json:"notes"`
+	ProxyID            *int64         `json:"proxy_id"`
+	Concurrency        int            `json:"concurrency" binding:"gte=0"`
+	Priority           int            `json:"priority" binding:"gte=0"`
+	LoadFactor         *int           `json:"load_factor" binding:"omitempty,lte=10000"`
+	RateMultiplier     *float64       `json:"rate_multiplier" binding:"omitempty,gte=0"`
+	GroupIDs           []int64        `json:"group_ids"`
+	ExpiresAt          *int64         `json:"expires_at"`
+	AutoPauseOnExpired *bool          `json:"auto_pause_on_expired"`
+	CredentialExtras   map[string]any `json:"credential_extras"`
+	Extra              map[string]any `json:"extra"`
+}
+
+// CreateAccountFromOAuth 在服务端获取凭据并原子创建账号与主 Persona。
 // POST /api/v1/admin/openai/create-from-oauth
 func (h *OpenAIOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
-	var req struct {
-		SessionID   string  `json:"session_id" binding:"required"`
-		Code        string  `json:"code" binding:"required"`
-		State       string  `json:"state" binding:"required"`
-		RedirectURI string  `json:"redirect_uri"`
-		ProxyID     *int64  `json:"proxy_id"`
-		Name        string  `json:"name"`
-		Concurrency int     `json:"concurrency"`
-		Priority    int     `json:"priority"`
-		GroupIDs    []int64 `json:"group_ids"`
-	}
+	var req OpenAIOAuthCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
 
-	// Exchange code for tokens
-	tokenInfo, err := h.openaiOAuthService.ExchangeCode(c.Request.Context(), &service.OpenAIExchangeCodeInput{
-		SessionID:   req.SessionID,
-		Code:        req.Code,
-		State:       req.State,
-		RedirectURI: req.RedirectURI,
-		ProxyID:     req.ProxyID,
-	})
+	if err := service.ValidateOpenAILongContextBillingExtra(service.PlatformOpenAI, req.Extra); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	// 消耗授权码或轮换 RT 前校验授权方式，拒绝混用两种凭据。
+	req.RefreshToken = strings.TrimSpace(req.RefreshToken)
+	var tokenInfo *service.OpenAITokenInfo
+	var err error
+	if req.RefreshToken != "" {
+		if req.SessionID != "" || req.Code != "" || req.State != "" {
+			response.BadRequest(c, "refresh_token cannot be combined with an authorization code")
+			return
+		}
+		var proxyURL string
+		if req.ProxyID != nil {
+			proxy, proxyErr := h.adminService.GetProxy(c.Request.Context(), *req.ProxyID)
+			if proxyErr != nil {
+				response.ErrorFrom(c, proxyErr)
+				return
+			}
+			if proxy != nil {
+				proxyURL = proxy.URL()
+			}
+		}
+		clientID := strings.TrimSpace(req.ClientID)
+		if clientID == "" {
+			clientID, _ = openai.OAuthClientConfigByPlatform(service.PlatformOpenAI)
+		}
+		tokenInfo, err = h.openaiOAuthService.RefreshTokenWithClientID(c.Request.Context(), req.RefreshToken, proxyURL, clientID)
+		if err == nil && tokenInfo.RefreshToken == "" {
+			tokenInfo.RefreshToken = req.RefreshToken
+		}
+	} else {
+		if strings.TrimSpace(req.SessionID) == "" || strings.TrimSpace(req.Code) == "" || strings.TrimSpace(req.State) == "" {
+			response.BadRequest(c, "session_id, code and state are required")
+			return
+		}
+		tokenInfo, err = h.openaiOAuthService.ExchangeCode(c.Request.Context(), &service.OpenAIExchangeCodeInput{
+			SessionID:   req.SessionID,
+			Code:        req.Code,
+			State:       req.State,
+			RedirectURI: req.RedirectURI,
+			ProxyID:     req.ProxyID,
+		})
+	}
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -756,7 +805,16 @@ func (h *OpenAIOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 		return
 	}
 	// 账号只保存非机密身份元数据，Token 的唯一权威副本属于 position 0。
-	credentials := h.openaiOAuthService.BuildAccountIdentityCredentials(tokenInfo)
+	credentials := mergeCodexImportMap(h.openaiOAuthService.BuildAccountIdentityCredentials(tokenInfo), sanitizeCodexImportCredentialExtras(req.CredentialExtras))
+	extra := mergeCodexImportMap(nil, req.Extra)
+	if extra == nil {
+		extra = make(map[string]any)
+	}
+	for key, value := range map[string]string{"email": tokenInfo.Email, "privacy_mode": tokenInfo.PrivacyMode} {
+		if value != "" {
+			extra[key] = value
+		}
+	}
 
 	platform := oauthPlatformFromPath(c)
 
@@ -772,14 +830,19 @@ func (h *OpenAIOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 	// Create account
 	account, err := h.adminService.CreateAccount(c.Request.Context(), &service.CreateAccountInput{
 		Name:                 name,
+		Notes:                req.Notes,
 		Platform:             platform,
 		Type:                 "oauth",
 		Credentials:          credentials,
-		Extra:                nil,
+		Extra:                extra,
 		ProxyID:              req.ProxyID,
 		Concurrency:          req.Concurrency,
 		Priority:             req.Priority,
 		GroupIDs:             req.GroupIDs,
+		LoadFactor:           req.LoadFactor,
+		RateMultiplier:       req.RateMultiplier,
+		ExpiresAt:            req.ExpiresAt,
+		AutoPauseOnExpired:   req.AutoPauseOnExpired,
 		PrimaryOpenAIPersona: primaryPersona,
 	})
 	if err != nil {

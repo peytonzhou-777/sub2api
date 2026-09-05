@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   createAccountMock,
+  createOpenAIOAuthMock,
+  generateAuthUrlMock,
+  exchangeCodeMock,
+  showErrorMock,
   probeUpstreamBillingMock,
   syncUpstreamModelsMock,
   showWarningMock,
@@ -12,6 +16,10 @@ const {
   authIsSimpleMode,
 } = vi.hoisted(() => ({
   createAccountMock: vi.fn(),
+  createOpenAIOAuthMock: vi.fn(),
+  generateAuthUrlMock: vi.fn(),
+  exchangeCodeMock: vi.fn(),
+  showErrorMock: vi.fn(),
   probeUpstreamBillingMock: vi.fn(),
   syncUpstreamModelsMock: vi.fn(),
   showWarningMock: vi.fn(),
@@ -22,7 +30,7 @@ const {
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
-    showError: vi.fn(),
+    showError: showErrorMock,
     showSuccess: vi.fn(),
     showWarning: showWarningMock,
   }),
@@ -40,6 +48,9 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       create: createAccountMock,
+      createOpenAIOAuth: createOpenAIOAuthMock,
+      generateAuthUrl: generateAuthUrlMock,
+      exchangeCode: exchangeCodeMock,
       probeUpstreamBilling: probeUpstreamBillingMock,
       syncUpstreamModels: syncUpstreamModelsMock,
       checkMixedChannelRisk: vi.fn().mockResolvedValue({ has_risk: false }),
@@ -84,9 +95,11 @@ const OAuthAuthorizationFlowStub = defineComponent({
     showAgentIdentityOption: Boolean,
     showCodexPatOption: Boolean,
     initialInputMethod: String,
+    loading: Boolean,
+    error: String,
   },
-  data: () => ({ inputMethod: 'manual' }),
-  emits: ['import-codex-session', 'import-codex-pat'],
+  data: () => ({ inputMethod: 'manual', authCode: ' test-code ', oauthState: 'test-state' }),
+  emits: ['import-codex-session', 'import-codex-pat', 'generate-url', 'validate-refresh-token', 'validate-mobile-refresh-token'],
   template: `
     <div>
       <button data-testid="import-codex-session" @click="$emit('import-codex-session', 'session-json')">session</button>
@@ -210,6 +223,79 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
       warnings: [],
     })
     createOpenAICodexPATMock.mockReset().mockResolvedValue({})
+    createOpenAIOAuthMock.mockReset().mockResolvedValue({ id: 42, platform: 'openai', type: 'oauth' })
+    generateAuthUrlMock.mockReset().mockResolvedValue({
+      auth_url: 'https://auth.openai.com/authorize?state=test-state',
+      session_id: 'test-session'
+    })
+    exchangeCodeMock.mockReset()
+    showErrorMock.mockReset()
+  })
+
+  it('新增授权码通过 Persona 建号入口保留表单配置，不再交换 Token 后通用建号', async () => {
+    const wrapper = await openCodexImportStep()
+    const flow = wrapper.findComponent(OAuthAuthorizationFlowStub)
+    flow.vm.$emit('generate-url')
+    await flushPromises()
+    await selectButtonByText(wrapper, 'admin.accounts.oauth.completeAuth')
+    await flushPromises()
+
+    expect(createOpenAIOAuthMock).toHaveBeenCalledWith(expect.objectContaining({
+      session_id: 'test-session', code: 'test-code', state: 'test-state',
+      name: 'Codex import', credential_extras: expect.any(Object),
+      extra: expect.objectContaining({ codex_fingerprint_mode: 'session' })
+    }))
+    expect(createOpenAIOAuthMock.mock.calls[0][0]).not.toHaveProperty('credentials')
+    expect(exchangeCodeMock).not.toHaveBeenCalled()
+    expect(createAccountMock).not.toHaveBeenCalled()
+    expect(wrapper.emitted('created')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('新增失败保留授权界面并展示拦截器返回的实际原因', async () => {
+    createOpenAIOAuthMock.mockRejectedValue({ message: 'Primary Persona storage unavailable' })
+    const wrapper = await openCodexImportStep()
+    const flow = wrapper.findComponent(OAuthAuthorizationFlowStub)
+    flow.vm.$emit('generate-url')
+    await flushPromises()
+    await selectButtonByText(wrapper, 'admin.accounts.oauth.completeAuth')
+    await flushPromises()
+    expect(showErrorMock).toHaveBeenCalledWith('Primary Persona storage unavailable')
+    expect(flow.props('loading')).toBe(false)
+    expect(wrapper.emitted('created')).toBeUndefined()
+    expect(wrapper.emitted('close')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it.each(['validate-refresh-token', 'validate-mobile-refresh-token'] as const)('通过 %s 新增也只调用 Persona 建号入口', async (event) => {
+    const wrapper = await openCodexImportStep()
+    wrapper.findComponent(OAuthAuthorizationFlowStub).vm.$emit(event, ' rt-one ')
+    await flushPromises()
+    expect(createOpenAIOAuthMock).toHaveBeenCalledWith(expect.objectContaining({
+      refresh_token: 'rt-one',
+      client_id: event === 'validate-mobile-refresh-token' ? 'app_LlGpXReQgckcGGUo2JrYvtJK' : undefined,
+      name: 'Codex import',
+      extra: expect.objectContaining({ codex_fingerprint_mode: 'session' })
+    }))
+    expect(exchangeCodeMock).not.toHaveBeenCalled()
+    expect(createAccountMock).not.toHaveBeenCalled()
+    expect(wrapper.emitted('created')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('RT 批量部分失败时保留逐条错误并刷新已创建账号', async () => {
+    createOpenAIOAuthMock.mockResolvedValueOnce({ id: 42 }).mockRejectedValueOnce({ message: 'RT expired' })
+    const wrapper = await openCodexImportStep()
+    const flow = wrapper.findComponent(OAuthAuthorizationFlowStub)
+    flow.vm.$emit('validate-refresh-token', 'rt-one\nrt-two')
+    await flushPromises()
+    expect(createOpenAIOAuthMock).toHaveBeenCalledTimes(2)
+    expect(flow.props('error')).toBe('#2: RT expired')
+    expect(flow.props('loading')).toBe(false)
+    expect(showWarningMock).toHaveBeenCalled()
+    expect(wrapper.emitted('created')).toHaveLength(1)
+    expect(wrapper.emitted('close')).toBeUndefined()
+    wrapper.unmount()
   })
 
   it('hides only the redundant account toggle when every selected group enables tier pricing', async () => {
