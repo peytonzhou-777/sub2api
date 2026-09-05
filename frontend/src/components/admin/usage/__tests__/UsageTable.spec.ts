@@ -153,6 +153,28 @@ describe('admin UsageTable subagent marker', () => {
   })
 })
 
+describe('admin UsageTable upstream turn-state size', () => {
+  it.each([undefined, null, 0, 1234])('renders byte size %s without rounding', (size) => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ ...baseImageRow, upstream_turn_state_size_bytes: size }],
+        loading: false,
+        columns: [{ key: 'upstream_turn_state_size_bytes', label: 'Upstream Turn State Size (B)' }],
+      },
+      global: {
+        stubs: {
+          DataTable: {
+            props: ['data'],
+            template: '<div><slot name="cell-upstream_turn_state_size_bytes" :row="data[0]" /></div>',
+          },
+          Teleport: true,
+        },
+      },
+    })
+    expect(wrapper.text()).toBe(size == null ? '-' : `${size} B`)
+  })
+})
+
 describe('admin UsageTable account admission latency', () => {
   it('renders the account queue wait separately from upstream latency', () => {
     const wrapper = mount(UsageTable, {

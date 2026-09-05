@@ -623,6 +623,33 @@ func (_u *UsageLogUpdate) ClearAccountRateMultiplier() *UsageLogUpdate {
 	return _u
 }
 
+// SetUpstreamTurnStateSizeBytes sets the "upstream_turn_state_size_bytes" field.
+func (_u *UsageLogUpdate) SetUpstreamTurnStateSizeBytes(v int) *UsageLogUpdate {
+	_u.mutation.ResetUpstreamTurnStateSizeBytes()
+	_u.mutation.SetUpstreamTurnStateSizeBytes(v)
+	return _u
+}
+
+// SetNillableUpstreamTurnStateSizeBytes sets the "upstream_turn_state_size_bytes" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUpstreamTurnStateSizeBytes(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUpstreamTurnStateSizeBytes(*v)
+	}
+	return _u
+}
+
+// AddUpstreamTurnStateSizeBytes adds value to the "upstream_turn_state_size_bytes" field.
+func (_u *UsageLogUpdate) AddUpstreamTurnStateSizeBytes(v int) *UsageLogUpdate {
+	_u.mutation.AddUpstreamTurnStateSizeBytes(v)
+	return _u
+}
+
+// ClearUpstreamTurnStateSizeBytes clears the value of the "upstream_turn_state_size_bytes" field.
+func (_u *UsageLogUpdate) ClearUpstreamTurnStateSizeBytes() *UsageLogUpdate {
+	_u.mutation.ClearUpstreamTurnStateSizeBytes()
+	return _u
+}
+
 // SetBillingType sets the "billing_type" field.
 func (_u *UsageLogUpdate) SetBillingType(v int8) *UsageLogUpdate {
 	_u.mutation.ResetBillingType()
@@ -1389,6 +1416,15 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.AccountRateMultiplierCleared() {
 		_spec.ClearField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.UpstreamTurnStateSizeBytes(); ok {
+		_spec.SetField(usagelog.FieldUpstreamTurnStateSizeBytes, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamTurnStateSizeBytes(); ok {
+		_spec.AddField(usagelog.FieldUpstreamTurnStateSizeBytes, field.TypeInt, value)
+	}
+	if _u.mutation.UpstreamTurnStateSizeBytesCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamTurnStateSizeBytes, field.TypeInt)
 	}
 	if value, ok := _u.mutation.BillingType(); ok {
 		_spec.SetField(usagelog.FieldBillingType, field.TypeInt8, value)
@@ -2281,6 +2317,33 @@ func (_u *UsageLogUpdateOne) ClearAccountRateMultiplier() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetUpstreamTurnStateSizeBytes sets the "upstream_turn_state_size_bytes" field.
+func (_u *UsageLogUpdateOne) SetUpstreamTurnStateSizeBytes(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetUpstreamTurnStateSizeBytes()
+	_u.mutation.SetUpstreamTurnStateSizeBytes(v)
+	return _u
+}
+
+// SetNillableUpstreamTurnStateSizeBytes sets the "upstream_turn_state_size_bytes" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUpstreamTurnStateSizeBytes(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUpstreamTurnStateSizeBytes(*v)
+	}
+	return _u
+}
+
+// AddUpstreamTurnStateSizeBytes adds value to the "upstream_turn_state_size_bytes" field.
+func (_u *UsageLogUpdateOne) AddUpstreamTurnStateSizeBytes(v int) *UsageLogUpdateOne {
+	_u.mutation.AddUpstreamTurnStateSizeBytes(v)
+	return _u
+}
+
+// ClearUpstreamTurnStateSizeBytes clears the value of the "upstream_turn_state_size_bytes" field.
+func (_u *UsageLogUpdateOne) ClearUpstreamTurnStateSizeBytes() *UsageLogUpdateOne {
+	_u.mutation.ClearUpstreamTurnStateSizeBytes()
+	return _u
+}
+
 // SetBillingType sets the "billing_type" field.
 func (_u *UsageLogUpdateOne) SetBillingType(v int8) *UsageLogUpdateOne {
 	_u.mutation.ResetBillingType()
@@ -3077,6 +3140,15 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.AccountRateMultiplierCleared() {
 		_spec.ClearField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.UpstreamTurnStateSizeBytes(); ok {
+		_spec.SetField(usagelog.FieldUpstreamTurnStateSizeBytes, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamTurnStateSizeBytes(); ok {
+		_spec.AddField(usagelog.FieldUpstreamTurnStateSizeBytes, field.TypeInt, value)
+	}
+	if _u.mutation.UpstreamTurnStateSizeBytesCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamTurnStateSizeBytes, field.TypeInt)
 	}
 	if value, ok := _u.mutation.BillingType(); ok {
 		_spec.SetField(usagelog.FieldBillingType, field.TypeInt8, value)

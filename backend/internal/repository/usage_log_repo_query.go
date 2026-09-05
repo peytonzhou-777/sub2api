@@ -19,7 +19,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
-const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, upstream_response_model, upstream_model_mismatch, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, image_input_tokens, image_input_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, account_queue_wait_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, service_tier, reasoning_effort, requested_reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, long_context_billing_applied, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, session_scope_hash, session_source_hash, prompt_cache_key_hash, session_id, is_subagent, first_response_ms, first_event_ms, first_output_ms, native_compaction_v2, account_persona_id, persona_profile, created_at"
+const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, upstream_response_model, upstream_model_mismatch, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, image_input_tokens, image_input_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, account_queue_wait_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, service_tier, reasoning_effort, requested_reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, long_context_billing_applied, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, session_scope_hash, session_source_hash, prompt_cache_key_hash, session_id, is_subagent, first_response_ms, first_event_ms, first_output_ms, native_compaction_v2, account_persona_id, persona_profile, upstream_turn_state_size_bytes, created_at"
 
 func (r *usageLogRepository) GetByID(ctx context.Context, id int64) (log *service.UsageLog, err error) {
 	query := "SELECT " + usageLogSelectColumns + " FROM usage_logs WHERE id = $1"
@@ -440,78 +440,79 @@ func (r *usageLogRepository) loadSubscriptions(ctx context.Context, ids []int64)
 
 func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, error) {
 	var (
-		id                        int64
-		userID                    int64
-		apiKeyID                  int64
-		accountID                 int64
-		requestID                 sql.NullString
-		model                     string
-		requestedModel            sql.NullString
-		upstreamModel             sql.NullString
-		upstreamResponseModel     sql.NullString
-		upstreamModelMismatch     sql.NullBool
-		groupID                   sql.NullInt64
-		subscriptionID            sql.NullInt64
-		inputTokens               int
-		outputTokens              int
-		cacheCreationTokens       int
-		cacheReadTokens           int
-		cacheCreation5m           int
-		cacheCreation1h           int
-		imageOutputTokens         int
-		imageOutputCost           float64
-		imageInputTokens          int
-		imageInputCost            float64
-		inputCost                 float64
-		outputCost                float64
-		cacheCreationCost         float64
-		cacheReadCost             float64
-		totalCost                 float64
-		actualCost                float64
-		rateMultiplier            float64
-		accountRateMultiplier     sql.NullFloat64
-		billingType               int16
-		requestTypeRaw            int16
-		stream                    bool
-		openaiWSMode              bool
-		durationMs                sql.NullInt64
-		firstTokenMs              sql.NullInt64
-		accountQueueWaitMs        sql.NullInt64
-		userAgent                 sql.NullString
-		ipAddress                 sql.NullString
-		imageCount                int
-		imageSize                 sql.NullString
-		imageInputSize            sql.NullString
-		imageOutputSize           sql.NullString
-		imageSizeSource           sql.NullString
-		imageSizeBreakdown        sql.NullString
-		videoCount                int
-		videoResolution           sql.NullString
-		videoDurationSeconds      sql.NullInt64
-		serviceTier               sql.NullString
-		reasoningEffort           sql.NullString
-		requestedReasoningEffort  sql.NullString
-		inboundEndpoint           sql.NullString
-		upstreamEndpoint          sql.NullString
-		cacheTTLOverridden        bool
-		longContextBillingApplied bool
-		channelID                 sql.NullInt64
-		modelMappingChain         sql.NullString
-		billingTier               sql.NullString
-		billingMode               sql.NullString
-		accountStatsCost          sql.NullFloat64
-		sessionScopeHash          sql.NullString
-		sessionSourceHash         sql.NullString
-		promptCacheKeyHash        sql.NullString
-		sessionID                 sql.NullString
-		isSubagent                bool
-		firstResponseMs           sql.NullInt64
-		firstEventMs              sql.NullInt64
-		firstOutputMs             sql.NullInt64
-		nativeCompactionV2        bool
-		accountPersonaID          sql.NullInt64
-		personaProfile            sql.NullString
-		createdAt                 time.Time
+		id                         int64
+		userID                     int64
+		apiKeyID                   int64
+		accountID                  int64
+		requestID                  sql.NullString
+		model                      string
+		requestedModel             sql.NullString
+		upstreamModel              sql.NullString
+		upstreamResponseModel      sql.NullString
+		upstreamModelMismatch      sql.NullBool
+		groupID                    sql.NullInt64
+		subscriptionID             sql.NullInt64
+		inputTokens                int
+		outputTokens               int
+		cacheCreationTokens        int
+		cacheReadTokens            int
+		cacheCreation5m            int
+		cacheCreation1h            int
+		imageOutputTokens          int
+		imageOutputCost            float64
+		imageInputTokens           int
+		imageInputCost             float64
+		inputCost                  float64
+		outputCost                 float64
+		cacheCreationCost          float64
+		cacheReadCost              float64
+		totalCost                  float64
+		actualCost                 float64
+		rateMultiplier             float64
+		accountRateMultiplier      sql.NullFloat64
+		billingType                int16
+		requestTypeRaw             int16
+		stream                     bool
+		openaiWSMode               bool
+		durationMs                 sql.NullInt64
+		firstTokenMs               sql.NullInt64
+		accountQueueWaitMs         sql.NullInt64
+		userAgent                  sql.NullString
+		ipAddress                  sql.NullString
+		imageCount                 int
+		imageSize                  sql.NullString
+		imageInputSize             sql.NullString
+		imageOutputSize            sql.NullString
+		imageSizeSource            sql.NullString
+		imageSizeBreakdown         sql.NullString
+		videoCount                 int
+		videoResolution            sql.NullString
+		videoDurationSeconds       sql.NullInt64
+		serviceTier                sql.NullString
+		reasoningEffort            sql.NullString
+		requestedReasoningEffort   sql.NullString
+		inboundEndpoint            sql.NullString
+		upstreamEndpoint           sql.NullString
+		cacheTTLOverridden         bool
+		longContextBillingApplied  bool
+		channelID                  sql.NullInt64
+		modelMappingChain          sql.NullString
+		billingTier                sql.NullString
+		billingMode                sql.NullString
+		accountStatsCost           sql.NullFloat64
+		sessionScopeHash           sql.NullString
+		sessionSourceHash          sql.NullString
+		promptCacheKeyHash         sql.NullString
+		sessionID                  sql.NullString
+		isSubagent                 bool
+		firstResponseMs            sql.NullInt64
+		firstEventMs               sql.NullInt64
+		firstOutputMs              sql.NullInt64
+		nativeCompactionV2         bool
+		accountPersonaID           sql.NullInt64
+		personaProfile             sql.NullString
+		upstreamTurnStateSizeBytes sql.NullInt64
+		createdAt                  time.Time
 	)
 
 	if err := scanner.Scan(
@@ -586,6 +587,7 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&nativeCompactionV2,
 		&accountPersonaID,
 		&personaProfile,
+		&upstreamTurnStateSizeBytes,
 		&createdAt,
 	); err != nil {
 		return nil, err
@@ -630,6 +632,10 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 	if accountPersonaID.Valid {
 		value := accountPersonaID.Int64
 		log.AccountPersonaID = &value
+	}
+	if upstreamTurnStateSizeBytes.Valid {
+		value := int(upstreamTurnStateSizeBytes.Int64)
+		log.UpstreamTurnStateSizeBytes = &value
 	}
 	// 先回填 legacy 字段，再基于 legacy + request_type 计算最终请求类型，保证历史数据兼容。
 	log.Stream = stream

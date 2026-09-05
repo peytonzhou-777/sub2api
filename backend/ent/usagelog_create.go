@@ -407,6 +407,20 @@ func (_c *UsageLogCreate) SetNillableAccountRateMultiplier(v *float64) *UsageLog
 	return _c
 }
 
+// SetUpstreamTurnStateSizeBytes sets the "upstream_turn_state_size_bytes" field.
+func (_c *UsageLogCreate) SetUpstreamTurnStateSizeBytes(v int) *UsageLogCreate {
+	_c.mutation.SetUpstreamTurnStateSizeBytes(v)
+	return _c
+}
+
+// SetNillableUpstreamTurnStateSizeBytes sets the "upstream_turn_state_size_bytes" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUpstreamTurnStateSizeBytes(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetUpstreamTurnStateSizeBytes(*v)
+	}
+	return _c
+}
+
 // SetBillingType sets the "billing_type" field.
 func (_c *UsageLogCreate) SetBillingType(v int8) *UsageLogCreate {
 	_c.mutation.SetBillingType(v)
@@ -1122,6 +1136,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.AccountRateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64, value)
 		_node.AccountRateMultiplier = &value
+	}
+	if value, ok := _c.mutation.UpstreamTurnStateSizeBytes(); ok {
+		_spec.SetField(usagelog.FieldUpstreamTurnStateSizeBytes, field.TypeInt, value)
+		_node.UpstreamTurnStateSizeBytes = &value
 	}
 	if value, ok := _c.mutation.BillingType(); ok {
 		_spec.SetField(usagelog.FieldBillingType, field.TypeInt8, value)
@@ -1857,6 +1875,30 @@ func (u *UsageLogUpsert) AddAccountRateMultiplier(v float64) *UsageLogUpsert {
 // ClearAccountRateMultiplier clears the value of the "account_rate_multiplier" field.
 func (u *UsageLogUpsert) ClearAccountRateMultiplier() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldAccountRateMultiplier)
+	return u
+}
+
+// SetUpstreamTurnStateSizeBytes sets the "upstream_turn_state_size_bytes" field.
+func (u *UsageLogUpsert) SetUpstreamTurnStateSizeBytes(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldUpstreamTurnStateSizeBytes, v)
+	return u
+}
+
+// UpdateUpstreamTurnStateSizeBytes sets the "upstream_turn_state_size_bytes" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUpstreamTurnStateSizeBytes() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUpstreamTurnStateSizeBytes)
+	return u
+}
+
+// AddUpstreamTurnStateSizeBytes adds v to the "upstream_turn_state_size_bytes" field.
+func (u *UsageLogUpsert) AddUpstreamTurnStateSizeBytes(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldUpstreamTurnStateSizeBytes, v)
+	return u
+}
+
+// ClearUpstreamTurnStateSizeBytes clears the value of the "upstream_turn_state_size_bytes" field.
+func (u *UsageLogUpsert) ClearUpstreamTurnStateSizeBytes() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldUpstreamTurnStateSizeBytes)
 	return u
 }
 
@@ -2894,6 +2936,34 @@ func (u *UsageLogUpsertOne) UpdateAccountRateMultiplier() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearAccountRateMultiplier() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearAccountRateMultiplier()
+	})
+}
+
+// SetUpstreamTurnStateSizeBytes sets the "upstream_turn_state_size_bytes" field.
+func (u *UsageLogUpsertOne) SetUpstreamTurnStateSizeBytes(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamTurnStateSizeBytes(v)
+	})
+}
+
+// AddUpstreamTurnStateSizeBytes adds v to the "upstream_turn_state_size_bytes" field.
+func (u *UsageLogUpsertOne) AddUpstreamTurnStateSizeBytes(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUpstreamTurnStateSizeBytes(v)
+	})
+}
+
+// UpdateUpstreamTurnStateSizeBytes sets the "upstream_turn_state_size_bytes" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUpstreamTurnStateSizeBytes() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamTurnStateSizeBytes()
+	})
+}
+
+// ClearUpstreamTurnStateSizeBytes clears the value of the "upstream_turn_state_size_bytes" field.
+func (u *UsageLogUpsertOne) ClearUpstreamTurnStateSizeBytes() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamTurnStateSizeBytes()
 	})
 }
 
@@ -4162,6 +4232,34 @@ func (u *UsageLogUpsertBulk) UpdateAccountRateMultiplier() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearAccountRateMultiplier() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearAccountRateMultiplier()
+	})
+}
+
+// SetUpstreamTurnStateSizeBytes sets the "upstream_turn_state_size_bytes" field.
+func (u *UsageLogUpsertBulk) SetUpstreamTurnStateSizeBytes(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamTurnStateSizeBytes(v)
+	})
+}
+
+// AddUpstreamTurnStateSizeBytes adds v to the "upstream_turn_state_size_bytes" field.
+func (u *UsageLogUpsertBulk) AddUpstreamTurnStateSizeBytes(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUpstreamTurnStateSizeBytes(v)
+	})
+}
+
+// UpdateUpstreamTurnStateSizeBytes sets the "upstream_turn_state_size_bytes" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUpstreamTurnStateSizeBytes() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamTurnStateSizeBytes()
+	})
+}
+
+// ClearUpstreamTurnStateSizeBytes clears the value of the "upstream_turn_state_size_bytes" field.
+func (u *UsageLogUpsertBulk) ClearUpstreamTurnStateSizeBytes() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamTurnStateSizeBytes()
 	})
 }
 

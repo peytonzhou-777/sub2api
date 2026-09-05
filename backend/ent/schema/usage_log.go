@@ -122,6 +122,11 @@ func (UsageLog) Fields() []ent.Field {
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}),
 
 		// 其他字段
+		field.Int("upstream_turn_state_size_bytes").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "integer"}).
+			Comment("上游原始 x-codex-turn-state 响应头值字节数，不含站点封装"),
 		field.Int8("billing_type").
 			Default(0),
 		field.Bool("stream").

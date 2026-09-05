@@ -706,6 +706,7 @@ describe('admin UsageView model audit export', () => {
 				upstream_model: 'gpt-5.5',
 				upstream_response_model: 'gpt-5.4',
 				upstream_model_mismatch: true,
+				upstream_turn_state_size_bytes: 4097,
 				request_type: 'sync',
 				input_tokens: 1,
 				output_tokens: 1,
@@ -747,14 +748,19 @@ describe('admin UsageView model audit export', () => {
 		)
 
 		const headers = aoaToSheet.mock.calls[0][0][0]
-		expect(headers.slice(5, 9)).toEqual([
+		const modelIndex = headers.indexOf('Requested model')
+		expect(modelIndex).toBeGreaterThanOrEqual(0)
+		expect(headers.slice(modelIndex, modelIndex + 4)).toEqual([
 			'Requested model',
 			'Sent upstream model',
 			'Upstream response model',
 			'Upstream model mismatch',
 		])
 		const row = sheetAddAoa.mock.calls[0][1][0]
-		expect(row.slice(5, 9)).toEqual(['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4', 'Yes'])
+		expect(row.slice(modelIndex, modelIndex + 4)).toEqual(['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4', 'Yes'])
+		const sizeIndex = headers.indexOf('usage.upstreamTurnStateSizeBytes')
+		expect(sizeIndex).toBeGreaterThanOrEqual(0)
+		expect(row[sizeIndex]).toBe(4097)
 		expect(saveAs).toHaveBeenCalledTimes(1)
 	})
 })

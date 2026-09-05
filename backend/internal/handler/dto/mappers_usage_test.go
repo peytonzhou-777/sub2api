@@ -28,6 +28,23 @@ func TestUsageLogFromService_IncludesOpenAIWSMode(t *testing.T) {
 	require.False(t, UsageLogFromServiceAdmin(httpLog).OpenAIWSMode)
 }
 
+func TestUsageLogFromService_ExposesTurnStateSizeToAdminOnly(t *testing.T) {
+	size := 1234
+	for _, value := range []*int{nil, &size} {
+		log := &service.UsageLog{UpstreamTurnStateSizeBytes: value}
+		userJSON, err := json.Marshal(UsageLogFromService(log))
+		require.NoError(t, err)
+		adminJSON, err := json.Marshal(UsageLogFromServiceAdmin(log))
+		require.NoError(t, err)
+		require.NotContains(t, string(userJSON), "upstream_turn_state_size_bytes")
+		if value == nil {
+			require.Contains(t, string(adminJSON), `"upstream_turn_state_size_bytes":null`)
+		} else {
+			require.Contains(t, string(adminJSON), `"upstream_turn_state_size_bytes":1234`)
+		}
+	}
+}
+
 func TestUsageLogFromService_ExposesAccountQueueWaitToAdminOnly(t *testing.T) {
 	t.Parallel()
 

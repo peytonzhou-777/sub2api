@@ -68,6 +68,12 @@
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
         </template>
 
+        <template #cell-upstream_turn_state_size_bytes="{ row }">
+          <span class="whitespace-nowrap text-sm tabular-nums text-gray-900 dark:text-white">
+            {{ row.upstream_turn_state_size_bytes == null ? '-' : `${row.upstream_turn_state_size_bytes} B` }}
+          </span>
+        </template>
+
         <template #cell-model="{ row }">
           <div class="space-y-0.5 text-xs">
             <div v-if="row.model_mapping_chain && row.model_mapping_chain.includes('→')" class="space-y-0.5">

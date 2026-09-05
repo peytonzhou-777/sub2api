@@ -115,8 +115,10 @@ type UsageLog struct {
 	// They are nil/empty for non-OpenAI or historical rows without Persona routing.
 	AccountPersonaID *int64
 	PersonaProfile   string
-	RequestID        string
-	Model            string
+	// UpstreamTurnStateSizeBytes 仅保存上游原始状态头字节数，历史或缺失值为 nil。
+	UpstreamTurnStateSizeBytes *int
+	RequestID                  string
+	Model                      string
 	// RequestedModel is the client-requested model name recorded for stable user/admin display.
 	// Empty should be treated as Model for backward compatibility with historical rows.
 	RequestedModel string

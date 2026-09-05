@@ -259,8 +259,10 @@ type OpenAIForwardResult struct {
 	// upstream Responses WebSocket turn. Empty preserves legacy/non-WS success.
 	UpstreamTerminalEvent string
 	ResponseHeaders       http.Header
-	Duration              time.Duration
-	FirstTokenMs          *int
+	// UpstreamTurnStateSizeBytes 是 HTTP 上游原始状态头的字节数；WS 从握手头读取。
+	UpstreamTurnStateSizeBytes *int
+	Duration                   time.Duration
+	FirstTokenMs               *int
 	// FirstResponseMs 是上游响应头或 WS 连接/租约确认耗时。
 	FirstResponseMs *int
 	// FirstEventMs 是首个可解析 SSE data 或 WS 事件耗时。

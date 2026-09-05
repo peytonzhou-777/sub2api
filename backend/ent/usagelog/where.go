@@ -205,6 +205,11 @@ func AccountRateMultiplier(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldAccountRateMultiplier, v))
 }
 
+// UpstreamTurnStateSizeBytes applies equality check predicate on the "upstream_turn_state_size_bytes" field. It's identical to UpstreamTurnStateSizeBytesEQ.
+func UpstreamTurnStateSizeBytes(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldUpstreamTurnStateSizeBytes, v))
+}
+
 // BillingType applies equality check predicate on the "billing_type" field. It's identical to BillingTypeEQ.
 func BillingType(v int8) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldBillingType, v))
@@ -1653,6 +1658,56 @@ func AccountRateMultiplierIsNil() predicate.UsageLog {
 // AccountRateMultiplierNotNil applies the NotNil predicate on the "account_rate_multiplier" field.
 func AccountRateMultiplierNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldAccountRateMultiplier))
+}
+
+// UpstreamTurnStateSizeBytesEQ applies the EQ predicate on the "upstream_turn_state_size_bytes" field.
+func UpstreamTurnStateSizeBytesEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldUpstreamTurnStateSizeBytes, v))
+}
+
+// UpstreamTurnStateSizeBytesNEQ applies the NEQ predicate on the "upstream_turn_state_size_bytes" field.
+func UpstreamTurnStateSizeBytesNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldUpstreamTurnStateSizeBytes, v))
+}
+
+// UpstreamTurnStateSizeBytesIn applies the In predicate on the "upstream_turn_state_size_bytes" field.
+func UpstreamTurnStateSizeBytesIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldUpstreamTurnStateSizeBytes, vs...))
+}
+
+// UpstreamTurnStateSizeBytesNotIn applies the NotIn predicate on the "upstream_turn_state_size_bytes" field.
+func UpstreamTurnStateSizeBytesNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldUpstreamTurnStateSizeBytes, vs...))
+}
+
+// UpstreamTurnStateSizeBytesGT applies the GT predicate on the "upstream_turn_state_size_bytes" field.
+func UpstreamTurnStateSizeBytesGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldUpstreamTurnStateSizeBytes, v))
+}
+
+// UpstreamTurnStateSizeBytesGTE applies the GTE predicate on the "upstream_turn_state_size_bytes" field.
+func UpstreamTurnStateSizeBytesGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldUpstreamTurnStateSizeBytes, v))
+}
+
+// UpstreamTurnStateSizeBytesLT applies the LT predicate on the "upstream_turn_state_size_bytes" field.
+func UpstreamTurnStateSizeBytesLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldUpstreamTurnStateSizeBytes, v))
+}
+
+// UpstreamTurnStateSizeBytesLTE applies the LTE predicate on the "upstream_turn_state_size_bytes" field.
+func UpstreamTurnStateSizeBytesLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldUpstreamTurnStateSizeBytes, v))
+}
+
+// UpstreamTurnStateSizeBytesIsNil applies the IsNil predicate on the "upstream_turn_state_size_bytes" field.
+func UpstreamTurnStateSizeBytesIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldUpstreamTurnStateSizeBytes))
+}
+
+// UpstreamTurnStateSizeBytesNotNil applies the NotNil predicate on the "upstream_turn_state_size_bytes" field.
+func UpstreamTurnStateSizeBytesNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldUpstreamTurnStateSizeBytes))
 }
 
 // BillingTypeEQ applies the EQ predicate on the "billing_type" field.

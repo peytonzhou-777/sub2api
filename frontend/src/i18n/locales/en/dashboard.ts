@@ -368,6 +368,7 @@ export default {
     requestedReasoningEffort: 'Requested reasoning effort',
     endpoint: 'Endpoint',
     persona: 'Persona',
+    upstreamTurnStateSizeBytes: 'Upstream Turn State Size (B)',
     endpointDistribution: 'Endpoint Distribution',
     inbound: 'Inbound',
     upstream: 'Upstream',

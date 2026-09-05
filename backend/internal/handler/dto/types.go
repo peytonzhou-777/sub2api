@@ -589,6 +589,8 @@ type UsageLog struct {
 // AdminUsageLog 是管理员接口使用的 usage log DTO（包含管理员字段）。
 type AdminUsageLog struct {
 	UsageLog
+	// 上游原始状态头大小仅供管理员观察，不暴露状态内容。
+	UpstreamTurnStateSizeBytes *int `json:"upstream_turn_state_size_bytes"`
 	// OpenAI Persona snapshot used for this request (admin-only; absent for legacy/non-OpenAI rows).
 	AccountPersonaID *int64 `json:"account_persona_id,omitempty"`
 	PersonaProfile   string `json:"persona_profile,omitempty"`

@@ -582,6 +582,10 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	usageLog.DurationMs = &durationMs
 	usageLog.FirstTokenMs = result.FirstTokenMs
 	usageLog.FirstResponseMs = result.FirstResponseMs
+	usageLog.UpstreamTurnStateSizeBytes = result.UpstreamTurnStateSizeBytes
+	if usageLog.UpstreamTurnStateSizeBytes == nil {
+		usageLog.UpstreamTurnStateSizeBytes = upstreamTurnStateSizeBytes(result.ResponseHeaders)
+	}
 	usageLog.FirstEventMs = result.FirstEventMs
 	usageLog.FirstOutputMs = result.FirstOutputMs
 	if queueWaitMS := OpenAIAccountQueueWaitMSFromContext(ctx); queueWaitMS > 0 {

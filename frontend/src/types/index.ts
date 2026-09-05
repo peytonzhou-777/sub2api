@@ -1770,6 +1770,7 @@ export interface UsageLogAccountSummary {
 }
 
 export interface AdminUsageLog extends UsageLog {
+  upstream_turn_state_size_bytes?: number | null
 	account_persona_id?: number | null
 	persona_profile?: string | null
 	account_queue_wait_ms?: number | null

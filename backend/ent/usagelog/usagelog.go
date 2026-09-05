@@ -74,6 +74,8 @@ const (
 	FieldLongContextBillingApplied = "long_context_billing_applied"
 	// FieldAccountRateMultiplier holds the string denoting the account_rate_multiplier field in the database.
 	FieldAccountRateMultiplier = "account_rate_multiplier"
+	// FieldUpstreamTurnStateSizeBytes holds the string denoting the upstream_turn_state_size_bytes field in the database.
+	FieldUpstreamTurnStateSizeBytes = "upstream_turn_state_size_bytes"
 	// FieldBillingType holds the string denoting the billing_type field in the database.
 	FieldBillingType = "billing_type"
 	// FieldStream holds the string denoting the stream field in the database.
@@ -198,6 +200,7 @@ var Columns = []string{
 	FieldRateMultiplier,
 	FieldLongContextBillingApplied,
 	FieldAccountRateMultiplier,
+	FieldUpstreamTurnStateSizeBytes,
 	FieldBillingType,
 	FieldStream,
 	FieldDurationMs,
@@ -460,6 +463,11 @@ func ByLongContextBillingApplied(opts ...sql.OrderTermOption) OrderOption {
 // ByAccountRateMultiplier orders the results by the account_rate_multiplier field.
 func ByAccountRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAccountRateMultiplier, opts...).ToFunc()
+}
+
+// ByUpstreamTurnStateSizeBytes orders the results by the upstream_turn_state_size_bytes field.
+func ByUpstreamTurnStateSizeBytes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamTurnStateSizeBytes, opts...).ToFunc()
 }
 
 // ByBillingType orders the results by the billing_type field.

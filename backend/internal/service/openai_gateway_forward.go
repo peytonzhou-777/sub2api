@@ -1282,6 +1282,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 
 		forwardResult := &OpenAIForwardResult{
+			UpstreamTurnStateSizeBytes:    upstreamTurnStateSizeBytes(resp.Header),
 			RequestID:                     resp.Header.Get("x-request-id"),
 			ResponseID:                    responseID,
 			Usage:                         *usage,

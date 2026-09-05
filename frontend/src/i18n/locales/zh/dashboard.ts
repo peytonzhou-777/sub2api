@@ -373,6 +373,7 @@ export default {
     requestedReasoningEffort: '请求推理强度',
     endpoint: '端点',
     persona: 'Persona',
+    upstreamTurnStateSizeBytes: '上游 Turn State 大小 (B)',
     endpointDistribution: '端点分布',
     inbound: '入站',
     upstream: '上游',

@@ -98,6 +98,16 @@ func turnStateAADForContext(c *gin.Context, accountID int64) string {
 // codex-api/src/sse/responses.rs 与 endpoint/compact.rs）。
 const openAICodexTurnStateHeader = "x-codex-turn-state"
 
+// upstreamTurnStateSizeBytes 仅测量上游原始响应头值的字节数，不包含头名称或站点封装。
+func upstreamTurnStateSizeBytes(headers http.Header) *int {
+	raw := headers.Get(openAICodexTurnStateHeader)
+	if raw == "" {
+		return nil
+	}
+	size := len(raw)
+	return &size
+}
+
 type openAICodexTurnStateOrigin struct {
 	accountID int64
 	expiresAt time.Time
