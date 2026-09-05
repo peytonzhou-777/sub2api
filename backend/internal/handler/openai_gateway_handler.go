@@ -480,7 +480,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
-	c.Request = c.Request.WithContext(service.ContextWithOpenAIContinuationState(c.Request.Context(), c.Request.Header, body))
+	c.Request = c.Request.WithContext(service.ContextWithOpenAIContinuationState(c.Request.Context(), c.Request.Header, body, c.Request.URL.Path))
 	previousResponseID := strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String())
 	previousResponseCanMove := true
 	if previousResponseID != "" {
@@ -509,11 +509,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			apiKey.ID,
 		)
 		if errors.Is(ownershipErr, service.ErrOpenAIConversationResetRequired) {
-			h.errorResponse(c, http.StatusConflict, "invalid_request_error", "Conversation state expired; start a new conversation")
+			h.handleStreamingAwareErrorWithCode(c, http.StatusConflict, "invalid_request_error", "conversation_reset_required", "Conversation state expired; start a new conversation", streamStarted, false)
 			return
 		}
 		if ownershipErr != nil {
 			reqLog.Warn("openai.previous_response_owner_lookup_failed", zap.Error(ownershipErr))
+			h.handleStreamingAwareErrorWithCode(c, http.StatusServiceUnavailable, "server_error", "conversation_state_unavailable", "Conversation state temporarily unavailable; retry later", streamStarted, false)
+			return
 		}
 		if !owned {
 			reqLog.Warn("openai.request_validation_failed", zap.String("reason", "previous_response_owner_mismatch"))
@@ -670,7 +672,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
 			if errors.Is(err, service.ErrOpenAIConversationResetRequired) {
-				h.handleStreamingAwareError(c, http.StatusConflict, "invalid_request_error", "Conversation state expired; start a new conversation", streamStarted)
+				h.handleStreamingAwareErrorWithCode(c, http.StatusConflict, "invalid_request_error", "conversation_reset_required", "Conversation state expired; start a new conversation", streamStarted, false)
 				return
 			}
 			if errors.Is(err, service.ErrOpenAIPersonaUserCapacity) {
@@ -2911,11 +2913,14 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 
+	c.Request = c.Request.WithContext(ctx)
 	sessionHash := h.gatewayService.GenerateSessionHashWithFallback(
 		c,
 		firstMessage,
 		openAIWSIngressFallbackSessionSeed(subject.UserID, apiKey.ID, apiKey.GroupID),
 	)
+	// GenerateSessionHash 会补齐首帧 Thread 拓扑，选号必须继承该上下文。
+	ctx = c.Request.Context()
 	maxAccountSwitches := h.maxAccountSwitches
 	switchCount := 0
 	profitVetoCount := 0
@@ -3658,6 +3663,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		// turn 级定价：BeforeTurn 重新冻结 pricingAt 并按最新门复核当前账号；
 		// passthrough 没有 BeforeTurn 时，AfterTurn 回退到 TurnStarted 的所属 turn 时刻。
 		var turnPricing openAIWSTurnPricing
+		ctx = h.gatewayService.ContextWithOpenAIConversationReference(ctx, account.ID)
 		hooks := &service.OpenAIWSIngressHooks{
 			ClientLifecycleContext:      clientLifecycleCtx,
 			InitialRequestModel:         reqModel,
@@ -3667,6 +3673,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			ReasoningEffortMappings:     reasoningEffortMappings,
 			TurnStarted:                 recordTurnStart,
 			BeforeRequest: func(turn int, payload []byte, originalModel string) error {
+				conversationCtx := service.ContextWithOpenAIContinuationState(ctx, nil, payload)
 				c.Set(securityAuditWSTurnContextKey, turn)
 				service.BeginOpsStreamTurn(c, turn)
 				setCyberTurnBody(turn, payload)
@@ -3680,8 +3687,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if turn == 1 {
 					return nil
 				}
-				if err := h.gatewayService.ResumeOpenAIConversationActivity(ctx, account.ID); err != nil {
-					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "Conversation state expired; start a new conversation", err)
+				if err := h.gatewayService.ResumeOpenAIConversationActivity(conversationCtx, account.ID); err != nil {
+					recordOpenAIContinuationSelectionFailure(c, reqLog, err)
+					return openAIConversationWSResumeError(err)
 				}
 				if !gjson.ValidBytes(payload) {
 					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", errors.New("invalid json"))

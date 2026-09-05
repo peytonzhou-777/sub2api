@@ -67,6 +67,7 @@ type OpenAIUserAffinityConfig struct {
 	ResidentAccountSlotCount          int    `json:"resident_account_slot_count"`
 	ResidentTTLSeconds                int    `json:"resident_ttl_seconds"`
 	ConversationActiveTTLSeconds      int    `json:"conversation_active_ttl_seconds"`
+	ConversationIdentityTTLSeconds    int    `json:"conversation_identity_ttl_seconds"`
 	ConfigVersion                     int64  `json:"config_version"`
 	UpdatedAt                         string `json:"updated_at,omitempty"`
 }
@@ -93,6 +94,7 @@ func DefaultOpenAIUserAffinityConfig() OpenAIUserAffinityConfig {
 		ResidentAccountSlotCount:          1,
 		ResidentTTLSeconds:                7 * 24 * 60 * 60,
 		ConversationActiveTTLSeconds:      60 * 60,
+		ConversationIdentityTTLSeconds:    7 * 24 * 60 * 60,
 		ConfigVersion:                     0,
 	}
 }
@@ -121,6 +123,9 @@ func ValidateAndNormalizeOpenAIUserAffinityConfig(cfg OpenAIUserAffinityConfig) 
 	}
 	if cfg.ConversationActiveTTLSeconds == 0 {
 		cfg.ConversationActiveTTLSeconds = defaults.ConversationActiveTTLSeconds
+	}
+	if cfg.ConversationIdentityTTLSeconds == 0 {
+		cfg.ConversationIdentityTTLSeconds = defaults.ConversationIdentityTTLSeconds
 	}
 	if cfg.DefaultMaxResidentUsers == 0 {
 		cfg.DefaultMaxResidentUsers = defaults.DefaultMaxResidentUsers
@@ -170,6 +175,9 @@ func ValidateAndNormalizeOpenAIUserAffinityConfig(cfg OpenAIUserAffinityConfig) 
 	if cfg.ConversationActiveTTLSeconds < 5*60 || cfg.ConversationActiveTTLSeconds > 24*60*60 {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "conversation_active_ttl_seconds must be between 300 and 86400")
 	}
+	if cfg.ConversationIdentityTTLSeconds < 86400 || cfg.ConversationIdentityTTLSeconds > 30*86400 || cfg.ConversationIdentityTTLSeconds < cfg.ConversationActiveTTLSeconds {
+		return cfg, infraerrors.BadRequest("INVALID_OPENAI_USER_AFFINITY_CONFIG", "conversation_identity_ttl_seconds must be between 86400 and 2592000 and cover the active window")
+	}
 	return cfg, nil
 }
 
@@ -185,7 +193,7 @@ func (cfg OpenAIUserAffinityConfig) RuntimeResidentAccountSlotCount() int {
 	return cfg.ResidentAccountSlotCount
 }
 
-// ResidentTTL 返回常驻槽位及长期会话绑定的统一滑动 TTL。
+// ResidentTTL 只控制常驻选号偏好，不控制会话身份保留期。
 func (cfg OpenAIUserAffinityConfig) ResidentTTL() time.Duration {
 	return time.Duration(cfg.ResidentTTLSeconds) * time.Second
 }
@@ -193,6 +201,14 @@ func (cfg OpenAIUserAffinityConfig) ResidentTTL() time.Duration {
 // ConversationActiveTTL 返回新会话对常驻槽位的短期活跃占用 TTL。
 func (cfg OpenAIUserAffinityConfig) ConversationActiveTTL() time.Duration {
 	return time.Duration(cfg.ConversationActiveTTLSeconds) * time.Second
+}
+
+// ConversationIdentityTTL 独立保留可恢复的原会话身份，实际续接仍须通过 epoch/凭据校验。
+func (cfg OpenAIUserAffinityConfig) ConversationIdentityTTL() time.Duration {
+	if cfg.ConversationIdentityTTLSeconds <= 0 {
+		return 7 * 24 * time.Hour
+	}
+	return time.Duration(cfg.ConversationIdentityTTLSeconds) * time.Second
 }
 
 // decodeOpenAIUserAffinityConfig 兼容迁移前的触达容量键，便于滚动升级期间保留自定义上限。

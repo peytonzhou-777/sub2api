@@ -1494,6 +1494,18 @@ func (s *OpenAIGatewayService) ValidateOpenAIHTTPResponseOwner(
 		return false, nil
 	}
 	ownerUserID, ownerAPIKeyID, found, err := s.getOpenAIWSStateStore().GetHTTPResponseOwner(ctx, groupID, responseID)
+	// 缓存不是归属权威；缺失或故障时按同一 API Key 回源持久化别名。
+	if err != nil || !found {
+		if store, ok := s.accountRepo.(OpenAIUserAffinityConversationStore); ok {
+			binding, lookupErr := lookupOpenAIConversationResponseAlias(ctx, store, userID, apiKeyID, &groupID, responseID)
+			if lookupErr != nil {
+				return false, lookupErr
+			}
+			if binding != nil {
+				return true, nil
+			}
+		}
+	}
 	if err == nil && !found {
 		// 缓存归属过期后仍可用本租户的持久化失效证据区分旧续链和未知响应。
 		if expiry, ok := s.accountRepo.(OpenAIConversationActivityStore); ok {

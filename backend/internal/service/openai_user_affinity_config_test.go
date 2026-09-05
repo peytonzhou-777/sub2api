@@ -107,6 +107,8 @@ func TestValidateAndNormalizeOpenAIUserAffinityConfig(t *testing.T) {
 		{"resident slots", func(c *OpenAIUserAffinityConfig) { c.ResidentAccountSlotCount = 6 }},
 		{"resident ttl", func(c *OpenAIUserAffinityConfig) { c.ResidentTTLSeconds = 60 }},
 		{"conversation ttl", func(c *OpenAIUserAffinityConfig) { c.ConversationActiveTTLSeconds = 60 }},
+		{"identity ttl", func(c *OpenAIUserAffinityConfig) { c.ConversationIdentityTTLSeconds = 3600 }},
+		{"identity upper bound", func(c *OpenAIUserAffinityConfig) { c.ConversationIdentityTTLSeconds = 31 * 86400 }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -146,7 +148,7 @@ func TestOpenAIUserAffinityLegacyConfigFillsMultiSlotDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get legacy config: %v", err)
 	}
-	if cfg.ResidentAccountSlotCount != 1 || cfg.ResidentTTLSeconds != 604800 || cfg.ConversationActiveTTLSeconds != 3600 {
+	if cfg.ResidentAccountSlotCount != 1 || cfg.ResidentTTLSeconds != 604800 || cfg.ConversationActiveTTLSeconds != 3600 || cfg.ConversationIdentityTTLSeconds != 604800 {
 		t.Fatalf("legacy defaults were not filled: %+v", cfg)
 	}
 	if cfg.DefaultMaxResidentUsers != 37 {

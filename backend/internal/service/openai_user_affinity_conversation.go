@@ -99,8 +99,19 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 	}
 	identity, ok := resolveOpenAIUserConversationIdentity(ctx, req)
 	if !ok {
+		if identity.userID > 0 && identity.apiKeyID > 0 {
+			if opaque, _ := ctx.Value(openAIContinuationStateKey{}).(bool); opaque || OpenAIConversationRequestKind(ctx) != "response" {
+				return nil, true, openAIConversationRejection(ctx, ErrOpenAIConversationResetRequired, "identity_missing", identity.scopeKey)
+			}
+		}
 		return nil, false, nil
 	}
+	defer func() {
+		var detailed *OpenAIContinuationSelectionError
+		if resultErr != nil && !errors.As(resultErr, &detailed) {
+			resultErr = openAIConversationRejection(ctx, resultErr, "identity_lookup_failed", identity.scopeKey)
+		}
+	}()
 	store, ok := s.accountRepo.(OpenAIUserAffinityConversationStore)
 	if !ok {
 		return nil, false, nil
@@ -129,7 +140,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 				return nil, true, err
 			}
 			if expired {
-				return nil, true, ErrOpenAIConversationResetRequired
+				return nil, true, openAIConversationRejection(ctx, ErrOpenAIConversationResetRequired, "thread_expired", identity.scopeKey)
 			}
 		}
 	}
@@ -145,6 +156,15 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 	} else if identity.aliasHash != "" {
 		binding, err = store.GetOpenAIUserConversationBindingByAlias(ctx, identity.userID, identity.apiKeyID,
 			identity.scopeKey, identity.aliasType, identity.aliasHash)
+		if err != nil {
+			return nil, true, err
+		}
+		if binding != nil {
+			bindingSource = "protocol_alias"
+		}
+	}
+	if binding == nil && identity.aliasHash != "" {
+		binding, err = lookupOpenAIConversationResponseAlias(ctx, store, identity.userID, identity.apiKeyID, req.GroupID, req.PreviousResponseID)
 		if err != nil {
 			return nil, true, err
 		}
@@ -174,14 +194,14 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 	}
 	if binding == nil {
 		if topology != nil && len(topology.parentAliasHashes) > 0 {
-			return nil, true, ErrOpenAIConversationResetRequired
+			return nil, true, openAIConversationRejection(ctx, ErrOpenAIConversationResetRequired, "parent_missing", identity.scopeKey)
 		}
 		// 不可重建续链在作用域化 alias 未命中时必须失败关闭，禁止回落到 group 级旧缓存。
 		if identity.aliasHash != "" {
-			return nil, true, ErrOpenAIConversationResetRequired
+			return nil, true, openAIConversationRejection(ctx, ErrOpenAIConversationResetRequired, "response_alias_missing", identity.scopeKey)
 		}
 		if opaque, _ := ctx.Value(openAIContinuationStateKey{}).(bool); opaque {
-			return nil, true, ErrOpenAIConversationResetRequired
+			return nil, true, openAIConversationRejection(ctx, ErrOpenAIConversationResetRequired, "opaque_source_missing", identity.scopeKey)
 		}
 		if expiryStore, ok := s.accountRepo.(OpenAIConversationActivityStore); ok {
 			aliases := []OpenAIUserConversationAlias{}
@@ -198,14 +218,21 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 				return nil, true, err
 			}
 			if expired {
-				return nil, true, ErrOpenAIConversationResetRequired
+				return nil, true, openAIConversationRejection(ctx, ErrOpenAIConversationResetRequired, "identity_expired", identity.scopeKey)
 			}
+		}
+		if OpenAIConversationRequestKind(ctx) != "response" {
+			return nil, true, openAIConversationRejection(ctx, ErrNoAvailableAccounts, "conversation_not_ready", identity.scopeKey)
 		}
 		return nil, false, nil
 	}
 	defer func() {
 		if resultErr != nil {
-			resultErr = &OpenAIContinuationSelectionError{Cause: resultErr, BindingID: binding.ID, AccountID: binding.AccountID, AccountPersonaID: binding.AccountPersonaID, SessionEpoch: binding.PersonaSessionEpoch, Profile: string(binding.ProfileID), Source: bindingSource}
+			reason := "bound_target_unavailable"
+			if errors.Is(resultErr, ErrOpenAIConversationResetRequired) {
+				reason = "bound_identity_invalid"
+			}
+			resultErr = &OpenAIContinuationSelectionError{Cause: resultErr, BindingID: binding.ID, AccountID: binding.AccountID, AccountPersonaID: binding.AccountPersonaID, SessionEpoch: binding.PersonaSessionEpoch, Profile: string(binding.ProfileID), Source: bindingSource, Reason: reason, RequestKind: OpenAIConversationRequestKind(ctx), ScopeKey: identity.scopeKey}
 		}
 	}()
 	if binding.AccountPersonaID > 0 {
@@ -222,7 +249,7 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 			"user_id", identity.userID, "api_key_id", identity.apiKeyID, "scope_key", identity.scopeKey,
 			"binding_id", binding.ID, "account_id", binding.AccountID, "slot_id", binding.ResidentSlotID,
 			"slot_generation", binding.SlotGeneration)
-		if !binding.ContextRebuildable || !identity.contextRebuildable {
+		if binding.AccountPersonaID > 0 || !binding.ContextRebuildable || !identity.contextRebuildable {
 			return nil, true, ErrOpenAIConversationResetRequired
 		}
 		// reservation 会在 scope 锁内再次校验并把 stale binding 转回 provisional，
@@ -230,6 +257,10 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		return nil, false, nil
 	}
 	if bindingSource == "codex_parent" && (binding.Status == "provisional" || !binding.FirstOutputCommitted) {
+		return nil, true, ErrOpenAICodexParentThreadPending
+	}
+	if bindingSource == "codex_parent" && OpenAIConversationRequestKind(ctx) != "response" {
+		// 维护请求只能借用已有自身身份，不能替尚未启动的子线程创建 binding。
 		return nil, true, ErrOpenAICodexParentThreadPending
 	}
 	excluded := false
@@ -338,13 +369,16 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		// 为升级前或 v1 Session+Thread 索引命中的会话补齐稳定的 v2 Thread 别名。
 		legacyIdentity := identity
 		legacyIdentity.conversationHash = binding.ConversationHash
+		legacyIdentity.scopeKey = binding.ScopeKey
 		if err := s.reserveOpenAIUserAffinityConversationWithAliases(ctx, req, account.ID, legacyIdentity, []OpenAIUserConversationAlias{
 			openAICodexThreadReservationAlias(req.GroupID, identity.codexThreadHash),
 		}, nil, false); err != nil {
 			return nil, true, err
 		}
 	}
-	if topology != nil && parentBinding != nil && parentBinding.AccountID == account.ID {
+	if topology != nil && parentBinding != nil && parentBinding.AccountID == account.ID &&
+		parentBinding.AccountPersonaID == binding.AccountPersonaID && parentBinding.PersonaSessionEpoch == binding.PersonaSessionEpoch &&
+		parentBinding.CredentialChainID == binding.CredentialChainID {
 		topology.authorize(account.ID)
 	}
 	acquired, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
@@ -418,6 +452,9 @@ func (s *OpenAIGatewayService) rememberOpenAIUserAffinityConversationTransition(
 
 // reserveOpenAIUserAffinityConversation 为本次新会话创建首输出前 provisional 绑定。
 func (s *OpenAIGatewayService) reserveOpenAIUserAffinityConversation(ctx context.Context, req OpenAIAccountScheduleRequest, accountID int64) error {
+	if OpenAIConversationRequestKind(ctx) != "response" {
+		return openAIConversationRejection(ctx, ErrNoAvailableAccounts, "conversation_not_ready", "")
+	}
 	identity, ok := resolveOpenAIUserConversationIdentity(ctx, req)
 	if !ok || identity.conversationHash == "" {
 		return nil
@@ -636,14 +673,14 @@ func (s *OpenAIGatewayService) rollbackOpenAIUserAffinityConversation(ctx contex
 	}
 }
 
-// acceptOpenAICodexLineageBinding 只允许 lineage 恢复当前 endpoint scope 的权威 binding。
+// acceptOpenAICodexLineageBinding 允许同组 Responses 族跨 lane 恢复，其余历史 scope 保持隔离。
 func (s *OpenAIGatewayService) acceptOpenAICodexLineageBinding(
 	ctx context.Context,
 	req OpenAIAccountScheduleRequest,
 	identity openAIUserConversationIdentity,
 	binding *OpenAIUserConversationBinding,
 ) *OpenAIUserConversationBinding {
-	if binding == nil || binding.ScopeKey == identity.scopeKey {
+	if binding == nil || OpenAIConversationScopesCompatible(binding.ScopeKey, identity.scopeKey) {
 		return binding
 	}
 	s.observeOpenAIUserAffinityRecovery("stale_lineage_scope_mismatch",

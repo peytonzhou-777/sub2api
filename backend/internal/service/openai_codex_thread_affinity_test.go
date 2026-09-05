@@ -87,9 +87,14 @@ func TestOpenAICodexThreadAffinitySkipsNonTurnRequests(t *testing.T) {
 			c.Request.URL.Path = test.path
 			svc.GenerateSessionHash(c, test.body)
 			state := stagedOpenAICodexThreadAffinity(c)
-			require.NotNil(t, state, "非 turn 仍需保留本地子代理语义用于出站剥离")
-			require.Empty(t, state.selfAliasHash)
-			require.Empty(t, state.parentAliasHashes)
+			require.NotNil(t, state, "保留本地子代理语义用于出站剥离")
+			if test.name == "input_tokens" || test.name == "chat_completions" {
+				require.Empty(t, state.selfAliasHash)
+				require.Empty(t, state.parentAliasHashes)
+			} else {
+				require.NotEmpty(t, state.selfAliasHash)
+				require.NotEmpty(t, state.parentAliasHashes)
+			}
 			require.True(t, state.internalSubagent)
 		})
 	}

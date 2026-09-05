@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -42,6 +43,37 @@ func openAIUserAffinityScopeKey(groupID *int64, requireCompact bool, endpointCap
 		lane += ":transport:" + string(transport)
 	}
 	return "openai:v1:group:" + group + ":lane:" + lane
+}
+
+// OpenAIConversationScopesCompatible 将 Responses 的能力/传输 lane 与持久身份分开，保留分组边界。
+func OpenAIConversationScopesCompatible(left, right string) bool {
+	if left == right {
+		return true
+	}
+	family := func(scope string) (string, bool) {
+		group, lane, ok := strings.Cut(scope, ":lane:")
+		if !ok || !strings.HasPrefix(group, "openai:v1:group:") {
+			return "", false
+		}
+		lane, transport, hasTransport := strings.Cut(lane, ":transport:")
+		if hasTransport {
+			switch OpenAIUpstreamTransport(transport) {
+			case OpenAIUpstreamTransportHTTPSSE, OpenAIUpstreamTransportResponsesWebsocket,
+				OpenAIUpstreamTransportResponsesWebsocketV2, OpenAIUpstreamTransportResponsesWebsocketV2Ingress:
+			default:
+				return "", false
+			}
+		}
+		switch lane {
+		case "general", "compact", "endpoint:responses":
+			return group, true
+		default:
+			return "", false
+		}
+	}
+	l, lok := family(left)
+	r, rok := family(right)
+	return lok && rok && l == r
 }
 
 // SelectOpenAIUserAffinityCandidate 按额度主窗口选择剩余容量更充足的新居民账号。

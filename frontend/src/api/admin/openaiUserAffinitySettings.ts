@@ -21,6 +21,7 @@ export interface OpenAIUserAffinityConfig {
   resident_account_slot_count: number
   resident_ttl_seconds: number
   conversation_active_ttl_seconds: number
+  conversation_identity_ttl_seconds: number
   config_version: number
   updated_at: string
 }

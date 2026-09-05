@@ -51,6 +51,7 @@ const config = {
   resident_account_slot_count: 1,
   resident_ttl_seconds: 604800,
   conversation_active_ttl_seconds: 3600,
+  conversation_identity_ttl_seconds: 604800,
   config_version: 1,
   updated_at: '2026-08-15T00:00:00Z'
 }
@@ -82,12 +83,15 @@ describe('OpenAIUserAffinitySettings', () => {
 
     expect(wrapper.find('[data-test="affinity-details"]').exists()).toBe(true)
     expect(wrapper.find('input[type="text"]').exists()).toBe(false)
-    expect(wrapper.findAll('input[type="number"]')).toHaveLength(14)
+    expect(wrapper.findAll('input[type="number"]')).toHaveLength(15)
+    const identityTTL = wrapper.findAll('label').find(label => label.text().includes('admin.settings.openAIUserAffinity.conversationIdentityTTL'))
+    expect(identityTTL).toBeDefined()
+    await identityTTL!.get('input').setValue('432000')
 
     await wrapper.get('button.btn-primary').trigger('click')
     await flushPromises()
 
-    expect(updateScheduling).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }))
+    expect(updateScheduling).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, conversation_identity_ttl_seconds: 432000 }))
     expect(updateScheduling.mock.calls[0]).toHaveLength(1)
   })
 })

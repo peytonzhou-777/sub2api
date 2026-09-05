@@ -35,7 +35,7 @@ func (r *accountRepository) ReconcileOpenAIUserAffinity(ctx context.Context, now
 			pending_resident_slot_id = NULL, pending_account_id = NULL, pending_slot_generation = NULL,
 			pending_token = NULL, pending_expires_at = NULL, updated_at = $1
 			WHERE status IN ('provisional', 'active', 'draining', 'reset')
-              AND LEAST(COALESCE(active_until,expires_at),expires_at) <= $1::timestamptz
+              AND expires_at <= $1::timestamptz
               AND NOT openai_conversation_has_activity(id)`},
 		{"conversation_pending", `UPDATE openai_user_conversation_bindings SET
 			pending_resident_slot_id = NULL, pending_account_id = NULL, pending_slot_generation = NULL,

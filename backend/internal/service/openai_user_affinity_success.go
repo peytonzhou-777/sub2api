@@ -20,7 +20,11 @@ type openAIUserAffinityAcceptedState struct {
 
 // RecordOpenAIUserAffinityAccepted 在收到首个非错误上游响应时冻结成功判定配置。
 func (s *OpenAIGatewayService) RecordOpenAIUserAffinityAccepted(ctx context.Context, accountID int64, eventKeys ...string) {
+	if s.isOpenAIConversationPrewarm(ctx) {
+		return
+	}
 	commitOpenAIPersonaUserReservation(ctx, accountID)
+	s.commitOpenAIConversationPersonaReservation(ctx)
 	if s != nil {
 		s.touchOpenAIConversationActivity(ctx, accountID)
 	}
@@ -46,6 +50,10 @@ func (s *OpenAIGatewayService) RecordOpenAIUserAffinityAccepted(ctx context.Cont
 // RecordOpenAIUserAffinitySuccess 在响应或 WebSocket turn 成功完成后消费 accepted 事实。
 func (s *OpenAIGatewayService) RecordOpenAIUserAffinitySuccess(ctx context.Context, accountID int64, eventKeys ...string) {
 	defer s.endOpenAIConversationActivity(ctx)
+	if s.isOpenAIConversationPrewarm(ctx) {
+		rollbackOpenAIPersonaUserReservation(ctx, accountID)
+		return
+	}
 	if s == nil || accountID <= 0 {
 		return
 	}

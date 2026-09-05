@@ -97,17 +97,17 @@ func (r *accountRepository) TouchOpenAIConversationActivity(ctx context.Context,
 	var count int
 	err := scanSingleRow(ctx, r.sql, `WITH touched AS (
  UPDATE openai_user_conversation_bindings SET active_until=GREATEST(active_until,$7::timestamptz),
- expires_at=GREATEST(active_until,$7::timestamptz), last_success_at=GREATEST(last_success_at,$6::timestamptz),updated_at=$6::timestamptz
+ expires_at=GREATEST(expires_at,$8::timestamptz), last_success_at=GREATEST(last_success_at,$6::timestamptz),updated_at=$6::timestamptz
  WHERE id=$1 AND user_id=$2 AND api_key_id=$3 AND account_id=$4 AND slot_generation=$5
  AND status IN ('provisional','active','draining') AND openai_conversation_is_live(id,active_until,expires_at)
- RETURNING id,user_id,account_persona_id,active_until
+ RETURNING id,user_id,account_persona_id,active_until,expires_at
  ), aliases AS (
- UPDATE openai_user_conversation_aliases a SET expires_at=t.active_until FROM touched t WHERE a.binding_id=t.id
+ UPDATE openai_user_conversation_aliases a SET expires_at=t.expires_at FROM touched t WHERE a.binding_id=t.id
  ), leases AS (
  UPDATE openai_persona_active_user_leases l SET last_active_at=GREATEST(last_active_at,$6::timestamptz),
  active_until=GREATEST(l.active_until,t.active_until),updated_at=$6::timestamptz FROM touched t
  WHERE l.account_persona_id=t.account_persona_id AND l.user_id=t.user_id AND l.state='active'
- ) SELECT COUNT(*) FROM touched`, []any{tr.BindingID, tr.UserID, tr.APIKeyID, tr.AccountID, tr.SlotGeneration, now, now.Add(tr.Config.ConversationActiveTTL())}, &count)
+ ) SELECT COUNT(*) FROM touched`, []any{tr.BindingID, tr.UserID, tr.APIKeyID, tr.AccountID, tr.SlotGeneration, now, now.Add(tr.Config.ConversationActiveTTL()), now.Add(tr.Config.ConversationIdentityTTL())}, &count)
 	return count == 1, err
 }
 

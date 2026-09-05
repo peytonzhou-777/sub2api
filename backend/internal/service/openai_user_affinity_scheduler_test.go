@@ -100,6 +100,7 @@ type schedulerConversationAffinityRepo struct {
 	evictedSlots               []OpenAIUserResidentSlotVersion
 	aliasType                  string
 	aliasHash                  string
+	aliasLookups               []string
 	aliasBindings              map[string]*OpenAIUserConversationBinding
 	reservationErrors          map[int64]error
 	slotsAfterReservationError map[int64][]OpenAIUserResidentSlot
@@ -183,6 +184,7 @@ func (r *schedulerConversationAffinityRepo) GetOpenAIUserConversationBinding(_ c
 func (r *schedulerConversationAffinityRepo) GetOpenAIUserConversationBindingByAlias(_ context.Context, _, _ int64, scopeKey, aliasType, aliasHash string) (*OpenAIUserConversationBinding, error) {
 	r.aliasType = aliasType
 	r.aliasHash = aliasHash
+	r.aliasLookups = append(r.aliasLookups, aliasHash)
 	if binding := r.aliasBindings[scopeKey+"\x00"+aliasType+"\x00"+aliasHash]; binding != nil {
 		copy := *binding
 		return &copy, nil
@@ -1536,9 +1538,9 @@ func TestOpenAIGatewayService_UnknownStrictResponseAliasFailsClosed(t *testing.T
 	require.True(t, found)
 	require.Nil(t, selection)
 	require.Equal(t, "response_id", repo.aliasType)
-	require.Equal(t, openAIUserAffinityScopedStateHash(42, 77,
+	require.Contains(t, repo.aliasLookups, openAIUserAffinityScopedStateHash(42, 77,
 		openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE),
-		"response_id", "resp_unknown_owner"), repo.aliasHash)
+		"response_id", "resp_unknown_owner"))
 }
 
 func TestDefaultOpenAIAccountScheduler_DoesNotUseGroupResponseCacheWhenAffinityIsEnabled(t *testing.T) {

@@ -30,6 +30,7 @@ const config: OpenAIUserAffinityConfig = {
   resident_account_slot_count: 1,
   resident_ttl_seconds: 604800,
   conversation_active_ttl_seconds: 3600,
+  conversation_identity_ttl_seconds: 604800,
   config_version: 7,
   updated_at: '2026-08-15T00:00:00Z'
 }

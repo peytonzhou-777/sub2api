@@ -60,8 +60,8 @@ func TestConversationActivityTTLAndInFlightProtection(t *testing.T) {
 	}
 	binding := load()
 	require.NotNil(t, binding)
-	require.WithinDuration(t, *binding.ActiveUntil, binding.ExpiresAt, time.Millisecond)
-	require.WithinDuration(t, now.Add(40*time.Minute), binding.ExpiresAt, 5*time.Second)
+	require.WithinDuration(t, now.Add(40*time.Minute), *binding.ActiveUntil, 5*time.Second)
+	require.WithinDuration(t, now.Add(tr.Config.ConversationIdentityTTL()), binding.ExpiresAt, 5*time.Second)
 	token := uuid.NewString()
 	acquired, err := repo.AcquireOpenAIConversationActivity(ctx, tr, token, now.Add(2*time.Minute))
 	require.NoError(t, err)
@@ -74,6 +74,14 @@ func TestConversationActivityTTLAndInFlightProtection(t *testing.T) {
 	byAlias, err := repo.GetOpenAIUserConversationBindingByAlias(ctx, tr.UserID, tr.APIKeyID, tr.ScopeKey, "codex_thread", strings.Repeat("b", 64))
 	require.NoError(t, err)
 	require.NotNil(t, byAlias)
+	reserved, created, err := repo.ReserveOpenAIUserConversationBinding(ctx, service.OpenAIUserConversationReservation{
+		UserID: tr.UserID, APIKeyID: tr.APIKeyID, ScopeKey: tr.ScopeKey, ConversationHash: tr.ConversationHash,
+		AccountID: tr.AccountID, PlacementGeneration: tr.SlotGeneration, ProvisionalToken: uuid.NewString(), Config: tr.Config,
+		Aliases: []service.OpenAIUserConversationAlias{{ScopeKey: tr.ScopeKey, Type: "codex_thread", Hash: strings.Repeat("b", 64)}},
+	})
+	require.NoError(t, err)
+	require.False(t, created, "在途身份不能因原截止时间到期被重新预留")
+	require.Equal(t, tr.BindingID, reserved.ID)
 	require.NoError(t, repo.ConvergeOpenAIUserResidentSlots(ctx, tr.UserID, tr.ScopeKey, tr.Config, now))
 	alive, err := repo.RenewOpenAIConversationActivity(ctx, token, now.Add(2*time.Minute))
 	require.NoError(t, err)
@@ -88,8 +96,8 @@ func TestConversationActivityTTLAndInFlightProtection(t *testing.T) {
 	require.NoError(t, repo.ReleaseOpenAIConversationActivity(ctx, token))
 	binding = load()
 	require.NotNil(t, binding)
-	require.WithinDuration(t, *binding.ActiveUntil, binding.ExpiresAt, time.Millisecond)
-	require.WithinDuration(t, time.Now().Add(tr.Config.ConversationActiveTTL()), binding.ExpiresAt, 5*time.Second)
+	require.WithinDuration(t, time.Now().Add(tr.Config.ConversationActiveTTL()), *binding.ActiveUntil, 5*time.Second)
+	require.WithinDuration(t, time.Now().Add(tr.Config.ConversationIdentityTTL()), binding.ExpiresAt, 5*time.Second)
 }
 
 func TestConversationActivityHoldCannotProtectChangedGeneration(t *testing.T) {
@@ -99,7 +107,7 @@ func TestConversationActivityHoldCannotProtectChangedGeneration(t *testing.T) {
 	held, err := repo.AcquireOpenAIConversationActivity(ctx, tr, token, time.Now().Add(time.Minute))
 	require.NoError(t, err)
 	require.True(t, held)
-	_, err = repo.sql.ExecContext(ctx, `UPDATE openai_user_conversation_bindings SET slot_generation=slot_generation+1,active_until=NOW()-INTERVAL '1 hour' WHERE id=$1`, tr.BindingID)
+	_, err = repo.sql.ExecContext(ctx, `UPDATE openai_user_conversation_bindings SET slot_generation=slot_generation+1,active_until=NOW()-INTERVAL '1 hour',expires_at=NOW()-INTERVAL '1 hour' WHERE id=$1`, tr.BindingID)
 	require.NoError(t, err)
 	b, err := repo.GetOpenAIUserConversationBinding(ctx, tr.UserID, tr.APIKeyID, tr.ScopeKey, tr.ConversationHash)
 	require.NoError(t, err)
@@ -114,7 +122,7 @@ func TestConversationActivityExpiredIdentityCannotResurrect(t *testing.T) {
 	repo, tr := conversationActivityFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	_, err := repo.sql.ExecContext(ctx, `UPDATE openai_user_conversation_bindings SET active_until=$2::timestamptz,expires_at=$3::timestamptz WHERE id=$1`, tr.BindingID, now.Add(-time.Hour), now.Add(72*time.Hour))
+	_, err := repo.sql.ExecContext(ctx, `UPDATE openai_user_conversation_bindings SET active_until=$2::timestamptz,expires_at=$3::timestamptz WHERE id=$1`, tr.BindingID, now.Add(-time.Hour), now.Add(-time.Hour))
 	require.NoError(t, err)
 	b, err := repo.GetOpenAIUserConversationBinding(ctx, tr.UserID, tr.APIKeyID, tr.ScopeKey, tr.ConversationHash)
 	require.NoError(t, err)

@@ -72,7 +72,7 @@ func (s *OpenAIGatewayService) stageOpenAICodexThreadAffinity(c *gin.Context, bo
 		return
 	}
 	original := extractCodexFingerprintOriginalIDs(c.Request.Header, body)
-	bindConversation := isOpenAICodexConversationTurn(c, body)
+	bindConversation := isOpenAICodexConversationIdentityRequest(c)
 	if !bindConversation && !original.isSubagent {
 		return
 	}
@@ -123,22 +123,19 @@ func (s *OpenAIGatewayService) stageOpenAICodexThreadAffinity(c *gin.Context, bo
 	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), openAICodexThreadAffinityContextKey{}, state))
 }
 
-// isOpenAICodexConversationTurn 仅让会生成对话输出的 Responses turn 建立线程绑定。
-func isOpenAICodexConversationTurn(c *gin.Context, body []byte) bool {
+// isOpenAICodexConversationIdentityRequest 让压缩和预热也能恢复已有身份，是否新建绑定另行判断。
+func isOpenAICodexConversationIdentityRequest(c *gin.Context) bool {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		return false
 	}
 	normalizedPath := strings.TrimRight(strings.TrimSpace(c.Request.URL.Path), "/")
 	switch normalizedPath {
-	case "/v1/responses", "/openai/v1/responses", "/responses", "/backend-api/codex/responses":
+	case "/v1/responses", "/openai/v1/responses", "/responses", "/backend-api/codex/responses",
+		"/v1/responses/compact", "/openai/v1/responses/compact", "/responses/compact", "/backend-api/codex/responses/compact":
 	default:
 		return false
 	}
-	if HasCompactionTriggerInInput(body) {
-		return false
-	}
-	generate := gjson.GetBytes(body, "generate")
-	return !generate.Exists() || generate.Type != gjson.False
+	return true
 }
 
 func equalOpenAICodexThreadHashes(left, right []string) bool {
@@ -238,7 +235,7 @@ func resolveOpenAICodexThreadBindings(
 	var parentHint *OpenAIUserConversationBinding
 	for _, hash := range sortedOpenAICodexThreadHashes(state.parentAliasHashes) {
 		if hash == state.selfAliasHash {
-			if selfBinding != nil && selfBinding.ScopeKey != identity.scopeKey {
+			if selfBinding != nil && !OpenAIConversationScopesCompatible(selfBinding.ScopeKey, identity.scopeKey) {
 				continue
 			}
 			if selfBinding != nil {
@@ -253,14 +250,14 @@ func resolveOpenAICodexThreadBindings(
 		if candidate == nil {
 			continue
 		}
-		if candidate.ScopeKey != identity.scopeKey {
+		if !OpenAIConversationScopesCompatible(candidate.ScopeKey, identity.scopeKey) {
 			if parentHint == nil {
 				parentHint = candidate
 			}
 			continue
 		}
 		if parentBinding != nil && (parentBinding.ID != candidate.ID || parentBinding.AccountID != candidate.AccountID) {
-			if selfBinding != nil && selfBinding.ScopeKey == identity.scopeKey {
+			if selfBinding != nil && OpenAIConversationScopesCompatible(selfBinding.ScopeKey, identity.scopeKey) {
 				return selfBinding, nil, nil
 			}
 			return nil, nil, ErrOpenAICodexThreadLineageConflict
