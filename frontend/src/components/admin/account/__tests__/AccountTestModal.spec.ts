@@ -83,7 +83,9 @@ function mountModal(account: Record<string, unknown> = {
       stubs: {
         BaseDialog: { template: '<div><slot /><slot name="footer" /></div>' },
         Select: {
+          name: 'Select',
           props: ['options'],
+          emits: ['update:modelValue'],
           template: '<div class="select-stub">{{ (options || []).map((option) => option.label || option.display_name).join(" | ") }}</div>'
         },
         TextArea: {
@@ -321,7 +323,10 @@ describe('AccountTestModal', () => {
     ]])
   })
 
-  it('动态 Persona 降智检测显示身份并提交稳定 ID', async () => {
+  it.each([
+    { name: '普通 OAuth 账号', id: 51, parent_account_id: undefined },
+    { name: '存量影子账号', id: 52, parent_account_id: 51 }
+  ])('$name 可选择动态 Persona 并提交所选稳定 ID', async ({ name, id, parent_account_id }) => {
     getAvailableModels.mockResolvedValue([
       { id: 'gpt-5.4', display_name: 'GPT-5.4' }
     ])
@@ -350,9 +355,9 @@ describe('AccountTestModal', () => {
     ) as any
 
     const wrapper = mountModal({
-      id: 52,
-      parent_account_id: 51,
-      name: 'OpenAI Persona Shadow',
+      id,
+      parent_account_id,
+      name,
       platform: 'openai',
       type: 'oauth',
       status: 'active'
@@ -365,8 +370,16 @@ describe('AccountTestModal', () => {
     expect(wrapper.text()).toContain('OpenCode')
     expect((wrapper.vm as any).selectedAccountPersonaId).toBe(5101)
 
-    ;(wrapper.vm as any).selectedAccountPersonaId = 5102
-    await (wrapper.vm as any).startTest()
+    const personaSelect = wrapper.findAllComponents({ name: 'Select' }).find((select) =>
+      select.props('options').some((option: { value?: number }) => option.value === 5102)
+    )
+    expect(personaSelect).toBeDefined()
+    personaSelect!.vm.$emit('update:modelValue', 5102)
+    await flushPromises()
+    const startButton = wrapper.findAll('button').find((button) =>
+      button.text().includes('admin.accounts.startIntelligenceTest')
+    )
+    await startButton!.trigger('click')
     await flushPromises()
 
     const [, request] = (global.fetch as any).mock.calls[0]

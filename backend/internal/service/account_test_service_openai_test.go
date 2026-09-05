@@ -281,9 +281,6 @@ func newOpenAIPersonaV3IntelligenceAccount(id int64) *Account {
 		Credentials: map[string]any{
 			"chatgpt_account_id": "org-persona-v3",
 		},
-		Extra: map[string]any{
-			codexFingerprintModeExtraKey: "off",
-		},
 	}
 }
 
@@ -346,14 +343,19 @@ func newOpenAIPersonaV3IntelligenceService(t *testing.T, repo *openAIAccountTest
 	}
 	repo.OpenAIAccountPersonaRepository = repo
 	oauth.configureAccountPersonaStore(repo)
-	return &AccountTestService{
-		accountRepo:         repo,
-		httpUpstream:        upstream,
-		openAITokenProvider: NewOpenAITokenProvider(repo, cache, oauth),
-		cfg: &config.Config{Gateway: config.GatewayConfig{
+	// 普通账号仓库不暴露 Persona 接口，按生产依赖注入路径构造检测服务。
+	accountRepo := struct {
+		AccountRepository
+		CodexFingerprintSecretRepository
+	}{repo, &codexOAuthProbeTestRepo{}}
+	return ProvideAccountTestService(
+		accountRepo, repo, nil, nil, nil, nil, upstream,
+		&config.Config{Gateway: config.GatewayConfig{
 			CodexOutboundProfileDefault: CodexOutboundProfileCLI0149,
+			CodexFingerprintSecret:      string(testCodexFingerprintV3Secret()),
 		}},
-	}
+		nil, nil, NewOpenAITokenProvider(accountRepo, cache, oauth), nil, nil,
+	)
 }
 
 func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotZeroUsesStrictCodex(t *testing.T) {
@@ -372,6 +374,10 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotZeroUsesStrictCode
 	require.Len(t, upstream.requests, 1)
 	req := upstream.requests[0]
 	require.Equal(t, "Bearer strict-token", req.Header.Get("Authorization"))
+	target, ok := OpenAIExecutionTargetFromContext(req.Context())
+	require.True(t, ok)
+	require.Equal(t, personaID, target.AccountPersonaID)
+	require.Equal(t, "strict-session", target.UpstreamSessionID)
 	require.Equal(t, "codex_cli_rs", req.Header.Get("originator"))
 	require.True(t, strings.HasPrefix(req.Header.Get("User-Agent"), "codex_cli_rs/0.149.0 "))
 	require.Equal(t, "zstd", req.Header.Get("Content-Encoding"))
@@ -396,6 +402,10 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotOneUsesOpenCodeCha
 	require.Len(t, upstream.requests, 1)
 	req := upstream.requests[0]
 	require.Equal(t, "Bearer opencode-token", req.Header.Get("Authorization"))
+	target, ok := OpenAIExecutionTargetFromContext(req.Context())
+	require.True(t, ok)
+	require.Equal(t, personaID, target.AccountPersonaID)
+	require.Equal(t, "opencode-session", target.UpstreamSessionID)
 	require.Equal(t, "opencode", req.Header.Get("originator"))
 	require.True(t, strings.HasPrefix(req.Header.Get("User-Agent"), "opencode/"+SessionPersonaOpenCodeVersion))
 	require.Equal(t, "org-persona-v3", req.Header.Get("chatgpt-account-id"))
@@ -474,6 +484,24 @@ func TestAccountTestService_OpenAIOAuthIntelligencePersonaSlotFailsClosed(t *tes
 			require.Contains(t, recorder.Body.String(), testCase.wantError)
 		})
 	}
+}
+
+// 缺少显式 Persona 仓库时禁止回退到普通账号仓库或发起上游请求。
+func TestAccountTestService_OpenAIOAuthIntelligenceMissingPersonaRepository(t *testing.T) {
+	ctx, recorder := newTestContext()
+	account := newOpenAIPersonaV3IntelligenceAccount(210)
+	repo := &openAIAccountTestRepo{mockAccountRepoForGemini: mockAccountRepoForGemini{
+		accountsByID: map[int64]*Account{account.ID: account},
+	}}
+	upstream := &queuedHTTPUpstream{}
+	svc := newOpenAIPersonaV3IntelligenceService(t, repo, upstream)
+	svc.SetAccountPersonaRepository(nil)
+	personaID := account.ID*10 + 1
+
+	err := svc.TestOpenAIOAuthIntelligence(ctx, account.ID, "gpt-5.4", &personaID)
+	require.ErrorContains(t, err, "OpenAI AccountPersona repository is not configured")
+	require.Contains(t, recorder.Body.String(), "OpenAI AccountPersona repository is not configured")
+	require.Empty(t, upstream.requests)
 }
 
 func TestAccountTestService_OpenAIOAuthIntelligenceRejectsUnsupportedAccounts(t *testing.T) {

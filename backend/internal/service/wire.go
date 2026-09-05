@@ -267,6 +267,7 @@ func ProvideAccountUsageService(
 
 func ProvideAccountTestService(
 	accountRepo AccountRepository,
+	accountPersonaRepo OpenAIAccountPersonaRepository,
 	geminiTokenProvider *GeminiTokenProvider,
 	claudeTokenProvider *ClaudeTokenProvider,
 	grokTokenProvider *GrokTokenProvider,
@@ -290,6 +291,7 @@ func ProvideAccountTestService(
 		tlsFPProfileService,
 	)
 	service.agentIdentityWS = openAIGatewayService
+	service.SetAccountPersonaRepository(accountPersonaRepo)
 	service.SetOpenAITokenProvider(openAITokenProvider)
 	service.SetSettingService(settingService)
 	service.SetPluginManager(pluginManager)

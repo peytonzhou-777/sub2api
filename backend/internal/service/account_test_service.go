@@ -145,6 +145,7 @@ func normalizeGrokAccountTestMode(mode string) string {
 // AccountTestService handles account testing operations
 type AccountTestService struct {
 	accountRepo               AccountRepository
+	accountPersonaRepo        OpenAIAccountPersonaRepository
 	geminiTokenProvider       *GeminiTokenProvider
 	claudeTokenProvider       *ClaudeTokenProvider
 	openAITokenProvider       *OpenAITokenProvider
@@ -175,6 +176,13 @@ func (s *AccountTestService) SetSettingService(settingService *SettingService) {
 func (s *AccountTestService) SetOpenAITokenProvider(tokenProvider *OpenAITokenProvider) {
 	if s != nil {
 		s.openAITokenProvider = tokenProvider
+	}
+}
+
+// SetAccountPersonaRepository 注入独立的 Persona 仓库，用于解析检测目标及其 Session。
+func (s *AccountTestService) SetAccountPersonaRepository(repo OpenAIAccountPersonaRepository) {
+	if s != nil {
+		s.accountPersonaRepo = repo
 	}
 }
 
@@ -745,8 +753,8 @@ func (s *AccountTestService) testOpenAIAccountConnectionWithOptions(c *gin.Conte
 		binding := testOptions.personaBinding.Clone()
 		personaBinding = &binding
 	} else if testOptions.accountPersonaID != nil {
-		repo, ok := s.accountRepo.(OpenAIAccountPersonaRepository)
-		if !ok {
+		repo := s.accountPersonaRepo
+		if repo == nil {
 			return s.sendErrorAndEnd(c, "OpenAI AccountPersona repository is not configured")
 		}
 		persona, personaErr := repo.GetAccountPersona(ctx, credentialAccount.ID, *testOptions.accountPersonaID)
