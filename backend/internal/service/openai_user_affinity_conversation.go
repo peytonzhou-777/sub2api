@@ -286,8 +286,8 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityConversation(ctx context.
 		}, binding, false); err != nil {
 			return nil, true, err
 		}
-	} else if bindingSource != "codex_self" && identity.codexThreadHash != "" {
-		// 为升级前已存在的会话补齐线程别名，后续子线程可直接按父系索引命中。
+	} else if bindingSource != "codex_parent" && identity.codexThreadHash != "" {
+		// 为升级前或 v1 Session+Thread 索引命中的会话补齐稳定的 v2 Thread 别名。
 		legacyIdentity := identity
 		legacyIdentity.conversationHash = binding.ConversationHash
 		if err := s.reserveOpenAIUserAffinityConversationWithAliases(ctx, req, account.ID, legacyIdentity, []OpenAIUserConversationAlias{
@@ -482,7 +482,7 @@ func (s *OpenAIGatewayService) rememberOpenAIUserAffinityConversationAttempt(ctx
 		BindingEpoch:     binding.BindingEpoch,
 		AccountPersonaID: binding.AccountPersonaID, PersonaSessionEpoch: binding.PersonaSessionEpoch,
 		CredentialChainID: binding.CredentialChainID, RootClientSessionHash: binding.RootClientSessionHash,
-		UserGroupLeaseID: binding.UserGroupLeaseID, ProfileID: binding.ProfileID, ProfileVersion: binding.ProfileVersion,
+		ProfileID: binding.ProfileID, ProfileVersion: binding.ProfileVersion,
 		ManageActiveRoute: binding.ManageActiveRoute, ActiveRoutePending: binding.ActiveRoutePending,
 	}
 	if binding.FirstOutputCommitted {
@@ -513,7 +513,6 @@ func (s *OpenAIGatewayService) bindOpenAIUserAffinityConversationExecutionTarget
 	attempt.conversation.PersonaSessionEpoch = target.SessionEpoch
 	attempt.conversation.CredentialChainID = target.CredentialChainID
 	attempt.conversation.RootClientSessionHash = transition.RootClientSessionHash
-	attempt.conversation.UserGroupLeaseID = target.UserGroupLeaseID
 	attempt.conversation.ProfileID = target.ProfileID
 	attempt.conversation.ProfileVersion = target.ProfileVersion
 	return nil

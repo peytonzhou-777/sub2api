@@ -14,7 +14,7 @@ const config: OpenAIAccountAdmissionConfig = {
   queue_enabled: true,
   max_wait_seconds: 45,
   max_concurrency: 0,
-  max_active_client_sessions: 1,
+  default_max_active_users_per_persona: 1,
   requests_per_minute: 60,
   tokens_per_minute: 120000,
   max_subagents: 0,

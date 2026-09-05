@@ -155,37 +155,37 @@ func parseOpenAIAccountID(c *gin.Context) (int64, bool) {
 }
 
 type openAIAccountPersonaDTO struct {
-	ID                              int64                             `json:"id"`
-	AccountID                       int64                             `json:"account_id"`
-	Position                        int                               `json:"position"`
-	ProfileID                       service.SessionPersonaID          `json:"profile_id"`
-	ProfileVersion                  string                            `json:"profile_version"`
-	CredentialOwner                 service.OpenAICredentialOwner     `json:"credential_owner"`
-	State                           service.OpenAIAccountPersonaState `json:"state"`
-	Enabled                         bool                              `json:"enabled"`
-	Authorized                      bool                              `json:"authorized"`
-	PersonaGeneration               int64                             `json:"persona_generation"`
-	CurrentSessionEpoch             int64                             `json:"current_session_epoch"`
-	ProxyID                         *int64                            `json:"proxy_id,omitempty"`
-	MaxActiveClientSessionsOverride *int                              `json:"max_active_client_sessions_override,omitempty"`
-	RowVersion                      int64                             `json:"row_version"`
-	DefaultProtected                bool                              `json:"default_protected"`
-	CredentialState                 string                            `json:"credential_state"`
-	CredentialUpdatedAt             *time.Time                        `json:"credential_updated_at,omitempty"`
-	CredentialExpiresAt             *time.Time                        `json:"credential_expires_at,omitempty"`
-	InstallationSummary             string                            `json:"installation_summary"`
-	SessionState                    service.OpenAIPersonaSessionState `json:"session_state,omitempty"`
-	SessionStartedAt                *time.Time                        `json:"session_started_at,omitempty"`
-	SessionLastActiveAt             *time.Time                        `json:"session_last_active_at,omitempty"`
-	ActiveClientSessions            int                               `json:"active_client_sessions"`
-	EarliestClientSessionReleaseAt  *time.Time                        `json:"earliest_client_session_release_at,omitempty"`
-	EffectiveMaxClientSessions      int                               `json:"effective_max_client_sessions"`
-	EffectiveMaxConcurrency         int                               `json:"effective_max_concurrency"`
-	EffectiveMaxWebSockets          int                               `json:"effective_max_websockets"`
-	EffectiveProxyID                *int64                            `json:"effective_proxy_id,omitempty"`
-	ProxyInherited                  bool                              `json:"proxy_inherited"`
-	CreatedAt                       time.Time                         `json:"created_at"`
-	UpdatedAt                       time.Time                         `json:"updated_at"`
+	ID                      int64                             `json:"id"`
+	AccountID               int64                             `json:"account_id"`
+	Position                int                               `json:"position"`
+	ProfileID               service.SessionPersonaID          `json:"profile_id"`
+	ProfileVersion          string                            `json:"profile_version"`
+	CredentialOwner         service.OpenAICredentialOwner     `json:"credential_owner"`
+	State                   service.OpenAIAccountPersonaState `json:"state"`
+	Enabled                 bool                              `json:"enabled"`
+	Authorized              bool                              `json:"authorized"`
+	PersonaGeneration       int64                             `json:"persona_generation"`
+	CurrentSessionEpoch     int64                             `json:"current_session_epoch"`
+	ProxyID                 *int64                            `json:"proxy_id,omitempty"`
+	MaxActiveUsersOverride  *int                              `json:"max_active_users_override,omitempty"`
+	RowVersion              int64                             `json:"row_version"`
+	DefaultProtected        bool                              `json:"default_protected"`
+	CredentialState         string                            `json:"credential_state"`
+	CredentialUpdatedAt     *time.Time                        `json:"credential_updated_at,omitempty"`
+	CredentialExpiresAt     *time.Time                        `json:"credential_expires_at,omitempty"`
+	InstallationSummary     string                            `json:"installation_summary"`
+	SessionState            service.OpenAIPersonaSessionState `json:"session_state,omitempty"`
+	SessionStartedAt        *time.Time                        `json:"session_started_at,omitempty"`
+	SessionLastActiveAt     *time.Time                        `json:"session_last_active_at,omitempty"`
+	ActiveUsers             int                               `json:"active_users"`
+	EarliestUserReleaseAt   *time.Time                        `json:"earliest_user_release_at,omitempty"`
+	EffectiveMaxActiveUsers int                               `json:"effective_max_active_users"`
+	EffectiveMaxConcurrency int                               `json:"effective_max_concurrency"`
+	EffectiveMaxWebSockets  int                               `json:"effective_max_websockets"`
+	EffectiveProxyID        *int64                            `json:"effective_proxy_id,omitempty"`
+	ProxyInherited          bool                              `json:"proxy_inherited"`
+	CreatedAt               time.Time                         `json:"created_at"`
+	UpdatedAt               time.Time                         `json:"updated_at"`
 }
 
 func summarizeOpenAIInstallationID(value string) string {
@@ -208,13 +208,13 @@ func openAIAccountPersonaFromAdminView(view service.OpenAIAccountPersonaAdminVie
 		CredentialOwner: persona.CredentialOwner, State: persona.State, Enabled: persona.Enabled,
 		Authorized:        persona.CurrentCredentialChainID != "" && persona.CurrentSessionEpoch > 0,
 		PersonaGeneration: persona.PersonaGeneration, CurrentSessionEpoch: persona.CurrentSessionEpoch,
-		ProxyID: persona.ProxyID, MaxActiveClientSessionsOverride: persona.MaxActiveClientSessionsOverride,
+		ProxyID: persona.ProxyID, MaxActiveUsersOverride: persona.MaxActiveUsersOverride,
 		RowVersion: persona.RowVersion, DefaultProtected: persona.IsDefaultProtected(),
 		CredentialState: view.CredentialState, CredentialUpdatedAt: view.CredentialUpdatedAt,
 		CredentialExpiresAt: view.CredentialExpiresAt, InstallationSummary: summarizeOpenAIInstallationID(persona.InstallationID),
 		SessionState: view.SessionState, SessionStartedAt: view.SessionStartedAt, SessionLastActiveAt: view.SessionLastActiveAt,
-		ActiveClientSessions: view.ActiveClientSessions, EarliestClientSessionReleaseAt: view.EarliestClientSessionReleaseAt,
-		EffectiveMaxClientSessions: view.EffectiveMaxClientSessions, EffectiveMaxConcurrency: view.EffectiveMaxConcurrency,
+		ActiveUsers: view.ActiveUsers, EarliestUserReleaseAt: view.EarliestUserReleaseAt,
+		EffectiveMaxActiveUsers: view.EffectiveMaxActiveUsers, EffectiveMaxConcurrency: view.EffectiveMaxConcurrency,
 		EffectiveMaxWebSockets: view.EffectiveMaxWebSockets, EffectiveProxyID: view.EffectiveProxyID, ProxyInherited: view.ProxyInherited,
 		CreatedAt: persona.CreatedAt, UpdatedAt: persona.UpdatedAt,
 	}
@@ -267,7 +267,8 @@ func (h *OpenAIOAuthHandler) CreateAccountPersona(c *gin.Context) {
 	var req struct {
 		ProfileID                       service.SessionPersonaID `json:"profile_id" binding:"required"`
 		ProxyID                         *int64                   `json:"proxy_id"`
-		MaxActiveClientSessionsOverride *int                     `json:"max_active_client_sessions_override"`
+		MaxActiveUsersOverride          *int                     `json:"max_active_users_override"`
+		LegacyMaxActiveSessionsOverride *int                     `json:"max_active_client_sessions_override"`
 	}
 	if err = c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
@@ -278,7 +279,11 @@ func (h *OpenAIOAuthHandler) CreateAccountPersona(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	persona, err := h.openaiOAuthService.CreateAccountPersona(c.Request.Context(), account, req.ProfileID, req.ProxyID, req.MaxActiveClientSessionsOverride)
+	maxActiveUsers := req.MaxActiveUsersOverride
+	if maxActiveUsers == nil {
+		maxActiveUsers = req.LegacyMaxActiveSessionsOverride
+	}
+	persona, err := h.openaiOAuthService.CreateAccountPersona(c.Request.Context(), account, req.ProfileID, req.ProxyID, maxActiveUsers)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -292,23 +297,31 @@ func (h *OpenAIOAuthHandler) UpdateAccountPersona(c *gin.Context) {
 		return
 	}
 	var req struct {
-		RowVersion                      int64                              `json:"row_version" binding:"required"`
-		Enabled                         *bool                              `json:"enabled"`
-		State                           *service.OpenAIAccountPersonaState `json:"state"`
-		ProxyConfigured                 bool                               `json:"proxy_configured"`
-		ProxyID                         *int64                             `json:"proxy_id"`
-		MaxActiveSessionsConfigured     bool                               `json:"max_active_client_sessions_configured"`
-		MaxActiveClientSessionsOverride *int                               `json:"max_active_client_sessions_override"`
+		RowVersion                int64                              `json:"row_version" binding:"required"`
+		Enabled                   *bool                              `json:"enabled"`
+		State                     *service.OpenAIAccountPersonaState `json:"state"`
+		ProxyConfigured           bool                               `json:"proxy_configured"`
+		ProxyID                   *int64                             `json:"proxy_id"`
+		MaxActiveUsersConfigured  bool                               `json:"max_active_users_configured"`
+		MaxActiveUsersOverride    *int                               `json:"max_active_users_override"`
+		LegacyMaxActiveConfigured bool                               `json:"max_active_client_sessions_configured"`
+		LegacyMaxActiveOverride   *int                               `json:"max_active_client_sessions_override"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	maxActiveConfigured := req.MaxActiveUsersConfigured
+	maxActiveOverride := req.MaxActiveUsersOverride
+	if !maxActiveConfigured && req.LegacyMaxActiveConfigured {
+		maxActiveConfigured = true
+		maxActiveOverride = req.LegacyMaxActiveOverride
+	}
 	persona, err := h.openaiOAuthService.UpdateAccountPersona(c.Request.Context(), service.OpenAIAccountPersonaUpdate{
 		AccountID: accountID, AccountPersonaID: personaID, ExpectedRowVersion: req.RowVersion,
 		Enabled: req.Enabled, State: req.State, ProxyConfigured: req.ProxyConfigured, ProxyID: req.ProxyID,
-		MaxActiveSessionsConfigured:     req.MaxActiveSessionsConfigured,
-		MaxActiveClientSessionsOverride: req.MaxActiveClientSessionsOverride,
+		MaxActiveUsersConfigured: maxActiveConfigured,
+		MaxActiveUsersOverride:   maxActiveOverride,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

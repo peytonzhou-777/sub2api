@@ -808,7 +808,7 @@ export interface OpenAIAccountPersona {
   persona_generation: number
   current_session_epoch: number
   proxy_id?: number | null
-  max_active_client_sessions_override?: number | null
+  max_active_users_override?: number | null
   row_version: number
   default_protected: boolean
   credential_state: 'unconfigured' | 'pending' | 'ready' | 'refreshing' | 'invalid' | 'revoked'
@@ -818,9 +818,9 @@ export interface OpenAIAccountPersona {
   session_state?: 'current' | 'draining' | 'expired' | 'revoked'
   session_started_at?: string
   session_last_active_at?: string
-  active_client_sessions: number
-  earliest_client_session_release_at?: string
-  effective_max_client_sessions: number
+  active_users: number
+  earliest_user_release_at?: string
+  effective_max_active_users: number
   effective_max_concurrency: number
   effective_max_websockets: number
   effective_proxy_id?: number | null
@@ -848,7 +848,7 @@ export async function listOpenAIAccountPersonaProfiles(): Promise<OpenAIAccountP
 
 export async function createOpenAIAccountPersona(
   id: number,
-  payload: { profile_id: OpenAIAccountPersona['profile_id']; proxy_id?: number | null; max_active_client_sessions_override?: number | null }
+  payload: { profile_id: OpenAIAccountPersona['profile_id']; proxy_id?: number | null; max_active_users_override?: number | null }
 ): Promise<OpenAIAccountPersona> {
   const { data } = await apiClient.post<OpenAIAccountPersona>(`/admin/openai/accounts/${id}/personas`, payload)
   return data
@@ -863,8 +863,8 @@ export async function updateOpenAIAccountPersona(
     state?: OpenAIAccountPersonaState
     proxy_configured?: boolean
     proxy_id?: number | null
-    max_active_client_sessions_configured?: boolean
-    max_active_client_sessions_override?: number | null
+    max_active_users_configured?: boolean
+    max_active_users_override?: number | null
   }
 ): Promise<OpenAIAccountPersona> {
   const { data } = await apiClient.patch<OpenAIAccountPersona>(`/admin/openai/accounts/${id}/personas/${personaId}`, payload)

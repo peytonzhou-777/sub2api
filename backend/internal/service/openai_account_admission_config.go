@@ -30,24 +30,25 @@ type cachedOpenAIAccountAdmissionConfig struct {
 
 // OpenAIAccountAdmissionConfig 是账号选定后的全局准入配置，不提供逐账号覆盖。
 type OpenAIAccountAdmissionConfig struct {
-	Enabled                 bool `json:"enabled"`
-	QueueEnabled            bool `json:"queue_enabled"`
-	MaxWaitSeconds          int  `json:"max_wait_seconds"`
-	MaxConcurrency          int  `json:"max_concurrency,omitempty"`
-	MaxActiveClientSessions int  `json:"max_active_client_sessions"`
-	// MaxActiveClientSessionsPerUserGroup 限制同一用户在一个有效分组内可占用的客户端 Session 总数。
-	MaxActiveClientSessionsPerUserGroup int   `json:"max_active_client_sessions_per_user_group"`
-	RequestsPerMinute                   int   `json:"requests_per_minute"`
-	TokensPerMinute                     int64 `json:"tokens_per_minute"`
-	MaxSubagents                        int   `json:"max_subagents,omitempty"`
-	SubagentDepth                       int   `json:"subagent_depth,omitempty"`
-	MaxActiveWebSockets                 int   `json:"max_active_websockets,omitempty"`
-	DefaultOutputTokens                 int64 `json:"default_output_tokens"`
-	JitterMinMS                         int   `json:"jitter_min_ms"`
-	JitterMaxMS                         int   `json:"jitter_max_ms"`
-	MaxQueueDepthPerAccount             int   `json:"max_queue_depth_per_account"`
-	InteractiveBurst                    int   `json:"interactive_burst"`
-	BackgroundAgingSeconds              int   `json:"background_aging_seconds"`
+	Enabled                         bool `json:"enabled"`
+	QueueEnabled                    bool `json:"queue_enabled"`
+	MaxWaitSeconds                  int  `json:"max_wait_seconds"`
+	MaxConcurrency                  int  `json:"max_concurrency,omitempty"`
+	DefaultMaxActiveUsersPerPersona int  `json:"default_max_active_users_per_persona"`
+	// LegacyMaxActiveClientSessions 只用于读取旧配置，校验归一后不会再写回。
+	LegacyMaxActiveClientSessions             int   `json:"max_active_client_sessions,omitempty"`
+	LegacyMaxActiveClientSessionsPerUserGroup int   `json:"max_active_client_sessions_per_user_group,omitempty"`
+	RequestsPerMinute                         int   `json:"requests_per_minute"`
+	TokensPerMinute                           int64 `json:"tokens_per_minute"`
+	MaxSubagents                              int   `json:"max_subagents,omitempty"`
+	SubagentDepth                             int   `json:"subagent_depth,omitempty"`
+	MaxActiveWebSockets                       int   `json:"max_active_websockets,omitempty"`
+	DefaultOutputTokens                       int64 `json:"default_output_tokens"`
+	JitterMinMS                               int   `json:"jitter_min_ms"`
+	JitterMaxMS                               int   `json:"jitter_max_ms"`
+	MaxQueueDepthPerAccount                   int   `json:"max_queue_depth_per_account"`
+	InteractiveBurst                          int   `json:"interactive_burst"`
+	BackgroundAgingSeconds                    int   `json:"background_aging_seconds"`
 	// PersonaPolicies is optional for backward compatibility. When omitted,
 	// legacy top-level limits apply to every Persona. When present, the named
 	// Persona receives its own queue/RPM/capacity policy without changing the
@@ -60,24 +61,31 @@ type OpenAIAccountAdmissionConfig struct {
 // DefaultOpenAIAccountAdmissionConfig 返回默认关闭且可直接启用的保守配置。
 func DefaultOpenAIAccountAdmissionConfig() OpenAIAccountAdmissionConfig {
 	return OpenAIAccountAdmissionConfig{
-		Enabled:                             false,
-		QueueEnabled:                        false,
-		MaxWaitSeconds:                      45,
-		MaxActiveClientSessions:             1,
-		MaxActiveClientSessionsPerUserGroup: 3,
-		RequestsPerMinute:                   0,
-		TokensPerMinute:                     0,
-		DefaultOutputTokens:                 4096,
-		JitterMinMS:                         100,
-		JitterMaxMS:                         500,
-		MaxQueueDepthPerAccount:             100,
-		InteractiveBurst:                    4,
-		BackgroundAgingSeconds:              5,
+		Enabled:                         false,
+		QueueEnabled:                    false,
+		MaxWaitSeconds:                  45,
+		DefaultMaxActiveUsersPerPersona: 1,
+		RequestsPerMinute:               0,
+		TokensPerMinute:                 0,
+		DefaultOutputTokens:             4096,
+		JitterMinMS:                     100,
+		JitterMaxMS:                     500,
+		MaxQueueDepthPerAccount:         100,
+		InteractiveBurst:                4,
+		BackgroundAgingSeconds:          5,
 	}
 }
 
 // ValidateOpenAIAccountAdmissionConfig 校验完整对象，确保所有等待共享有界预算。
 func ValidateOpenAIAccountAdmissionConfig(cfg OpenAIAccountAdmissionConfig) (OpenAIAccountAdmissionConfig, error) {
+	if cfg.DefaultMaxActiveUsersPerPersona == 0 && cfg.LegacyMaxActiveClientSessions > 0 {
+		cfg.DefaultMaxActiveUsersPerPersona = cfg.LegacyMaxActiveClientSessions
+	}
+	cfg.LegacyMaxActiveClientSessions = 0
+	cfg.LegacyMaxActiveClientSessionsPerUserGroup = 0
+	for id, policy := range cfg.PersonaPolicies {
+		cfg.PersonaPolicies[id] = policy.normalized()
+	}
 	if cfg.MaxWaitSeconds < 1 || cfg.MaxWaitSeconds > 120 {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", "max_wait_seconds must be between 1 and 120")
 	}
@@ -87,11 +95,8 @@ func ValidateOpenAIAccountAdmissionConfig(cfg OpenAIAccountAdmissionConfig) (Ope
 	if cfg.MaxConcurrency < 0 || cfg.MaxConcurrency > maxPersonaPolicyConcurrency {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("max_concurrency must be between 0 and %d", maxPersonaPolicyConcurrency))
 	}
-	if cfg.MaxActiveClientSessions < 1 || cfg.MaxActiveClientSessions > maxPersonaPolicySessions {
-		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("max_active_client_sessions must be between 1 and %d", maxPersonaPolicySessions))
-	}
-	if cfg.MaxActiveClientSessionsPerUserGroup < 1 || cfg.MaxActiveClientSessionsPerUserGroup > 10000 {
-		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", "max_active_client_sessions_per_user_group must be between 1 and 10000")
+	if cfg.DefaultMaxActiveUsersPerPersona < 1 || cfg.DefaultMaxActiveUsersPerPersona > maxPersonaPolicyUsers {
+		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("default_max_active_users_per_persona must be between 1 and %d", maxPersonaPolicyUsers))
 	}
 	if cfg.MaxSubagents < 0 || cfg.MaxSubagents > maxPersonaPolicySubagents {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", fmt.Sprintf("max_subagents must be between 0 and %d", maxPersonaPolicySubagents))
@@ -132,6 +137,21 @@ func ValidateOpenAIAccountAdmissionConfig(cfg OpenAIAccountAdmissionConfig) (Ope
 	return cfg, nil
 }
 
+func decodeOpenAIAccountAdmissionConfig(raw string) (OpenAIAccountAdmissionConfig, error) {
+	cfg := DefaultOpenAIAccountAdmissionConfig()
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return cfg, err
+	}
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return cfg, err
+	}
+	if _, configured := fields["default_max_active_users_per_persona"]; !configured && cfg.LegacyMaxActiveClientSessions > 0 {
+		cfg.DefaultMaxActiveUsersPerPersona = 0
+	}
+	return cfg, nil
+}
+
 // GetOpenAIAccountAdmissionConfig 读取带短缓存的完整全局配置。
 func (s *SettingService) GetOpenAIAccountAdmissionConfig(ctx context.Context) (OpenAIAccountAdmissionConfig, error) {
 	cfg := DefaultOpenAIAccountAdmissionConfig()
@@ -149,7 +169,8 @@ func (s *SettingService) GetOpenAIAccountAdmissionConfig(ctx context.Context) (O
 	if err != nil {
 		return cfg, fmt.Errorf("get openai account admission config: %w", err)
 	}
-	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+	cfg, err = decodeOpenAIAccountAdmissionConfig(raw)
+	if err != nil {
 		return cfg, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", "stored openai account admission config is invalid").WithCause(err)
 	}
 	cfg, err = ValidateOpenAIAccountAdmissionConfig(cfg)
@@ -177,7 +198,8 @@ func (s *SettingService) UpdateOpenAIAccountAdmissionConfig(ctx context.Context,
 	raw, readErr := s.settingRepo.GetValue(ctx, SettingKeyOpenAIAccountAdmission)
 	if readErr == nil {
 		expectedRaw = &raw
-		if err := json.Unmarshal([]byte(raw), &current); err != nil {
+		current, err = decodeOpenAIAccountAdmissionConfig(raw)
+		if err != nil {
 			return next, infraerrors.BadRequest("INVALID_OPENAI_ACCOUNT_ADMISSION_CONFIG", "stored openai account admission config is invalid").WithCause(err)
 		}
 		current, err = ValidateOpenAIAccountAdmissionConfig(current)

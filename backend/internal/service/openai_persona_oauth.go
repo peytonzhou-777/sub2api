@@ -126,15 +126,15 @@ func (s *OpenAIOAuthService) ListAccountPersonaAdminViews(ctx context.Context, a
 		policy := cfg.EffectiveOpenAIPersonaPolicyForAccount(account, persona.ProfileID, 0)
 		view := OpenAIAccountPersonaAdminView{
 			Persona: persona, CredentialState: "unconfigured", ProxyInherited: persona.ProxyID == nil,
-			EffectiveMaxClientSessions: policy.MaxActiveClientSessions,
-			EffectiveMaxConcurrency:    policy.MaxConcurrency, EffectiveMaxWebSockets: policy.MaxActiveWebSockets,
+			EffectiveMaxActiveUsers: policy.MaxActiveUsers,
+			EffectiveMaxConcurrency: policy.MaxConcurrency, EffectiveMaxWebSockets: policy.MaxActiveWebSockets,
 		}
-		if persona.MaxActiveClientSessionsOverride != nil {
-			view.EffectiveMaxClientSessions = *persona.MaxActiveClientSessionsOverride
+		if persona.MaxActiveUsersOverride != nil {
+			view.EffectiveMaxActiveUsers = *persona.MaxActiveUsersOverride
 		}
-		if lease := stats[persona.ID]; lease.ActiveClientSessions > 0 || lease.EarliestReleaseAt != nil {
-			view.ActiveClientSessions = lease.ActiveClientSessions
-			view.EarliestClientSessionReleaseAt = lease.EarliestReleaseAt
+		if lease := stats[persona.ID]; lease.ActiveUsers > 0 || lease.EarliestReleaseAt != nil {
+			view.ActiveUsers = lease.ActiveUsers
+			view.EarliestUserReleaseAt = lease.EarliestReleaseAt
 		}
 		if persona.CurrentCredentialChainID != "" {
 			record, credentialErr := s.accountPersonaRepo.GetAccountPersonaCredential(ctx, persona.ID, persona.CurrentCredentialChainID)
@@ -175,8 +175,8 @@ func (s *OpenAIOAuthService) CreateAccountPersona(ctx context.Context, account *
 	if !ok || !profile.Valid() {
 		return nil, infraerrors.BadRequest("OPENAI_PERSONA_PROFILE_INVALID", "unsupported OpenAI Persona profile")
 	}
-	if maxActive != nil && (*maxActive < 1 || *maxActive > maxPersonaPolicySessions) {
-		return nil, infraerrors.BadRequest("OPENAI_PERSONA_CLIENT_LIMIT_INVALID", "max_active_client_sessions must be between 1 and 10000")
+	if maxActive != nil && (*maxActive < 1 || *maxActive > maxPersonaPolicyUsers) {
+		return nil, infraerrors.BadRequest("OPENAI_PERSONA_USER_LIMIT_INVALID", "max_active_users must be between 1 and 10000")
 	}
 	seed, err := openai.GenerateRandomBytes(32)
 	if err != nil {
@@ -188,7 +188,7 @@ func (s *OpenAIOAuthService) CreateAccountPersona(ctx context.Context, account *
 	}
 	return s.accountPersonaRepo.CreateAccountPersona(ctx, OpenAIAccountPersonaCreate{
 		AccountID: account.ID, ProfileID: profile.ID, ProfileVersion: profile.EffectiveVersion(),
-		ProxyID: proxyID, MaxActiveClientSessionsOverride: maxActive,
+		ProxyID: proxyID, MaxActiveUsersOverride: maxActive,
 		DeviceSeed: seed, InstallationID: string(profile.ID) + "-" + nonce,
 	})
 }
@@ -197,9 +197,9 @@ func (s *OpenAIOAuthService) UpdateAccountPersona(ctx context.Context, input Ope
 	if s == nil || s.accountPersonaRepo == nil {
 		return nil, ErrOpenAIPersonaCredentialStoreUnavailable
 	}
-	if input.MaxActiveSessionsConfigured && input.MaxActiveClientSessionsOverride != nil &&
-		(*input.MaxActiveClientSessionsOverride < 1 || *input.MaxActiveClientSessionsOverride > maxPersonaPolicySessions) {
-		return nil, infraerrors.BadRequest("OPENAI_PERSONA_CLIENT_LIMIT_INVALID", "max_active_client_sessions must be between 1 and 10000")
+	if input.MaxActiveUsersConfigured && input.MaxActiveUsersOverride != nil &&
+		(*input.MaxActiveUsersOverride < 1 || *input.MaxActiveUsersOverride > maxPersonaPolicyUsers) {
+		return nil, infraerrors.BadRequest("OPENAI_PERSONA_USER_LIMIT_INVALID", "max_active_users must be between 1 and 10000")
 	}
 	if input.ProxyConfigured || (input.Enabled != nil && *input.Enabled) ||
 		(input.State != nil && *input.State == OpenAIAccountPersonaStateActive) {

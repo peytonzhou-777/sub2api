@@ -69,7 +69,7 @@ func TestApplyOpenAIPersonaAdmissionPolicy(t *testing.T) {
 	cfg.PersonaPolicies = map[string]service.OpenAIPersonaAdmissionPolicy{
 		"opencode": {
 			MaxConcurrency:          3,
-			MaxActiveClientSessions: 2,
+			MaxActiveUsers:          2,
 			RequestsPerMinute:       20,
 			TokensPerMinute:         2000,
 			MaxQueueDepthPerAccount: 7,
@@ -81,7 +81,7 @@ func TestApplyOpenAIPersonaAdmissionPolicy(t *testing.T) {
 	if accountConcurrency != 12 || personaConcurrency != 3 {
 		t.Fatalf("effective concurrency = account %d persona %d, want 12/3", accountConcurrency, personaConcurrency)
 	}
-	if got.MaxActiveClientSessions != 2 || got.RequestsPerMinute != 20 || got.TokensPerMinute != 2000 || got.MaxQueueDepthPerAccount != 7 {
+	if got.DefaultMaxActiveUsersPerPersona != 2 || got.RequestsPerMinute != 20 || got.TokensPerMinute != 2000 || got.MaxQueueDepthPerAccount != 7 {
 		t.Fatalf("Persona rate/queue policy not applied: %+v", got)
 	}
 }

@@ -289,7 +289,7 @@ func (r *schedulerConversationAffinityRepo) BindOpenAIUserConversationExecutionT
 	r.binding.PersonaSessionEpoch = target.SessionEpoch
 	r.binding.CredentialChainID = target.CredentialChainID
 	r.binding.RootClientSessionHash = transition.RootClientSessionHash
-	r.binding.UserGroupLeaseID = target.UserGroupLeaseID
+	r.binding.UserGroupLeaseID = 0
 	r.binding.ProfileID = target.ProfileID
 	r.binding.ProfileVersion = target.ProfileVersion
 	return nil
@@ -422,6 +422,33 @@ func TestOpenAIGatewayService_MultiSlotKeepsSoftOwnerOnActiveRoute(t *testing.T)
 	require.Equal(t, int64(36211), selection.Account.ID)
 	require.Len(t, repo.reservations, 1)
 	require.Equal(t, int64(36211), repo.reservations[0].AccountID)
+}
+
+func TestOpenAIGatewayService_MultiSlotPrefersOccupiedPersonaAccountOverActiveRoute(t *testing.T) {
+	now := time.Now().UTC()
+	scopeKey := openAIUserAffinityScopeKey(nil, false, "", "", OpenAIUpstreamTransportHTTPSSE)
+	accounts := []Account{
+		{ID: 36241, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Concurrency: 1},
+		{ID: 36242, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Concurrency: 1},
+	}
+	slots := []OpenAIUserResidentSlot{
+		{ID: 41, UserID: 42, ScopeKey: scopeKey, AccountID: 36241, Generation: 1, Status: OpenAIUserResidentSlotStatusActive, UsageScore: 4, ScoreUpdatedAt: now, AdmittedAt: now.Add(-time.Hour), ExpiresAt: now.Add(24 * time.Hour), SoftOwnerUserID: 42},
+		{ID: 42, UserID: 42, ScopeKey: scopeKey, AccountID: 36242, Generation: 2, Status: OpenAIUserResidentSlotStatusActive, UsageScore: 1, ScoreUpdatedAt: now, AdmittedAt: now, ExpiresAt: now.Add(24 * time.Hour)},
+	}
+	svc, repo, ctx := newMultiSlotAffinitySchedulerTestService(t, slots, accounts, nil, 2)
+	activeUntil := now.Add(time.Hour)
+	repo.activeRoute = &OpenAIUserActiveRoute{UserID: 42, ScopeKey: scopeKey, ResidentSlotID: 41, AccountID: 36241, SlotGeneration: 1, ActiveUntil: &activeUntil}
+	ctx = contextWithOpenAIUserOccupiedPersonaAccounts(ctx, map[int64]struct{}{36242: {}})
+	req := newOpenAIUserAffinityScheduleRequest(nil, PlatformOpenAI, "", "", OpenAIUpstreamTransportHTTPSSE, "", "", false, nil)
+	req.SessionHash = "occupied-persona-account"
+
+	selection, found, err := svc.selectOpenAIUserAffinityResidentSlots(ctx, req)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, selection)
+	require.Equal(t, int64(36242), selection.Account.ID)
+	require.Len(t, repo.reservations, 1)
+	require.Equal(t, int64(36242), repo.reservations[0].AccountID)
 }
 
 func TestOpenAIGatewayService_MultiSlotNonOwnerRetreatsOnNewConversation(t *testing.T) {
@@ -894,8 +921,8 @@ func TestOpenAIGatewayService_CodexDerivedThreadLocksParentAndReservesOwnBinding
 	require.True(t, selection.ExecutionTarget.Valid())
 
 	reservationRepo := &openAIBoundPersonaReservationRepo{personaLeaseID: 3301}
-	reservationState := &openAIClientSessionReservationState{
-		repo: reservationRepo, token: "child-client-reservation", userLeaseID: 3201,
+	reservationState := &openAIPersonaUserReservationState{
+		repo: reservationRepo, token: "child-client-reservation",
 	}
 	clientHash := strings.Repeat("d", 64)
 	require.NoError(t, svc.attachBoundOpenAIPersonaReservation(ctx, selection, reservationState, clientHash))
@@ -903,7 +930,7 @@ func TestOpenAIGatewayService_CodexDerivedThreadLocksParentAndReservesOwnBinding
 	require.Equal(t, parent.PersonaSessionEpoch, repo.binding.PersonaSessionEpoch)
 	require.Equal(t, parent.CredentialChainID, repo.binding.CredentialChainID)
 	require.Equal(t, clientHash, repo.binding.RootClientSessionHash)
-	require.Equal(t, int64(3201), repo.binding.UserGroupLeaseID)
+	require.Zero(t, repo.binding.UserGroupLeaseID)
 	require.Equal(t, parent.ProfileID, repo.binding.ProfileID)
 	require.Equal(t, parent.ProfileVersion, repo.binding.ProfileVersion)
 
@@ -949,10 +976,10 @@ func TestOpenAIGatewayService_ContinuationRestoresBoundPersonaBeforeNewRootCapac
 	repo.aliasBindings = map[string]*OpenAIUserConversationBinding{
 		scopeKey + "\x00response_id\x00" + responseHash: binding,
 	}
-	reservationRepo := &openAIBoundPersonaReservationRepo{userLeaseID: 3901, personaLeaseID: 3902}
-	// 空候选模拟该账号的 Persona 已被其他客户端占满。旧实现会在恢复 binding
+	reservationRepo := &openAIBoundPersonaReservationRepo{personaLeaseID: 3902}
+	// 空候选模拟该账号的 Persona 已被其他用户占满。旧实现会在恢复 binding
 	// 之前执行账号级新根预筛选，并错误返回 account unavailable。
-	svc.clientSessionReservationRepo = reservationRepo
+	svc.personaUserReservationRepo = reservationRepo
 
 	selection, decision, err := svc.SelectAccountWithSchedulerForCapability(
 		ctx, &groupID, responseID, "bound-client-session", "", nil,
@@ -994,16 +1021,16 @@ func TestOpenAIGatewayService_BoundPersonaCapacityReturnsPersonaBusyWithoutMigra
 		scopeKey + "\x00response_id\x00" + responseHash: binding,
 	}
 	reservationRepo := &openAIBoundPersonaReservationRepo{
-		userLeaseID: 4001, reserveErr: ErrOpenAIPersonaSessionCapacity,
+		reserveErr: ErrOpenAIPersonaUserCapacity,
 	}
-	svc.clientSessionReservationRepo = reservationRepo
+	svc.personaUserReservationRepo = reservationRepo
 
 	selection, _, err := svc.SelectAccountWithSchedulerForCapability(
 		ctx, &groupID, responseID, "expired-bound-client-session", "", nil,
 		OpenAIUpstreamTransportHTTPSSE, "", false, false, true,
 	)
 
-	require.ErrorIs(t, err, ErrOpenAIPersonaSessionCapacity)
+	require.ErrorIs(t, err, ErrOpenAIPersonaUserCapacity)
 	require.NotErrorIs(t, err, ErrOpenAIPreviousResponseAccountUnavailable)
 	require.Nil(t, selection)
 	require.Zero(t, reservationRepo.listCalls)

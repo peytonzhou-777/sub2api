@@ -55,13 +55,12 @@ func TestRestoreOpenAIUserConversationExecutionTargetUsesInjectedPersonaReposito
 		CredentialChainID: "chain-51", ProfileID: SessionPersonaCodexCLIStrict,
 		ProfileVersion: CodexOutboundProfileCLI0149, BindingEpoch: OpenAIConversationBindingEpoch,
 		// 短期 lease 和原始客户端 Session 哈希不再是恢复持久 Thread 身份的前提。
-		UserGroupLeaseID: 0, RootClientSessionHash: "",
+		RootClientSessionHash: "",
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(56), target.AccountID)
 	require.Equal(t, int64(51), target.AccountPersonaID)
 	require.Equal(t, int64(7), target.SessionEpoch)
-	require.Zero(t, target.UserGroupLeaseID)
 }
 
 func TestRestoreOpenAIUserConversationExecutionTargetRejectsOldBindingEpoch(t *testing.T) {

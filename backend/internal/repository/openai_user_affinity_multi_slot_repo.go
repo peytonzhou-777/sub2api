@@ -476,23 +476,23 @@ func (r *accountRepository) BindOpenAIUserConversationExecutionTarget(
 ) error {
 	if r == nil || r.sql == nil || transition.BindingID <= 0 || transition.AccountID <= 0 ||
 		strings.TrimSpace(transition.ProvisionalToken) == "" || !target.Valid() ||
-		target.AccountID != transition.AccountID || len(strings.TrimSpace(transition.RootClientSessionHash)) != 64 ||
-		target.UserGroupLeaseID <= 0 {
+		target.AccountID != transition.AccountID {
 		return errors.New("invalid openai conversation execution target binding")
 	}
 	result, err := r.sql.ExecContext(ctx, `
 		UPDATE openai_user_conversation_bindings SET
 			account_persona_id = $1, persona_session_epoch = $2, credential_chain_id = $3,
-			root_client_session_hash = $4::char(64), user_group_client_session_lease_id = $5,
-			profile_id = $6, profile_version = $7, updated_at = $8
-		WHERE id = $9 AND account_id = $10 AND binding_epoch = $12 AND status = 'provisional'
-		  AND first_output_committed = FALSE AND provisional_token = $11
+			root_client_session_hash = NULLIF($4::text, '')::char(64), user_group_client_session_lease_id = NULL::bigint,
+			profile_id = $5, profile_version = $6, updated_at = $7
+		WHERE id = $8 AND account_id = $9 AND binding_epoch = $11 AND status = 'provisional'
+		  AND first_output_committed = FALSE AND provisional_token = $10
 		  AND (account_persona_id IS NULL OR (
 			account_persona_id = $1 AND persona_session_epoch = $2 AND credential_chain_id = $3 AND
-			root_client_session_hash = $4::char(64) AND user_group_client_session_lease_id = $5 AND
-			profile_id = $6 AND profile_version = $7))`,
+			root_client_session_hash IS NOT DISTINCT FROM NULLIF($4::text, '')::char(64) AND
+			user_group_client_session_lease_id IS NULL AND
+			profile_id = $5 AND profile_version = $6))`,
 		target.AccountPersonaID, target.SessionEpoch, target.CredentialChainID,
-		strings.ToLower(strings.TrimSpace(transition.RootClientSessionHash)), target.UserGroupLeaseID,
+		strings.ToLower(strings.TrimSpace(transition.RootClientSessionHash)),
 		string(target.ProfileID), target.ProfileVersion, time.Now().UTC(), transition.BindingID,
 		transition.AccountID, transition.ProvisionalToken, service.OpenAIConversationBindingEpoch)
 	if err != nil {

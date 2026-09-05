@@ -442,40 +442,40 @@ var ErrNoAvailableCompactAccounts = errors.New("no available accounts support /r
 
 // OpenAIGatewayService handles OpenAI API gateway operations
 type OpenAIGatewayService struct {
-	accountRepo                  AccountRepository
-	accountPersonaRepo           OpenAIAccountPersonaRepository
-	clientSessionReservationRepo OpenAIClientSessionReservationRepository
-	personaIDMappingStore        OpenAIPersonaIDMappingStore
-	usageLogRepo                 UsageLogRepository
-	usageBillingRepo             UsageBillingRepository
-	userRepo                     UserRepository
-	userSubRepo                  UserSubscriptionRepository
-	cache                        GatewayCache
-	cfg                          *config.Config
-	codexDetector                CodexClientRestrictionDetector
-	schedulerSnapshot            *SchedulerSnapshotService
-	concurrencyService           *ConcurrencyService
-	billingService               *BillingService
-	rateLimitService             *RateLimitService
-	billingCacheService          *BillingCacheService
-	userGroupRateResolver        *userGroupRateResolver
-	httpUpstream                 HTTPUpstream
-	pluginManager                *PluginManager
-	deferredService              *DeferredService
-	openAITokenProvider          *OpenAITokenProvider
-	grokTokenProvider            *GrokTokenProvider
-	toolCorrector                *CodexToolCorrector
-	openaiWSResolver             OpenAIWSProtocolResolver
-	resolver                     *ModelPricingResolver
-	channelService               *ChannelService
-	balanceNotifyService         *BalanceNotifyService
-	settingService               *SettingService
-	userPlatformQuotaRepo        UserPlatformQuotaRepository
-	liveAttestation              liveattestation.Provider
-	liveAttestationCipher        SecretEncryptor
-	turnStateCipher              *openAITurnStateCipher
-	turnStateClientTokens        sync.Map // key: scope AAD + raw state hash, value: wrapped token
-	turnStateClientTokenWrites   atomic.Int64
+	accountRepo                AccountRepository
+	accountPersonaRepo         OpenAIAccountPersonaRepository
+	personaUserReservationRepo OpenAIPersonaUserReservationRepository
+	personaIDMappingStore      OpenAIPersonaIDMappingStore
+	usageLogRepo               UsageLogRepository
+	usageBillingRepo           UsageBillingRepository
+	userRepo                   UserRepository
+	userSubRepo                UserSubscriptionRepository
+	cache                      GatewayCache
+	cfg                        *config.Config
+	codexDetector              CodexClientRestrictionDetector
+	schedulerSnapshot          *SchedulerSnapshotService
+	concurrencyService         *ConcurrencyService
+	billingService             *BillingService
+	rateLimitService           *RateLimitService
+	billingCacheService        *BillingCacheService
+	userGroupRateResolver      *userGroupRateResolver
+	httpUpstream               HTTPUpstream
+	pluginManager              *PluginManager
+	deferredService            *DeferredService
+	openAITokenProvider        *OpenAITokenProvider
+	grokTokenProvider          *GrokTokenProvider
+	toolCorrector              *CodexToolCorrector
+	openaiWSResolver           OpenAIWSProtocolResolver
+	resolver                   *ModelPricingResolver
+	channelService             *ChannelService
+	balanceNotifyService       *BalanceNotifyService
+	settingService             *SettingService
+	userPlatformQuotaRepo      UserPlatformQuotaRepository
+	liveAttestation            liveattestation.Provider
+	liveAttestationCipher      SecretEncryptor
+	turnStateCipher            *openAITurnStateCipher
+	turnStateClientTokens      sync.Map // key: scope AAD + raw state hash, value: wrapped token
+	turnStateClientTokenWrites atomic.Int64
 
 	openaiWSPoolOnce               sync.Once
 	openaiWSStateStoreOnce         sync.Once
@@ -597,8 +597,8 @@ func NewOpenAIGatewayService(
 		codexSnapshotThrottle: newAccountWriteThrottle(openAICodexSnapshotPersistMinInterval),
 		openaiModelTransient:  newOpenAIAccountModelTransientState(openAIModelTransientDefaultMax),
 	}
-	if reservationRepo, ok := accountRepo.(OpenAIClientSessionReservationRepository); ok {
-		svc.clientSessionReservationRepo = reservationRepo
+	if reservationRepo, ok := accountRepo.(OpenAIPersonaUserReservationRepository); ok {
+		svc.personaUserReservationRepo = reservationRepo
 	}
 	if rateLimitService != nil {
 		rateLimitService.SetAccountRuntimeBlocker(svc)

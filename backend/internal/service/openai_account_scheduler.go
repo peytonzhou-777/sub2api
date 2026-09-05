@@ -435,7 +435,7 @@ func (s *defaultOpenAIAccountScheduler) Select(
 		return selection, decision, err
 	}
 
-	if !req.StickyWeighted {
+	if !req.StickyWeighted && len(openAIUserOccupiedPersonaAccounts(ctx)) == 0 {
 		selection, escapedSticky, err := s.selectBySessionHash(ctx, req)
 		if err != nil {
 			return nil, decision, err
@@ -1503,6 +1503,26 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 		}
 	}
 
+	// 动态 OAuth 新根优先复用该用户已占用的 Persona 账号，再按普通负载均衡开辟新占用；
+	// 能力和健康过滤仍是硬约束。
+	if occupiedAccounts := openAIUserOccupiedPersonaAccounts(ctx); len(occupiedAccounts) > 0 {
+		occupiedPool := make([]*Account, 0, len(occupiedAccounts))
+		for _, account := range filtered {
+			if _, ok := occupiedAccounts[account.ID]; ok {
+				occupiedPool = append(occupiedPool, account)
+			}
+		}
+		if len(occupiedPool) > 0 && len(occupiedPool) < len(filtered) {
+			attempt := s.trySelectByLoadBalancePool(ctx, req, occupiedPool, loadMap, budget)
+			if attempt.err != nil && !attempt.noCompactCandidates {
+				return nil, attempt.candidateCount, attempt.topK, attempt.loadSkew, attempt.err
+			}
+			if attempt.result != nil {
+				return attempt.result, attempt.candidateCount, attempt.topK, attempt.loadSkew, nil
+			}
+		}
+	}
+
 	if req.SubscriptionPriority {
 		subscriptionAccounts, regularAccounts := partitionOpenAIChatGPTSubscriptionAccounts(filtered)
 		if len(subscriptionAccounts) > 0 {
@@ -2176,10 +2196,10 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	useUpstreamTokenCost bool,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
 	platform = NormalizeOpenAICompatiblePlatform(platform)
-	var reservation *openAIClientSessionReservationState
+	var reservation *openAIPersonaUserReservationState
 	var err error
-	if platform == PlatformOpenAI && s.clientSessionReservationRepo != nil {
-		reservation, err = s.beginOpenAIClientSessionReservation(ctx, groupID, sessionHash)
+	if platform == PlatformOpenAI && s.personaUserReservationRepo != nil {
+		reservation, err = s.beginOpenAIPersonaUserReservation(ctx)
 		if err != nil {
 			return nil, OpenAIAccountScheduleDecision{}, err
 		}
@@ -2214,11 +2234,13 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	// continuation 必须先恢复持久化的 Account×Persona×Epoch，再对该精确 Persona
 	// 续租。账号级容量预筛选只服务新根，不能把仍有效的固定目标伪装成账号失效。
 	if strings.TrimSpace(previousResponseID) == "" {
-		effectiveExcluded, err = s.openAIAccountsWithPersonaCapacity(ctx, groupID, effectiveExcluded, sessionHash)
+		var occupiedAccounts map[int64]struct{}
+		effectiveExcluded, occupiedAccounts, err = s.openAIAccountsWithPersonaCapacity(ctx, groupID, effectiveExcluded)
 		if err != nil {
 			rollback()
 			return nil, OpenAIAccountScheduleDecision{}, err
 		}
+		ctx = contextWithOpenAIUserOccupiedPersonaAccounts(ctx, occupiedAccounts)
 	}
 	for {
 		selection, decision, selectErr := selectOnce(ctx, effectiveExcluded)
@@ -2229,7 +2251,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 		boundContinuation := selection.ExecutionTarget != nil && selection.ExecutionTarget.Valid()
 		if attachErr := s.attachOpenAIPersonaReservation(ctx, selection, reservation, sessionHash); attachErr == nil {
 			return selection, decision, nil
-		} else if !errors.Is(attachErr, ErrOpenAIPersonaSessionCapacity) && !errors.Is(attachErr, ErrOpenAIAccountPersonaClaim) {
+		} else if !errors.Is(attachErr, ErrOpenAIPersonaUserCapacity) {
 			if selection.ReleaseFunc != nil {
 				selection.ReleaseFunc()
 			}
@@ -2242,7 +2264,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 				selection.ReleaseFunc()
 			}
 			rollback()
-			return nil, decision, ErrOpenAIPersonaSessionCapacity
+			return nil, decision, ErrOpenAIPersonaUserCapacity
 		}
 		if selection.ReleaseFunc != nil {
 			selection.ReleaseFunc()

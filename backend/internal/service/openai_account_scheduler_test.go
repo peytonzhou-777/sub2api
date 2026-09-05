@@ -3903,3 +3903,37 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_SubscriptionPriorityWai
 	require.Equal(t, int64(38011), selection.WaitPlan.AccountID)
 	require.Equal(t, openAIAccountScheduleLayerLoadBalance, decision.Layer)
 }
+
+func TestOpenAIAccountScheduler_OccupiedPersonaAccountWithoutCompactFallsBackToCapableAccount(t *testing.T) {
+	groupID := int64(101092)
+	accounts := []Account{
+		{
+			ID: 38021, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,
+			Schedulable: true, Concurrency: 1, GroupIDs: []int64{groupID},
+			Extra: map[string]any{"openai_compact_supported": false},
+		},
+		{
+			ID: 38022, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,
+			Schedulable: true, Concurrency: 1, GroupIDs: []int64{groupID},
+			Extra: map[string]any{"openai_compact_supported": true},
+		},
+	}
+	accountRepo := schedulerGroupAwareOpenAIAccountRepo{schedulerTestOpenAIAccountRepo{accounts: accounts}}
+	svc := &OpenAIGatewayService{
+		accountRepo: accountRepo, accountPersonaRepo: accountRepo,
+		cfg:                newSchedulerTestSubscriptionPriorityConfig(),
+		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+	}
+	scheduler, ok := newDefaultOpenAIAccountScheduler(svc, nil).(*defaultOpenAIAccountScheduler)
+	require.True(t, ok)
+	ctx := contextWithOpenAIUserOccupiedPersonaAccounts(context.Background(), map[int64]struct{}{38021: {}})
+
+	selection, _, _, _, err := scheduler.selectByLoadBalance(ctx, OpenAIAccountScheduleRequest{
+		GroupID: &groupID, Platform: PlatformOpenAI, RequestedModel: "gpt-5.1",
+		RequireCompact: true, RequiredTransport: OpenAIUpstreamTransportAny,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, selection)
+	require.NotNil(t, selection.Account)
+	require.Equal(t, int64(38022), selection.Account.ID)
+}

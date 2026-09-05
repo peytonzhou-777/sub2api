@@ -26,8 +26,7 @@
 
         <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           <NumberField v-model="config.max_concurrency" :label="t('admin.settings.openAIAccountAdmission.globalMaxConcurrency')" :hint="t('admin.settings.openAIAccountAdmission.globalMaxConcurrencyHint')" :min="0" :max="100000" />
-          <NumberField v-model="config.max_active_client_sessions" :label="t('admin.settings.openAIAccountAdmission.globalMaxActiveClientSessions')" :hint="t('admin.settings.openAIAccountAdmission.globalMaxActiveClientSessionsHint')" :min="1" :max="10000" />
-          <NumberField v-model="config.max_active_client_sessions_per_user_group" :label="t('admin.settings.openAIAccountAdmission.userGroupMaxActiveClientSessions')" :hint="t('admin.settings.openAIAccountAdmission.userGroupMaxActiveClientSessionsHint')" :min="1" :max="10000" />
+          <NumberField v-model="config.default_max_active_users_per_persona" :label="t('admin.settings.openAIAccountAdmission.globalMaxActiveUsers')" :hint="t('admin.settings.openAIAccountAdmission.globalMaxActiveUsersHint')" :min="1" :max="10000" />
           <NumberField v-model="config.requests_per_minute" :label="t('admin.settings.openAIAccountAdmission.rpm')" :hint="t('admin.settings.openAIAccountAdmission.rpmHint')" :min="0" :max="100000" />
           <NumberField v-model="config.tokens_per_minute" :label="t('admin.settings.openAIAccountAdmission.tpm')" :hint="t('admin.settings.openAIAccountAdmission.tpmHint')" :min="0" :max="100000000" />
           <NumberField v-model="config.max_subagents" :label="t('admin.settings.openAIAccountAdmission.globalMaxSubagents')" :hint="t('admin.settings.openAIAccountAdmission.globalMaxSubagentsHint')" :min="0" :max="100000" />
@@ -51,7 +50,7 @@
               <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.settings.openAIAccountAdmission.inheritHint') }}</p>
               <div class="mt-4 grid gap-4 md:grid-cols-2">
                 <NumberField v-model="persona.policy.max_concurrency" :label="t('admin.settings.openAIAccountAdmission.personaMaxConcurrency')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="100000" />
-                <NumberField v-model="persona.policy.max_active_client_sessions" :label="t('admin.settings.openAIAccountAdmission.personaMaxActiveClientSessions')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="10000" />
+                <NumberField v-model="persona.policy.max_active_users" :label="t('admin.settings.openAIAccountAdmission.personaMaxActiveUsers')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="10000" />
                 <NumberField v-model="persona.policy.requests_per_minute" :label="t('admin.settings.openAIAccountAdmission.personaRPM')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="1000000" />
                 <NumberField v-model="persona.policy.tokens_per_minute" :label="t('admin.settings.openAIAccountAdmission.personaTPM')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="1000000000" />
                 <NumberField v-model="persona.policy.max_queue_depth_per_account" :label="t('admin.settings.openAIAccountAdmission.personaQueueDepth')" :hint="t('admin.settings.openAIAccountAdmission.inheritGlobal')" :min="0" :max="100000" />
@@ -90,7 +89,7 @@ const config = ref<OpenAIAccountAdmissionConfig | null>(null)
 
 const emptyPersonaPolicy = (): OpenAIPersonaAdmissionPolicy => ({
   max_concurrency: 0,
-  max_active_client_sessions: 0,
+  max_active_users: 0,
   requests_per_minute: 0,
   tokens_per_minute: 0,
   max_queue_depth_per_account: 0,
@@ -101,17 +100,29 @@ const emptyPersonaPolicy = (): OpenAIPersonaAdmissionPolicy => ({
 
 function normalizeConfig(value: OpenAIAccountAdmissionConfig): OpenAIAccountAdmissionConfig {
   const policies = value.persona_policies || {}
+  const normalizePolicy = (policy?: OpenAIPersonaAdmissionPolicy): OpenAIPersonaAdmissionPolicy => {
+    const source = policy || emptyPersonaPolicy()
+    const { max_active_client_sessions, ...current } = source
+    return {
+      ...emptyPersonaPolicy(),
+      ...current,
+      max_active_users: source.max_active_users || max_active_client_sessions || 0
+    }
+  }
+  const current = { ...value }
+  const max_active_client_sessions = current.max_active_client_sessions
+  delete current.max_active_client_sessions
+  delete current.max_active_client_sessions_per_user_group
   return {
-    ...value,
+    ...current,
     max_concurrency: value.max_concurrency || 0,
-    max_active_client_sessions: value.max_active_client_sessions || 1,
-    max_active_client_sessions_per_user_group: value.max_active_client_sessions_per_user_group || 3,
+    default_max_active_users_per_persona: value.default_max_active_users_per_persona || max_active_client_sessions || 1,
     max_subagents: value.max_subagents || 0,
     subagent_depth: value.subagent_depth || 0,
     max_active_websockets: value.max_active_websockets || 0,
     persona_policies: {
-      codex_cli_strict: { ...emptyPersonaPolicy(), ...(policies.codex_cli_strict || {}) },
-      opencode: { ...emptyPersonaPolicy(), ...(policies.opencode || {}) }
+      codex_cli_strict: normalizePolicy(policies.codex_cli_strict),
+      opencode: normalizePolicy(policies.opencode)
     }
   }
 }
@@ -161,7 +172,7 @@ async function load() {
 async function save() {
   if (!config.value) return
   const personaValues = Object.values(config.value.persona_policies || {}).flatMap((policy) => Object.values(policy))
-  const inheritedGlobalValues = [config.value.max_concurrency, config.value.max_active_client_sessions, config.value.max_active_client_sessions_per_user_group, config.value.max_subagents, config.value.subagent_depth, config.value.max_active_websockets]
+  const inheritedGlobalValues = [config.value.max_concurrency, config.value.default_max_active_users_per_persona, config.value.max_subagents, config.value.subagent_depth, config.value.max_active_websockets]
   if ([...personaValues, ...inheritedGlobalValues].some((value) => !Number.isInteger(value) || value < 0) || config.value.jitter_min_ms > config.value.jitter_max_ms) {
     appStore.showError(t('admin.settings.openAIAccountAdmission.validationError'))
     return

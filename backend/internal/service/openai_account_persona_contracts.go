@@ -45,27 +45,27 @@ var (
 
 // OpenAIAccountPersona 是账号下稳定的应用/设备实例，Position 仅用于管理排序。
 type OpenAIAccountPersona struct {
-	ID                              int64
-	AccountID                       int64
-	Position                        int
-	ProfileID                       SessionPersonaID
-	ProfileVersion                  string
-	CredentialOwner                 OpenAICredentialOwner
-	State                           OpenAIAccountPersonaState
-	Enabled                         bool
-	PersonaGeneration               int64
-	CurrentCredentialChainID        string
-	CurrentSessionEpoch             int64
-	DeviceSeed                      []byte
-	InstallationID                  string
-	ProxyID                         *int64
-	MaxActiveClientSessionsOverride *int
-	RowVersion                      int64
-	CreatedAt                       time.Time
-	UpdatedAt                       time.Time
-	DrainingStartedAt               *time.Time
-	DisabledAt                      *time.Time
-	RetiredAt                       *time.Time
+	ID                       int64
+	AccountID                int64
+	Position                 int
+	ProfileID                SessionPersonaID
+	ProfileVersion           string
+	CredentialOwner          OpenAICredentialOwner
+	State                    OpenAIAccountPersonaState
+	Enabled                  bool
+	PersonaGeneration        int64
+	CurrentCredentialChainID string
+	CurrentSessionEpoch      int64
+	DeviceSeed               []byte
+	InstallationID           string
+	ProxyID                  *int64
+	MaxActiveUsersOverride   *int
+	RowVersion               int64
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
+	DrainingStartedAt        *time.Time
+	DisabledAt               *time.Time
+	RetiredAt                *time.Time
 }
 
 func (p OpenAIAccountPersona) IsDefaultProtected() bool {
@@ -107,51 +107,51 @@ type OpenAIAccountPersonaSession struct {
 
 // OpenAIAccountPersonaLeaseStats 是管理端可展示的脱敏占用摘要。
 type OpenAIAccountPersonaLeaseStats struct {
-	ActiveClientSessions int
-	EarliestReleaseAt    *time.Time
+	ActiveUsers       int
+	EarliestReleaseAt *time.Time
 }
 
 // OpenAIAccountPersonaAdminView 聚合 Persona、OAuth、Session 与准入容量，
 // 不包含 Token、原始 Session ID、device seed 或客户端 Session 标识。
 type OpenAIAccountPersonaAdminView struct {
-	Persona                        OpenAIAccountPersona
-	CredentialState                string
-	CredentialUpdatedAt            *time.Time
-	CredentialExpiresAt            *time.Time
-	SessionState                   OpenAIPersonaSessionState
-	SessionStartedAt               *time.Time
-	SessionLastActiveAt            *time.Time
-	EffectiveProxyID               *int64
-	ProxyInherited                 bool
-	ActiveClientSessions           int
-	EarliestClientSessionReleaseAt *time.Time
-	EffectiveMaxClientSessions     int
-	EffectiveMaxConcurrency        int
-	EffectiveMaxWebSockets         int
+	Persona                 OpenAIAccountPersona
+	CredentialState         string
+	CredentialUpdatedAt     *time.Time
+	CredentialExpiresAt     *time.Time
+	SessionState            OpenAIPersonaSessionState
+	SessionStartedAt        *time.Time
+	SessionLastActiveAt     *time.Time
+	EffectiveProxyID        *int64
+	ProxyInherited          bool
+	ActiveUsers             int
+	EarliestUserReleaseAt   *time.Time
+	EffectiveMaxActiveUsers int
+	EffectiveMaxConcurrency int
+	EffectiveMaxWebSockets  int
 }
 
 type OpenAIAccountPersonaCreate struct {
-	AccountID                       int64
-	ProfileID                       SessionPersonaID
-	ProfileVersion                  string
-	ProxyID                         *int64
-	MaxActiveClientSessionsOverride *int
-	DeviceSeed                      []byte
-	InstallationID                  string
+	AccountID              int64
+	ProfileID              SessionPersonaID
+	ProfileVersion         string
+	ProxyID                *int64
+	MaxActiveUsersOverride *int
+	DeviceSeed             []byte
+	InstallationID         string
 }
 
 type OpenAIAccountPersonaUpdate struct {
-	AccountID                       int64
-	AccountPersonaID                int64
-	ExpectedRowVersion              int64
-	Enabled                         *bool
-	State                           *OpenAIAccountPersonaState
-	ProxyConfigured                 bool
-	ProxyID                         *int64
-	MaxActiveSessionsConfigured     bool
-	MaxActiveClientSessionsOverride *int
-	NewUpstreamSessionID            string
-	OldSessionExpiresAt             time.Time
+	AccountID                int64
+	AccountPersonaID         int64
+	ExpectedRowVersion       int64
+	Enabled                  *bool
+	State                    *OpenAIAccountPersonaState
+	ProxyConfigured          bool
+	ProxyID                  *int64
+	MaxActiveUsersConfigured bool
+	MaxActiveUsersOverride   *int
+	NewUpstreamSessionID     string
+	OldSessionExpiresAt      time.Time
 }
 
 type OpenAIAccountPersonaAuthorization struct {
@@ -237,23 +237,22 @@ type OpenAIAccountPersonaLeaseStatsReader interface {
 
 // OpenAIExecutionTarget 是选定账号后贯穿 HTTP、WS、compact 与 OAuth 的完整身份边界。
 type OpenAIExecutionTarget struct {
-	AccountID         int64
-	AccountPersonaID  int64
-	PersonaGeneration int64
-	SessionEpoch      int64
-	SessionStartedAt  time.Time
-	CredentialChainID string
-	ProfileID         SessionPersonaID
-	ProfileVersion    string
-	DeviceSeed        []byte `json:"-"`
-	InstallationID    string
-	UpstreamSessionID string
-	EffectiveProxyID  *int64
-	ProxyRevision     int64
-	EffectiveProxyURL string `json:"-"`
-	UserGroupLeaseID  int64
-	PersonaLeaseID    int64
-	ReservationToken  string
+	AccountID          int64
+	AccountPersonaID   int64
+	PersonaGeneration  int64
+	SessionEpoch       int64
+	SessionStartedAt   time.Time
+	CredentialChainID  string
+	ProfileID          SessionPersonaID
+	ProfileVersion     string
+	DeviceSeed         []byte `json:"-"`
+	InstallationID     string
+	UpstreamSessionID  string
+	EffectiveProxyID   *int64
+	ProxyRevision      int64
+	EffectiveProxyURL  string `json:"-"`
+	PersonaUserLeaseID int64
+	ReservationToken   string
 }
 
 func (t OpenAIExecutionTarget) Valid() bool {

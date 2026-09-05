@@ -26,7 +26,7 @@
         </select>
       </label>
       <label class="text-xs text-gray-600 dark:text-gray-300">
-        <span>{{ t('admin.accounts.openai.dynamicPersona.maxClients') }}</span>
+        <span>{{ t('admin.accounts.openai.dynamicPersona.maxUsers') }}</span>
         <input v-model="createForm.max_active" type="number" min="1" max="10000" class="input mt-1 w-full" :placeholder="t('admin.accounts.openai.dynamicPersona.inheritPolicy')" />
       </label>
       <div class="flex justify-end gap-2 sm:col-span-3">
@@ -53,7 +53,7 @@
             </p>
           </div>
           <div class="text-right text-xs text-gray-500 dark:text-gray-400">
-            <div>{{ t('admin.accounts.openai.dynamicPersona.clients') }} {{ persona.active_client_sessions }}/{{ persona.effective_max_client_sessions }}</div>
+            <div>{{ t('admin.accounts.openai.dynamicPersona.users') }} {{ persona.active_users }}/{{ persona.effective_max_active_users }}</div>
             <div>{{ t('admin.accounts.openai.dynamicPersona.capacity') }} {{ persona.effective_max_concurrency }} · WS {{ persona.effective_max_websockets || '-' }}</div>
           </div>
         </div>
@@ -67,7 +67,7 @@
             </select>
           </label>
           <label class="text-xs text-gray-600 dark:text-gray-300">
-            <span>{{ t('admin.accounts.openai.dynamicPersona.maxClients') }}</span>
+            <span>{{ t('admin.accounts.openai.dynamicPersona.maxUsers') }}</span>
             <input v-model="drafts[persona.id].max_active" type="number" min="1" max="10000" class="input mt-1 w-full" :placeholder="t('admin.accounts.openai.dynamicPersona.inheritPolicy')" />
           </label>
         </div>
@@ -129,7 +129,7 @@ function stateClass(state: OpenAIAccountPersona['state']) {
 function resetDraft(persona: OpenAIAccountPersona) {
   drafts[persona.id] = {
     proxy_id: persona.proxy_id == null ? '' : String(persona.proxy_id),
-    max_active: persona.max_active_client_sessions_override == null ? '' : String(persona.max_active_client_sessions_override)
+    max_active: persona.max_active_users_override == null ? '' : String(persona.max_active_users_override)
   }
 }
 
@@ -176,7 +176,7 @@ async function createPersona() {
     await adminAPI.accounts.createOpenAIAccountPersona(props.account.id, {
       profile_id: createForm.profile_id,
       proxy_id: createForm.proxy_id === '' ? null : Number(createForm.proxy_id),
-      max_active_client_sessions_override: createForm.max_active === '' ? null : Number(createForm.max_active)
+      max_active_users_override: createForm.max_active === '' ? null : Number(createForm.max_active)
     })
     adding.value = false
     createForm.max_active = ''
@@ -194,8 +194,8 @@ async function savePersona(persona: OpenAIAccountPersona) {
     row_version: persona.row_version,
     proxy_configured: true,
     proxy_id: draft.proxy_id === '' ? null : Number(draft.proxy_id),
-    max_active_client_sessions_configured: true,
-    max_active_client_sessions_override: draft.max_active === '' ? null : Number(draft.max_active)
+    max_active_users_configured: true,
+    max_active_users_override: draft.max_active === '' ? null : Number(draft.max_active)
   }))
 }
 

@@ -144,9 +144,9 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 				zap.Error(err),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
-			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
-				markDownstreamDistributionDenied(c)
-				h.errorResponse(c, downstreamDistributionDeniedStatus, downstreamDistributionDeniedType, downstreamDistributionDeniedMessage)
+			if errors.Is(err, service.ErrOpenAIPersonaUserCapacity) {
+				markOpsRoutingCapacityLimited(c)
+				h.errorResponse(c, http.StatusServiceUnavailable, "rate_limit_error", openAIAccountBusyClientMessage)
 				return
 			}
 			if len(failedAccountIDs) == 0 {

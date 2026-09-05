@@ -177,9 +177,9 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				zap.Error(err),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
-			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
-				markDownstreamDistributionDenied(c)
-				h.handleStreamingAwareError(c, downstreamDistributionDeniedStatus, downstreamDistributionDeniedType, downstreamDistributionDeniedMessage, streamStarted)
+			if errors.Is(err, service.ErrOpenAIPersonaUserCapacity) {
+				markOpsRoutingCapacityLimited(c)
+				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "rate_limit_error", openAIAccountBusyClientMessage, streamStarted)
 				return
 			}
 			if len(failedAccountIDs) == 0 {

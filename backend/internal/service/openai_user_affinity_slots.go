@@ -133,6 +133,33 @@ func (s *OpenAIGatewayService) selectOpenAIUserAffinityResidentSlotsOnce(ctx con
 			}
 		}
 	}
+	if occupiedAccounts := openAIUserOccupiedPersonaAccounts(ctx); len(occupiedAccounts) > 0 {
+		preferredSlots := make([]OpenAIUserResidentSlot, 0, len(activeSlots))
+		for _, slot := range activeSlots {
+			if _, ok := occupiedAccounts[slot.AccountID]; ok && isOpenAIUserAffinityResidentSlotReusable(slot.Status) {
+				preferredSlots = append(preferredSlots, slot)
+			}
+		}
+		sort.SliceStable(preferredSlots, func(i, j int) bool {
+			leftRoute := routeSlot != nil && preferredSlots[i].ID == routeSlot.ID
+			rightRoute := routeSlot != nil && preferredSlots[j].ID == routeSlot.ID
+			if leftRoute != rightRoute {
+				return leftRoute
+			}
+			return openAIUserAffinityResidentSlotOwnershipTier(preferredSlots[i], identity.userID) <
+				openAIUserAffinityResidentSlotOwnershipTier(preferredSlots[j], identity.userID)
+		})
+		for i := range preferredSlots {
+			slot := &preferredSlots[i]
+			admission, admissionErr := s.openAIUserAffinityResidentSlotAdmission(ctx, req, slot)
+			if admissionErr != nil {
+				return nil, true, admissionErr
+			}
+			if admission == openAIUserAffinityResidentAllowed || routeSlot != nil && slot.ID == routeSlot.ID && admission == openAIUserAffinityResidentTemporaryCapacity {
+				return s.selectOpenAIUserAffinityResidentSlot(ctx, req, config, identity, slot)
+			}
+		}
+	}
 	if routeSlot != nil && (routeSlot.SoftOwnerUserID == 0 || routeSlot.SoftOwnerUserID == identity.userID) {
 		admission, admissionErr := s.openAIUserAffinityResidentSlotAdmission(ctx, req, routeSlot)
 		if admissionErr != nil {

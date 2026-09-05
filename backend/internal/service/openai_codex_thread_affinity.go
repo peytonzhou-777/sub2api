@@ -29,6 +29,7 @@ type openAICodexThreadAffinityContextKey struct{}
 // openAICodexThreadAffinityState 只保存 HMAC 索引和本次选号授权，不保存客户端原始 ID。
 type openAICodexThreadAffinityState struct {
 	selfAliasHash       string
+	selfLookupHashes    []string
 	parentAliasHashes   []string
 	internalSubagent    bool
 	authorizedAccountID int64
@@ -75,7 +76,7 @@ func (s *OpenAIGatewayService) stageOpenAICodexThreadAffinity(c *gin.Context, bo
 	if !bindConversation && !original.isSubagent {
 		return
 	}
-	if original.clientSessionID == "" || original.threadID == "" && original.parentThreadID == "" && original.forkedThreadID == "" {
+	if original.threadID == "" && original.parentThreadID == "" && original.forkedThreadID == "" {
 		if !original.isSubagent {
 			return
 		}
@@ -85,13 +86,19 @@ func (s *OpenAIGatewayService) stageOpenAICodexThreadAffinity(c *gin.Context, bo
 		secret = strings.TrimSpace(s.cfg.Gateway.CodexFingerprintSecret)
 	}
 	state := &openAICodexThreadAffinityState{internalSubagent: original.isSubagent}
-	if bindConversation && len(secret) >= codexFingerprintSeedBytes && original.clientSessionID != "" {
+	if bindConversation && len(secret) >= codexFingerprintSeedBytes {
 		if original.threadID != "" {
-			state.selfAliasHash = openAICodexThreadAliasHash([]byte(secret), original.clientSessionID, original.threadID)
+			state.selfAliasHash = openAICodexThreadAliasHash([]byte(secret), original.threadID)
+			state.selfLookupHashes = uniqueCodexFingerprintHashes(
+				state.selfAliasHash,
+				openAILegacyCodexThreadAliasHash([]byte(secret), original.clientSessionID, original.threadID),
+			)
 		}
 		state.parentAliasHashes = uniqueCodexFingerprintHashes(
-			openAICodexThreadAliasHash([]byte(secret), original.clientSessionID, original.parentThreadID),
-			openAICodexThreadAliasHash([]byte(secret), original.clientSessionID, original.forkedThreadID),
+			openAICodexThreadAliasHash([]byte(secret), original.parentThreadID),
+			openAILegacyCodexThreadAliasHash([]byte(secret), original.clientSessionID, original.parentThreadID),
+			openAICodexThreadAliasHash([]byte(secret), original.forkedThreadID),
+			openAILegacyCodexThreadAliasHash([]byte(secret), original.clientSessionID, original.forkedThreadID),
 		)
 	}
 	current := openAICodexThreadAffinityFromContext(c.Request.Context())
@@ -99,11 +106,16 @@ func (s *OpenAIGatewayService) stageOpenAICodexThreadAffinity(c *gin.Context, bo
 		if state.selfAliasHash == "" {
 			state.selfAliasHash = current.selfAliasHash
 		}
+		if len(state.selfLookupHashes) == 0 {
+			state.selfLookupHashes = append([]string(nil), current.selfLookupHashes...)
+		}
 		if len(state.parentAliasHashes) == 0 {
 			state.parentAliasHashes = append([]string(nil), current.parentAliasHashes...)
 		}
 		state.internalSubagent = state.internalSubagent || current.internalSubagent
-		if state.selfAliasHash == current.selfAliasHash && equalOpenAICodexThreadHashes(state.parentAliasHashes, current.parentAliasHashes) {
+		if state.selfAliasHash == current.selfAliasHash &&
+			equalOpenAICodexThreadHashes(state.selfLookupHashes, current.selfLookupHashes) &&
+			equalOpenAICodexThreadHashes(state.parentAliasHashes, current.parentAliasHashes) {
 			current.internalSubagent = state.internalSubagent
 			return
 		}
@@ -141,8 +153,19 @@ func equalOpenAICodexThreadHashes(left, right []string) bool {
 	return true
 }
 
-// openAICodexThreadAliasHash 使用长度分隔 HMAC，避免保存或拼接歧义泄露原始线程 ID。
-func openAICodexThreadAliasHash(secret []byte, sessionID, threadID string) string {
+// openAICodexThreadAliasHash 只使用稳定 Thread ID，使不同客户端 Session 的子进程仍能解析父绑定。
+func openAICodexThreadAliasHash(secret []byte, threadID string) string {
+	threadID = strings.TrimSpace(threadID)
+	if len(secret) == 0 || threadID == "" {
+		return ""
+	}
+	mac := hmac.New(sha256.New, secret)
+	writeCodexFingerprintHMACPart(mac, []byte("openai-codex-thread-affinity:v2"))
+	writeCodexFingerprintHMACPart(mac, []byte(threadID))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func openAILegacyCodexThreadAliasHash(secret []byte, sessionID, threadID string) string {
 	sessionID = strings.TrimSpace(sessionID)
 	threadID = strings.TrimSpace(threadID)
 	if len(secret) == 0 || sessionID == "" || threadID == "" {
@@ -193,9 +216,23 @@ func resolveOpenAICodexThreadBindings(
 			ctx, identity.userID, identity.apiKeyID, scopeKey, openAICodexThreadAliasType, hash,
 		)
 	}
-	selfBinding, err := lookup(state.selfAliasHash)
-	if err != nil {
-		return nil, nil, err
+	var selfBinding *OpenAIUserConversationBinding
+	selfHashes := state.selfLookupHashes
+	if len(selfHashes) == 0 && state.selfAliasHash != "" {
+		selfHashes = []string{state.selfAliasHash}
+	}
+	for _, hash := range sortedOpenAICodexThreadHashes(selfHashes) {
+		candidate, err := lookup(hash)
+		if err != nil {
+			return nil, nil, err
+		}
+		if candidate == nil {
+			continue
+		}
+		if selfBinding != nil && (selfBinding.ID != candidate.ID || selfBinding.AccountID != candidate.AccountID) {
+			return nil, nil, ErrOpenAICodexThreadLineageConflict
+		}
+		selfBinding = candidate
 	}
 	var parentBinding *OpenAIUserConversationBinding
 	var parentHint *OpenAIUserConversationBinding

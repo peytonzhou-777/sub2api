@@ -190,9 +190,9 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 				zap.Error(openAICompatibleSelectionErrorForLog(err, requestPlatform)),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
-			if errors.Is(err, service.ErrOpenAIUserGroupSessionCapacity) {
-				markDownstreamDistributionDenied(c)
-				h.handleStreamingAwareError(c, downstreamDistributionDeniedStatus, downstreamDistributionDeniedType, downstreamDistributionDeniedMessage, streamStarted)
+			if errors.Is(err, service.ErrOpenAIPersonaUserCapacity) {
+				markOpsRoutingCapacityLimited(c)
+				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "rate_limit_error", openAIAccountBusyClientMessage, streamStarted)
 				return
 			}
 			if len(failedAccountIDs) == 0 {

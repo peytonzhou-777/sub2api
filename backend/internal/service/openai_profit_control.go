@@ -299,8 +299,8 @@ func ContextWithSelectionProfitGate(ctx context.Context, sel *AccountSelectionRe
 	if sel.ExecutionTarget != nil && sel.ExecutionTarget.Valid() {
 		ctx = ContextWithOpenAIExecutionTarget(ctx, *sel.ExecutionTarget)
 	}
-	if sel.clientSessionReservation != nil {
-		ctx = context.WithValue(ctx, openAIClientSessionReservationContextKey{}, sel.clientSessionReservation)
+	if sel.personaUserReservation != nil {
+		ctx = context.WithValue(ctx, openAIPersonaUserReservationContextKey{}, sel.personaUserReservation)
 	}
 	return ctx
 }

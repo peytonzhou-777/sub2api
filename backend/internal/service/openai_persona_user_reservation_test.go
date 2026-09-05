@@ -12,38 +12,35 @@ import (
 )
 
 type openAIBoundPersonaReservationRepo struct {
-	OpenAIClientSessionReservationRepository
-	userLeaseID    int64
+	OpenAIPersonaUserReservationRepository
 	personaLeaseID int64
 	reserveErr     error
+	reserveInputs  []OpenAIPersonaUserReserveInput
 	rollbackTokens []string
-	commits        []OpenAIClientSessionReservationCommit
+	commits        []OpenAIPersonaUserReservationCommit
 	candidates     []OpenAIPersonaCapacityCandidate
 	listCalls      int
 }
 
-func (r *openAIBoundPersonaReservationRepo) ReserveUserGroupSession(context.Context, OpenAIUserGroupSessionReserveInput) (*OpenAIClientSessionLeaseReservation, error) {
-	return &OpenAIClientSessionLeaseReservation{LeaseID: r.userLeaseID}, nil
-}
-
-func (r *openAIBoundPersonaReservationRepo) ReservePersonaSession(context.Context, OpenAIPersonaSessionReserveInput) (*OpenAIClientSessionLeaseReservation, error) {
+func (r *openAIBoundPersonaReservationRepo) ReservePersonaUser(_ context.Context, input OpenAIPersonaUserReserveInput) (*OpenAIPersonaUserLeaseReservation, error) {
+	r.reserveInputs = append(r.reserveInputs, input)
 	if r.reserveErr != nil {
 		return nil, r.reserveErr
 	}
-	return &OpenAIClientSessionLeaseReservation{LeaseID: r.personaLeaseID}, nil
+	return &OpenAIPersonaUserLeaseReservation{LeaseID: r.personaLeaseID}, nil
 }
 
-func (r *openAIBoundPersonaReservationRepo) RollbackClientSessionReservation(_ context.Context, token string, _ time.Time) error {
+func (r *openAIBoundPersonaReservationRepo) RollbackPersonaUserReservation(_ context.Context, token string, _ time.Time) error {
 	r.rollbackTokens = append(r.rollbackTokens, token)
 	return nil
 }
 
-func (r *openAIBoundPersonaReservationRepo) CommitClientSessionReservation(_ context.Context, commit OpenAIClientSessionReservationCommit) (OpenAIExecutionTarget, error) {
+func (r *openAIBoundPersonaReservationRepo) CommitPersonaUserReservation(_ context.Context, commit OpenAIPersonaUserReservationCommit) (OpenAIExecutionTarget, error) {
 	r.commits = append(r.commits, commit)
 	return OpenAIExecutionTarget{}, nil
 }
 
-func (r *openAIBoundPersonaReservationRepo) ListOpenAIPersonaCapacityCandidates(context.Context, []int64, int64, int64, string, time.Time) ([]OpenAIPersonaCapacityCandidate, error) {
+func (r *openAIBoundPersonaReservationRepo) ListOpenAIPersonaCapacityCandidates(context.Context, []int64, int64, time.Time) ([]OpenAIPersonaCapacityCandidate, error) {
 	r.listCalls++
 	return append([]OpenAIPersonaCapacityCandidate(nil), r.candidates...), nil
 }
@@ -72,7 +69,7 @@ func openAIBoundPersonaReservationTestFixture(t *testing.T, provisionalToken str
 	*openAIBoundPersonaReservationRepo,
 	context.Context,
 	*AccountSelectionResult,
-	*openAIClientSessionReservationState,
+	*openAIPersonaUserReservationState,
 ) {
 	t.Helper()
 	const accountID int64 = 61
@@ -115,8 +112,8 @@ func openAIBoundPersonaReservationTestFixture(t *testing.T, provisionalToken str
 		Account:         &Account{ID: accountID, Platform: PlatformOpenAI, Type: AccountTypeOAuth},
 		ExecutionTarget: &target,
 	}
-	state := &openAIClientSessionReservationState{
-		repo: reservationRepo, token: "client-reservation", userLeaseID: 801,
+	state := &openAIPersonaUserReservationState{
+		repo: reservationRepo, token: "client-reservation",
 	}
 	return svc, store, reservationRepo, ctx, selection, state
 }
@@ -136,8 +133,10 @@ func TestAttachBoundOpenAIPersonaReservationPersistsProvisionalChildTarget(t *te
 	require.Equal(t, int64(55), store.targets[0].AccountPersonaID)
 	require.Equal(t, int64(7), store.targets[0].SessionEpoch)
 	require.Equal(t, "chain-55", store.targets[0].CredentialChainID)
-	require.Equal(t, int64(801), store.targets[0].UserGroupLeaseID)
-	require.Equal(t, int64(901), store.targets[0].PersonaLeaseID)
+	require.Equal(t, int64(901), store.targets[0].PersonaUserLeaseID)
+	require.Len(t, reservationRepo.reserveInputs, 1)
+	require.Equal(t, int64(35), reservationRepo.reserveInputs[0].UserID)
+	require.True(t, reservationRepo.reserveInputs[0].ExistingThread)
 }
 
 func TestAttachBoundOpenAIPersonaReservationRollsBackWhenChildTargetPersistenceFails(t *testing.T) {
@@ -162,7 +161,7 @@ func TestAttachBoundOpenAIPersonaReservationDoesNotRewriteCommittedContinuation(
 	require.Empty(t, reservationRepo.rollbackTokens)
 }
 
-func TestAccountPermitHandoffKeepsClientSessionReservationUntilAccepted(t *testing.T) {
+func TestAccountPermitHandoffKeepsPersonaUserReservationUntilAccepted(t *testing.T) {
 	svc, _, reservationRepo, ctx, selection, state := openAIBoundPersonaReservationTestFixture(t, "")
 	state.activeTTL = 40 * time.Minute
 	permitReleases := 0
@@ -174,7 +173,7 @@ func TestAccountPermitHandoffKeepsClientSessionReservationUntilAccepted(t *testi
 	selection.ReleaseAccountPermit()
 
 	require.Equal(t, 1, permitReleases)
-	require.Empty(t, reservationRepo.rollbackTokens, "统一准入交接不能回滚客户端 Session")
+	require.Empty(t, reservationRepo.rollbackTokens, "统一准入交接不能回滚 Persona 用户占用")
 	require.False(t, state.rolledBack)
 
 	acceptedCtx := ContextWithSelectionProfitGate(ctx, selection)
@@ -186,10 +185,52 @@ func TestAccountPermitHandoffKeepsClientSessionReservationUntilAccepted(t *testi
 
 	selection.ReleaseFunc()
 	require.Equal(t, 1, permitReleases)
-	require.Empty(t, reservationRepo.rollbackTokens, "accepted 后释放执行槽不得缩短活跃 lease")
+	require.Empty(t, reservationRepo.rollbackTokens, "accepted 后释放执行槽不得缩短用户 lease")
 }
 
-func TestWaitPlanClientSessionReservationCommitsWithoutSchedulerPermit(t *testing.T) {
+func TestAttachOpenAIPersonaReservationPrefersPersonaAlreadyOccupiedByUser(t *testing.T) {
+	svc, _, reservationRepo, ctx, selection, state := openAIBoundPersonaReservationTestFixture(t, "")
+	selection.ExecutionTarget = nil
+	basePersona := OpenAIAccountPersona{
+		AccountID: selection.Account.ID, ProfileID: SessionPersonaCodexCLIStrict,
+		ProfileVersion: CodexOutboundProfileCLI0149, State: OpenAIAccountPersonaStateActive,
+		Enabled: true, PersonaGeneration: 1, CurrentCredentialChainID: "chain",
+		CurrentSessionEpoch: 1, DeviceSeed: []byte("0123456789abcdef0123456789abcdef"), InstallationID: "install",
+	}
+	baseSession := OpenAIAccountPersonaSession{
+		SessionEpoch: 1, State: OpenAIPersonaSessionCurrent, PersonaGeneration: 1,
+		CredentialChainID: "chain", ProfileID: SessionPersonaCodexCLIStrict,
+		ProfileVersion: CodexOutboundProfileCLI0149, InstallationID: "install",
+		UpstreamSessionID: "session", StartedAt: time.Now().UTC().Add(-time.Minute),
+	}
+	firstPersona := basePersona
+	firstPersona.ID = 101
+	firstPersona.Position = 0
+	firstSession := baseSession
+	firstSession.AccountPersonaID = firstPersona.ID
+	secondPersona := basePersona
+	secondPersona.ID = 102
+	secondPersona.Position = 1
+	secondPersona.ProfileID = SessionPersonaOpenCode
+	secondPersona.ProfileVersion = SessionPersonaOpenCodeVersion
+	secondSession := baseSession
+	secondSession.AccountPersonaID = secondPersona.ID
+	secondSession.ProfileID = secondPersona.ProfileID
+	secondSession.ProfileVersion = secondPersona.ProfileVersion
+	reservationRepo.candidates = []OpenAIPersonaCapacityCandidate{
+		{Persona: firstPersona, Session: firstSession, ActiveUsers: 0},
+		{Persona: secondPersona, Session: secondSession, ActiveUsers: 1, UserAlreadyActive: true},
+	}
+
+	err := svc.attachOpenAIPersonaReservation(ctx, selection, state, "different-client-session")
+
+	require.NoError(t, err)
+	require.Equal(t, int64(102), selection.ExecutionTarget.AccountPersonaID)
+	require.Len(t, reservationRepo.reserveInputs, 1)
+	require.Equal(t, int64(102), reservationRepo.reserveInputs[0].AccountPersonaID)
+}
+
+func TestWaitPlanPersonaUserReservationCommitsWithoutSchedulerPermit(t *testing.T) {
 	svc, _, reservationRepo, ctx, selection, state := openAIBoundPersonaReservationTestFixture(t, "")
 	selection.Acquired = false
 	selection.ReleaseFunc = nil
@@ -203,7 +244,7 @@ func TestWaitPlanClientSessionReservationCommitsWithoutSchedulerPermit(t *testin
 	require.Empty(t, reservationRepo.rollbackTokens)
 }
 
-func TestAbandonedClientSessionReservationRollsBackExactlyOnce(t *testing.T) {
+func TestAbandonedPersonaUserReservationRollsBackExactlyOnce(t *testing.T) {
 	svc, _, reservationRepo, ctx, selection, state := openAIBoundPersonaReservationTestFixture(t, "")
 	permitReleases := 0
 	selection.Acquired = true
@@ -212,7 +253,7 @@ func TestAbandonedClientSessionReservationRollsBackExactlyOnce(t *testing.T) {
 
 	selection.ReleaseFunc()
 	selection.ReleaseFunc()
-	selection.RollbackOpenAIClientSessionReservation()
+	selection.RollbackOpenAIPersonaUserReservation()
 
 	require.Equal(t, 1, permitReleases)
 	require.Equal(t, []string{"client-reservation"}, reservationRepo.rollbackTokens)

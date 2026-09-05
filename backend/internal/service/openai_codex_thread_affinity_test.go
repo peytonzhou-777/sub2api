@@ -37,11 +37,13 @@ func TestOpenAICodexThreadAffinityStagesOnlyHMACIndexes(t *testing.T) {
 	state := stagedOpenAICodexThreadAffinity(c)
 	require.NotNil(t, state)
 	require.True(t, state.internalSubagent)
-	require.Equal(t, openAICodexThreadAliasHash([]byte(secret), "raw-session", "raw-child"), state.selfAliasHash)
-	require.ElementsMatch(t, []string{
-		openAICodexThreadAliasHash([]byte(secret), "raw-session", "raw-parent"),
-		openAICodexThreadAliasHash([]byte(secret), "raw-session", "raw-fork"),
-	}, state.parentAliasHashes)
+	require.Equal(t, openAICodexThreadAliasHash([]byte(secret), "raw-child"), state.selfAliasHash)
+	require.Contains(t, state.selfLookupHashes, state.selfAliasHash)
+	require.Contains(t, state.selfLookupHashes, openAILegacyCodexThreadAliasHash([]byte(secret), "raw-session", "raw-child"))
+	require.Contains(t, state.parentAliasHashes, openAICodexThreadAliasHash([]byte(secret), "raw-parent"))
+	require.Contains(t, state.parentAliasHashes, openAILegacyCodexThreadAliasHash([]byte(secret), "raw-session", "raw-parent"))
+	require.Contains(t, state.parentAliasHashes, openAICodexThreadAliasHash([]byte(secret), "raw-fork"))
+	require.Contains(t, state.parentAliasHashes, openAILegacyCodexThreadAliasHash([]byte(secret), "raw-session", "raw-fork"))
 	encoded := strings.Join(append([]string{state.selfAliasHash}, state.parentAliasHashes...), "\n")
 	require.NotContains(t, encoded, "raw-session")
 	require.NotContains(t, encoded, "raw-parent")
@@ -109,7 +111,7 @@ func TestOpenAICodexThreadAffinityGenerateSessionFeedsParentScheduling(t *testin
 	require.NotEmpty(t, sessionHash)
 	state := stagedOpenAICodexThreadAffinity(c)
 	require.NotNil(t, state)
-	parentHash := openAICodexThreadAliasHash([]byte(secret), "session-bridge", "parent-thread")
+	parentHash := openAICodexThreadAliasHash([]byte(secret), "parent-thread")
 	require.Contains(t, state.parentAliasHashes, parentHash)
 	repo.aliasBindings = map[string]*OpenAIUserConversationBinding{
 		openAICodexThreadAliasTestKey(nil, parentHash): {
@@ -129,6 +131,17 @@ func TestOpenAICodexThreadAffinityGenerateSessionFeedsParentScheduling(t *testin
 	require.NotNil(t, selection)
 	require.Equal(t, accountID, selection.Account.ID)
 	require.True(t, state.allows(accountID))
+}
+
+func TestOpenAICodexThreadAliasHashIsStableAcrossClientSessions(t *testing.T) {
+	secret := []byte(strings.Repeat("q", 32))
+	stable := openAICodexThreadAliasHash(secret, "thread-1")
+
+	require.Equal(t, stable, openAICodexThreadAliasHash(secret, "thread-1"))
+	require.NotEqual(t,
+		openAILegacyCodexThreadAliasHash(secret, "session-a", "thread-1"),
+		openAILegacyCodexThreadAliasHash(secret, "session-b", "thread-1"),
+	)
 }
 
 func TestOpenAICodexThreadAffinityStripsUnauthorizedHTTPAndBodyLineage(t *testing.T) {

@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -80,8 +79,8 @@ WHERE account_persona_id = $1 AND session_epoch = 2`, personas[0].ID).Scan(&newP
 	maxActive := 1
 	dynamic, err := personaRepo.CreateAccountPersona(ctx, service.OpenAIAccountPersonaCreate{
 		AccountID: account.ID, ProfileID: service.SessionPersonaOpenCode, ProfileVersion: "1.18.23",
-		MaxActiveClientSessionsOverride: &maxActive,
-		DeviceSeed:                      []byte("abcdef0123456789abcdef0123456789"), InstallationID: "opencode-installation",
+		MaxActiveUsersOverride: &maxActive,
+		DeviceSeed:             []byte("abcdef0123456789abcdef0123456789"), InstallationID: "opencode-installation",
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, dynamic.Position)
@@ -119,11 +118,11 @@ WHERE account_persona_id = $1 AND session_epoch = 2`, personas[0].ID).Scan(&newP
 	updatedMaxActive := 2
 	capacityUpdated, err := personaRepo.UpdateAccountPersona(ctx, service.OpenAIAccountPersonaUpdate{
 		AccountID: account.ID, AccountPersonaID: dynamic.ID, ExpectedRowVersion: authorized.RowVersion,
-		MaxActiveSessionsConfigured: true, MaxActiveClientSessionsOverride: &updatedMaxActive,
+		MaxActiveUsersConfigured: true, MaxActiveUsersOverride: &updatedMaxActive,
 	})
 	require.NoError(t, err)
-	require.NotNil(t, capacityUpdated.MaxActiveClientSessionsOverride)
-	require.Equal(t, updatedMaxActive, *capacityUpdated.MaxActiveClientSessionsOverride)
+	require.NotNil(t, capacityUpdated.MaxActiveUsersOverride)
+	require.Equal(t, updatedMaxActive, *capacityUpdated.MaxActiveUsersOverride)
 	require.Equal(t, service.OpenAIAccountPersonaStateActive, capacityUpdated.State)
 
 	disabled := false
@@ -238,23 +237,17 @@ func TestOpenAIAccountPersonaSessionManualRotationHonorsLeaseAndForceRevokes(t *
 	require.NoError(t, err)
 	persona := personas[0]
 
-	var userID, groupID, apiKeyID int64
+	var userID int64
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `INSERT INTO users (email, password_hash)
 VALUES ($1, 'test') RETURNING id`, "persona-session-"+suffix+"@example.com").Scan(&userID))
 	t.Cleanup(func() {
 		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM users WHERE id = $1`, userID)
 	})
-	require.NoError(t, integrationDB.QueryRowContext(ctx, `INSERT INTO groups (name) VALUES ($1) RETURNING id`, "persona-session-"+suffix).Scan(&groupID))
-	t.Cleanup(func() {
-		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM groups WHERE id = $1`, groupID)
-	})
-	require.NoError(t, integrationDB.QueryRowContext(ctx, `INSERT INTO api_keys (user_id, key, name, group_id)
-VALUES ($1, $2, 'test', $3) RETURNING id`, userID, "sk-session-"+suffix, groupID).Scan(&apiKeyID))
-	_, err = integrationDB.ExecContext(ctx, `INSERT INTO openai_persona_client_session_leases
-    (account_persona_id, account_id, user_id, api_key_id, client_session_hash, state, last_active_at, active_until)
-VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW() + INTERVAL '1 hour')`,
-		persona.ID, account.ID, userID, apiKeyID, strings.Repeat("a", 64))
+	_, err = integrationDB.ExecContext(ctx, `INSERT INTO openai_persona_active_user_leases
+    (account_persona_id, account_id, user_id, state, last_active_at, active_until)
+VALUES ($1, $2, $3, 'active', NOW(), NOW() + INTERVAL '1 hour')`,
+		persona.ID, account.ID, userID)
 	require.NoError(t, err)
 
 	policy := service.CodexFingerprintEpochPolicy{MinSessionAgeHours: 1, MaxSessionAgeHours: 2, IdleGateMinutes: 1, OldEpochGraceHours: 1}

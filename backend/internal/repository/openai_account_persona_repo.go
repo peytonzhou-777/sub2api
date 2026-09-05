@@ -24,7 +24,7 @@ func NewOpenAIAccountPersonaRepository(db *sql.DB) service.OpenAIAccountPersonaR
 const openAIAccountPersonaSelect = `SELECT id, account_id, position, profile_id, profile_version,
        credential_owner, state, enabled, persona_generation,
        COALESCE(current_credential_chain_id, ''), current_session_epoch, device_seed,
-       installation_id, proxy_id, max_active_client_sessions_override, row_version,
+       installation_id, proxy_id, max_active_users_override, row_version,
        created_at, updated_at, draining_started_at, disabled_at, retired_at
 FROM openai_account_personas`
 
@@ -50,7 +50,7 @@ func scanOpenAIAccountPersona(scanner interface{ Scan(...any) error }) (*service
 	}
 	if maxActive.Valid {
 		value := int(maxActive.Int64)
-		persona.MaxActiveClientSessionsOverride = &value
+		persona.MaxActiveUsersOverride = &value
 	}
 	if drainingAt.Valid {
 		persona.DrainingStartedAt = &drainingAt.Time
@@ -159,7 +159,7 @@ WHERE account_id = $1 AND id = $2 AND state <> 'retired'`, accountID, accountPer
 	return persona, err
 }
 
-// ListAccountPersonaLeaseStats 汇总仍被 lease 或 request hold 占用的客户端 Session。
+// ListAccountPersonaLeaseStats 汇总仍被 lease 或 request hold 占用的活跃用户。
 func (r *openAIAccountPersonaRepository) ListAccountPersonaLeaseStats(ctx context.Context, accountID int64, now time.Time) (map[int64]service.OpenAIAccountPersonaLeaseStats, error) {
 	if r == nil || r.db == nil || accountID <= 0 {
 		return nil, service.ErrOpenAIAccountPersonaNotFound
@@ -170,13 +170,13 @@ func (r *openAIAccountPersonaRepository) ListAccountPersonaLeaseStats(ctx contex
 	rows, err := r.db.QueryContext(ctx, `SELECT p.id,
        COUNT(DISTINCT l.id) FILTER (WHERE l.state IN ('provisional','active') AND (
            l.active_until > $2::timestamptz OR EXISTS (
-               SELECT 1 FROM openai_persona_request_holds h
+               SELECT 1 FROM openai_persona_user_request_holds h
                WHERE h.lease_id = l.id AND h.expires_at > $2::timestamptz
            )
        )),
        MIN(l.active_until) FILTER (WHERE l.state IN ('provisional','active') AND l.active_until > $2::timestamptz)
 FROM openai_account_personas p
-LEFT JOIN openai_persona_client_session_leases l ON l.account_persona_id = p.id
+LEFT JOIN openai_persona_active_user_leases l ON l.account_persona_id = p.id
 WHERE p.account_id = $1::bigint AND p.state <> 'retired'
 GROUP BY p.id`, accountID, now)
 	if err != nil {
@@ -191,7 +191,7 @@ GROUP BY p.id`, accountID, now)
 		if err = rows.Scan(&personaID, &active, &earliest); err != nil {
 			return nil, err
 		}
-		stats := service.OpenAIAccountPersonaLeaseStats{ActiveClientSessions: active}
+		stats := service.OpenAIAccountPersonaLeaseStats{ActiveUsers: active}
 		if earliest.Valid {
 			value := earliest.Time
 			stats.EarliestReleaseAt = &value
@@ -251,15 +251,15 @@ FROM openai_account_personas WHERE account_id = $1 AND state <> 'retired'`, inpu
 	persona, err := scanOpenAIAccountPersona(tx.QueryRowContext(ctx, `INSERT INTO openai_account_personas
     (account_id, position, profile_id, profile_version, credential_owner, state, enabled,
      persona_generation, current_session_epoch, device_seed, installation_id, proxy_id,
-     max_active_client_sessions_override, row_version)
-VALUES ($1, $2, $3, $4, 'persona_independent', 'draft', TRUE, 1, 0, $5, $6, $7::bigint, $8::int, 1)
+     max_active_users_override, max_active_client_sessions_override, row_version)
+VALUES ($1, $2, $3, $4, 'persona_independent', 'draft', TRUE, 1, 0, $5, $6, $7::bigint, $8::int, $8::int, 1)
 RETURNING id, account_id, position, profile_id, profile_version, credential_owner, state,
           enabled, persona_generation, COALESCE(current_credential_chain_id, ''),
           current_session_epoch, device_seed, installation_id, proxy_id,
-          max_active_client_sessions_override, row_version, created_at, updated_at,
+          max_active_users_override, row_version, created_at, updated_at,
           draining_started_at, disabled_at, retired_at`, input.AccountID, position,
 		string(input.ProfileID), strings.TrimSpace(input.ProfileVersion), input.DeviceSeed,
-		strings.TrimSpace(input.InstallationID), input.ProxyID, input.MaxActiveClientSessionsOverride))
+		strings.TrimSpace(input.InstallationID), input.ProxyID, input.MaxActiveUsersOverride))
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +296,7 @@ WHERE account_id = $1 AND id = $2 AND state <> 'retired' FOR UPDATE`, input.Acco
 	enabled := current.Enabled
 	state := current.State
 	proxyID := current.ProxyID
-	maxActive := current.MaxActiveClientSessionsOverride
+	maxActive := current.MaxActiveUsersOverride
 	if input.Enabled != nil {
 		enabled = *input.Enabled
 		if !enabled && state == service.OpenAIAccountPersonaStateActive {
@@ -309,8 +309,8 @@ WHERE account_id = $1 AND id = $2 AND state <> 'retired' FOR UPDATE`, input.Acco
 	if input.ProxyConfigured {
 		proxyID = input.ProxyID
 	}
-	if input.MaxActiveSessionsConfigured {
-		maxActive = input.MaxActiveClientSessionsOverride
+	if input.MaxActiveUsersConfigured {
+		maxActive = input.MaxActiveUsersOverride
 	}
 	requiresNewSession := input.ProxyConfigured && !sameNullableInt64(current.ProxyID, proxyID)
 	if (current.State == service.OpenAIAccountPersonaStateDisabled || current.State == service.OpenAIAccountPersonaStateDraining) &&
@@ -368,7 +368,7 @@ VALUES ($1, $2, $3, 'current', $4, $5, $6, $7, $8::bigint, $9, $10, $11, TRUE)`,
 
 	updated, err := scanOpenAIAccountPersona(tx.QueryRowContext(ctx, `UPDATE openai_account_personas SET
     enabled = $1, state = $2::varchar, proxy_id = $3::bigint,
-    max_active_client_sessions_override = $4::int,
+    max_active_users_override = $4::int, max_active_client_sessions_override = $4::int,
     persona_generation = $5, current_session_epoch = $6,
     row_version = row_version + 1, updated_at = NOW(),
     draining_started_at = CASE WHEN $2::varchar = 'draining' THEN COALESCE(draining_started_at, NOW()) ELSE NULL END,
@@ -377,7 +377,7 @@ WHERE id = $7 AND account_id = $8 AND row_version = $9
 RETURNING id, account_id, position, profile_id, profile_version, credential_owner, state,
           enabled, persona_generation, COALESCE(current_credential_chain_id, ''),
           current_session_epoch, device_seed, installation_id, proxy_id,
-          max_active_client_sessions_override, row_version, created_at, updated_at,
+          max_active_users_override, row_version, created_at, updated_at,
           draining_started_at, disabled_at, retired_at`, enabled, string(state), proxyID, maxActive,
 		personaGeneration, sessionEpoch, current.ID, current.AccountID, current.RowVersion))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -427,10 +427,10 @@ WHERE account_id = $1 AND id = $2 AND state <> 'retired' FOR UPDATE`, accountID,
 	}
 	var inUse bool
 	if err = tx.QueryRowContext(ctx, `SELECT EXISTS (
-    SELECT 1 FROM openai_persona_client_session_leases l
+    SELECT 1 FROM openai_persona_active_user_leases l
     WHERE l.account_persona_id = $1 AND l.state IN ('provisional', 'active')
       AND (l.active_until > NOW() OR EXISTS (
-          SELECT 1 FROM openai_persona_request_holds h
+          SELECT 1 FROM openai_persona_user_request_holds h
           WHERE h.lease_id = l.id AND h.expires_at > NOW()
       ))
     UNION ALL
@@ -551,7 +551,7 @@ WHERE id = $4 AND account_id = $5 AND row_version = $6
 RETURNING id, account_id, position, profile_id, profile_version, credential_owner, state,
           enabled, persona_generation, COALESCE(current_credential_chain_id, ''),
           current_session_epoch, device_seed, installation_id, proxy_id,
-          max_active_client_sessions_override, row_version, created_at, updated_at,
+          max_active_users_override, row_version, created_at, updated_at,
           draining_started_at, disabled_at, retired_at`, strings.TrimSpace(input.CredentialChainID),
 		nextEpoch, nextGeneration, persona.ID, persona.AccountID, persona.RowVersion))
 	if err != nil {
@@ -851,7 +851,7 @@ WHERE id = $4 AND account_id = $5 AND row_version = $6
 RETURNING id, account_id, position, profile_id, profile_version, credential_owner, state,
           enabled, persona_generation, COALESCE(current_credential_chain_id, ''),
           current_session_epoch, device_seed, installation_id, proxy_id,
-          max_active_client_sessions_override, row_version, created_at, updated_at,
+          max_active_users_override, row_version, created_at, updated_at,
           draining_started_at, disabled_at, retired_at`, nextEpoch, nextPersonaGeneration, input.Now,
 		persona.ID, persona.AccountID, persona.RowVersion))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -902,12 +902,12 @@ func shouldRotateAccountPersonaSession(session service.OpenAIAccountPersonaSessi
 func accountPersonaSessionOccupied(ctx context.Context, tx *sql.Tx, accountPersonaID int64, now time.Time) (bool, error) {
 	var occupied bool
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS (
-    SELECT 1 FROM openai_persona_client_session_leases lease
+    SELECT 1 FROM openai_persona_active_user_leases lease
     WHERE lease.account_persona_id = $1
       AND lease.state IN ('provisional', 'active')
       AND (
         lease.active_until > $2::timestamptz OR EXISTS (
-          SELECT 1 FROM openai_persona_request_holds hold
+          SELECT 1 FROM openai_persona_user_request_holds hold
           WHERE hold.lease_id = lease.id AND hold.expires_at > $2::timestamptz
         )
       )
